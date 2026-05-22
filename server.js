@@ -9,8 +9,8 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "pixelgom-db.json");
 const PORT = Number(process.env.PORT || 3000);
 const STATE_ID = process.env.PIXELGOM_STATE_ID || "main";
-const APP_VERSION = "0.7.1";
-const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "live-user-rank", "name-only-nicknames", "typing-games", "rpg-120-pools", "item-sell", "shop-forge-alchemy", "pets", "enhancement-scrolls", "auto-adventure"];
+const APP_VERSION = "0.7.3";
+const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "rpg-combat-ranks", "name-only-nicknames", "typing-games", "rpg-120-pools", "equipable-forge-items", "equipment-synthesis", "item-sell", "shop-forge-alchemy", "pets", "enhancement-scrolls", "equipment-views", "requirement-guides", "auto-adventure"];
 
 let pgPool;
 
@@ -600,6 +600,11 @@ function rankUsers(db, selector, limit = 10, room = "") {
     .slice(0, limit);
 }
 
+function roomPlayableUsers(db, room = "") {
+  return Object.values(db.users)
+    .filter((user) => (!room || user.room === room) && isPlayableUser(user));
+}
+
 function rankingText(title, rows, selector, suffix) {
   if (!rows.length) return `${title}\n\n아직 기록이 없습니다.`;
   const medals = ["1위", "2위", "3위"];
@@ -869,7 +874,9 @@ function helpText(text = "") {
     "기본/순위",
     "/상태, /봇소개, /내정보, /?",
     "/버전",
-    "/실시간순위, /방순위, /내순위",
+    "/랭킹 - RPG 전투 랭킹",
+    "/방순위 - 채팅/타수 순위",
+    "/실시간순위, /내순위",
     "",
     "자동 적립",
     `카톡방 메시지 1회당 +${POINT_RULES.chat}P`,
@@ -884,7 +891,9 @@ function gameHelpText() {
     "/캐릭터 또는 /캐릭 - RPG 상태",
     "/낚시(/ㄴㅅ), /채집(/ㅊㅈ), /탐험(/ㅌㅎ)",
     "/사냥(/ㅅㄴ), /던전(/ㄷㅈ), /휴식(/ㅎㅅ)",
-    "/상점, /구매, /판매, /강화, /대장간, /연금술",
+    "/장비, /무기, /방어구, /신발, /장신구, /아이템",
+    "/장착 번호, /해제 무기",
+    "/상점, /구매, /판매, /강화, /대장간, /제작, /합성, /연금술",
     "/펫, /펫입양, /펫훈련, /펫대전",
     "/오토모험 - 권한 있는 사람만 자동 진행",
     "",
@@ -914,7 +923,13 @@ function gameHelpText() {
 function rankingHelpText() {
   return [
     "픽셀곰 랭킹",
-    "/실시간순위, /방순위 또는 /순위 - 오늘 채팅/타수 TOP",
+    "/랭킹 또는 /순위 - RPG 종합/공격/방어/민첩 TOP",
+    "/종합랭킹 또는 /전투력 - 종합 전투력 순위",
+    "/공격랭킹",
+    "/방어랭킹",
+    "/민첩랭킹",
+    "/행운랭킹",
+    "/실시간순위, /방순위 - 오늘 채팅/타수 TOP",
     "/내순위 - 내 현재 타수/채팅/포인트 등수",
     "/주간순위, /월간순위",
     "/포인트순위",
@@ -1787,16 +1802,143 @@ function rpgStats(user) {
   const weapon = user.equipment?.weapon || { level: 0 };
   const armor = user.equipment?.armor || { level: 0 };
   const pet = user.pet || {};
+  const gear = equippedEquipmentStats(user);
   return {
-    attack: 8 + rpg.level * 3 + weapon.level * 4 + Math.floor((pet.level || 0) / 2) + Math.floor((user.gameWins || 0) / 5),
-    defense: 7 + rpg.level * 2 + armor.level * 4 + Math.floor((pet.level || 0) / 3) + Math.floor(itemCount / 5),
-    speed: 6 + rpg.level + (pet.level || 0) + Math.floor((user.attendanceStreak || 0) / 3),
-    luck: 5 + Math.floor((user.points || 0) / 200) + Math.floor((user.chatCount || 0) / 30) + Math.floor((pet.wins || 0) / 3)
+    attack: 8 + rpg.level * 3 + weapon.level * 4 + gear.attack + Math.floor((pet.level || 0) / 2) + Math.floor((user.gameWins || 0) / 5),
+    defense: 7 + rpg.level * 2 + armor.level * 4 + gear.defense + Math.floor((pet.level || 0) / 3) + Math.floor(itemCount / 5),
+    speed: 6 + rpg.level + gear.speed + (pet.level || 0) + Math.floor((user.attendanceStreak || 0) / 3),
+    luck: 5 + gear.luck + Math.floor((user.points || 0) / 200) + Math.floor((user.chatCount || 0) / 30) + Math.floor((pet.wins || 0) / 3)
   };
 }
 
 function formatStats(stats) {
   return `⚔️공격 ${stats.attack} / 🛡️방어 ${stats.defense} / 💨민첩 ${stats.speed} / 🍀행운 ${stats.luck}`;
+}
+
+function emptyStats() {
+  return { attack: 0, defense: 0, speed: 0, luck: 0 };
+}
+
+function addStats(left, right) {
+  return {
+    attack: (left.attack || 0) + (right.attack || 0),
+    defense: (left.defense || 0) + (right.defense || 0),
+    speed: (left.speed || 0) + (right.speed || 0),
+    luck: (left.luck || 0) + (right.luck || 0)
+  };
+}
+
+function combatPower(stats) {
+  return stats.attack * 2 + stats.defense * 2 + stats.speed + stats.luck;
+}
+
+function formatGearStats(stats) {
+  const rows = [];
+  if (stats.attack) rows.push(`공격 +${stats.attack}`);
+  if (stats.defense) rows.push(`방어 +${stats.defense}`);
+  if (stats.speed) rows.push(`민첩 +${stats.speed}`);
+  if (stats.luck) rows.push(`행운 +${stats.luck}`);
+  return rows.length ? rows.join(" / ") : "능력치 없음";
+}
+
+function slotDisplayName(slot) {
+  return {
+    weapon: "무기",
+    armor: "방어구",
+    boots: "신발",
+    accessory: "장신구"
+  }[slot] || "장비";
+}
+
+function equipmentItemByKey(key) {
+  return FORGE_RESULTS.find((item) => item.key === key) || null;
+}
+
+function isEquipmentItemKey(key) {
+  return Boolean(equipmentItemByKey(key));
+}
+
+function equippedItemKeys(user) {
+  return Object.values(user.rpgEquipment || {}).filter(Boolean);
+}
+
+function equippedCount(user, key) {
+  return equippedItemKeys(user).filter((itemKey) => itemKey === key).length;
+}
+
+function equippedSlotByKey(user, key) {
+  return Object.entries(user.rpgEquipment || {}).find(([, itemKey]) => itemKey === key)?.[0] || "";
+}
+
+function equippedEquipmentStats(user) {
+  return equippedItemKeys(user)
+    .map(equipmentItemByKey)
+    .filter(Boolean)
+    .reduce((stats, item) => addStats(stats, item.stats || emptyStats()), emptyStats());
+}
+
+function equipmentSlotLine(user, slot) {
+  const key = user.rpgEquipment?.[slot];
+  const item = key ? equipmentItemByKey(key) : null;
+  if (!item) return `${slotDisplayName(slot)}: 없음`;
+  return `${slotDisplayName(slot)}: ${item.label} (${formatGearStats(item.stats)})`;
+}
+
+function rpgRankRows(db, room, metric = "power", limit = 10) {
+  return roomPlayableUsers(db, room)
+    .map((user) => {
+      const stats = rpgStats(user);
+      const values = {
+        power: combatPower(stats),
+        attack: stats.attack,
+        defense: stats.defense,
+        speed: stats.speed,
+        luck: stats.luck
+      };
+      return { user, stats, value: values[metric] || values.power };
+    })
+    .filter((row) => row.value > 0)
+    .sort((a, b) => b.value - a.value || displayUserName(a.user).localeCompare(displayUserName(b.user), "ko"))
+    .slice(0, limit);
+}
+
+function rpgRankText(db, room, metric = "power") {
+  const labels = {
+    power: { title: "종합 전투력", suffix: "전투력" },
+    attack: { title: "공격", suffix: "공격" },
+    defense: { title: "방어", suffix: "방어" },
+    speed: { title: "민첩", suffix: "민첩" },
+    luck: { title: "행운", suffix: "행운" }
+  };
+  const label = labels[metric] || labels.power;
+  const rows = rpgRankRows(db, room, metric, 10);
+  if (!rows.length) return `픽셀곰 RPG ${label.title} 랭킹\n\n아직 기록이 없습니다.`;
+  return [
+    `픽셀곰 RPG ${label.title} 랭킹`,
+    "",
+    ...rows.map((row, index) => `${index + 1}위 ${displayUserName(row.user)} - ${row.value.toLocaleString()}${label.suffix} / ${formatStats(row.stats)}`),
+    "",
+    "/공격랭킹 /방어랭킹 /민첩랭킹 /행운랭킹 /방순위"
+  ].join("\n");
+}
+
+function rpgRankOverviewText(db, room) {
+  const sections = [
+    ["종합 전투력 TOP5", "power", "전투력"],
+    ["공격 TOP3", "attack", "공격"],
+    ["방어 TOP3", "defense", "방어"],
+    ["민첩 TOP3", "speed", "민첩"]
+  ];
+  const lines = ["픽셀곰 RPG 랭킹", ""];
+  for (const [title, metric, suffix] of sections) {
+    const rows = rpgRankRows(db, room, metric, metric === "power" ? 5 : 3);
+    lines.push(title);
+    lines.push(...(rows.length ? rows.map((row, index) => `${index + 1}위 ${displayUserName(row.user)} - ${row.value.toLocaleString()}${suffix}`) : ["기록 없음"]));
+    lines.push("");
+  }
+  lines.push("상세: /종합랭킹 /공격랭킹 /방어랭킹 /민첩랭킹 /행운랭킹");
+  lines.push("채팅 순위: /방순위");
+  return lines.join("\n").trim();
 }
 
 function addInventory(user, key, count = 1) {
@@ -1943,15 +2085,36 @@ const DUNGEON_REWARDS = buildPool(
   }
 );
 
+function forgeSlot(item) {
+  if (/(방패|갑옷|장갑)/.test(item)) return "armor";
+  if (/부츠/.test(item)) return "boots";
+  if (/부적/.test(item)) return "accessory";
+  return "weapon";
+}
+
+function forgeItemStats(slot, rarity, index) {
+  const tier = rarity.difficulty;
+  const variance = index % 4;
+  if (slot === "weapon") return { attack: 5 + tier * 4 + variance, defense: Math.floor(tier / 2), speed: index % 3, luck: index % 5 === 0 ? 1 : 0 };
+  if (slot === "armor") return { attack: index % 5 === 0 ? 1 : 0, defense: 5 + tier * 4 + variance, speed: Math.max(0, 2 - tier), luck: index % 4 === 0 ? 1 : 0 };
+  if (slot === "boots") return { attack: Math.floor(tier / 2), defense: Math.floor(tier / 2), speed: 5 + tier * 3 + variance, luck: index % 3 === 0 ? 1 : 0 };
+  return { attack: tier, defense: tier, speed: tier, luck: 4 + tier * 3 + variance };
+}
+
 const FORGE_RESULTS = buildPool(
   ["튼튼한", "가벼운", "날카로운", "묵직한", "빛나는", "그림자", "불꽃", "얼음", "바람", "왕관", "픽셀", "전설의"],
   ["단검", "검", "방패", "장갑", "부츠", "망치", "낚싯대", "활", "갑옷 조각", "부적"],
   (prefix, item, index) => {
     const rarity = rarityByIndex(index);
     const label = `${prefix} ${item}`;
+    const slot = forgeSlot(item);
+    const stats = forgeItemStats(slot, rarity, index);
     return {
       key: inventoryKey("forge", label),
       label,
+      slot,
+      stats,
+      power: combatPower(stats),
       points: Math.floor(rarity.points / 2),
       exp: rarity.exp,
       weight: rarity.weight
@@ -2005,7 +2168,9 @@ function rpgHelpText() {
     "/사냥 또는 /ㅅㄴ - 몬스터 전투",
     "/던전 또는 /ㄷㅈ - 큰 보상 도전",
     "/상점, /구매, /판매, /시세",
-    "/대장간 또는 /제련 - 장비 제작",
+    "/장비, /무기, /방어구, /신발, /장신구, /아이템",
+    "/대장간, /제련, /제작 - 120종 장비 제작",
+    "/장착 번호, /해제 무기, /합성 1 2",
     "/연금술 또는 /연금 - 물약 제작",
     "/휴식 또는 /ㅎㅅ - HP/기력 회복",
     "/가방 또는 /ㄱㅂ - 아이템 확인",
@@ -2025,11 +2190,96 @@ function rpgProfile(user) {
     `❤️ HP ${rpg.hp}/${rpg.maxHp}`,
     `⚡ 기력 ${rpg.energy}/${rpg.maxEnergy}`,
     formatStats(stats),
+    `종합 전투력: ${combatPower(stats).toLocaleString()}`,
     `🗡️ 무기 +${weaponLevel} / 🛡️ 방어구 +${armorLevel}`,
+    equipmentSlotLine(user, "weapon"),
+    equipmentSlotLine(user, "armor"),
+    equipmentSlotLine(user, "boots"),
+    equipmentSlotLine(user, "accessory"),
     user.pet ? `🐾 펫 ${user.pet.emoji || "🐾"} ${user.pet.name} LV.${user.pet.level}` : "🐾 펫 없음",
     `💰 포인트 ${user.points.toLocaleString()}P`,
     `🎮 게임 ${user.gameWins.toLocaleString()}승 / ${user.gamePlays.toLocaleString()}회`,
     "명령어: /낚시 /채집 /탐험 /사냥 /던전 /강화 /펫"
+  ].join("\n");
+}
+
+function equipmentText(user) {
+  const weapon = user.equipment?.weapon || { level: 0, attempts: 0 };
+  const armor = user.equipment?.armor || { level: 0, attempts: 0 };
+  const gearStats = equippedEquipmentStats(user);
+  const stats = rpgStats(user);
+  return [
+    `🧰 ${displayUserName(user)}님의 장비창`,
+    "",
+    "장착 장비",
+    equipmentSlotLine(user, "weapon"),
+    equipmentSlotLine(user, "armor"),
+    equipmentSlotLine(user, "boots"),
+    equipmentSlotLine(user, "accessory"),
+    `장착 보너스: ${formatGearStats(gearStats)}`,
+    "",
+    "강화",
+    `🗡️ 무기 +${weapon.level || 0} / 공격 +${(weapon.level || 0) * 4}`,
+    `🛡️ 방어구 +${armor.level || 0} / 방어 +${(armor.level || 0) * 4}`,
+    formatStats(stats),
+    `종합 전투력: ${combatPower(stats).toLocaleString()}`,
+    "",
+    "주문서",
+    `• 무기 주문서 x${user.inventory?.weapon_scroll || 0}`,
+    `• 방어구 주문서 x${user.inventory?.armor_scroll || 0}`,
+    `• 축복 주문서 x${user.inventory?.blessed_scroll || 0}`,
+    "",
+    "명령어",
+    "/무기",
+    "/방어구",
+    "/신발",
+    "/장신구",
+    "/장착 번호",
+    "/해제 무기",
+    "/합성 1 2",
+    "/강화 무기",
+    "/강화 방어구",
+    "/상점"
+  ].join("\n");
+}
+
+function equipmentSlotText(user, type) {
+  const isArmor = type === "armor";
+  const isWeapon = type === "weapon";
+  const slot = isArmor ? user.equipment?.armor : user.equipment?.weapon;
+  const level = slot?.level || 0;
+  const attempts = slot?.attempts || 0;
+  const scrollKey = isArmor ? "armor_scroll" : "weapon_scroll";
+  const label = slotDisplayName(type);
+  const bonusLabel = isArmor ? "방어" : "공격";
+  const equippedKey = user.rpgEquipment?.[type];
+  const equipped = equippedKey ? equipmentItemByKey(equippedKey) : null;
+  if (!isWeapon && !isArmor) {
+    return [
+      `${type === "boots" ? "🥾" : "🍀"} ${displayUserName(user)}님의 ${label}`,
+      equipped ? `장착: ${equipped.label}` : "장착: 없음",
+      equipped ? `능력치: ${formatGearStats(equipped.stats)}` : "능력치: 없음",
+      "",
+      `장착: /장착 번호`,
+      `해제: /해제 ${label}`,
+      "장비 제작: /제작",
+      "장비 합성: /합성 1 2"
+    ].join("\n");
+  }
+  return [
+    `${isArmor ? "🛡️" : "🗡️"} ${displayUserName(user)}님의 ${label}`,
+    equipped ? `장착: ${equipped.label}` : "장착: 없음",
+    equipped ? `장착 능력치: ${formatGearStats(equipped.stats)}` : "장착 능력치: 없음",
+    `${label} 강화: +${level}`,
+    `${bonusLabel} 보너스: +${level * 4}`,
+    `강화 시도: ${attempts.toLocaleString()}회`,
+    `보유 주문서: ${itemDisplayName(scrollKey)} x${user.inventory?.[scrollKey] || 0}`,
+    `축복 주문서: x${user.inventory?.blessed_scroll || 0}`,
+    "",
+    `장착: /장착 번호`,
+    `해제: /해제 ${label}`,
+    `강화: /강화 ${label}`,
+    "주문서 구매: /상점"
   ].join("\n");
 }
 
@@ -2310,7 +2560,7 @@ function gacha(db, user) {
   const now = Date.now();
   const last = user.cooldowns?.gacha || 0;
   if (now - last < COOLDOWNS.gachaMs) return "뽑기는 2분에 한 번만 가능합니다.";
-  if (user.points < POINT_RULES.gachaCost) return `뽑기는 ${POINT_RULES.gachaCost}P가 필요합니다.\n현재: ${user.points.toLocaleString()}P`;
+  if (user.points < POINT_RULES.gachaCost) return pointRequirementText(POINT_RULES.gachaCost, user, ["뽑기 비용입니다."]);
 
   const items = [
     { key: "bear_jelly", name: "곰젤리", points: 0, weight: 40 },
@@ -2405,6 +2655,39 @@ function findShopItem(query) {
   return shopItems().find((item) => nicknameLookupKey(item.name) === key || nicknameLookupKey(item.name).includes(key));
 }
 
+function itemPriceLines(key) {
+  const item = ITEM_CATALOG[key];
+  const name = itemDisplayName(key);
+  const sell = itemSellValue(key);
+  const lines = [`${name}: 판매 ${sell.toLocaleString()}P`];
+  if (item?.cost) lines.push(`구매 가격: ${item.cost.toLocaleString()}P`);
+  else lines.push("구매 가격: 상점 판매 없음");
+  return lines;
+}
+
+function itemRequirementText(key, required = 1, owned = 0) {
+  const name = itemDisplayName(key);
+  const item = ITEM_CATALOG[key];
+  return [
+    `${name}이 필요합니다.`,
+    `필요: ${name} x${required.toLocaleString()}`,
+    `보유: ${owned.toLocaleString()}개`,
+    ...itemPriceLines(key),
+    item?.cost ? `구매: /구매 ${name}${required > 1 ? ` ${required}` : ""}` : "획득: 모험/제작/합성",
+    `시세: /시세 ${name}`
+  ].join("\n");
+}
+
+function pointRequirementText(required, user, rows = []) {
+  return [
+    "포인트가 부족합니다.",
+    `필요: ${required.toLocaleString()}P`,
+    `보유: ${user.points.toLocaleString()}P`,
+    ...rows,
+    "포인트 얻기: 일반 채팅 +1P, /ㅊㅊ, /판매"
+  ].join("\n");
+}
+
 function findInventoryKey(user, query) {
   const wanted = nicknameLookupKey(query);
   if (!wanted) return "";
@@ -2432,13 +2715,19 @@ function inventoryText(user) {
   return [
     `${displayUserName(user)}님의 가방`,
     "",
-    ...rows.map(([key, count], index) => `${index + 1}. ${itemDisplayName(key)} x${count} / 판매 ${itemSellValue(key)}P`),
+    ...rows.map(([key, count], index) => {
+      const equipment = equipmentItemByKey(key);
+      const equipped = equippedCount(user, key) > 0 ? " / 장착중" : "";
+      const gear = equipment ? ` / ${slotDisplayName(equipment.slot)} ${formatGearStats(equipment.stats)}` : "";
+      return `${index + 1}. ${itemDisplayName(key)} x${count} / 판매 ${itemSellValue(key)}P${gear}${equipped}`;
+    }),
     "",
     "판매 방법",
     "/판매 번호 [수량]",
     "예시: /판매 1 3",
     "해당 번호 전부 판매: /판매 1 전체",
-    "가방 전체 판매: /판매 전체"
+    "가방 전체 판매: /판매 전체",
+    "장착: /장착 번호, 해제: /해제 무기"
   ].join("\n");
 }
 
@@ -2470,7 +2759,7 @@ function buyItem(db, user, text) {
   const item = findShopItem(itemName);
   if (!item) return "상점에서 찾지 못했습니다.\n/상점 으로 목록을 확인해주세요.";
   const cost = item.cost * count;
-  if (user.points < cost) return `포인트가 부족합니다.\n필요: ${cost.toLocaleString()}P\n현재: ${user.points.toLocaleString()}P`;
+  if (user.points < cost) return pointRequirementText(cost, user, [`구매 품목: ${item.name} x${count}`]);
   addPoints(db, user, -cost, "shop_buy", { item: item.name, count });
   addInventory(user, item.key, count);
   return [
@@ -2489,8 +2778,12 @@ function sellItem(db, user, text) {
   if (!rows.length) return "가방이 비어 있습니다.";
 
   if (["전체", "전부", "all"].includes(raw.toLowerCase())) {
-    const total = rows.reduce((sum, [key, count]) => sum + itemSellValue(key) * count, 0);
-    user.inventory = {};
+    const sellable = rows
+      .map(([key, count]) => [key, Math.max(0, count - equippedCount(user, key))])
+      .filter(([, count]) => count > 0);
+    if (!sellable.length) return "판매 가능한 아이템이 없습니다.\n장착 중인 아이템은 /해제 후 판매할 수 있습니다.";
+    const total = sellable.reduce((sum, [key, count]) => sum + itemSellValue(key) * count, 0);
+    for (const [key, count] of sellable) removeInventory(user, key, count);
     addPoints(db, user, total, "sell_all", { items: rows.length });
     return [
       "전체 판매 완료",
@@ -2518,7 +2811,12 @@ function sellItem(db, user, text) {
     if (!key) return `${itemName} 아이템을 가방에서 찾지 못했습니다.\n/가방 으로 확인해주세요.`;
   }
   const owned = user.inventory[key] || 0;
-  const sellCount = Math.min(count, owned);
+  const available = Math.max(0, owned - equippedCount(user, key));
+  if (available <= 0) {
+    const slot = equippedSlotByKey(user, key);
+    return `${itemDisplayName(key)}은(는) ${slotDisplayName(slot)}에 장착 중입니다.\n/해제 ${slotDisplayName(slot)} 후 판매해주세요.`;
+  }
+  const sellCount = Math.min(count, available);
   const gained = itemSellValue(key) * sellCount;
   removeInventory(user, key, sellCount);
   addPoints(db, user, gained, "sell_item", { item: itemDisplayName(key), count: sellCount });
@@ -2535,10 +2833,14 @@ function priceText(user, text) {
   const raw = text.replace(/^(\/?시세|\/?가격|\/price)\s*/i, "").trim();
   if (raw) {
     const key = findInventoryKey(user, raw) || findShopItem(raw)?.key || raw;
-    return [`픽셀곰 시세`, `${itemDisplayName(key)}: 판매 ${itemSellValue(key)}P`].join("\n");
+    return ["픽셀곰 시세", ...itemPriceLines(key), isEquipmentItemKey(key) ? "장착 가능: /장착 번호" : ""].filter(Boolean).join("\n");
   }
   return [
     "픽셀곰 시세",
+    "상점 아이템은 구매 가격과 판매 가격이 다릅니다.",
+    "",
+    ...shopItems().map((item) => `${item.name}: 구매 ${item.cost}P / 판매 ${item.sell}P`),
+    "",
     "낚시 물고기: 6P",
     "채집 재료: 5P",
     "탐험 보물: 8P",
@@ -2555,7 +2857,7 @@ function useItem(db, user, text) {
   const raw = text.replace(/^(\/?사용|\/?use)\s*/i, "").trim();
   if (!raw) return "사용법: /사용 회복 물약\n사용 가능: 회복 물약, 기력 물약, 행운 부적";
   const key = findInventoryKey(user, raw);
-  if (!key) return `${raw} 아이템을 가방에서 찾지 못했습니다.`;
+  if (!key) return `${raw} 아이템을 가방에서 찾지 못했습니다.\n/가방 또는 /상점 으로 확인해주세요.`;
   const item = ITEM_CATALOG[key];
   if (!item?.use) return `${itemDisplayName(key)}은(는) 바로 사용할 수 없는 아이템입니다.\n/판매 로 포인트로 바꿀 수 있어요.`;
 
@@ -2574,29 +2876,162 @@ function useItem(db, user, text) {
   return [`아이템 사용`, `닉네임: ${displayUserName(user)}`, `${item.name}: +${gained}P`, `현재: ${user.points.toLocaleString()}P / LV.${user.level}`].join("\n");
 }
 
+function inventoryKeyFromToken(user, token) {
+  if (/^\d+$/.test(token || "")) {
+    return inventoryRows(user)[Number(token) - 1]?.[0] || "";
+  }
+  return findInventoryKey(user, token);
+}
+
+function availableUnequippedCount(user, key) {
+  return Math.max(0, (user.inventory?.[key] || 0) - equippedCount(user, key));
+}
+
+function slotFromText(text) {
+  if (/방어|방패|갑옷|armor/i.test(text)) return "armor";
+  if (/신발|부츠|민첩|boots|speed/i.test(text)) return "boots";
+  if (/장신|부적|행운|accessory|luck/i.test(text)) return "accessory";
+  if (/무기|검|활|망치|낚싯대|weapon|attack/i.test(text)) return "weapon";
+  return "";
+}
+
+function equipmentInventoryText(user) {
+  const rows = inventoryRows(user)
+    .map(([key, count], index) => ({ key, count, index: index + 1, item: equipmentItemByKey(key) }))
+    .filter((row) => row.item);
+  if (!rows.length) {
+    return [
+      "장착할 장비가 없습니다.",
+      "/제작 또는 /제련 으로 120종 장비 중 하나를 얻을 수 있습니다.",
+      "/합성 1 2 로 장비 두 개를 합성할 수 있습니다."
+    ].join("\n");
+  }
+  return [
+    "장착 가능한 장비",
+    ...rows.map((row) => `${row.index}. ${row.item.label} x${row.count} / ${slotDisplayName(row.item.slot)} / ${formatGearStats(row.item.stats)}${equippedCount(user, row.key) ? " / 장착중" : ""}`),
+    "",
+    "장착: /장착 번호",
+    "합성: /합성 번호 번호"
+  ].join("\n");
+}
+
+function equipItem(db, user, text) {
+  const raw = text.replace(/^(\/?장착|\/?착용|\/equip)\s*/i, "").trim();
+  if (!raw) return equipmentInventoryText(user);
+  const key = inventoryKeyFromToken(user, raw);
+  if (!key) return `${raw} 아이템을 가방에서 찾지 못했습니다.\n/가방 으로 번호를 확인해주세요.`;
+  const item = equipmentItemByKey(key);
+  if (!item) return `${itemDisplayName(key)}은(는) 장착 장비가 아닙니다.\n/제작 또는 /합성 으로 장비를 얻어주세요.`;
+  if ((user.inventory?.[key] || 0) < 1) return `${item.label}을(를) 보유하고 있지 않습니다.`;
+  user.rpgEquipment ||= {};
+  const before = user.rpgEquipment[item.slot];
+  user.rpgEquipment[item.slot] = key;
+  addEvent(db, user, "equip_item", { item: item.label, slot: item.slot, before });
+  return [
+    "장착 완료",
+    `닉네임: ${displayUserName(user)}`,
+    `${slotDisplayName(item.slot)}: ${item.label}`,
+    `능력치: ${formatGearStats(item.stats)}`,
+    formatStats(rpgStats(user)),
+    "/장비 로 전체 장비를 볼 수 있습니다."
+  ].join("\n");
+}
+
+function unequipItem(db, user, text) {
+  const raw = text.replace(/^(\/?해제|\/?장착해제|\/unequip)\s*/i, "").trim();
+  if (!raw) return "사용법: /해제 무기\n가능: 무기, 방어구, 신발, 장신구";
+  let slot = slotFromText(raw);
+  if (!slot) {
+    const key = findInventoryKey(user, raw);
+    slot = key ? equippedSlotByKey(user, key) : "";
+  }
+  if (!slot || !user.rpgEquipment?.[slot]) return `${raw} 장착 장비를 찾지 못했습니다.\n/장비 로 확인해주세요.`;
+  const item = equipmentItemByKey(user.rpgEquipment[slot]);
+  delete user.rpgEquipment[slot];
+  addEvent(db, user, "unequip_item", { item: item?.label || "", slot });
+  return [
+    "장착 해제 완료",
+    `닉네임: ${displayUserName(user)}`,
+    `${slotDisplayName(slot)}: ${item?.label || "알 수 없음"}`,
+    formatStats(rpgStats(user))
+  ].join("\n");
+}
+
+function synthesizeEquipment(db, user, text) {
+  const raw = text.replace(/^(\/?합성|\/?장비합성|\/synthesis|\/synth)\s*/i, "").trim();
+  if (!raw) {
+    return [
+      "🧪 픽셀곰 장비 합성",
+      "장비 2개와 80P로 새 장비를 만듭니다.",
+      "결과는 공격/방어/민첩/행운 능력치가 붙은 120종 장비 중 하나입니다.",
+      "",
+      "사용법: /합성 1 2",
+      "번호는 /가방 에 보이는 번호입니다."
+    ].join("\n");
+  }
+  const cost = 80;
+  if (user.points < cost) return pointRequirementText(cost, user, ["장비 합성 비용입니다."]);
+  const args = raw.includes(",") ? raw.split(",").map((value) => value.trim()).filter(Boolean) : raw.split(/\s+/).filter(Boolean);
+  if (args.length < 2) return "사용법: /합성 1 2\n번호는 /가방 에 보이는 번호입니다.";
+  const keyA = inventoryKeyFromToken(user, args[0]);
+  let keyB = inventoryKeyFromToken(user, args[1]);
+  if (!keyB && /^\d+$/.test(args[0] || "") && /^\d+$/.test(args[1] || "")) {
+    const firstKey = inventoryRows(user)[Number(args[0]) - 1]?.[0] || "";
+    if (firstKey && availableUnequippedCount(user, firstKey) >= 2) keyB = firstKey;
+  }
+  if (!keyA || !keyB) return "합성할 장비 번호를 찾지 못했습니다.\n/가방 으로 번호를 확인해주세요.";
+  const itemA = equipmentItemByKey(keyA);
+  const itemB = equipmentItemByKey(keyB);
+  if (!itemA || !itemB) return "합성은 제작 장비만 가능합니다.\n/제작 으로 장비를 얻어주세요.";
+  if (keyA === keyB) {
+    if (availableUnequippedCount(user, keyA) < 2) return `${itemA.label}이 2개 필요합니다.\n장착 중인 장비는 합성 재료로 사용할 수 없습니다.`;
+  } else if (availableUnequippedCount(user, keyA) < 1 || availableUnequippedCount(user, keyB) < 1) {
+    return "장착 중인 장비는 합성 재료로 사용할 수 없습니다.\n/해제 후 다시 시도해주세요.";
+  }
+
+  removeInventory(user, keyA, 1);
+  removeInventory(user, keyB, 1);
+  addPoints(db, user, -cost, "equipment_synthesis_cost", { itemA: itemA.label, itemB: itemB.label });
+  const result = pickWeighted(FORGE_RESULTS);
+  addInventory(user, result.key);
+  const exp = Math.ceil((itemA.exp + itemB.exp + result.exp) / 3);
+  const level = addRpgExp(user, exp);
+  addEvent(db, user, "equipment_synthesis", { itemA: itemA.label, itemB: itemB.label, result: result.label });
+  return formatRpgResult("장비 합성 완료", user, [
+    `재료: ${itemA.label} + ${itemB.label}`,
+    `획득: ${result.label}`,
+    `종류: ${slotDisplayName(result.slot)}`,
+    `능력치: ${formatGearStats(result.stats)}`,
+    `비용: -${cost}P`,
+    "장착: /장착 번호"
+  ], level);
+}
+
 function forgeItem(db, user, text) {
-  const raw = text.replace(/^(\/?대장간|\/?제련|\/forge)\s*/i, "").trim();
-  if (!raw && !/^\/?(제련|강화|forge)/i.test(text)) {
+  const raw = text.replace(/^(\/?대장간|\/?제련|\/?제작|\/?장비제작|\/forge|\/craft)\s*/i, "").trim();
+  if (!raw && !/^\/?(제련|제작|강화|forge|craft)/i.test(text)) {
     return [
       "⚒️ 픽셀곰 대장간",
       "철광석 1개와 40P로 장비를 제작합니다.",
-      "장비 결과물은 120종입니다.",
+      "공격/방어/민첩/행운 능력치가 붙은 장비 120종 중 하나를 얻습니다.",
       "",
-      "/제련",
+      "/제련 또는 /제작",
+      "/장착 번호",
+      "/합성 1 2",
       "/강화 무기 또는 /강화 방어구",
       "/구매 철광석"
     ].join("\n");
   }
   const cost = 40;
-  if ((user.inventory?.iron_ore || 0) < 1) return "철광석이 필요합니다.\n/구매 철광석";
-  if (user.points < cost) return `포인트가 부족합니다.\n필요: ${cost}P\n현재: ${user.points.toLocaleString()}P`;
+  if ((user.inventory?.iron_ore || 0) < 1) return itemRequirementText("iron_ore", 1, user.inventory?.iron_ore || 0);
+  if (user.points < cost) return pointRequirementText(cost, user, ["대장간 제련 비용입니다."]);
   removeInventory(user, "iron_ore", 1);
   addPoints(db, user, -cost, "forge_cost");
   const item = pickWeighted(FORGE_RESULTS);
   addInventory(user, item.key);
   if (item.points) addPoints(db, user, item.points, "forge_bonus", { item: item.label });
   const level = addRpgExp(user, item.exp);
-  return formatRpgResult("대장간 제련 완료", user, [`획득: ${item.label}`, `비용: 철광석 x1 / -${cost}P`, `보너스: +${item.points}P / +${item.exp}EXP`], level);
+  return formatRpgResult("대장간 제련 완료", user, [`획득: ${item.label}`, `종류: ${slotDisplayName(item.slot)}`, `능력치: ${formatGearStats(item.stats)}`, `비용: 철광석 x1 / -${cost}P`, `보너스: +${item.points}P / +${item.exp}EXP`, "장착: /장착 번호"], level);
 }
 
 function alchemyItem(db, user, text) {
@@ -2612,8 +3047,8 @@ function alchemyItem(db, user, text) {
     ].join("\n");
   }
   const cost = 35;
-  if ((user.inventory?.alchemy_dust || 0) < 1) return "연금 가루가 필요합니다.\n/구매 연금 가루";
-  if (user.points < cost) return `포인트가 부족합니다.\n필요: ${cost}P\n현재: ${user.points.toLocaleString()}P`;
+  if ((user.inventory?.alchemy_dust || 0) < 1) return itemRequirementText("alchemy_dust", 1, user.inventory?.alchemy_dust || 0);
+  if (user.points < cost) return pointRequirementText(cost, user, ["연금술 비용입니다."]);
   removeInventory(user, "alchemy_dust", 1);
   addPoints(db, user, -cost, "alchemy_cost");
   const item = pickWeighted(ALCHEMY_RESULTS);
@@ -2648,12 +3083,12 @@ function enhanceEquipment(db, user, text) {
   const label = type === "armor" ? "방어구" : "무기";
   const scrollKey = /축복|bless/i.test(raw) ? "blessed_scroll" : type === "armor" ? "armor_scroll" : "weapon_scroll";
   const scrollName = itemDisplayName(scrollKey);
-  if ((user.inventory?.[scrollKey] || 0) < 1) return `${scrollName}가 필요합니다.\n/구매 ${scrollName}`;
+  if ((user.inventory?.[scrollKey] || 0) < 1) return itemRequirementText(scrollKey, 1, user.inventory?.[scrollKey] || 0);
   user.equipment ||= {};
   user.equipment[type] ||= { level: 0, attempts: 0 };
   const level = user.equipment[type].level || 0;
   const cost = 50 + level * 25;
-  if (user.points < cost) return `포인트가 부족합니다.\n필요: ${cost.toLocaleString()}P\n현재: ${user.points.toLocaleString()}P`;
+  if (user.points < cost) return pointRequirementText(cost, user, ["강화 비용입니다."]);
 
   removeInventory(user, scrollKey, 1);
   addPoints(db, user, -cost, "enhance_cost", { type, level });
@@ -2728,7 +3163,11 @@ function petStatusText(user) {
 function adoptPet(db, user) {
   const replacing = Boolean(user.pet);
   if (replacing && (user.inventory?.pet_ticket || 0) < 1) {
-    return "이미 펫이 있습니다.\n새 펫을 다시 입양하려면 /구매 펫 입양권 후 /펫입양";
+    return [
+      "이미 펫이 있습니다.",
+      itemRequirementText("pet_ticket", 1, user.inventory?.pet_ticket || 0),
+      "새 펫을 다시 입양하려면 /펫입양"
+    ].join("\n");
   }
   if (replacing) removeInventory(user, "pet_ticket", 1);
   const template = pickWeighted(PET_TYPES);
@@ -2963,7 +3402,7 @@ function transferPoints(db, user, text) {
   const amount = Number(args.at(-1));
   const targetName = args.slice(0, -1).join(" ");
   if (!Number.isInteger(amount) || amount <= 0) return "보낼 포인트는 1 이상의 숫자로 입력해주세요.";
-  if (!user.isAdmin && user.points < amount + POINT_RULES.transferFee) return `포인트가 부족합니다.\n현재: ${user.points.toLocaleString()}P`;
+  if (!user.isAdmin && user.points < amount + POINT_RULES.transferFee) return pointRequirementText(amount + POINT_RULES.transferFee, user, [`송금액: ${amount.toLocaleString()}P`, `수수료: ${POINT_RULES.transferFee.toLocaleString()}P`]);
 
   const result = findOneUserByName(db, user.room, targetName, user.id);
   if (result.error) return result.error;
@@ -3247,7 +3686,13 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/가입", "/계정등록", "/계정", "/등록"])) return registerAccount(db, user);
   if (!isRegisteredUser(user)) return registrationGuideText(user);
 
-  if (aliasesMatch(commandText, ["/실시간순위", "실시간순위", "/실시간랭킹", "실시간랭킹", "/현재순위", "현재순위", "/방순위", "방순위", "/오늘순위", "오늘순위", "/오늘랭킹", "오늘랭킹", "/랭킹", "랭킹", "/순위", "순위", "/순웨", "순웨"])) return periodOverviewText(db, user.room, "day");
+  if (aliasesMatch(commandText, ["/랭킹", "랭킹", "/순위", "순위", "/전투랭킹", "전투랭킹", "/rpg랭킹", "/rpgrank"])) return rpgRankOverviewText(db, user.room);
+  if (aliasesMatch(commandText, ["/종합랭킹", "종합랭킹", "/전투력", "전투력", "/전투력순위", "전투력순위", "/파워랭킹", "파워랭킹"])) return rpgRankText(db, user.room, "power");
+  if (aliasesMatch(commandText, ["/공격랭킹", "공격랭킹", "/공격순위", "공격순위", "/공격력순위", "공격력순위"])) return rpgRankText(db, user.room, "attack");
+  if (aliasesMatch(commandText, ["/방어랭킹", "방어랭킹", "/방어순위", "방어순위", "/방어력순위", "방어력순위"])) return rpgRankText(db, user.room, "defense");
+  if (aliasesMatch(commandText, ["/민첩랭킹", "민첩랭킹", "/민첩순위", "민첩순위", "/스피드랭킹", "스피드랭킹"])) return rpgRankText(db, user.room, "speed");
+  if (aliasesMatch(commandText, ["/행운랭킹", "행운랭킹", "/행운순위", "행운순위", "/운랭킹", "운랭킹"])) return rpgRankText(db, user.room, "luck");
+  if (aliasesMatch(commandText, ["/실시간순위", "실시간순위", "/실시간랭킹", "실시간랭킹", "/현재순위", "현재순위", "/방순위", "방순위", "/오늘순위", "오늘순위", "/오늘랭킹", "오늘랭킹", "/순웨", "순웨"])) return periodOverviewText(db, user.room, "day");
   if (aliasesMatch(commandText, ["/내순위", "내순위", "/내등수", "내등수", "/내랭킹", "내랭킹", "/나는몇등", "나는몇등"])) return myRankText(db, user, "day");
   if (aliasesMatch(commandText, ["/주간순위", "주간순위", "/주간랭킹", "주간랭킹"])) return periodOverviewText(db, user.room, "week");
   if (aliasesMatch(commandText, ["/월간순위", "월간순위", "/월간랭킹", "월간랭킹"])) return periodOverviewText(db, user.room, "month");
@@ -3263,7 +3708,7 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/입퇴장현황", "입퇴장현황", "/입장현황", "입장현황"])) return membershipStatusText(db, user.room);
   if (startsWithAny(commandText, ["/닉이력", "닉이력"])) return nicknameHistoryText(db, user, commandText);
   if (startsWithAny(commandText, ["/닉연결", "닉연결"])) return linkNickname(db, user, commandText);
-  if (aliasesMatch(commandText, ["/포인트순위", "포인트순위", "포인트 순위", "랭킹", "/rank"]) || blockNames.includes("포인트순위")) {
+  if (aliasesMatch(commandText, ["/포인트순위", "포인트순위", "포인트 순위", "/rank"]) || blockNames.includes("포인트순위")) {
     return rankingText("픽셀곰 포인트 순위", rankUsers(db, (row) => row.points, 10, user.room), (row) => row.points, "P");
   }
   if (aliasesMatch(commandText, ["/채팅순위", "채팅순위", "채팅 순위", "/chatrank"])) {
@@ -3303,21 +3748,29 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/룰렛", "룰렛", "/roulette"])) return roulette(db, user);
   if (aliasesMatch(commandText, ["/행운상자", "행운상자", "/상자", "상자", "/luckybox"])) return luckyBox(db, user);
   if (aliasesMatch(commandText, ["/뽑기", "뽑기", "/가챠", "가챠", "/gacha"])) return gacha(db, user);
-  if (aliasesMatch(commandText, ["/가방", "가방", "/ㄱㅂ", "/인벤", "인벤", "/inventory"])) return inventoryText(user);
+  if (aliasesMatch(commandText, ["/가방", "가방", "/아이템", "아이템", "/ㄱㅂ", "/인벤", "인벤", "/inventory", "/items"])) return inventoryText(user);
   if (aliasesMatch(commandText, ["/상점", "상점", "/shop"])) return shopText();
   if (startsWithAny(commandText, ["/구매", "/buy"])) return buyItem(db, user, commandText);
   if (startsWithAny(commandText, ["/판매", "/팔기", "/sell"])) return sellItem(db, user, commandText);
   if (startsWithAny(commandText, ["/시세", "/가격", "/price"])) return priceText(user, commandText);
   if (startsWithAny(commandText, ["/사용", "/use"])) return useItem(db, user, commandText);
+  if (startsWithAny(commandText, ["/장착", "/착용", "/equip"])) return equipItem(db, user, commandText);
+  if (startsWithAny(commandText, ["/해제", "/장착해제", "/unequip"])) return unequipItem(db, user, commandText);
+  if (startsWithAny(commandText, ["/합성", "/장비합성", "/synthesis", "/synth"])) return synthesizeEquipment(db, user, commandText);
   if (aliasesMatch(commandText, ["/모험", "모험", "/ㅁㅎ", "/rpg", "rpg"])) return rpgHelpText();
   if (aliasesMatch(commandText, ["/캐릭터", "캐릭터", "/캐릭", "/내캐릭", "내캐릭", "/character"])) return rpgProfile(user);
+  if (aliasesMatch(commandText, ["/장비", "장비", "/장비창", "장비창", "/equipment", "/equip"])) return equipmentText(user);
+  if (aliasesMatch(commandText, ["/무기", "무기", "/weapon"])) return equipmentSlotText(user, "weapon");
+  if (aliasesMatch(commandText, ["/방어구", "방어구", "/갑옷", "갑옷", "/armor"])) return equipmentSlotText(user, "armor");
+  if (aliasesMatch(commandText, ["/신발", "신발", "/부츠", "부츠", "/민첩", "민첩", "/boots"])) return equipmentSlotText(user, "boots");
+  if (aliasesMatch(commandText, ["/장신구", "장신구", "/부적", "부적", "/accessory"])) return equipmentSlotText(user, "accessory");
   if (aliasesMatch(commandText, ["/낚시", "낚시", "/ㄴㅅ", "/fish", "fish"])) return fishing(db, user);
   if (aliasesMatch(commandText, ["/채집", "채집", "/ㅊㅈ", "/gather", "gather"])) return gathering(db, user);
   if (aliasesMatch(commandText, ["/탐험", "탐험", "/ㅌㅎ", "/adventure", "adventure"])) return adventure(db, user);
   if (aliasesMatch(commandText, ["/사냥", "사냥", "/ㅅㄴ", "/hunt", "hunt"])) return hunt(db, user);
   if (aliasesMatch(commandText, ["/던전", "던전", "/ㄷㅈ", "/dungeon", "dungeon"])) return dungeon(db, user);
   if (aliasesMatch(commandText, ["/휴식", "휴식", "/ㅎㅅ", "/rest", "rest"])) return restRpg(user);
-  if (startsWithAny(commandText, ["/대장간", "/제련", "/forge"])) return forgeItem(db, user, commandText);
+  if (startsWithAny(commandText, ["/대장간", "/제련", "/제작", "/장비제작", "/forge", "/craft"])) return forgeItem(db, user, commandText);
   if (startsWithAny(commandText, ["/강화", "/enhance"])) return enhanceEquipment(db, user, commandText);
   if (startsWithAny(commandText, ["/연금술", "/연금", "/alchemy"])) return alchemyItem(db, user, commandText);
   if (aliasesMatch(commandText, ["/펫입양", "/petadopt"])) return adoptPet(db, user);
