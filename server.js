@@ -9,8 +9,8 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "pixelgom-db.json");
 const PORT = Number(process.env.PORT || 3000);
 const STATE_ID = process.env.PIXELGOM_STATE_ID || "main";
-const APP_VERSION = "0.3.0";
-const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview"];
+const APP_VERSION = "0.4.0";
+const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "live-user-rank"];
 
 let pgPool;
 
@@ -219,10 +219,15 @@ function normalizeText(value) {
 }
 
 function botNames() {
-  return (process.env.BOT_NAMES || "픽셀곰,하리보,오픈채팅봇")
+  return (process.env.BOT_NAMES || "픽셀곰,픽셀,하리보,오픈채팅봇")
     .split(",")
     .map((name) => name.trim())
     .filter(Boolean);
+}
+
+function isPixelgomMentionCommand(text) {
+  const value = normalizeText(text);
+  return /^@?픽셀곰(?:아)?(?:\s|$|[!?.,~])/i.test(value) || /^@?픽셀(?:아)?(?:\s|$|[!?.,~])/i.test(value);
 }
 
 function aliasesMatch(text, aliases) {
@@ -607,15 +612,34 @@ function topRows(rows, key, limit = 5) {
     .slice(0, limit);
 }
 
+function sortedRows(rows, key) {
+  return [...rows]
+    .filter((row) => row[key] > 0)
+    .sort((a, b) => b[key] - a[key] || a.nickname.localeCompare(b.nickname, "ko"));
+}
+
+function rankPosition(rows, userId, key) {
+  const canonicalId = userId;
+  const ranked = sortedRows(rows, key);
+  const index = ranked.findIndex((row) => row.userId === canonicalId);
+  const row = index >= 0 ? ranked[index] : null;
+  return {
+    rank: index >= 0 ? index + 1 : null,
+    total: ranked.length,
+    value: row ? row[key] : 0
+  };
+}
+
 function periodOverviewText(db, room, period = "day") {
   const stats = periodRoomStats(db, room, period);
-  const title = `픽셀곰 ${periodLabel(period)} 방순위`;
+  const title = `픽셀곰 ${periodLabel(period)} 실시간 방순위`;
   if (!stats.rows.length) return `${title}\n\n아직 기록이 없습니다.`;
 
   const charRows = topRows(stats.rows, "chars");
   const messageRows = topRows(stats.rows, "messages");
   const lines = [
     title,
+    `기준: 지금`,
     `참여: ${stats.rows.length.toLocaleString()}명`,
     `채팅: ${stats.totalMessages.toLocaleString()}회`,
     `타수: ${stats.totalChars.toLocaleString()}타`,
@@ -629,6 +653,40 @@ function periodOverviewText(db, room, period = "day") {
   return lines.join("\n");
 }
 
+function cumulativePointRank(db, user) {
+  const rows = Object.values(db.users)
+    .filter((row) => row.room === user.room && row.points > 0)
+    .sort((a, b) => b.points - a.points || a.nickname.localeCompare(b.nickname, "ko"));
+  const index = rows.findIndex((row) => row.id === user.id);
+  return {
+    rank: index >= 0 ? index + 1 : null,
+    total: rows.length,
+    value: index >= 0 ? rows[index].points : user.points || 0
+  };
+}
+
+function rankLine(label, rank) {
+  const rankText = rank.rank ? `${rank.rank}위/${rank.total}명` : `기록 없음`;
+  return `${label}: ${rankText} (${rank.value.toLocaleString()})`;
+}
+
+function myRankText(db, user, period = "day") {
+  const stats = periodRoomStats(db, user.room, period);
+  const canonicalId = canonicalUserId(db, user.id);
+  const chars = rankPosition(stats.rows, canonicalId, "chars");
+  const messages = rankPosition(stats.rows, canonicalId, "messages");
+  const points = cumulativePointRank(db, user);
+  return [
+    `${user.nickname}님의 ${periodLabel(period)} 실시간 순위`,
+    `기준: 지금`,
+    rankLine("타수", chars) + "타",
+    rankLine("채팅", messages) + "회",
+    rankLine("포인트", points) + "P",
+    "",
+    "전체 순위는 /방순위"
+  ].join("\n");
+}
+
 function botIntroText() {
   return [
     "픽셀곰은 방 활동 기록 봇입니다.",
@@ -637,6 +695,7 @@ function botIntroText() {
     "자주 쓰는 명령어",
     "/ㅊㅊ - 출석",
     "/방순위 - 오늘 채팅/타수 TOP",
+    "/내순위 - 내 현재 등수",
     "/내정보 - 내 포인트/채팅",
     "/운세 - 오늘 운세",
     "/? - 전체 도움말"
@@ -660,7 +719,7 @@ function helpText(text = "") {
     "기본",
     "/상태, /봇소개, /내정보, /도움말, /?",
     "/출석, /ㅊㅊ, /출첵",
-    "/방순위, /오늘순위, /일간타수순위",
+    "/실시간순위, /방순위, /내순위",
     "/지역등록 서울, /지역전체",
     "/운세, /미션, /칭찬",
     "",
@@ -691,7 +750,8 @@ function gameHelpText() {
 function rankingHelpText() {
   return [
     "픽셀곰 랭킹",
-    "/방순위 또는 /순위 - 오늘 채팅/타수 TOP",
+    "/실시간순위, /방순위 또는 /순위 - 오늘 채팅/타수 TOP",
+    "/내순위 - 내 현재 타수/채팅/포인트 등수",
     "/주간순위, /월간순위",
     "/포인트순위",
     "/채팅순위",
@@ -1605,8 +1665,9 @@ async function runCommand(db, user, text, blockNames = []) {
 
   if (aliasesMatch(commandText, ["/도움말", "도움말", "도움", "/도움", "명령어", "/명령어", "/help", "help", "/?", "?"]) || startsWithAny(commandText, ["/?", "/도움말", "/도움", "/help"]) || blockNames.includes("도움말")) return helpText(commandText);
   if (aliasesMatch(commandText, ["/상태", "상태", "/status", "status"])) return statusText();
-  if (aliasesMatch(commandText, ["/봇소개", "봇소개", "/픽셀곰소개", "픽셀곰소개", "/브리핑", "브리핑", "/설명", "설명", "픽셀곰"]) || (/^@?픽셀곰아?\s*/.test(commandText) && /(뭐|누구|로봇|봇|설명)/.test(commandText))) return botIntroText();
-  if (aliasesMatch(commandText, ["/방순위", "방순위", "/오늘순위", "오늘순위", "/오늘랭킹", "오늘랭킹", "/랭킹", "랭킹", "/순위", "순위", "/순웨", "순웨"])) return periodOverviewText(db, user.room, "day");
+  if (aliasesMatch(commandText, ["/봇소개", "봇소개", "/픽셀곰소개", "픽셀곰소개", "/픽셀소개", "픽셀소개", "/브리핑", "브리핑", "/설명", "설명", "픽셀곰", "픽셀"]) || (isPixelgomMentionCommand(commandText) && /(뭐|누구|로봇|봇|설명)/.test(commandText))) return botIntroText();
+  if (aliasesMatch(commandText, ["/실시간순위", "실시간순위", "/실시간랭킹", "실시간랭킹", "/현재순위", "현재순위", "/방순위", "방순위", "/오늘순위", "오늘순위", "/오늘랭킹", "오늘랭킹", "/랭킹", "랭킹", "/순위", "순위", "/순웨", "순웨"])) return periodOverviewText(db, user.room, "day");
+  if (aliasesMatch(commandText, ["/내순위", "내순위", "/내등수", "내등수", "/내랭킹", "내랭킹", "/나는몇등", "나는몇등"])) return myRankText(db, user, "day");
   if (aliasesMatch(commandText, ["/주간순위", "주간순위", "/주간랭킹", "주간랭킹"])) return periodOverviewText(db, user.room, "week");
   if (aliasesMatch(commandText, ["/월간순위", "월간순위", "/월간랭킹", "월간랭킹"])) return periodOverviewText(db, user.room, "month");
   if (aliasesMatch(commandText, ["/게임", "게임", "/game"])) return gameHelpText();
@@ -1659,7 +1720,7 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/퀴즈", "퀴즈", "/quiz"])) return quiz(user);
   if (startsWithAny(commandText, ["/정답", "정답", "/answer"])) return answerQuiz(db, user, commandText);
   if (aliasesMatch(commandText, ["/운세", "운세", "/fortune"])) return fortune(user);
-  if (aliasesMatch(commandText, ["/연애운", "연애운", "/남친", "남친", "/여친", "여친", "/썸운", "썸운"]) || (/^@?픽셀곰아?\s*/.test(commandText) && /(남친|여친|연애|썸)/.test(commandText))) return relationshipFortune(user, commandText);
+  if (aliasesMatch(commandText, ["/연애운", "연애운", "/남친", "남친", "/여친", "여친", "/썸운", "썸운"]) || (isPixelgomMentionCommand(commandText) && /(남친|여친|연애|썸)/.test(commandText))) return relationshipFortune(user, commandText);
   if (aliasesMatch(commandText, ["/미션", "미션", "/mission"])) return mission(user);
   if (aliasesMatch(commandText, ["/칭찬", "칭찬", "/compliment"])) return compliment(user);
   if (startsWithAny(commandText, ["/궁합", "궁합", "/compat"])) return compatibility(user, commandText);
@@ -1731,16 +1792,24 @@ export async function handleChatEvent(payload) {
     "상태",
     "봇소개",
     "픽셀곰소개",
+    "픽셀소개",
     "브리핑",
     "설명",
     "내정보",
     "정보",
+    "실시간순위",
+    "실시간랭킹",
+    "현재순위",
     "방순위",
     "오늘순위",
     "오늘랭킹",
     "랭킹",
     "순위",
     "순웨",
+    "내순위",
+    "내등수",
+    "내랭킹",
+    "나는몇등",
     "주간순위",
     "주간랭킹",
     "월간순위",
@@ -1783,7 +1852,7 @@ export async function handleChatEvent(payload) {
     "입퇴장현황",
     "입장현황"
   ];
-  const botMentionCommand = /^@?픽셀곰아?\s*/.test(msg) && /(뭐|누구|로봇|봇|설명|남친|여친|연애|썸)/.test(msg);
+  const botMentionCommand = isPixelgomMentionCommand(msg) && /(뭐|누구|로봇|봇|설명|남친|여친|연애|썸)/.test(msg);
   const isCommand = commandPrefixes.some((prefix) => msg.startsWith(prefix)) || exactCommands.includes(msg) || botMentionCommand;
   const reply = isCommand ? await runCommand(db, user, msg) : null;
   await saveDb(db);

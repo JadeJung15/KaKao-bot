@@ -7,13 +7,17 @@
 const bot = BotManager.getCurrentBot();
 
 const BOT_SERVER = "https://ka-kao-bot.vercel.app/chat-event";
-const BOT_NAME = "픽셀곰";
+const BOT_NAMES = ["픽셀곰", "픽셀"];
 
 // Empty list means all rooms. Put exact KakaoTalk room names here to restrict.
 const ALLOWED_ROOMS = [];
 
 function isAllowedRoom(room) {
   return ALLOWED_ROOMS.length === 0 || ALLOWED_ROOMS.indexOf(room) >= 0;
+}
+
+function isBotSender(sender) {
+  return BOT_NAMES.indexOf(String(sender)) >= 0;
 }
 
 function postJson(url, payload) {
@@ -34,7 +38,7 @@ function onMessage(message) {
   const sender = String((message.author && message.author.name) || "");
 
   if (!isAllowedRoom(room)) return;
-  if (!content || !sender || sender === BOT_NAME) return;
+  if (!content || !sender || isBotSender(sender)) return;
 
   try {
     if (content.trim() === "/로컬상태") {
