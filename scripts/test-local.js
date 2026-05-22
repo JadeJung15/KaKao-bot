@@ -35,7 +35,7 @@ async function skill(utterance, id) {
   return json.template.outputs[0].simpleText.text;
 }
 
-async function chat(msg, sender = `민지-${Date.now()}`, room = "테스트방", extra = {}) {
+async function rawChat(msg, sender = `민지-${Date.now()}`, room = "테스트방", extra = {}) {
   const response = await fetch(`${baseUrl}/chat-event`, {
     method: "POST",
     headers: {
@@ -54,6 +54,18 @@ async function chat(msg, sender = `민지-${Date.now()}`, room = "테스트방",
   return response.json();
 }
 
+const registeredKeys = new Set();
+
+async function chat(msg, sender = `민지-${Date.now()}`, room = "테스트방", extra = {}) {
+  const { autoRegister = true, ...payloadExtra } = extra;
+  const key = `${room}:${sender}`;
+  if (autoRegister && msg !== "/가입" && sender !== "픽셀" && !registeredKeys.has(key)) {
+    await rawChat("/가입", sender, room, payloadExtra);
+    registeredKeys.add(key);
+  }
+  return rawChat(msg, sender, room, payloadExtra);
+}
+
 const help = await skill("/도움말");
 assert.match(help, /픽셀곰 도움말/);
 
@@ -68,6 +80,28 @@ assert.match(ranking, /민지|테스터|포인트/);
 
 const regions = await skill("/지역전체");
 assert.match(regions, /서울/);
+
+const blockedUser = `미가입-${Date.now()}`;
+const blockedGame = await rawChat("/낚시", blockedUser, "가입테스트방");
+assert.match(blockedGame.reply, /계정 등록이 필요/);
+assert.equal(blockedGame.awarded, 0);
+const joined = await rawChat("/가입", blockedUser, "가입테스트방");
+assert.match(joined.reply, /계정 등록 완료/);
+assert.match(joined.reply, /관리자 권한/);
+const memberUser = `회원-${Date.now()}`;
+await rawChat("/가입", memberUser, "가입테스트방");
+const grant = await rawChat(`/지급 ${memberUser} 50`, blockedUser, "가입테스트방");
+assert.match(grant.reply, /50P 지급 완료/);
+const adminList = await rawChat("/관리자목록", blockedUser, "가입테스트방");
+assert.match(adminList.reply, new RegExp(blockedUser));
+await rawChat("/자동공지 설정 /가입 후 /게임 참고", blockedUser, "가입테스트방");
+await rawChat("/자동공지 간격 5", blockedUser, "가입테스트방");
+await rawChat("/자동공지 켜기", blockedUser, "가입테스트방");
+let autoNotice = null;
+for (let i = 0; i < 5; i += 1) {
+  autoNotice = await rawChat(`자동공지 테스트 ${i}`, memberUser, "가입테스트방");
+}
+assert.match(autoNotice.reply, /\/가입 후 \/게임 참고/);
 
 const sender = `민지-${Date.now()}`;
 const normalChat = await chat("안녕하세요", sender);
@@ -239,7 +273,7 @@ const bulk = await chat(`/일괄등록
 assert.match(bulk.reply, /일괄등록 완료/);
 assert.match(bulk.reply, /총 입력: 3명/);
 const registerStatus = await chat("/등록현황", admin, `명단방-${stamp}`);
-assert.match(registerStatus.reply, /현재 등록/);
+assert.match(registerStatus.reply, /계정 등록/);
 const bulkHistory = await chat(`/닉이력 ${oldNick}`, admin, `명단방-${stamp}`);
 assert.match(bulkHistory.reply, new RegExp(oldNick));
 
@@ -288,7 +322,7 @@ const membership = await chat("/입퇴장현황", admin, transcriptRoom);
 assert.match(membership.reply, /유진 남/);
 assert.match(membership.reply, /흐물한 어피치/);
 const transcriptStatus = await chat("/등록현황", admin, transcriptRoom);
-assert.match(transcriptStatus.reply, /현재 등록/);
+assert.match(transcriptStatus.reply, /계정 등록/);
 assert.match(transcriptStatus.reply, /제외 기록: 퇴장 1명 \/ 내보냄 1명/);
 
 console.log("Local skill and chat-event tests passed.");

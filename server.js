@@ -9,7 +9,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "pixelgom-db.json");
 const PORT = Number(process.env.PORT || 3000);
 const STATE_ID = process.env.PIXELGOM_STATE_ID || "main";
-const APP_VERSION = "0.6.1";
+const APP_VERSION = "0.7.0";
 const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "live-user-rank", "name-only-nicknames", "typing-games"];
 
 let pgPool;
@@ -365,6 +365,18 @@ function isActiveUser(user) {
   return user && user.status !== "left" && user.status !== "kicked";
 }
 
+function isRegisteredUser(user) {
+  return Boolean(user?.accountRegistered);
+}
+
+function isPlayableUser(user) {
+  return isActiveUser(user) && isRegisteredUser(user);
+}
+
+function registeredRoomUsers(db, room) {
+  return roomUsers(db, room).filter(isRegisteredUser);
+}
+
 function addNicknameSeen(user, nickname, source = "seen") {
   const name = normalizeText(nickname);
   if (!name) return;
@@ -457,6 +469,9 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
       gameWins: 0,
       gamePlays: 0,
       chatChars: 0,
+      accountRegistered: false,
+      registeredAt: "",
+      isAdmin: false,
       aliases: [],
       nicknameHistory: [],
       activeQuiz: null,
@@ -482,6 +497,9 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
   user.gameWins ??= 0;
   user.gamePlays ??= 0;
   user.chatChars ??= 0;
+  user.accountRegistered ??= false;
+  user.registeredAt ||= "";
+  user.isAdmin ??= false;
   user.aliases ||= [];
   user.nicknameHistory ||= [];
   user.activeQuiz ??= null;
@@ -511,6 +529,12 @@ function touchRoom(db, room) {
   db.rooms[room].chatCount ??= 0;
   db.rooms[room].wordChain ??= null;
   db.rooms[room].fastFinger ??= null;
+  db.rooms[room].auto ||= {
+    noticeEnabled: false,
+    noticeEvery: 30,
+    noticeText: "처음이면 /가입 후 /게임 또는 /모험 입력!",
+    lastNoticeChatCount: 0
+  };
   db.rooms[room].updatedAt = nowIso();
 }
 
@@ -548,7 +572,7 @@ function addEvent(db, user, reason, meta = {}) {
 
 function rankUsers(db, selector, limit = 10, room = "") {
   return Object.values(db.users)
-    .filter((user) => selector(user) > 0 && (!room || user.room === room) && isActiveUser(user))
+    .filter((user) => selector(user) > 0 && (!room || user.room === room) && isPlayableUser(user))
     .sort((a, b) => selector(b) - selector(a) || a.nickname.localeCompare(b.nickname, "ko"))
     .slice(0, limit);
 }
@@ -618,7 +642,7 @@ function periodTypingRankText(db, room, period = "day", metric = "chars") {
     if (room && event.meta?.room !== room) continue;
     if (periodKeyKst(period, event.createdAt) !== targetKey) continue;
     const userId = canonicalUserId(db, event.userId);
-    if (db.users[userId] && !isActiveUser(db.users[userId])) continue;
+    if (db.users[userId] && !isPlayableUser(db.users[userId])) continue;
     const amount = metric === "messages" ? 1 : Number(event.meta?.textLength || 0);
     totals[userId] ||= { userId, nickname: db.users[userId]?.nickname || event.nickname || "익명", value: 0, level: db.users[userId]?.level || 1 };
     totals[userId].value += amount;
@@ -645,7 +669,7 @@ function periodRoomStats(db, room, period = "day") {
     if (room && event.meta?.room !== room) continue;
     if (periodKeyKst(period, event.createdAt) !== targetKey) continue;
     const userId = canonicalUserId(db, event.userId);
-    if (db.users[userId] && !isActiveUser(db.users[userId])) continue;
+    if (db.users[userId] && !isPlayableUser(db.users[userId])) continue;
     const textLength = Number(event.meta?.textLength || 0);
     totals[userId] ||= {
       userId,
@@ -878,6 +902,16 @@ function rankingHelpText() {
 function adminHelpText() {
   return [
     "픽셀곰 관리",
+    "/가입 - 계정 등록",
+    "/공지 - 간단 사용법",
+    "/관리자목록",
+    "/관리자추가 닉네임",
+    "/관리자해제 닉네임",
+    "/지급 닉네임 금액",
+    "/자동공지 - 현재 설정",
+    "/자동공지 켜기|끄기",
+    "/자동공지 간격 30",
+    "/자동공지 설정 내용",
     "/일괄등록 닉네임1, 닉네임2",
     "/일괄등록 후 줄바꿈으로 여러 명 입력 가능",
     "/대화가져오기 - 카카오 대화 복사본으로 참여자/타수 가져오기",
@@ -901,6 +935,135 @@ function pointHelpText() {
   ].join("\n");
 }
 
+function registrationGuideText(user) {
+  return [
+    "픽셀곰 계정 등록이 필요합니다.",
+    "/가입 입력하면 바로 시작할 수 있어요.",
+    "",
+    "가입 후 이용 가능",
+    "/게임, /모험, /낚시, /던전, /포인트순위",
+    "",
+    "자세한 사용법은 /공지 또는 /도움말 참고"
+  ].join("\n");
+}
+
+function registerAccount(db, user) {
+  if (user.accountRegistered) {
+    return [
+      `${user.nickname}님은 이미 가입되어 있습니다.`,
+      user.isAdmin ? "권한: 관리자" : "권한: 일반",
+      "게임은 /게임 또는 /모험"
+    ].join("\n");
+  }
+
+  const firstInRoom = user.room ? registeredRoomUsers(db, user.room).length === 0 : false;
+  user.accountRegistered = true;
+  user.registeredAt = nowIso();
+  if (firstInRoom) user.isAdmin = true;
+  user.updatedAt = nowIso();
+  return [
+    `${user.nickname}님 계정 등록 완료!`,
+    firstInRoom ? "이 방 첫 가입자라 관리자 권한이 부여되었습니다." : "이제 픽셀곰 게임을 이용할 수 있습니다.",
+    "",
+    "시작 명령어",
+    "/게임 - 전체 게임",
+    "/모험 - RPG 도움말",
+    "/캐릭터 - 내 상태"
+  ].join("\n");
+}
+
+function requireAdmin(user) {
+  return user.isAdmin ? "" : "관리자만 사용할 수 있는 명령어입니다.";
+}
+
+function adminListText(db, room) {
+  const admins = registeredRoomUsers(db, room).filter((user) => user.isAdmin);
+  if (!admins.length) return "등록된 관리자가 없습니다.";
+  return ["픽셀곰 관리자 목록", ...admins.map((user) => `• ${user.nickname}`)].join("\n");
+}
+
+function setAdminRole(db, user, text, enabled) {
+  const denied = requireAdmin(user);
+  if (denied) return denied;
+  const targetName = text.replace(/^(\/?(관리자추가|관리자등록|관리자해제|관리자삭제))\s*/i, "").trim();
+  if (!targetName) return enabled ? "사용법: /관리자추가 닉네임" : "사용법: /관리자해제 닉네임";
+  const result = findOneUserByName(db, user.room, targetName, user.id);
+  if (result.error) return result.error;
+  if (!result.user || !isRegisteredUser(result.user)) return `${targetName}님은 가입된 계정이 아닙니다.`;
+  result.user.isAdmin = enabled;
+  result.user.updatedAt = nowIso();
+  return `${result.user.nickname}님 관리자 권한을 ${enabled ? "부여" : "해제"}했습니다.`;
+}
+
+function grantPoints(db, user, text) {
+  const denied = requireAdmin(user);
+  if (denied) return denied;
+  const args = text.replace(/^(\/?(포인트지급|지급|포인트주기))\s*/i, "").trim().split(/\s+/).filter(Boolean);
+  if (args.length < 2) return "사용법: /지급 닉네임 금액";
+  const amount = Number(args.at(-1));
+  const targetName = args.slice(0, -1).join(" ");
+  if (!Number.isInteger(amount) || amount <= 0) return "지급 포인트는 1 이상의 숫자로 입력해주세요.";
+  const result = findOneUserByName(db, user.room, targetName, user.id);
+  if (result.error) return result.error;
+  if (!result.user || !isRegisteredUser(result.user)) return `${targetName}님은 가입된 계정이 아닙니다.`;
+  const level = addPoints(db, result.user, amount, "admin_grant", { from: user.nickname });
+  return [
+    `${result.user.nickname}님에게 ${amount.toLocaleString()}P 지급 완료`,
+    `현재 포인트: ${result.user.points.toLocaleString()}P / LV.${result.user.level}`,
+    level.leveledUp ? `레벨업! LV.${level.beforeLevel} -> LV.${level.afterLevel}` : ""
+  ].filter(Boolean).join("\n");
+}
+
+function autoNoticeText(db, user, text) {
+  const denied = requireAdmin(user);
+  if (denied) return denied;
+  if (!user.room) return "자동공지 설정은 채팅방에서만 가능합니다.";
+  touchRoom(db, user.room);
+  const auto = db.rooms[user.room].auto;
+  const raw = text.replace(/^(\/?(자동공지|오토|자동))\s*/i, "").trim();
+  if (!raw) {
+    return [
+      "픽셀곰 자동공지",
+      `상태: ${auto.noticeEnabled ? "켜짐" : "꺼짐"}`,
+      `간격: 채팅 ${auto.noticeEvery}회`,
+      `내용: ${auto.noticeText}`,
+      "",
+      "/자동공지 켜기",
+      "/자동공지 끄기",
+      "/자동공지 간격 30",
+      "/자동공지 설정 내용"
+    ].join("\n");
+  }
+  if (["켜기", "on"].includes(raw)) {
+    auto.noticeEnabled = true;
+    auto.lastNoticeChatCount = db.rooms[user.room].chatCount || 0;
+    return "자동공지 켜짐";
+  }
+  if (["끄기", "off"].includes(raw)) {
+    auto.noticeEnabled = false;
+    return "자동공지 꺼짐";
+  }
+  const interval = raw.match(/^(간격|주기)\s+(\d{1,3})$/);
+  if (interval) {
+    auto.noticeEvery = Math.max(5, Math.min(200, Number(interval[2])));
+    return `자동공지 간격: 채팅 ${auto.noticeEvery}회`;
+  }
+  const message = raw.replace(/^(설정|내용)\s*/i, "").trim();
+  if (!message) return "사용법: /자동공지 설정 내용";
+  auto.noticeText = message.slice(0, 300);
+  return ["자동공지 내용 설정 완료", auto.noticeText].join("\n");
+}
+
+function maybeAutoNotice(db, roomName) {
+  const room = db.rooms?.[roomName];
+  const auto = room?.auto;
+  if (!auto?.noticeEnabled) return null;
+  const every = Math.max(5, Number(auto.noticeEvery || 30));
+  if ((room.chatCount || 0) - (auto.lastNoticeChatCount || 0) < every) return null;
+  auto.lastNoticeChatCount = room.chatCount || 0;
+  return auto.noticeText || "처음이면 /가입 후 /게임 또는 /모험 입력!";
+}
+
 function statusText() {
   return [
     "픽셀곰 서버 정상 연결",
@@ -913,6 +1076,8 @@ function profileText(user) {
   const itemCount = Object.values(user.inventory || {}).reduce((sum, count) => sum + count, 0);
   return [
     `${user.nickname}님의 정보`,
+    user.accountRegistered ? "계정: 등록됨" : "계정: 미등록",
+    user.isAdmin ? "권한: 관리자" : "권한: 일반",
     `칭호: ${titleFor(user)}`,
     `레벨: LV.${user.level}`,
     `포인트: ${user.points.toLocaleString()}P`,
@@ -1015,6 +1180,7 @@ function parseBulkNames(text) {
 
 function bulkRegister(db, user, text) {
   if (!user.room) return "일괄등록은 채팅방에서만 사용할 수 있습니다.";
+  if (!user.isAdmin) return "관리자만 일괄등록을 사용할 수 있습니다.";
   const names = uniqueValues(parseBulkNames(text));
   if (!names.length) {
     return [
@@ -1036,6 +1202,8 @@ function bulkRegister(db, user, text) {
     if (db.users[id]) existing += 1;
     else created += 1;
     const row = ensureUser(db, id, name, user.room, { source: "bulk" });
+    row.accountRegistered = true;
+    row.registeredAt ||= nowIso();
     row.bulkRegisteredAt ||= nowIso();
   }
   return [
@@ -1050,6 +1218,8 @@ function bulkRegister(db, user, text) {
 function registrationStatusText(db, room) {
   const users = Object.values(db.users).filter((user) => !room || user.room === room);
   const activeUsers = users.filter(isActiveUser);
+  const registeredUsers = activeUsers.filter(isRegisteredUser);
+  const admins = registeredUsers.filter((user) => user.isAdmin).length;
   const active = activeUsers.length;
   const chatted = activeUsers.filter((user) => (user.chatCount || 0) > 0).length;
   const left = users.filter((user) => user.status === "left").length;
@@ -1057,7 +1227,9 @@ function registrationStatusText(db, room) {
   const bulk = activeUsers.filter((user) => user.bulkRegisteredAt).length;
   return [
     "픽셀곰 등록현황",
-    `현재 등록: ${active}명`,
+    `계정 등록: ${registeredUsers.length}명`,
+    `관리자: ${admins}명`,
+    `감지 인원: ${active}명`,
     `채팅 감지: ${chatted}명`,
     `일괄등록: ${bulk}명`,
     `제외 기록: 퇴장 ${left}명 / 내보냄 ${kicked}명`
@@ -1278,6 +1450,8 @@ function importTranscript(db, user, text) {
     const id = userKeyForChat(user.room, item.sender);
     const existed = Boolean(db.users[canonicalUserId(db, id)] || db.users[id]);
     const target = ensureUser(db, id, item.sender, user.room, { source: "import" });
+    target.accountRegistered = true;
+    target.registeredAt ||= nowIso();
     touchedUserIds.add(target.id);
     if (!existed) createdUserIds.add(target.id);
     const textLength = textLengthForStats(item.text);
@@ -2337,6 +2511,9 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/공지", "/간단", "/notice"])) return noticeText();
   if (aliasesMatch(commandText, ["/상태", "상태", "/status", "status"])) return statusText();
   if (aliasesMatch(commandText, ["/봇소개", "봇소개", "/픽셀곰소개", "픽셀곰소개", "/픽셀소개", "픽셀소개", "/브리핑", "브리핑", "/설명", "설명", "픽셀곰", "픽셀"]) || (isPixelgomMentionCommand(commandText) && /(뭐|누구|로봇|봇|설명)/.test(commandText))) return botIntroText();
+  if (aliasesMatch(commandText, ["/가입", "/계정등록", "/계정", "/등록"])) return registerAccount(db, user);
+  if (!isRegisteredUser(user)) return registrationGuideText(user);
+
   if (aliasesMatch(commandText, ["/실시간순위", "실시간순위", "/실시간랭킹", "실시간랭킹", "/현재순위", "현재순위", "/방순위", "방순위", "/오늘순위", "오늘순위", "/오늘랭킹", "오늘랭킹", "/랭킹", "랭킹", "/순위", "순위", "/순웨", "순웨"])) return periodOverviewText(db, user.room, "day");
   if (aliasesMatch(commandText, ["/내순위", "내순위", "/내등수", "내등수", "/내랭킹", "내랭킹", "/나는몇등", "나는몇등"])) return myRankText(db, user, "day");
   if (aliasesMatch(commandText, ["/주간순위", "주간순위", "/주간랭킹", "주간랭킹"])) return periodOverviewText(db, user.room, "week");
@@ -2377,6 +2554,12 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/게임순위", "게임순위", "게임 순위", "/gamerank"])) {
     return rankingText("픽셀곰 게임 순위", rankUsers(db, (row) => row.gameWins, 10, user.room), (row) => row.gameWins, "승");
   }
+  if (aliasesMatch(commandText, ["/관리자목록", "/관리자", "/admin"])) return adminListText(db, user.room);
+  if (startsWithAny(commandText, ["/관리자추가", "/관리자등록"])) return setAdminRole(db, user, commandText, true);
+  if (startsWithAny(commandText, ["/관리자해제", "/관리자삭제"])) return setAdminRole(db, user, commandText, false);
+  if (startsWithAny(commandText, ["/포인트지급", "/지급", "/포인트주기"])) return grantPoints(db, user, commandText);
+  if (startsWithAny(commandText, ["/자동공지", "/오토", "/자동"])) return autoNoticeText(db, user, commandText);
+
   if (startsWithAny(commandText, ["/가위바위보", "가위바위보", "/rps"])) return rps(db, user, commandText);
   if (aliasesMatch(commandText, ["/주사위", "주사위", "/dice"])) return dice(db, user);
   if (startsWithAny(commandText, ["/동전", "동전", "/coin"])) return coin(db, user, commandText);
@@ -2419,6 +2602,8 @@ export async function handleSkill(payload) {
   const utterance = normalizeText(payload?.userRequest?.utterance);
   const blockNames = blockNamesFrom(payload);
   const user = ensureUser(db, userIdFromSkill(payload), displayNameFromSkill(payload));
+  user.accountRegistered = true;
+  user.registeredAt ||= nowIso();
   const reply = await runCommand(db, user, utterance, blockNames);
   await saveDb(db);
   return kakaoText(reply || "알 수 없는 명령어입니다.\n/도움말 을 입력해보세요.");
@@ -2438,121 +2623,19 @@ export async function handleChatEvent(payload) {
 
   const userId = userKeyForChat(room, sender);
   const user = ensureUser(db, userId, sender, room, { source: "seen" });
-  awardChatPoint(db, user, room, msg, { textLength: isTranscriptImportCommand(msg) ? 0 : undefined });
-
-  const commandPrefixes = [
-    "/",
-    "지역등록",
-    "가위바위보",
-    "정답",
-    "동전",
-    "홀짝",
-    "타자게임",
-    "타자",
-    "초성퀴즈",
-    "초성",
-    "숫자야구",
-    "야구",
-    "선착순",
-    "업다운",
-    "끝말",
-    "랜덤",
-    "골라",
-    "선택",
-    "궁합",
-    "송금",
-    "선물",
-    "일괄등록",
-    "대화가져오기",
-    "대화등록",
-    "닉이력",
-    "닉연결"
-  ];
-  const exactCommands = [
-    "?",
-    "도움말",
-    "도움",
-    "명령어",
-    "상태",
-    "봇소개",
-    "픽셀곰소개",
-    "픽셀소개",
-    "브리핑",
-    "설명",
-    "내정보",
-    "정보",
-    "실시간순위",
-    "실시간랭킹",
-    "현재순위",
-    "방순위",
-    "오늘순위",
-    "오늘랭킹",
-    "랭킹",
-    "순위",
-    "순웨",
-    "내순위",
-    "내등수",
-    "내랭킹",
-    "나는몇등",
-    "주간순위",
-    "주간랭킹",
-    "월간순위",
-    "월간랭킹",
-    "지역전체",
-    "지역통계",
-    "포인트순위",
-    "채팅순위",
-    "타수순위",
-    "타수",
-    "몇타",
-    "일간타수순위",
-    "주간타수순위",
-    "월간타수순위",
-    "일간채팅순위",
-    "채팅랭킹",
-    "주간채팅순위",
-    "월간채팅순위",
-    "레벨순위",
-    "출석순위",
-    "게임순위",
-    "게임",
-    "주사위",
-    "룰렛",
-    "뽑기",
-    "가챠",
-    "행운상자",
-    "상자",
-    "가방",
-    "상점",
-    "모험",
-    "rpg",
-    "캐릭터",
-    "내캐릭",
-    "낚시",
-    "채집",
-    "탐험",
-    "사냥",
-    "던전",
-    "휴식",
-    "퀴즈",
-    "운세",
-    "연애운",
-    "남친",
-    "여친",
-    "썸운",
-    "미션",
-    "칭찬",
-    "등록현황",
-    "입퇴장현황",
-    "입장현황"
-  ];
   const isCommand = msg.startsWith("/");
+  let awarded = 0;
+  if (isRegisteredUser(user)) {
+    awardChatPoint(db, user, room, msg, { textLength: isTranscriptImportCommand(msg) ? 0 : undefined });
+    awarded = POINT_RULES.chat;
+  }
   const reply = isCommand ? await runCommand(db, user, msg) : null;
+  const autoReply = !isCommand && isRegisteredUser(user) ? maybeAutoNotice(db, room) : null;
   await saveDb(db);
   return {
     ok: true,
-    reply,
-    awarded: POINT_RULES.chat,
+    reply: reply || autoReply,
+    awarded,
     points: user.points,
     level: user.level
   };
