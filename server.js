@@ -9,8 +9,8 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "pixelgom-db.json");
 const PORT = Number(process.env.PORT || 3000);
 const STATE_ID = process.env.PIXELGOM_STATE_ID || "main";
-const APP_VERSION = "0.4.0";
-const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "live-user-rank"];
+const APP_VERSION = "0.5.0";
+const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "live-user-rank", "name-only-nicknames"];
 
 let pgPool;
 
@@ -262,12 +262,77 @@ function userKeyForChat(room, sender) {
   return `chat:${room}:${sender}`;
 }
 
-function userKeyForProfile(room, profileHash) {
-  return `profile:${room}:${profileHash}`;
-}
-
 function normalizeParticipantName(value) {
   return normalizeText(value).replace(/\s+/g, " ").replace(/님$/, "");
+}
+
+function nicknameLookupKey(value) {
+  return normalizeParticipantName(value)
+    .replace(/^@+/, "")
+    .replace(/[()[\]{}<>]/g, "")
+    .replace(/\s+/g, "")
+    .replace(/(남자|여자|남성|여성|남|여)$/i, "")
+    .toLowerCase();
+}
+
+function nicknameFullKey(value) {
+  return normalizeParticipantName(value)
+    .replace(/^@+/, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+function userNicknameCandidates(user) {
+  return uniqueValues([
+    user.nickname,
+    ...(user.aliases || []),
+    ...(user.nicknameHistory || []).map((row) => row.nickname)
+  ]);
+}
+
+function roomUsers(db, room, options = {}) {
+  const seen = new Set();
+  return Object.values(db.users)
+    .filter((user) => !room || user.room === room)
+    .map((user) => db.users[canonicalUserId(db, user.id)] || user)
+    .filter((user) => options.includeInactive || isActiveUser(user))
+    .filter((user) => {
+      if (!user || seen.has(user.id)) return false;
+      seen.add(user.id);
+      return true;
+    });
+}
+
+function findUsersByName(db, room, query, excludeId = "", options = {}) {
+  const clean = normalizeParticipantName(query);
+  const fullKey = nicknameFullKey(clean);
+  const nameKey = nicknameLookupKey(clean);
+  if (!nameKey) return [];
+  const excluded = excludeId ? canonicalUserId(db, excludeId) : "";
+  const candidates = roomUsers(db, room, options).filter((user) => user.id !== excluded);
+  const exact = candidates.filter((user) =>
+    userNicknameCandidates(user).some((name) => nicknameFullKey(name) === fullKey)
+  );
+  if (exact.length) return exact;
+  return candidates.filter((user) =>
+    userNicknameCandidates(user).some((name) => nicknameLookupKey(name) === nameKey)
+  );
+}
+
+function nameLookupFailure(name, matches) {
+  if (matches.length <= 1) return "";
+  return [
+    `${name} 닉네임이 여러 명입니다.`,
+    "전체 닉네임으로 다시 입력해주세요.",
+    ...matches.slice(0, 5).map((user) => `• ${user.nickname}`)
+  ].join("\n");
+}
+
+function findOneUserByName(db, room, query, excludeId = "", options = {}) {
+  const matches = findUsersByName(db, room, query, excludeId, options);
+  if (matches.length === 1) return { user: matches[0], error: "" };
+  if (matches.length > 1) return { user: null, error: nameLookupFailure(query, matches) };
+  return { user: null, error: "" };
 }
 
 function canonicalUserId(db, id) {
@@ -282,6 +347,10 @@ function canonicalUserId(db, id) {
 
 function uniqueValues(values) {
   return [...new Set(values.filter(Boolean))];
+}
+
+function isActiveUser(user) {
+  return user && user.status !== "left" && user.status !== "kicked";
 }
 
 function addNicknameSeen(user, nickname, source = "seen") {
@@ -327,7 +396,6 @@ function mergeUsers(db, targetId, sourceId, reason = "merge") {
   target.attendanceStreak = Math.max(target.attendanceStreak || 0, source.attendanceStreak || 0);
   target.lastAttendanceDate = [target.lastAttendanceDate, source.lastAttendanceDate].filter(Boolean).sort().at(-1) || "";
   target.aliases = uniqueValues([...(target.aliases || []), source.nickname, ...(source.aliases || [])]);
-  target.profileHashes = uniqueValues([...(target.profileHashes || []), ...(source.profileHashes || [])]);
   target.nicknameHistory = [...(target.nicknameHistory || []), ...(source.nicknameHistory || [])]
     .filter((row) => row?.nickname)
     .sort((a, b) => String(a.firstSeenAt || "").localeCompare(String(b.firstSeenAt || "")));
@@ -358,33 +426,8 @@ function mergeUsers(db, targetId, sourceId, reason = "merge") {
   return target;
 }
 
-function findUserByProfileHash(db, room, profileHash) {
-  const hashValue = normalizeText(profileHash);
-  if (!hashValue) return null;
-  const matches = Object.values(db.users).filter((user) =>
-    user.room === room &&
-    Array.isArray(user.profileHashes) &&
-    user.profileHashes.includes(hashValue)
-  );
-  return matches.length === 1 ? matches[0] : null;
-}
-
 function ensureUser(db, id, nickname, room = "", options = {}) {
   id = canonicalUserId(db, id);
-  if (!db.users[id]) {
-    const legacyId = room && nickname ? userKeyForChat(room, nickname) : "";
-    if (options.profileHash && legacyId && db.users[legacyId] && legacyId !== id) {
-      db.users[id] = db.users[legacyId];
-      db.users[id].id = id;
-      delete db.users[legacyId];
-      for (const event of db.events || []) {
-        if (event.userId === legacyId) event.userId = id;
-      }
-      db.identityLinks ||= {};
-      db.identityLinks[legacyId] = id;
-    }
-  }
-
   if (!db.users[id]) {
     db.users[id] = {
       id,
@@ -404,7 +447,6 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
       chatChars: 0,
       aliases: [],
       nicknameHistory: [],
-      profileHashes: [],
       activeQuiz: null,
       cooldowns: {},
       createdAt: nowIso(),
@@ -426,7 +468,6 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
   user.chatChars ??= 0;
   user.aliases ||= [];
   user.nicknameHistory ||= [];
-  user.profileHashes ||= [];
   user.activeQuiz ??= null;
   user.activeUpDown ??= null;
   user.inventory ||= {};
@@ -435,9 +476,6 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
   user.status ||= "active";
   user.createdAt ||= nowIso();
   user.updatedAt ||= nowIso();
-  if (options.profileHash && !user.profileHashes.includes(options.profileHash)) {
-    user.profileHashes.push(options.profileHash);
-  }
   addNicknameSeen(user, nickname, options.source || "seen");
   if (nickname && user.nickname !== nickname) user.nickname = nickname;
   if (room && user.room !== room) user.room = room;
@@ -489,7 +527,7 @@ function addEvent(db, user, reason, meta = {}) {
 
 function rankUsers(db, selector, limit = 10, room = "") {
   return Object.values(db.users)
-    .filter((user) => selector(user) > 0 && (!room || user.room === room))
+    .filter((user) => selector(user) > 0 && (!room || user.room === room) && isActiveUser(user))
     .sort((a, b) => selector(b) - selector(a) || a.nickname.localeCompare(b.nickname, "ko"))
     .slice(0, limit);
 }
@@ -559,6 +597,7 @@ function periodTypingRankText(db, room, period = "day", metric = "chars") {
     if (room && event.meta?.room !== room) continue;
     if (periodKeyKst(period, event.createdAt) !== targetKey) continue;
     const userId = canonicalUserId(db, event.userId);
+    if (db.users[userId] && !isActiveUser(db.users[userId])) continue;
     const amount = metric === "messages" ? 1 : Number(event.meta?.textLength || 0);
     totals[userId] ||= { userId, nickname: db.users[userId]?.nickname || event.nickname || "익명", value: 0, level: db.users[userId]?.level || 1 };
     totals[userId].value += amount;
@@ -585,6 +624,7 @@ function periodRoomStats(db, room, period = "day") {
     if (room && event.meta?.room !== room) continue;
     if (periodKeyKst(period, event.createdAt) !== targetKey) continue;
     const userId = canonicalUserId(db, event.userId);
+    if (db.users[userId] && !isActiveUser(db.users[userId])) continue;
     const textLength = Number(event.meta?.textLength || 0);
     totals[userId] ||= {
       userId,
@@ -862,7 +902,7 @@ function registerRegion(db, user, text) {
 
 function regionListText(db, room = "") {
   const grouped = Object.values(db.users)
-    .filter((user) => user.region && (!room || user.room === room))
+    .filter((user) => user.region && (!room || user.room === room) && isActiveUser(user))
     .sort((a, b) => a.nickname.localeCompare(b.nickname, "ko"))
     .reduce((acc, user) => {
       acc[user.region] ||= [];
@@ -882,7 +922,7 @@ function regionListText(db, room = "") {
 
 function regionStatsText(db, room = "") {
   const counts = Object.values(db.users)
-    .filter((user) => user.region && (!room || user.room === room))
+    .filter((user) => user.region && (!room || user.room === room) && isActiveUser(user))
     .reduce((acc, user) => {
       acc[user.region] = (acc[user.region] || 0) + 1;
       return acc;
@@ -939,19 +979,18 @@ function bulkRegister(db, user, text) {
 
 function registrationStatusText(db, room) {
   const users = Object.values(db.users).filter((user) => !room || user.room === room);
-  const active = users.filter((user) => user.status !== "left" && user.status !== "kicked").length;
-  const chatted = users.filter((user) => (user.chatCount || 0) > 0).length;
+  const activeUsers = users.filter(isActiveUser);
+  const active = activeUsers.length;
+  const chatted = activeUsers.filter((user) => (user.chatCount || 0) > 0).length;
   const left = users.filter((user) => user.status === "left").length;
   const kicked = users.filter((user) => user.status === "kicked").length;
-  const bulk = users.filter((user) => user.bulkRegisteredAt).length;
+  const bulk = activeUsers.filter((user) => user.bulkRegisteredAt).length;
   return [
     "픽셀곰 등록현황",
-    `등록 인원: ${users.length}명`,
-    `현재 추정: ${active}명`,
+    `현재 등록: ${active}명`,
     `채팅 감지: ${chatted}명`,
-    `퇴장: ${left}명`,
-    `내보냄: ${kicked}명`,
-    `일괄등록: ${bulk}명`
+    `일괄등록: ${bulk}명`,
+    `제외 기록: 퇴장 ${left}명 / 내보냄 ${kicked}명`
   ].join("\n");
 }
 
@@ -959,10 +998,9 @@ function nicknameHistoryText(db, user, text) {
   const query = text.replace(/^\/?닉이력\s*/i, "").trim();
   let target = user;
   if (query) {
-    target = Object.values(db.users).find((candidate) =>
-      candidate.room === user.room &&
-      (candidate.nickname === query || candidate.aliases?.includes(query))
-    );
+    const result = findOneUserByName(db, user.room, query, "", { includeInactive: true });
+    if (result.error) return result.error;
+    target = result.user;
     if (!target) return `${query}님의 닉네임 이력을 찾지 못했습니다.`;
   }
   const history = target.nicknameHistory || [];
@@ -977,11 +1015,9 @@ function nicknameHistoryText(db, user, text) {
 function linkNickname(db, user, text) {
   const previousName = text.replace(/^\/?닉연결\s*/i, "").trim();
   if (!previousName) return "사용법: /닉연결 이전닉\n예시: /닉연결 우주";
-  const previous = Object.values(db.users).find((candidate) =>
-    candidate.room === user.room &&
-    candidate.id !== user.id &&
-    (candidate.nickname === previousName || candidate.aliases?.includes(previousName))
-  );
+  const result = findOneUserByName(db, user.room, previousName, user.id, { includeInactive: true });
+  if (result.error) return result.error;
+  const previous = result.user;
   if (!previous) return `${previousName} 기록을 찾지 못했습니다.\n먼저 /일괄등록 으로 이전 닉네임을 등록할 수 있습니다.`;
   const merged = mergeUsers(db, user.id, previous.id, "nickname_link");
   addNicknameSeen(merged, previousName, "linked");
@@ -1489,47 +1525,29 @@ function randomNumber(text) {
   return `랜덤 결과: ${randomInt(min, max)}`;
 }
 
-function compatibility(user, text) {
-  const target = text.replace(/^(\/?궁합|\/compat)\s*/i, "").trim();
-  if (!target) return "사용법: /궁합 닉네임";
+function compatibility(db, user, text) {
+  const targetName = text.replace(/^(\/?궁합|\/compat)\s*/i, "").trim();
+  if (!targetName) return "사용법: /궁합 닉네임";
+  const result = findOneUserByName(db, user.room, targetName, user.id);
+  if (result.error) return result.error;
+  const target = result.user?.nickname || targetName;
   const score = Math.abs(hash(`${todayKst()}:${user.nickname}:${target}`)) % 101;
-  let comment = "무난한 케미입니다.";
-  if (score >= 90) comment = "오늘은 환상의 케미입니다.";
-  else if (score >= 70) comment = "분위기가 꽤 좋습니다.";
-  else if (score <= 20) comment = "오늘은 거리두기가 필요합니다.";
+  const comment = stablePick(COMPATIBILITY_MESSAGES, `${todayKst()}:${user.nickname}:${target}:compatibility`);
   return [`${user.nickname}님과 ${target}님의 오늘 궁합`, `${score}%`, comment].join("\n");
 }
 
 function compliment(user) {
-  const lines = [
-    "오늘 말투가 방 분위기를 살립니다.",
-    "조용히 있어도 존재감이 있습니다.",
-    "센스가 과하지 않고 딱 좋습니다.",
-    "오늘은 리액션이 무기입니다.",
-    "픽셀곰 기준 오늘의 호감도 상승 중입니다."
-  ];
-  return `${user.nickname}님\n${lines[Math.floor(Math.random() * lines.length)]}`;
+  const message = stablePick(COMPLIMENT_MESSAGES, `${todayKst()}:${user.id}:${user.nickname}:compliment`);
+  return `${user.nickname}님\n${message}`;
 }
 
 function mission(user) {
-  const missions = [
-    "오늘 채팅 10번 하기",
-    "출석하고 /주사위 굴리기",
-    "처음 온 사람에게 인사하기",
-    "/골라 로 메뉴 하나 정하기",
-    "지역 미등록이면 /지역등록 하기"
-  ];
-  const index = Math.abs(hash(`${todayKst()}:${user.id}:mission`)) % missions.length;
-  return `${user.nickname}님의 오늘 미션\n${missions[index]}`;
+  const message = stablePick(MISSION_MESSAGES, `${todayKst()}:${user.id}:${user.nickname}:mission`);
+  return `${user.nickname}님의 오늘 미션\n${message}`;
 }
 
 function findUserByNickname(db, room, nickname, excludeId = "") {
-  const normalized = normalizeText(nickname);
-  return Object.values(db.users).find((candidate) =>
-    candidate.id !== excludeId &&
-    candidate.nickname === normalized &&
-    (!room || candidate.room === room)
-  );
+  return findOneUserByName(db, room, nickname, excludeId).user;
 }
 
 function transferPoints(db, user, text) {
@@ -1540,7 +1558,9 @@ function transferPoints(db, user, text) {
   if (!Number.isInteger(amount) || amount <= 0) return "보낼 포인트는 1 이상의 숫자로 입력해주세요.";
   if (user.points < amount + POINT_RULES.transferFee) return `포인트가 부족합니다.\n현재: ${user.points.toLocaleString()}P`;
 
-  const target = findUserByNickname(db, user.room, targetName, user.id);
+  const result = findOneUserByName(db, user.room, targetName, user.id);
+  if (result.error) return result.error;
+  const target = result.user;
   if (!target) return `같은 방에서 ${targetName}님을 찾지 못했습니다.\n상대가 먼저 한 번 채팅하거나 /내정보 를 사용해야 합니다.`;
 
   addPoints(db, user, -amount - POINT_RULES.transferFee, "transfer_out", { to: target.nickname });
@@ -1589,47 +1609,171 @@ function wordChain(db, user, text) {
   return [`끝말 성공! +3P`, `현재 단어: ${word}`, `다음 글자: ${room.wordChain.lastChar}`].join("\n");
 }
 
+function makeMessagePool(starts, endings) {
+  const rows = [];
+  for (const start of starts) {
+    for (const ending of endings) {
+      rows.push(`${start} ${ending}`);
+      if (rows.length === 100) return rows;
+    }
+  }
+  return rows;
+}
+
+function stablePick(rows, key) {
+  return rows[Math.abs(hash(key)) % rows.length];
+}
+
+const FORTUNE_MESSAGES = makeMessagePool(
+  [
+    "오늘은 리액션이 살아나는 날입니다.",
+    "오늘은 말 한마디가 분위기를 바꾸는 날입니다.",
+    "오늘은 타이밍을 잘 잡으면 웃음이 따라옵니다.",
+    "오늘은 가볍게 던진 농담이 운을 부릅니다.",
+    "오늘은 먼저 인사하면 흐름이 좋아집니다.",
+    "오늘은 조용히 있다가도 존재감이 올라갑니다.",
+    "오늘은 너무 진지하지 않은 태도가 잘 맞습니다.",
+    "오늘은 작은 배려가 크게 돌아옵니다.",
+    "오늘은 질문보다 공감이 강한 날입니다.",
+    "오늘은 방 분위기를 살릴 기회가 있습니다."
+  ],
+  [
+    "선 넘지 않는 장난을 챙기세요.",
+    "답장 타이밍을 조금 빠르게 가져가세요.",
+    "새로 온 사람에게 한마디 건네면 좋습니다.",
+    "말을 아끼기보다 짧게라도 반응하세요.",
+    "출석과 한마디 수다가 행운 포인트입니다.",
+    "웃고 넘기면 오해가 줄어듭니다.",
+    "오늘의 행운 명령어는 /방순위 입니다.",
+    "상대 말에 한 번 더 받아주면 좋습니다.",
+    "가벼운 칭찬이 생각보다 잘 먹힙니다.",
+    "무리한 드립보다 안정적인 리액션이 낫습니다."
+  ]
+);
+
+const RELATIONSHIP_MESSAGES = makeMessagePool(
+  [
+    "연애운은 천천히 올라오는 중입니다.",
+    "썸운은 대화에서 먼저 열립니다.",
+    "오늘은 자연스러운 관심 표현이 좋습니다.",
+    "오늘은 급하게 밀어붙이면 흐름이 꺾입니다.",
+    "오늘은 웃긴 사람에게 시선이 갑니다.",
+    "오늘은 편하게 말 거는 쪽이 유리합니다.",
+    "오늘은 티 안 나는 배려가 점수입니다.",
+    "오늘은 말투가 호감도를 좌우합니다.",
+    "오늘은 먼저 다가가도 나쁘지 않습니다.",
+    "오늘은 기대보다 여유가 더 매력입니다."
+  ],
+  [
+    "짧은 질문으로 시작하세요.",
+    "장난 뒤에는 꼭 리액션을 붙이세요.",
+    "상대가 말할 틈을 남겨두세요.",
+    "너무 센 농담은 잠깐 아껴두세요.",
+    "공통 관심사를 잡으면 확률이 올라갑니다.",
+    "오늘은 보이스보다 채팅 예열이 먼저입니다.",
+    "가볍게 칭찬하면 분위기가 부드러워집니다.",
+    "한 번에 결론 내지 말고 흐름을 보세요.",
+    "읽씹보다 짧은 답장이 낫습니다.",
+    "무리하지 않으면 다음 기회가 생깁니다."
+  ]
+);
+
+const COMPATIBILITY_MESSAGES = makeMessagePool(
+  [
+    "둘의 케미는 오늘 대화 타이밍에 달렸습니다.",
+    "둘의 분위기는 가벼운 농담에서 살아납니다.",
+    "둘은 생각보다 리액션 합이 중요합니다.",
+    "둘은 서로 말 속도를 맞추면 좋아집니다.",
+    "둘은 장난 수위를 낮추면 더 편해집니다.",
+    "둘은 질문 하나로 흐름을 만들 수 있습니다.",
+    "둘은 오늘 무리하지 않을수록 자연스럽습니다.",
+    "둘은 웃음 포인트가 맞으면 급상승합니다.",
+    "둘은 짧은 대화가 길게 이어질 가능성이 있습니다.",
+    "둘은 배려가 보이면 분위기가 좋아집니다."
+  ],
+  [
+    "먼저 가볍게 안부를 던져보세요.",
+    "상대 말에 한 번 더 받아치면 좋습니다.",
+    "과한 장난보다 센스 있는 리액션이 낫습니다.",
+    "오늘은 천천히 친해지는 쪽이 유리합니다.",
+    "공통 주제를 하나만 잡아도 충분합니다.",
+    "칭찬은 짧고 구체적으로 하는 게 좋습니다.",
+    "타이밍만 맞으면 대화가 길어질 수 있습니다.",
+    "오늘은 웃음보다 안정감이 더 중요합니다.",
+    "서로 템포를 맞추면 점수가 올라갑니다.",
+    "무리한 플러팅은 잠깐 참는 게 좋습니다."
+  ]
+);
+
+const COMPLIMENT_MESSAGES = makeMessagePool(
+  [
+    "오늘 말투가 방 분위기를 살립니다.",
+    "오늘 존재감이 자연스럽게 올라갑니다.",
+    "오늘 리액션이 꽤 좋습니다.",
+    "오늘 센스가 과하지 않고 좋습니다.",
+    "오늘 대화 흐름을 편하게 만듭니다.",
+    "오늘 한마디가 생각보다 잘 먹힙니다.",
+    "오늘 웃음 포인트를 잘 잡습니다.",
+    "오늘 부담 없이 말 거는 힘이 있습니다.",
+    "오늘 채팅 텐션이 안정적입니다.",
+    "오늘 분위기 맞추는 감이 좋습니다."
+  ],
+  [
+    "이대로만 가면 호감도 유지입니다.",
+    "짧게 받아쳐도 충분히 매력 있습니다.",
+    "방이 조용할 때 한마디 하면 좋습니다.",
+    "너무 꾸미지 않아도 괜찮습니다.",
+    "가볍게 웃어주는 게 강점입니다.",
+    "선 넘지 않는 장난이 잘 어울립니다.",
+    "오늘은 대화 받는 쪽이 더 빛납니다.",
+    "편한 말투가 장점으로 보입니다.",
+    "상대가 말하기 좋게 만들어줍니다.",
+    "픽셀곰 기준 오늘 점수 좋습니다."
+  ]
+);
+
+const MISSION_MESSAGES = makeMessagePool(
+  [
+    "오늘 미션은 채팅 5번 하기입니다.",
+    "오늘 미션은 새로 온 사람에게 인사하기입니다.",
+    "오늘 미션은 /방순위 한 번 확인하기입니다.",
+    "오늘 미션은 웃긴 리액션 하나 남기기입니다.",
+    "오늘 미션은 밥 메뉴 하나 공유하기입니다.",
+    "오늘 미션은 누군가에게 가벼운 칭찬하기입니다.",
+    "오늘 미션은 보이스룸 얘기 한 번 꺼내기입니다.",
+    "오늘 미션은 지역 미등록이면 등록하기입니다.",
+    "오늘 미션은 /운세 결과 공유하기입니다.",
+    "오늘 미션은 조용한 사람 한 번 불러보기입니다."
+  ],
+  [
+    "성공하면 방 분위기가 조금 살아납니다.",
+    "무리하지 말고 자연스럽게 하면 됩니다.",
+    "짧게 해도 인정입니다.",
+    "오늘 안에만 하면 됩니다.",
+    "실패해도 포인트는 마음속에 적립됩니다.",
+    "타이밍이 보이면 바로 해보세요.",
+    "너무 진지하게 하지 않아도 됩니다.",
+    "가볍게 던질수록 성공 확률이 높습니다.",
+    "혼자 하기 어렵다면 누군가를 태그하세요.",
+    "픽셀곰이 조용히 지켜봅니다."
+  ]
+);
+
 function fortune(user) {
-  const messages = [
-    "오늘은 선톡보다 리액션이 강한 날입니다.",
-    "작은 농담 하나가 분위기를 살립니다.",
-    "포인트보다 중요한 건 출석입니다. 그래도 포인트도 챙기세요.",
-    "오늘의 행운 명령어는 /주사위 입니다.",
-    "말을 아끼면 아쉬운 날입니다. 한마디 더 해도 됩니다.",
-    "오늘은 가볍게 웃고 넘기면 운이 붙습니다.",
-    "오해가 생기기 쉬운 날입니다. 농담 뒤에는 리액션을 붙이세요.",
-    "채팅운이 좋습니다. 한 번 나오면 방이 살아납니다.",
-    "오늘은 질문보다 대답이 매력적인 날입니다.",
-    "작은 배려가 크게 돌아오는 날입니다.",
-    "오늘의 행운 포인트는 선 넘지 않는 장난입니다.",
-    "조용히 있다가 한마디로 분위기를 가져갈 수 있습니다.",
-    "오늘은 새로운 사람이랑 말 섞기 좋은 날입니다.",
-    "너무 진지하면 손해입니다. 적당히 웃고 가세요.",
-    "오늘은 타이밍이 중요합니다. 끼어들 틈을 잘 보세요."
-  ];
-  const index = Math.abs(hash(`${todayKst()}:${user.id}:${user.nickname}`)) % messages.length;
-  return `${user.nickname}님의 오늘 운세\n${messages[index]}`;
+  const message = stablePick(FORTUNE_MESSAGES, `${todayKst()}:${user.id}:${user.nickname}:fortune`);
+  return `${user.nickname}님의 오늘 운세\n${message}`;
 }
 
 function relationshipFortune(user, text) {
-  const messages = [
-    "가만히 있으면 안 생깁니다. 오늘은 먼저 말 걸면 확률이 올라갑니다.",
-    "이번 주는 썸보다 수다가 먼저입니다. 말이 통하는 사람을 보세요.",
-    "급하게 찾으면 꼬입니다. 오늘은 웃긴 사람 쪽에 운이 있습니다.",
-    "가능성은 있습니다. 다만 눈치 없는 드립은 줄이는 게 좋습니다.",
-    "오늘은 소개보다 자연스러운 대화운이 좋습니다.",
-    "기회는 있는데 타이밍이 짧습니다. 보이면 바로 리액션하세요.",
-    "아직은 예열 구간입니다. 출석부터 꾸준히 찍으세요.",
-    "주변에서 생각보다 보고 있습니다. 매너 점수 챙기세요."
-  ];
   const target = normalizeText(text)
     .replace(/^\/?(연애운|남친|여친|썸운)\s*/i, "")
     .replace(/^@?픽셀곰아?\s*/i, "")
+    .replace(/^@?픽셀아?\s*/i, "")
     .replace(/(남친|여친|연애|썸|언제|생겨|\?|는|은|이|가|에게|한테)/g, "")
     .trim();
   const label = target || user.nickname;
-  const index = Math.abs(hash(`${todayKst()}:${user.id}:${label}:relationship`)) % messages.length;
-  return `${label}님의 연애운\n${messages[index]}`;
+  const message = stablePick(RELATIONSHIP_MESSAGES, `${todayKst()}:${user.id}:${label}:relationship`);
+  return `${label}님의 연애운\n${message}`;
 }
 
 function hash(text) {
@@ -1723,7 +1867,7 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/연애운", "연애운", "/남친", "남친", "/여친", "여친", "/썸운", "썸운"]) || (isPixelgomMentionCommand(commandText) && /(남친|여친|연애|썸)/.test(commandText))) return relationshipFortune(user, commandText);
   if (aliasesMatch(commandText, ["/미션", "미션", "/mission"])) return mission(user);
   if (aliasesMatch(commandText, ["/칭찬", "칭찬", "/compliment"])) return compliment(user);
-  if (startsWithAny(commandText, ["/궁합", "궁합", "/compat"])) return compatibility(user, commandText);
+  if (startsWithAny(commandText, ["/궁합", "궁합", "/compat"])) return compatibility(db, user, commandText);
   if (startsWithAny(commandText, ["/랜덤", "랜덤", "/random"])) return randomNumber(commandText);
   if (startsWithAny(commandText, ["/골라", "골라", "/선택", "선택", "/pick", "/choose"])) return pickOne(commandText);
   if (startsWithAny(commandText, ["/송금", "송금", "/선물", "선물", "/transfer"])) return transferPoints(db, user, commandText);
@@ -1746,7 +1890,6 @@ export async function handleChatEvent(payload) {
   const room = normalizeText(payload.room);
   const msg = normalizeText(payload.msg || payload.message);
   const sender = normalizeText(payload.sender) || "익명";
-  const profileHash = normalizeText(payload.profileHash || payload.profile_hash);
   touchRoom(db, room);
 
   if (isBotMessage(sender, msg)) {
@@ -1754,13 +1897,8 @@ export async function handleChatEvent(payload) {
     return { ok: true, reply: null, ignored: true };
   }
 
-  const matchedByProfile = profileHash ? findUserByProfileHash(db, room, profileHash) : null;
-  const userId = matchedByProfile
-    ? matchedByProfile.id
-    : profileHash
-      ? userKeyForProfile(room, profileHash)
-      : userKeyForChat(room, sender);
-  const user = ensureUser(db, userId, sender, room, { profileHash, source: profileHash ? "profile" : "seen" });
+  const userId = userKeyForChat(room, sender);
+  const user = ensureUser(db, userId, sender, room, { source: "seen" });
   awardChatPoint(db, user, room, msg, { textLength: isTranscriptImportCommand(msg) ? 0 : undefined });
 
   const commandPrefixes = [

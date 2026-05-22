@@ -185,7 +185,7 @@ const bulk = await chat(`/일괄등록
 assert.match(bulk.reply, /일괄등록 완료/);
 assert.match(bulk.reply, /총 입력: 3명/);
 const registerStatus = await chat("/등록현황", admin, `명단방-${stamp}`);
-assert.match(registerStatus.reply, /등록 인원/);
+assert.match(registerStatus.reply, /현재 등록/);
 const bulkHistory = await chat(`/닉이력 ${oldNick}`, admin, `명단방-${stamp}`);
 assert.match(bulkHistory.reply, new RegExp(oldNick));
 
@@ -198,13 +198,19 @@ const linkedHistory = await chat("/닉이력", nextNick, linkRoom);
 assert.match(linkedHistory.reply, new RegExp(oldNick));
 assert.match(linkedHistory.reply, new RegExp(nextNick));
 
-const profileRoom = `프로필방-${stamp}`;
-const profileHash = `profile-${stamp}`;
-await chat("처음 입장", oldNick, profileRoom, { profileHash });
-await chat("닉네임 변경 후 입장", nextNick, profileRoom, { profileHash });
-const autoHistory = await chat("/닉이력", nextNick, profileRoom, { profileHash });
-assert.match(autoHistory.reply, new RegExp(oldNick));
-assert.match(autoHistory.reply, new RegExp(nextNick));
+const nameRoom = `이름방-${stamp}`;
+await chat(`/일괄등록 소영 여, 민지 여, 민지 남`, admin, nameRoom);
+const nameHistory = await chat("/닉이력 소영", admin, nameRoom);
+assert.match(nameHistory.reply, /소영 여/);
+const nameCompat = await chat("/궁합 소영", `정현기 남-${stamp}`, nameRoom);
+assert.match(nameCompat.reply, /소영 여/);
+await chat("/출석", `정현기 남-${stamp}`, nameRoom);
+const nameTransfer = await chat("/송금 소영 10", `정현기 남-${stamp}`, nameRoom);
+assert.match(nameTransfer.reply, /소영 여님에게 10P/);
+const ambiguousName = await chat("/닉이력 민지", admin, nameRoom);
+assert.match(ambiguousName.reply, /여러 명/);
+assert.match(ambiguousName.reply, /민지 여/);
+assert.match(ambiguousName.reply, /민지 남/);
 
 const transcriptRoom = `대화방-${stamp}`;
 const transcriptImport = await chat(`/대화가져오기
@@ -226,5 +232,8 @@ assert.match(importedTypingRank.reply, /미정 남|소영 여|지오 남/);
 const membership = await chat("/입퇴장현황", admin, transcriptRoom);
 assert.match(membership.reply, /유진 남/);
 assert.match(membership.reply, /흐물한 어피치/);
+const transcriptStatus = await chat("/등록현황", admin, transcriptRoom);
+assert.match(transcriptStatus.reply, /현재 등록/);
+assert.match(transcriptStatus.reply, /제외 기록: 퇴장 1명 \/ 내보냄 1명/);
 
 console.log("Local skill and chat-event tests passed.");
