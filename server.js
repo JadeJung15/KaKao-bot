@@ -9,8 +9,8 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "pixelgom-db.json");
 const PORT = Number(process.env.PORT || 3000);
 const STATE_ID = process.env.PIXELGOM_STATE_ID || "main";
-const APP_VERSION = "0.8.0";
-const FEATURES = ["chat-import", "nickname-history", "nickname-change-command", "period-ranks", "room-overview", "rpg-combat-ranks", "name-only-nicknames", "typing-games", "rpg-120-pools", "monster-140-pool", "set-items-40", "auto-equip", "auto-enhance", "dungeon-difficulty", "infinite-tower", "equipable-forge-items", "equipment-synthesis", "admin-point-create", "item-sell", "shop-forge-alchemy", "pets", "enhancement-scrolls", "equipment-views", "requirement-guides", "auto-adventure"];
+const APP_VERSION = "0.8.1";
+const FEATURES = ["chat-import", "nickname-history", "nickname-change-command", "period-ranks", "room-overview", "rpg-combat-ranks", "name-only-nicknames", "typing-games", "rpg-120-pools", "monster-140-pool", "set-items-40", "auto-equip", "auto-enhance", "dungeon-difficulty", "infinite-tower", "stable-levels", "admin-point-create", "admin-point-reclaim", "equipable-forge-items", "equipment-synthesis", "item-sell", "shop-forge-alchemy", "pets", "enhancement-scrolls", "equipment-views", "requirement-guides", "auto-adventure"];
 
 let pgPool;
 
@@ -198,8 +198,27 @@ function levelFor(points) {
   return LEVELS.reduce((current, row) => (points >= row.point ? row.level : current), 1);
 }
 
+function levelPointFor(level) {
+  return LEVELS.find((row) => row.level === level)?.point || 0;
+}
+
+function finiteNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function syncUserLevel(user) {
+  const currentPoints = finiteNumber(user.points, 0);
+  const currentLevel = finiteNumber(user.level, 1);
+  const currentLevelPoints = finiteNumber(user.levelPoints, 0);
+  user.points = Math.max(0, currentPoints);
+  user.levelPoints = Math.max(currentLevelPoints, user.points, levelPointFor(currentLevel));
+  user.level = Math.max(currentLevel, levelFor(user.levelPoints));
+  return user.level;
+}
+
 function titleFor(user) {
-  if (user.points >= 21000) return "전설";
+  if (user.level >= 10) return "전설";
   if (user.chatCount >= 1000) return "수다왕";
   if (user.attendanceStreak >= 30) return "출석장인";
   if (user.gameWins >= 100) return "게임고수";
@@ -448,8 +467,11 @@ function mergeUsers(db, targetId, sourceId, reason = "merge") {
   const source = db.users[sourceKey];
   if (!target || !source) return target || source;
 
-  target.points += source.points || 0;
-  target.level = levelFor(target.points);
+  syncUserLevel(target);
+  syncUserLevel(source);
+  target.points = Math.max(0, (target.points || 0) + (source.points || 0));
+  target.levelPoints = (target.levelPoints || 0) + (source.levelPoints || 0);
+  syncUserLevel(target);
   target.accountRegistered ||= Boolean(source.accountRegistered);
   target.registeredAt ||= source.registeredAt || "";
   target.isAdmin ||= Boolean(source.isAdmin);
@@ -520,6 +542,7 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
       nickname,
       room,
       points: 0,
+      levelPoints: 0,
       level: 1,
       region: "",
       attendanceDates: [],
@@ -553,6 +576,7 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
   }
   const user = db.users[id];
   user.points ??= 0;
+  user.levelPoints ??= Math.max(user.points || 0, levelPointFor(user.level || 1));
   user.level ??= 1;
   user.region ??= "";
   user.attendanceDates ||= [];
@@ -591,7 +615,7 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
   if (room && user.room !== room) user.room = room;
   user.lastSeenAt = nowIso();
   if (options.markActive !== false) user.status = "active";
-  user.level = levelFor(user.points);
+  syncUserLevel(user);
   return user;
 }
 
@@ -612,9 +636,14 @@ function touchRoom(db, room) {
 
 function addPoints(db, user, amount, reason, meta = {}) {
   if (!amount) return { beforeLevel: user.level, afterLevel: user.level, leveledUp: false };
-  const beforeLevel = user.level;
-  user.points += amount;
-  user.level = levelFor(user.points);
+  const beforeLevel = syncUserLevel(user);
+  if (amount > 0) {
+    user.points += amount;
+    user.levelPoints = (user.levelPoints || 0) + amount;
+  } else {
+    user.points = Math.max(0, user.points + amount);
+  }
+  syncUserLevel(user);
   user.updatedAt = nowIso();
   db.events.push({
     userId: user.id,
@@ -1008,6 +1037,7 @@ function adminHelpText() {
     "/관리자추가 닉네임",
     "/관리자해제 닉네임",
     "/지급 닉네임 금액 - 대상이 없어도 새 계정 생성 후 지급",
+    "/회수 닉네임 금액 - 관리자 전용 포인트 회수, 레벨은 유지",
     "/송금 닉네임 금액 - 관리자는 차감 없이 생성 송금",
     "/오토권한 닉네임",
     "/오토해제 닉네임",
@@ -1036,6 +1066,8 @@ function pointHelpText() {
     `지역 최초 등록 +${POINT_RULES.firstRegion}P`,
     "/송금 닉네임 금액 - 같은 방 유저에게 포인트 보내기",
     "/지급 닉네임 금액 - 관리자 전용 포인트 생성",
+    "/회수 닉네임 금액 - 관리자 전용 포인트 회수",
+    "레벨은 누적 획득 기준이라 구매/판매/회수로 내려가지 않습니다.",
     "/상점 - 현재 준비된 아이템 보기",
     "/가방 - 내 아이템 보기"
   ].join("\n");
@@ -1125,6 +1157,32 @@ function grantPoints(db, user, text) {
   ].filter(Boolean).join("\n");
 }
 
+function reclaimPoints(db, user, text) {
+  const denied = requireAdmin(user);
+  if (denied) return denied;
+  const args = text.replace(/^(\/?(포인트회수|회수|포인트차감|차감|몰수))\s*/i, "").trim().split(/\s+/).filter(Boolean);
+  if (args.length < 2) return "사용법: /회수 닉네임 금액";
+  const amount = Number(args.at(-1));
+  const targetName = args.slice(0, -1).join(" ");
+  if (!Number.isInteger(amount) || amount <= 0) return "회수 포인트는 1 이상의 숫자로 입력해주세요.";
+  const result = findOneUserByName(db, user.room, targetName, user.id, { includeInactive: true });
+  if (result.error) return result.error;
+  if (!result.user || !isRegisteredUser(result.user)) return `${displayNickname(targetName)}님은 가입된 계정이 아닙니다.`;
+
+  const target = result.user;
+  const beforePoints = target.points || 0;
+  const reclaimAmount = Math.min(amount, beforePoints);
+  if (reclaimAmount <= 0) return `${displayUserName(target)}님은 회수할 포인트가 없습니다.\n현재 포인트: 0P / LV.${target.level}`;
+  addPoints(db, target, -reclaimAmount, "admin_reclaim", { from: user.nickname, requested: amount });
+  return [
+    `${displayUserName(target)}님에게 ${reclaimAmount.toLocaleString()}P 회수 완료`,
+    reclaimAmount < amount ? `요청 ${amount.toLocaleString()}P 중 보유 포인트만 회수했습니다.` : "",
+    `회수 전: ${beforePoints.toLocaleString()}P`,
+    `현재 포인트: ${target.points.toLocaleString()}P / LV.${target.level}`,
+    "레벨은 회수/사용으로 내려가지 않습니다."
+  ].filter(Boolean).join("\n");
+}
+
 function autoNoticeText(db, user, text) {
   const denied = requireAdmin(user);
   if (denied) return denied;
@@ -1202,6 +1260,7 @@ function profileText(user) {
     `칭호: ${titleFor(user)}`,
     `레벨: LV.${user.level}`,
     `포인트: ${user.points.toLocaleString()}P`,
+    `레벨 기준 누적: ${(user.levelPoints || 0).toLocaleString()}P`,
     `채팅: ${user.chatCount.toLocaleString()}회`,
     `타수: ${(user.chatChars || 0).toLocaleString()}타`,
     `출석 연속: ${user.attendanceStreak || 0}일`,
@@ -1644,7 +1703,8 @@ function importTranscript(db, user, text) {
     target.chatPoints = (target.chatPoints || 0) + POINT_RULES.chat;
     target.chatChars = (target.chatChars || 0) + textLength;
     target.points += POINT_RULES.chat;
-    target.level = levelFor(target.points);
+    target.levelPoints = (target.levelPoints || 0) + POINT_RULES.chat;
+    syncUserLevel(target);
     target.lastSeenAt = item.createdAt;
     target.status = "active";
     target.updatedAt = nowIso();
@@ -4172,6 +4232,7 @@ async function runCommand(db, user, text, blockNames = []) {
   if (startsWithAny(commandText, ["/관리자추가", "/관리자등록"])) return setAdminRole(db, user, commandText, true);
   if (startsWithAny(commandText, ["/관리자해제", "/관리자삭제"])) return setAdminRole(db, user, commandText, false);
   if (startsWithAny(commandText, ["/포인트지급", "/지급", "/포인트주기"])) return grantPoints(db, user, commandText);
+  if (startsWithAny(commandText, ["/포인트회수", "/회수", "/포인트차감", "/차감", "/몰수"])) return reclaimPoints(db, user, commandText);
   if (startsWithAny(commandText, ["/오토권한", "/오토허용"])) return setAutoAdventurePermission(db, user, commandText, true);
   if (startsWithAny(commandText, ["/오토해제", "/오토금지"])) return setAutoAdventurePermission(db, user, commandText, false);
   if (aliasesMatch(commandText, ["/오토모험", "/자동모험", "/automode"])) return autoAdventure(db, user);
