@@ -9,7 +9,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "pixelgom-db.json");
 const PORT = Number(process.env.PORT || 3000);
 const STATE_ID = process.env.PIXELGOM_STATE_ID || "main";
-const APP_VERSION = "0.5.0";
+const APP_VERSION = "0.5.1";
 const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "live-user-rank", "name-only-nicknames"];
 
 let pgPool;
@@ -215,7 +215,10 @@ function jsonResponse(res, status, body) {
 }
 
 function normalizeText(value) {
-  return String(value || "").trim();
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
 }
 
 function botNames() {
@@ -231,7 +234,10 @@ function isPixelgomMentionCommand(text) {
 }
 
 function aliasesMatch(text, aliases) {
-  return aliases.includes(normalizeText(text));
+  const normalized = normalizeText(text);
+  if (aliases.includes(normalized)) return true;
+  const compacted = normalized.replace(/\s+/g, "");
+  return aliases.some((alias) => normalizeText(alias).replace(/\s+/g, "") === compacted);
 }
 
 function blockNamesFrom(payload) {
@@ -1212,14 +1218,18 @@ function importTranscript(db, user, text) {
     if (!existed) createdUserIds.add(target.id);
     const textLength = textLengthForStats(item.text);
     target.chatCount += 1;
+    target.chatPoints = (target.chatPoints || 0) + POINT_RULES.chat;
     target.chatChars = (target.chatChars || 0) + textLength;
+    target.points += POINT_RULES.chat;
+    target.level = levelFor(target.points);
     target.lastSeenAt = item.createdAt;
     target.status = "active";
     target.updatedAt = nowIso();
+    if (user.room && db.rooms[user.room]) db.rooms[user.room].chatCount += 1;
     db.events.push({
       userId: target.id,
       nickname: target.nickname,
-      amount: 0,
+      amount: POINT_RULES.chat,
       reason: "chat",
       meta: {
         room: user.room,
@@ -1245,7 +1255,7 @@ function importTranscript(db, user, text) {
     `타수: ${importedChars.toLocaleString()}타`,
     `참여자: ${touchedUserIds.size.toLocaleString()}명 처리 / 신규 ${createdUserIds.size.toLocaleString()}명`,
     `입퇴장: 입장 ${membershipCounts.join}명 / 퇴장 ${membershipCounts.leave}명 / 내보냄 ${membershipCounts.kick}명`,
-    "과거 대화는 순위 집계에만 반영하고 포인트는 소급 지급하지 않습니다."
+    `포인트: 메시지 1건당 +${POINT_RULES.chat}P 반영`
   ].join("\n");
 }
 

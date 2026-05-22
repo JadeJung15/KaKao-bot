@@ -113,6 +113,8 @@ assert.match(roomRank.reply, /오늘 실시간 방순위/);
 assert.match(roomRank.reply, /타수 TOP5/);
 const liveRank = await chat("/실시간순위", typingUser);
 assert.match(liveRank.reply, /오늘 실시간 방순위/);
+const spacedLiveRank = await chat("/실시간 순위", typingUser);
+assert.match(spacedLiveRank.reply, /오늘 실시간 방순위/);
 const myRank = await chat("/내순위", typingUser);
 assert.match(myRank.reply, /실시간 순위/);
 assert.match(myRank.reply, /타수:/);
@@ -225,6 +227,7 @@ const transcriptImport = await chat(`/대화가져오기
 [지오 남] [오후 2:02] 🌸닉넴 / 성별 : 지오 남
 🌸상세지역 :인천 부평`, admin, transcriptRoom);
 assert.match(transcriptImport.reply, /대화가져오기 완료/);
+assert.match(transcriptImport.reply, /포인트: 메시지 1건당/);
 assert.match(transcriptImport.reply, /메시지: 4건/);
 assert.match(transcriptImport.reply, /입장 1명 \/ 퇴장 1명 \/ 내보냄 1명/);
 const importedTypingRank = await chat("/일간타수순위", admin, transcriptRoom);
