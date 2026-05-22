@@ -2408,7 +2408,7 @@ function findShopItem(query) {
 function findInventoryKey(user, query) {
   const wanted = nicknameLookupKey(query);
   if (!wanted) return "";
-  const keys = Object.keys(user.inventory || {}).filter((key) => (user.inventory[key] || 0) > 0);
+  const keys = inventoryRows(user).map(([key]) => key);
   return keys.find((key) => nicknameLookupKey(itemDisplayName(key)) === wanted)
     || keys.find((key) => nicknameLookupKey(itemDisplayName(key)).includes(wanted))
     || "";
@@ -2420,13 +2420,25 @@ function removeInventory(user, key, count = 1) {
   if (user.inventory[key] <= 0) delete user.inventory[key];
 }
 
+function inventoryRows(user) {
+  return Object.entries(user.inventory || {})
+    .filter(([, count]) => count > 0)
+    .sort(([a], [b]) => itemDisplayName(a).localeCompare(itemDisplayName(b), "ko"));
+}
+
 function inventoryText(user) {
-  const rows = Object.entries(user.inventory || {}).filter(([, count]) => count > 0);
+  const rows = inventoryRows(user);
   if (!rows.length) return "가방이 비어 있습니다.\n/뽑기 로 아이템을 얻어보세요.";
   return [
     `${displayUserName(user)}님의 가방`,
     "",
-    ...rows.map(([key, count]) => `• ${itemDisplayName(key)} x${count} / 판매 ${itemSellValue(key)}P`)
+    ...rows.map(([key, count], index) => `${index + 1}. ${itemDisplayName(key)} x${count} / 판매 ${itemSellValue(key)}P`),
+    "",
+    "판매 방법",
+    "/판매 번호 [수량]",
+    "예시: /판매 1 3",
+    "해당 번호 전부 판매: /판매 1 전체",
+    "가방 전체 판매: /판매 전체"
   ].join("\n");
 }
 
@@ -2472,8 +2484,8 @@ function buyItem(db, user, text) {
 
 function sellItem(db, user, text) {
   const raw = text.replace(/^(\/?판매|\/?팔기|\/sell)\s*/i, "").trim();
-  const rows = Object.entries(user.inventory || {}).filter(([, count]) => count > 0);
-  if (!raw) return "사용법: /판매 아이템명 [수량]\n예시: /판매 별조각 2\n전체 판매: /판매 전체";
+  const rows = inventoryRows(user);
+  if (!raw || ["목록", "list"].includes(raw.toLowerCase())) return inventoryText(user);
   if (!rows.length) return "가방이 비어 있습니다.";
 
   if (["전체", "전부", "all"].includes(raw.toLowerCase())) {
@@ -2489,11 +2501,22 @@ function sellItem(db, user, text) {
   }
 
   const args = raw.split(/\s+/).filter(Boolean);
-  const last = Number(args.at(-1));
-  const count = Number.isInteger(last) && last > 0 ? last : 1;
-  const itemName = (count > 1 ? args.slice(0, -1) : args).join(" ");
-  const key = findInventoryKey(user, itemName);
-  if (!key) return `${itemName} 아이템을 가방에서 찾지 못했습니다.\n/가방 으로 확인해주세요.`;
+  let key = "";
+  let count = 1;
+  if (/^\d+$/.test(args[0] || "")) {
+    const index = Number(args[0]) - 1;
+    if (!rows[index]) return `${args[0]}번 아이템이 없습니다.\n/가방 으로 번호를 확인해주세요.`;
+    key = rows[index][0];
+    const countArg = args[1] || "";
+    count = ["전체", "전부", "all"].includes(countArg.toLowerCase()) ? rows[index][1] : Number(countArg);
+    if (!Number.isInteger(count) || count <= 0) count = 1;
+  } else {
+    const last = Number(args.at(-1));
+    count = Number.isInteger(last) && last > 0 ? last : 1;
+    const itemName = (count > 1 ? args.slice(0, -1) : args).join(" ");
+    key = findInventoryKey(user, itemName);
+    if (!key) return `${itemName} 아이템을 가방에서 찾지 못했습니다.\n/가방 으로 확인해주세요.`;
+  }
   const owned = user.inventory[key] || 0;
   const sellCount = Math.min(count, owned);
   const gained = itemSellValue(key) * sellCount;
