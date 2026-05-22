@@ -9,8 +9,8 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "pixelgom-db.json");
 const PORT = Number(process.env.PORT || 3000);
 const STATE_ID = process.env.PIXELGOM_STATE_ID || "main";
-const APP_VERSION = "0.7.4";
-const FEATURES = ["chat-import", "nickname-history", "nickname-change-command", "period-ranks", "room-overview", "rpg-combat-ranks", "name-only-nicknames", "typing-games", "rpg-120-pools", "equipable-forge-items", "equipment-synthesis", "admin-point-create", "item-sell", "shop-forge-alchemy", "pets", "enhancement-scrolls", "equipment-views", "requirement-guides", "auto-adventure"];
+const APP_VERSION = "0.8.0";
+const FEATURES = ["chat-import", "nickname-history", "nickname-change-command", "period-ranks", "room-overview", "rpg-combat-ranks", "name-only-nicknames", "typing-games", "rpg-120-pools", "monster-140-pool", "set-items-40", "auto-equip", "auto-enhance", "dungeon-difficulty", "infinite-tower", "equipable-forge-items", "equipment-synthesis", "admin-point-create", "item-sell", "shop-forge-alchemy", "pets", "enhancement-scrolls", "equipment-views", "requirement-guides", "auto-adventure"];
 
 let pgPool;
 
@@ -474,6 +474,11 @@ function mergeUsers(db, targetId, sourceId, reason = "merge") {
   for (const [slot, itemKey] of Object.entries(source.rpgEquipment || {})) {
     if (!target.rpgEquipment[slot]) target.rpgEquipment[slot] = itemKey;
   }
+  target.tower ||= {};
+  target.tower.floor = Math.max(target.tower.floor || 0, source.tower?.floor || 0);
+  target.tower.bestFloor = Math.max(target.tower.bestFloor || 0, source.tower?.bestFloor || 0);
+  target.tower.wins = (target.tower.wins || 0) + (source.tower?.wins || 0);
+  target.tower.losses = (target.tower.losses || 0) + (source.tower?.losses || 0);
   if (!target.pet && source.pet) target.pet = source.pet;
   target.daily = { ...(source.daily || {}), ...(target.daily || {}) };
   target.nicknameHistory = [...(target.nicknameHistory || []), ...(source.nicknameHistory || [])]
@@ -540,6 +545,7 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
       pet: null,
       equipment: {},
       rpgEquipment: {},
+      tower: {},
       cooldowns: {},
       createdAt: nowIso(),
       updatedAt: nowIso()
@@ -573,6 +579,7 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
   user.pet ??= null;
   user.equipment ||= {};
   user.rpgEquipment ||= {};
+  user.tower ||= {};
   user.inventory ||= {};
   user.daily ||= {};
   user.cooldowns ||= {};
@@ -852,7 +859,8 @@ function botIntroText() {
     "/모험 - RPG 도움말",
     "/캐릭터 - 내 RPG 상태",
     "/낚시, /채집, /탐험, /사냥, /던전",
-    "/상점, /판매, /강화, /펫, /오토모험",
+    "/무탑, /자동장착, /자동강화, /세트, /펫",
+    "/상점, /판매, /강화, /오토모험",
     "/타자, /초성, /야구, /끝말",
     "/게임순위 - 게임 승리 순위"
   ].join("\n");
@@ -875,8 +883,10 @@ function noticeText() {
     "/채집 또는 /ㅊㅈ",
     "/탐험 또는 /ㅌㅎ",
     "/사냥 또는 /ㅅㄴ",
-    "/던전 또는 /ㄷㅈ",
-    "/상점, /판매, /강화",
+    "/던전 보통 또는 /ㄷㅈ",
+    "/무탑",
+    "/상점, /판매, /강화, /자동강화",
+    "/자동장착, /세트",
     "/펫, /펫훈련, /펫대전",
     "/휴식 또는 /ㅎㅅ",
     "/가방 또는 /ㄱㅂ",
@@ -909,7 +919,8 @@ function helpText(text = "") {
     "/? 관리 - 일괄등록/닉네임 이력",
     "",
     "게임",
-    "/낚시, /채집, /탐험, /사냥, /던전, /휴식",
+    "/낚시, /채집, /탐험, /사냥, /던전, /무탑, /휴식",
+    "/자동장착, /자동강화, /세트, /몬스터",
     "/타자, /초성, /야구, /선착순, /끝말",
     "/캐릭터, /가방, /게임순위",
     "",
@@ -935,8 +946,9 @@ function gameHelpText() {
     "/낚시(/ㄴㅅ), /채집(/ㅊㅈ), /탐험(/ㅌㅎ)",
     "/사냥(/ㅅㄴ), /던전(/ㄷㅈ), /휴식(/ㅎㅅ)",
     "/장비, /무기, /방어구, /신발, /장신구, /아이템",
-    "/장착 번호, /해제 무기",
-    "/상점, /구매, /판매, /강화, /대장간, /제작, /합성, /연금술",
+    "/장착 번호, /자동장착, /해제 무기, /세트",
+    "/상점, /구매, /판매, /강화, /자동강화, /대장간, /제작, /합성, /연금술",
+    "/던전 쉬움|보통|어려움|악몽, /무탑, /몬스터",
     "/펫, /펫입양, /펫훈련, /펫대전",
     "/오토모험 - 권한 있는 사람만 자동 진행",
     "",
@@ -1918,11 +1930,12 @@ function rpgStats(user) {
   const armor = user.equipment?.armor || { level: 0 };
   const pet = user.pet || {};
   const gear = equippedEquipmentStats(user);
+  const set = equippedSetStats(user);
   return {
-    attack: 8 + rpg.level * 3 + weapon.level * 4 + gear.attack + Math.floor((pet.level || 0) / 2) + Math.floor((user.gameWins || 0) / 5),
-    defense: 7 + rpg.level * 2 + armor.level * 4 + gear.defense + Math.floor((pet.level || 0) / 3) + Math.floor(itemCount / 5),
-    speed: 6 + rpg.level + gear.speed + (pet.level || 0) + Math.floor((user.attendanceStreak || 0) / 3),
-    luck: 5 + gear.luck + Math.floor((user.points || 0) / 200) + Math.floor((user.chatCount || 0) / 30) + Math.floor((pet.wins || 0) / 3)
+    attack: 8 + rpg.level * 3 + weapon.level * 4 + gear.attack + set.attack + Math.floor((pet.level || 0) / 2) + Math.floor((user.gameWins || 0) / 5),
+    defense: 7 + rpg.level * 2 + armor.level * 4 + gear.defense + set.defense + Math.floor((pet.level || 0) / 3) + Math.floor(itemCount / 5),
+    speed: 6 + rpg.level + gear.speed + set.speed + (pet.level || 0) + Math.floor((user.attendanceStreak || 0) / 3),
+    luck: 5 + gear.luck + set.luck + Math.floor((user.points || 0) / 200) + Math.floor((user.chatCount || 0) / 30) + Math.floor((pet.wins || 0) / 3)
   };
 }
 
@@ -1947,6 +1960,10 @@ function combatPower(stats) {
   return stats.attack * 2 + stats.defense * 2 + stats.speed + stats.luck;
 }
 
+function monsterPower(stats) {
+  return (stats.attack || 0) * 2 + (stats.defense || 0) * 2 + (stats.speed || 0);
+}
+
 function formatGearStats(stats) {
   const rows = [];
   if (stats.attack) rows.push(`공격 +${stats.attack}`);
@@ -1954,6 +1971,45 @@ function formatGearStats(stats) {
   if (stats.speed) rows.push(`민첩 +${stats.speed}`);
   if (stats.luck) rows.push(`행운 +${stats.luck}`);
   return rows.length ? rows.join(" / ") : "능력치 없음";
+}
+
+function formatMonsterStats(stats) {
+  return `⚔️공격 ${stats.attack} / 🛡️방어 ${stats.defense} / 💨민첩 ${stats.speed}`;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function battleOutcome(playerStats, enemyStats, modifier = 0) {
+  const playerPower = combatPower(playerStats);
+  const enemyPower = monsterPower(enemyStats);
+  const chance = Math.round(clamp(50 + (playerPower - enemyPower) * 0.75 + modifier, 8, 92));
+  const roll = randomInt(1, 100);
+  return {
+    won: roll <= chance,
+    chance,
+    roll,
+    playerPower,
+    enemyPower
+  };
+}
+
+function scaleMonster(monster, bonus = 0) {
+  const add = Math.trunc(bonus);
+  const stats = {
+    attack: Math.max(1, monster.stats.attack + add),
+    defense: Math.max(1, monster.stats.defense + Math.floor(add * 0.8)),
+    speed: Math.max(1, monster.stats.speed + Math.floor(add * 0.6))
+  };
+  return {
+    ...monster,
+    stats,
+    power: monsterPower(stats),
+    damage: Math.max(1, monster.damage + Math.floor(add * 0.7)),
+    points: Math.max(1, monster.points + add),
+    exp: Math.max(1, monster.exp + add * 2)
+  };
 }
 
 function slotDisplayName(slot) {
@@ -1990,6 +2046,23 @@ function equippedEquipmentStats(user) {
     .map(equipmentItemByKey)
     .filter(Boolean)
     .reduce((stats, item) => addStats(stats, item.stats || emptyStats()), emptyStats());
+}
+
+function activeSetBonuses(user) {
+  const equipped = equippedItemKeys(user)
+    .map(equipmentItemByKey)
+    .filter(Boolean);
+  return SET_BONUSES
+    .map((set) => ({
+      ...set,
+      matched: equipped.filter((item) => item.label.startsWith(set.prefix)).length
+    }))
+    .filter((set) => set.matched >= set.required);
+}
+
+function equippedSetStats(user) {
+  return activeSetBonuses(user)
+    .reduce((stats, set) => addStats(stats, set.stats || emptyStats()), emptyStats());
 }
 
 function equipmentSlotLine(user, slot) {
@@ -2091,6 +2164,8 @@ function pickWeighted(rows) {
 }
 
 const RPG_POOL_SIZE = 120;
+const MONSTER_POOL_SIZE = 140;
+const SET_POOL_SIZE = 40;
 
 function buildPool(leftRows, rightRows, maker, limit = RPG_POOL_SIZE) {
   const rows = [];
@@ -2168,22 +2243,30 @@ const ADVENTURE_EVENTS = buildPool(
 );
 
 const HUNT_MONSTERS = buildPool(
-  ["장난꾸러기", "숲속", "꿀도둑", "별빛", "그림자", "고대", "노을", "얼음", "폭풍", "무지개", "픽셀", "왕관"],
+  ["장난꾸러기", "숲속", "꿀도둑", "별빛", "그림자", "고대", "노을", "얼음", "폭풍", "무지개", "픽셀", "왕관", "심연", "태양"],
   ["슬라임", "고블린", "늑대", "버섯병정", "멧돼지", "박쥐", "해골", "골렘", "드레이크", "곰수호자"],
   (prefix, monster, index) => {
     const rarity = rarityByIndex(index);
     const name = `${prefix} ${monster}`;
+    const stats = {
+      attack: 7 + rarity.difficulty * 5 + (index % 5),
+      defense: 6 + rarity.difficulty * 4 + (index % 4),
+      speed: 5 + rarity.difficulty * 3 + (index % 6)
+    };
     return {
       name,
       difficulty: rarity.difficulty,
+      stats,
+      power: monsterPower(stats),
       points: rarity.points + 8,
       exp: rarity.exp + 10,
-      damage: 6 + rarity.difficulty * 7,
+      damage: 6 + rarity.difficulty * 7 + Math.floor(stats.attack / 3),
       item: inventoryKey("hunt", `${name} 전리품`),
       itemLabel: `${name} 전리품`,
       weight: rarity.weight
     };
-  }
+  },
+  MONSTER_POOL_SIZE
 );
 
 const DUNGEON_REWARDS = buildPool(
@@ -2237,6 +2320,33 @@ const FORGE_RESULTS = buildPool(
   }
 );
 
+const SET_PREFIXES = ["튼튼한", "가벼운", "날카로운", "묵직한", "빛나는", "그림자", "불꽃", "얼음", "바람", "왕관"];
+const SET_PATHS = [
+  { label: "전사", required: 2, stats: { attack: 5, defense: 2, speed: 0, luck: 0 } },
+  { label: "수호", required: 2, stats: { attack: 1, defense: 6, speed: 0, luck: 0 } },
+  { label: "추격", required: 3, stats: { attack: 3, defense: 1, speed: 6, luck: 0 } },
+  { label: "행운", required: 4, stats: { attack: 2, defense: 2, speed: 2, luck: 8 } }
+];
+
+const SET_BONUSES = buildPool(
+  SET_PREFIXES,
+  SET_PATHS,
+  (prefix, path, index) => ({
+    id: `set-${index + 1}`,
+    name: `${prefix} ${path.label} 세트`,
+    prefix,
+    required: path.required,
+    stats: {
+      attack: path.stats.attack + Math.floor(index / 12),
+      defense: path.stats.defense + Math.floor(index / 12),
+      speed: path.stats.speed + (index % 3 === 0 ? 1 : 0),
+      luck: path.stats.luck + (index % 4 === 0 ? 1 : 0)
+    },
+    weight: 1
+  }),
+  SET_POOL_SIZE
+);
+
 const ALCHEMY_RESULTS = buildPool(
   ["맑은", "달콤한", "쌉쌀한", "반짝이는", "따뜻한", "차가운", "고요한", "폭신한", "무지개", "픽셀", "비밀", "전설의"],
   ["회복약", "기력약", "행운약", "용기약", "집중약", "수다약", "낚시약", "탐험약", "사냥약", "별가루"],
@@ -2281,11 +2391,14 @@ function rpgHelpText() {
     "/채집 또는 /ㅊㅈ - 재료 수집",
     "/탐험 또는 /ㅌㅎ - 랜덤 이벤트",
     "/사냥 또는 /ㅅㄴ - 몬스터 전투",
-    "/던전 또는 /ㄷㅈ - 큰 보상 도전",
+    "/던전 쉬움|보통|어려움|악몽 - 난이도별 보스 전투",
+    "/무탑 또는 /무한의탑 - 층별 몬스터 도전",
+    "/몬스터 - 몬스터 도감",
     "/상점, /구매, /판매, /시세",
     "/장비, /무기, /방어구, /신발, /장신구, /아이템",
     "/대장간, /제련, /제작 - 120종 장비 제작",
-    "/장착 번호, /해제 무기, /합성 1 2",
+    "/장착 번호, /자동장착, /해제 무기, /합성 1 2, /세트",
+    "/자동강화 무기 5, /자동강화 방어구 5",
     "/연금술 또는 /연금 - 물약 제작",
     "/휴식 또는 /ㅎㅅ - HP/기력 회복",
     "/가방 또는 /ㄱㅂ - 아이템 확인",
@@ -2314,7 +2427,7 @@ function rpgProfile(user) {
     user.pet ? `🐾 펫 ${user.pet.emoji || "🐾"} ${user.pet.name} LV.${user.pet.level}` : "🐾 펫 없음",
     `💰 포인트 ${user.points.toLocaleString()}P`,
     `🎮 게임 ${user.gameWins.toLocaleString()}승 / ${user.gamePlays.toLocaleString()}회`,
-    "명령어: /낚시 /채집 /탐험 /사냥 /던전 /강화 /펫"
+    "명령어: /낚시 /채집 /탐험 /사냥 /던전 /무탑 /자동장착 /세트 /강화 /펫"
   ].join("\n");
 }
 
@@ -2322,6 +2435,7 @@ function equipmentText(user) {
   const weapon = user.equipment?.weapon || { level: 0, attempts: 0 };
   const armor = user.equipment?.armor || { level: 0, attempts: 0 };
   const gearStats = equippedEquipmentStats(user);
+  const setBonuses = activeSetBonuses(user);
   const stats = rpgStats(user);
   return [
     `🧰 ${displayUserName(user)}님의 장비창`,
@@ -2332,6 +2446,7 @@ function equipmentText(user) {
     equipmentSlotLine(user, "boots"),
     equipmentSlotLine(user, "accessory"),
     `장착 보너스: ${formatGearStats(gearStats)}`,
+    `세트 보너스: ${setBonuses.length ? setBonuses.map((set) => set.name).join(", ") : "없음"}`,
     "",
     "강화",
     `🗡️ 무기 +${weapon.level || 0} / 공격 +${(weapon.level || 0) * 4}`,
@@ -2350,7 +2465,9 @@ function equipmentText(user) {
     "/신발",
     "/장신구",
     "/장착 번호",
+    "/자동장착",
     "/해제 무기",
+    "/세트",
     "/합성 1 2",
     "/강화 무기",
     "/강화 방어구",
@@ -2395,6 +2512,80 @@ function equipmentSlotText(user, type) {
     `해제: /해제 ${label}`,
     `강화: /강화 ${label}`,
     "주문서 구매: /상점"
+  ].join("\n");
+}
+
+function setListText(user) {
+  const active = activeSetBonuses(user);
+  return [
+    "🧩 픽셀곰 세트 아이템 40종",
+    "같은 접두어 장비를 필요한 개수만큼 장착하면 세트 효과가 켜집니다.",
+    "",
+    "현재 발동",
+    ...(active.length ? active.map((set) => `• ${set.name} ${set.matched}/${set.required} - ${formatGearStats(set.stats)}`) : ["없음"]),
+    "",
+    "세트 목록",
+    ...SET_BONUSES.map((set, index) => `${index + 1}. ${set.name} / ${set.required}세트 / ${formatGearStats(set.stats)}`),
+    "",
+    "장비 확인: /장비",
+    "자동 장착: /자동장착"
+  ].join("\n");
+}
+
+function monsterGuideText() {
+  return [
+    "👾 픽셀곰 몬스터 도감",
+    `총 ${HUNT_MONSTERS.length}종`,
+    "모든 몬스터는 공격/방어/민첩 수치를 가지고, 내 능력치와 비교해 승률이 정해집니다.",
+    "",
+    ...HUNT_MONSTERS.slice(0, 20).map((monster, index) => `${index + 1}. ${monster.name} / ${formatMonsterStats(monster.stats)}`),
+    "",
+    "사냥: /사냥",
+    "던전: /던전 보통",
+    "무한의탑: /무탑"
+  ].join("\n");
+}
+
+function equipmentScore(item) {
+  return combatPower(item.stats || emptyStats());
+}
+
+function autoEquipBest(db, user) {
+  const best = {};
+  for (const [key, count] of inventoryRows(user)) {
+    if (count <= 0) continue;
+    const item = equipmentItemByKey(key);
+    if (!item) continue;
+    const current = best[item.slot];
+    if (!current || equipmentScore(item) > equipmentScore(current.item) || (equipmentScore(item) === equipmentScore(current.item) && item.label.localeCompare(current.item.label, "ko") < 0)) {
+      best[item.slot] = { key, item };
+    }
+  }
+  const slots = ["weapon", "armor", "boots", "accessory"];
+  const changed = [];
+  user.rpgEquipment ||= {};
+  for (const slot of slots) {
+    if (!best[slot]) continue;
+    const before = user.rpgEquipment[slot];
+    user.rpgEquipment[slot] = best[slot].key;
+    if (before !== best[slot].key) changed.push(`${slotDisplayName(slot)}: ${best[slot].item.label} (${formatGearStats(best[slot].item.stats)})`);
+  }
+  if (!changed.length) {
+    return [
+      "자동장착 결과",
+      "장착할 새 장비가 없습니다.",
+      "/제작 또는 /합성 으로 장비를 얻어주세요."
+    ].join("\n");
+  }
+  addEvent(db, user, "auto_equip", { slots: changed.length });
+  return [
+    "자동장착 완료",
+    `닉네임: ${displayUserName(user)}`,
+    ...changed,
+    "",
+    `세트 보너스: ${formatGearStats(equippedSetStats(user))}`,
+    formatStats(rpgStats(user)),
+    `종합 전투력: ${combatPower(rpgStats(user)).toLocaleString()}`
   ].join("\n");
 }
 
@@ -2466,48 +2657,110 @@ function hunt(db, user) {
   user.cooldowns.hunt = Date.now();
   user.gamePlays += 1;
   const monster = pickWeighted(HUNT_MONSTERS);
-  const winChance = Math.min(85, 55 + rpg.level * 5 - monster.difficulty * 6);
-  const won = randomInt(1, 100) <= winChance;
+  const outcome = battleOutcome(rpgStats(user), monster.stats);
 
-  if (won) {
+  if (outcome.won) {
     addInventory(user, monster.item);
     addPoints(db, user, monster.points, "hunt_win", { monster: monster.name });
     user.gameWins += 1;
     const level = addRpgExp(user, monster.exp);
-    return formatRpgResult("⚔️ 픽셀곰 사냥 성공", user, [`상대: ${monster.name}`, `+${monster.points}P / +${monster.exp}EXP`, `획득: ${itemDisplayName(monster.item)}`], level);
+    return formatRpgResult("⚔️ 픽셀곰 사냥 승리", user, [`상대: ${monster.name}`, `몬스터: ${formatMonsterStats(monster.stats)}`, `전투력: ${outcome.playerPower} vs ${outcome.enemyPower}`, `승률: ${outcome.chance}% / 판정 ${outcome.roll}`, `+${monster.points}P / +${monster.exp}EXP`, `획득: ${itemDisplayName(monster.item)}`], level);
   }
 
-  rpg.hp = Math.max(0, rpg.hp - monster.damage);
+  const damage = Math.max(8, monster.damage + Math.floor((outcome.enemyPower - outcome.playerPower) / 18));
+  rpg.hp = Math.max(0, rpg.hp - damage);
   const level = addRpgExp(user, Math.ceil(monster.exp / 3));
-  return formatRpgResult("⚔️ 픽셀곰 사냥 실패", user, [`상대: ${monster.name}`, `피해: -${monster.damage}HP`, `+${Math.ceil(monster.exp / 3)}EXP`], level);
+  return formatRpgResult("⚔️ 픽셀곰 사냥 패배", user, [`상대: ${monster.name}`, `몬스터: ${formatMonsterStats(monster.stats)}`, `전투력: ${outcome.playerPower} vs ${outcome.enemyPower}`, `승률: ${outcome.chance}% / 판정 ${outcome.roll}`, `피해: -${damage}HP`, `+${Math.ceil(monster.exp / 3)}EXP`], level);
 }
 
-function dungeon(db, user) {
+const DUNGEON_DIFFICULTIES = {
+  easy: { label: "쉬움", aliases: ["쉬움", "이지", "easy"], energy: 14, hp: 25, monsterBonus: -4, pointMin: 30, pointMax: 55, expMin: 45, expMax: 80, chanceMod: 10 },
+  normal: { label: "보통", aliases: ["보통", "일반", "normal", ""], energy: 20, hp: 35, monsterBonus: 2, pointMin: 45, pointMax: 90, expMin: 70, expMax: 120, chanceMod: 0 },
+  hard: { label: "어려움", aliases: ["어려움", "하드", "hard"], energy: 28, hp: 50, monsterBonus: 12, pointMin: 90, pointMax: 160, expMin: 130, expMax: 220, chanceMod: -8 },
+  nightmare: { label: "악몽", aliases: ["악몽", "나이트메어", "nightmare"], energy: 36, hp: 70, monsterBonus: 26, pointMin: 180, pointMax: 320, expMin: 260, expMax: 420, chanceMod: -16 }
+};
+
+function dungeonDifficultyFromText(text) {
+  const raw = normalizeText(text).replace(/^(\/?던전|\/?ㄷㅈ|\/dungeon)\s*/i, "").trim().toLowerCase();
+  return Object.values(DUNGEON_DIFFICULTIES).find((row) => row.aliases.some((alias) => raw === alias.toLowerCase())) || DUNGEON_DIFFICULTIES.normal;
+}
+
+function dungeon(db, user, text = "") {
   const left = cooldownLeft(user, "dungeon", COOLDOWNS.dungeonMs);
   if (left > 0) return `던전은 ${left}초 뒤에 다시 가능합니다.`;
+  const difficulty = dungeonDifficultyFromText(text);
   const rpg = ensureRpg(user);
-  if (rpg.hp < 35) return "HP가 낮아서 던전에 들어갈 수 없습니다.\n/휴식 으로 회복하세요.";
-  if (!spendEnergy(user, 20)) return "기력이 부족합니다.\n/휴식 으로 회복하세요.";
+  if (rpg.hp < difficulty.hp) return `HP가 낮아서 ${difficulty.label} 던전에 들어갈 수 없습니다.\n필요 HP: ${difficulty.hp}\n/휴식 으로 회복하세요.`;
+  if (!spendEnergy(user, difficulty.energy)) return `기력이 부족합니다.\n필요 기력: ${difficulty.energy}\n/휴식 으로 회복하세요.`;
 
   user.cooldowns.dungeon = Date.now();
   user.gamePlays += 1;
-  const success = randomInt(1, 100) <= Math.min(78, 42 + rpg.level * 6);
-  if (success) {
-    const points = randomInt(45, 90);
-    const exp = randomInt(70, 120);
+  const boss = scaleMonster(pickWeighted(HUNT_MONSTERS), difficulty.monsterBonus);
+  const outcome = battleOutcome(rpgStats(user), boss.stats, difficulty.chanceMod);
+  if (outcome.won) {
+    const points = randomInt(difficulty.pointMin, difficulty.pointMax);
+    const exp = randomInt(difficulty.expMin, difficulty.expMax);
     const item = pickWeighted(DUNGEON_REWARDS);
     addInventory(user, item.key);
-    addPoints(db, user, points, "dungeon_clear", { item: item.label });
+    addPoints(db, user, points, "dungeon_clear", { item: item.label, difficulty: difficulty.label, boss: boss.name });
     user.gameWins += 1;
     const level = addRpgExp(user, exp);
-    return formatRpgResult("🏰 던전 클리어!", user, [`보상: ${item.label}`, `+${points}P / +${exp}EXP`], level);
+    return formatRpgResult("🏰 던전 클리어!", user, [`난이도: ${difficulty.label}`, `보스: ${boss.name}`, `보스 능력치: ${formatMonsterStats(boss.stats)}`, `전투력: ${outcome.playerPower} vs ${outcome.enemyPower}`, `승률: ${outcome.chance}% / 판정 ${outcome.roll}`, `보상: ${item.label}`, `+${points}P / +${exp}EXP`], level);
   }
 
-  const damage = randomInt(18, 40);
+  const damage = randomInt(18, 40) + Math.floor(boss.power / 12);
   rpg.hp = Math.max(0, rpg.hp - damage);
-  const exp = randomInt(20, 40);
+  const exp = Math.floor(randomInt(difficulty.expMin, difficulty.expMax) / 3);
   const level = addRpgExp(user, exp);
-  return formatRpgResult("🏰 던전 실패", user, [`피해: -${damage}HP`, `그래도 +${exp}EXP`], level);
+  return formatRpgResult("🏰 던전 패배", user, [`난이도: ${difficulty.label}`, `보스: ${boss.name}`, `보스 능력치: ${formatMonsterStats(boss.stats)}`, `전투력: ${outcome.playerPower} vs ${outcome.enemyPower}`, `승률: ${outcome.chance}% / 판정 ${outcome.roll}`, `피해: -${damage}HP`, `그래도 +${exp}EXP`], level);
+}
+
+function infiniteTower(db, user) {
+  const left = cooldownLeft(user, "tower", 75 * 1000);
+  if (left > 0) return `무한의탑은 ${left}초 뒤에 다시 도전할 수 있습니다.`;
+  const rpg = ensureRpg(user);
+  const nextFloor = (user.tower?.floor || 0) + 1;
+  const needHp = 25 + Math.floor(nextFloor / 4);
+  const needEnergy = 16 + Math.floor(nextFloor / 8);
+  if (rpg.hp < needHp) return `HP가 낮아서 ${nextFloor}층에 도전할 수 없습니다.\n필요 HP: ${needHp}\n/휴식 으로 회복하세요.`;
+  if (!spendEnergy(user, needEnergy)) return `기력이 부족합니다.\n필요 기력: ${needEnergy}\n/휴식 으로 회복하세요.`;
+
+  user.cooldowns.tower = Date.now();
+  user.tower ||= { floor: 0, bestFloor: 0, wins: 0, losses: 0 };
+  user.gamePlays += 1;
+  const base = HUNT_MONSTERS[(nextFloor - 1) % HUNT_MONSTERS.length];
+  const monster = scaleMonster(base, Math.floor(nextFloor * 1.8));
+  const outcome = battleOutcome(rpgStats(user), monster.stats, -Math.floor(nextFloor / 8));
+  if (outcome.won) {
+    user.tower.floor = nextFloor;
+    user.tower.bestFloor = Math.max(user.tower.bestFloor || 0, nextFloor);
+    user.tower.wins = (user.tower.wins || 0) + 1;
+    user.gameWins += 1;
+    const points = 25 + nextFloor * 4;
+    const exp = 45 + nextFloor * 6;
+    addPoints(db, user, points, "tower_clear", { floor: nextFloor, monster: monster.name });
+    if (nextFloor % 5 === 0) addInventory(user, pickWeighted(DUNGEON_REWARDS).key);
+    const level = addRpgExp(user, exp);
+    return formatRpgResult("🗼 무한의탑 승리", user, [`층수: ${nextFloor}층`, `상대: ${monster.name}`, `상대 능력치: ${formatMonsterStats(monster.stats)}`, `전투력: ${outcome.playerPower} vs ${outcome.enemyPower}`, `승률: ${outcome.chance}% / 판정 ${outcome.roll}`, `+${points}P / +${exp}EXP`, nextFloor % 5 === 0 ? "5층 보너스 보상 획득" : ""].filter(Boolean), level);
+  }
+
+  user.tower.losses = (user.tower.losses || 0) + 1;
+  const damage = 14 + Math.floor(monster.power / 15);
+  rpg.hp = Math.max(0, rpg.hp - damage);
+  const exp = 15 + nextFloor * 2;
+  const level = addRpgExp(user, exp);
+  return formatRpgResult("🗼 무한의탑 패배", user, [`도전층: ${nextFloor}층`, `상대: ${monster.name}`, `상대 능력치: ${formatMonsterStats(monster.stats)}`, `전투력: ${outcome.playerPower} vs ${outcome.enemyPower}`, `승률: ${outcome.chance}% / 판정 ${outcome.roll}`, `피해: -${damage}HP`, `+${exp}EXP`], level);
+}
+
+function towerText(user) {
+  const tower = user.tower || {};
+  return [
+    `🗼 ${displayUserName(user)}님의 무한의탑`,
+    `현재층: ${(tower.floor || 0).toLocaleString()}층`,
+    `최고층: ${(tower.bestFloor || 0).toLocaleString()}층`,
+    `승패: ${(tower.wins || 0).toLocaleString()}승 / ${(tower.losses || 0).toLocaleString()}패`,
+    "도전: /무탑 또는 /무한의탑"
+  ].join("\n");
 }
 
 function restRpg(user) {
@@ -3222,6 +3475,67 @@ function enhanceEquipment(db, user, text) {
   ].join("\n");
 }
 
+function autoEnhanceEquipment(db, user, text) {
+  const raw = text.replace(/^(\/?자동강화|\/?오토강화|\/autoenhance)\s*/i, "").trim();
+  if (!raw) {
+    return [
+      "✨ 자동강화",
+      "보유 주문서와 포인트로 여러 번 강화합니다.",
+      "실패해도 자동 진행은 멈추지 않고, 재료가 부족하면 종료합니다.",
+      "",
+      "사용법",
+      "/자동강화 무기 5",
+      "/자동강화 방어구 5",
+      "/자동강화 무기 축복 3"
+    ].join("\n");
+  }
+  const args = raw.split(/\s+/).filter(Boolean);
+  const type = /방어|갑옷|armor/i.test(raw) ? "armor" : "weapon";
+  const label = type === "armor" ? "방어구" : "무기";
+  const useBlessed = /축복|bless/i.test(raw);
+  const scrollKey = useBlessed ? "blessed_scroll" : type === "armor" ? "armor_scroll" : "weapon_scroll";
+  const countArg = [...args].reverse().find((arg) => /^\d+$/.test(arg));
+  const requestedAttempts = Number(countArg || 5);
+  const maxAttempts = Number.isFinite(requestedAttempts) ? clamp(requestedAttempts, 1, 10) : 5;
+  user.equipment ||= {};
+  user.equipment[type] ||= { level: 0, attempts: 0 };
+
+  const logs = [];
+  let successCount = 0;
+  for (let i = 0; i < maxAttempts; i += 1) {
+    const level = user.equipment[type].level || 0;
+    const cost = 50 + level * 25;
+    if ((user.inventory?.[scrollKey] || 0) < 1) {
+      logs.push(`중단: ${itemDisplayName(scrollKey)} 부족`);
+      break;
+    }
+    if (user.points < cost) {
+      logs.push(`중단: 포인트 부족 ${user.points.toLocaleString()}P / 필요 ${cost.toLocaleString()}P`);
+      break;
+    }
+    removeInventory(user, scrollKey, 1);
+    addPoints(db, user, -cost, "auto_enhance_cost", { type, level });
+    user.equipment[type].attempts = (user.equipment[type].attempts || 0) + 1;
+    const chance = Math.max(25, 82 - level * 6 + (scrollKey === "blessed_scroll" ? 12 : 0));
+    const success = randomInt(1, 100) <= chance;
+    if (success) {
+      user.equipment[type].level = level + 1;
+      successCount += 1;
+    }
+    logs.push(`${i + 1}회 ${success ? "성공" : "실패"} / ${label} +${level} -> +${user.equipment[type].level} / 성공률 ${chance}%`);
+  }
+  if (!logs.length) return `${itemDisplayName(scrollKey)} 또는 포인트가 부족합니다.\n/상점 에서 구매해주세요.`;
+  return [
+    "✨ 자동강화 결과",
+    `닉네임: ${displayUserName(user)}`,
+    `대상: ${label}`,
+    `성공: ${successCount.toLocaleString()}회 / 시도: ${logs.filter((line) => /^\d+회/.test(line)).length.toLocaleString()}회`,
+    ...logs,
+    formatStats(rpgStats(user)),
+    `현재 포인트: ${user.points.toLocaleString()}P`
+  ].join("\n");
+}
+
 function petLevelFor(exp) {
   return Math.floor(Math.sqrt(Math.max(0, exp) / 35)) + 1;
 }
@@ -3425,7 +3739,8 @@ function autoAdventure(db, user) {
     compactAutoResult("🌿 채집:", gathering(db, user)),
     compactAutoResult("🗺️ 탐험:", adventure(db, user)),
     compactAutoResult("⚔️ 사냥:", hunt(db, user)),
-    compactAutoResult("🏰 던전:", dungeon(db, user))
+    compactAutoResult("🏰 던전:", dungeon(db, user)),
+    compactAutoResult("🗼 무탑:", infiniteTower(db, user))
   ];
   return [
     "🤖 오토모험 결과",
@@ -3875,9 +4190,12 @@ async function runCommand(db, user, text, blockNames = []) {
   if (startsWithAny(commandText, ["/판매", "/팔기", "/sell"])) return sellItem(db, user, commandText);
   if (startsWithAny(commandText, ["/시세", "/가격", "/price"])) return priceText(user, commandText);
   if (startsWithAny(commandText, ["/사용", "/use"])) return useItem(db, user, commandText);
+  if (aliasesMatch(commandText, ["/자동장착", "자동장착", "/오토장착", "오토장착", "/bestequip"])) return autoEquipBest(db, user);
   if (startsWithAny(commandText, ["/장착", "/착용", "/equip"])) return equipItem(db, user, commandText);
   if (startsWithAny(commandText, ["/해제", "/장착해제", "/unequip"])) return unequipItem(db, user, commandText);
   if (startsWithAny(commandText, ["/합성", "/장비합성", "/synthesis", "/synth"])) return synthesizeEquipment(db, user, commandText);
+  if (aliasesMatch(commandText, ["/세트", "세트", "/세트아이템", "세트아이템", "/set"])) return setListText(user);
+  if (aliasesMatch(commandText, ["/몬스터", "몬스터", "/몬스터도감", "몬스터도감", "/monster"])) return monsterGuideText();
   if (aliasesMatch(commandText, ["/모험", "모험", "/ㅁㅎ", "/rpg", "rpg"])) return rpgHelpText();
   if (aliasesMatch(commandText, ["/캐릭터", "캐릭터", "/캐릭", "/내캐릭", "내캐릭", "/character"])) return rpgProfile(user);
   if (aliasesMatch(commandText, ["/장비", "장비", "/장비창", "장비창", "/equipment", "/equip"])) return equipmentText(user);
@@ -3889,9 +4207,12 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/채집", "채집", "/ㅊㅈ", "/gather", "gather"])) return gathering(db, user);
   if (aliasesMatch(commandText, ["/탐험", "탐험", "/ㅌㅎ", "/adventure", "adventure"])) return adventure(db, user);
   if (aliasesMatch(commandText, ["/사냥", "사냥", "/ㅅㄴ", "/hunt", "hunt"])) return hunt(db, user);
-  if (aliasesMatch(commandText, ["/던전", "던전", "/ㄷㅈ", "/dungeon", "dungeon"])) return dungeon(db, user);
+  if (aliasesMatch(commandText, ["/던전", "던전", "/ㄷㅈ", "/dungeon", "dungeon"]) || startsWithAny(commandText, ["/던전", "/ㄷㅈ", "/dungeon"])) return dungeon(db, user, commandText);
+  if (aliasesMatch(commandText, ["/무탑정보", "무탑정보", "/탑정보", "탑정보", "/towerinfo"])) return towerText(user);
+  if (aliasesMatch(commandText, ["/무탑", "무탑", "/무한의탑", "무한의탑", "/탑", "탑", "/tower"])) return infiniteTower(db, user);
   if (aliasesMatch(commandText, ["/휴식", "휴식", "/ㅎㅅ", "/rest", "rest"])) return restRpg(user);
   if (startsWithAny(commandText, ["/대장간", "/제련", "/제작", "/장비제작", "/forge", "/craft"])) return forgeItem(db, user, commandText);
+  if (startsWithAny(commandText, ["/자동강화", "/오토강화", "/autoenhance"])) return autoEnhanceEquipment(db, user, commandText);
   if (startsWithAny(commandText, ["/강화", "/enhance"])) return enhanceEquipment(db, user, commandText);
   if (startsWithAny(commandText, ["/연금술", "/연금", "/alchemy"])) return alchemyItem(db, user, commandText);
   if (aliasesMatch(commandText, ["/펫입양", "/petadopt"])) return adoptPet(db, user);
