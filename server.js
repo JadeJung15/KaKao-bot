@@ -9,8 +9,8 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "pixelgom-db.json");
 const PORT = Number(process.env.PORT || 3000);
 const STATE_ID = process.env.PIXELGOM_STATE_ID || "main";
-const APP_VERSION = "0.7.0";
-const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "live-user-rank", "name-only-nicknames", "typing-games"];
+const APP_VERSION = "0.7.1";
+const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "live-user-rank", "name-only-nicknames", "typing-games", "rpg-120-pools", "item-sell", "shop-forge-alchemy", "pets", "enhancement-scrolls", "auto-adventure"];
 
 let pgPool;
 
@@ -58,7 +58,9 @@ const COOLDOWNS = {
   adventureMs: 45 * 1000,
   huntMs: 45 * 1000,
   dungeonMs: 2 * 60 * 1000,
-  restMs: 60 * 1000
+  restMs: 60 * 1000,
+  petTrainMs: 45 * 1000,
+  petBattleMs: 90 * 1000
 };
 
 const initialDb = {
@@ -278,6 +280,15 @@ function normalizeParticipantName(value) {
   return normalizeText(value).replace(/\s+/g, " ").replace(/님$/, "");
 }
 
+function displayNickname(value) {
+  const normalized = normalizeParticipantName(value);
+  return normalized.replace(/\s+(남자|여자|남성|여성|남|여)$/i, "").trim() || normalized || "익명";
+}
+
+function displayUserName(user) {
+  return displayNickname(user?.nickname || "익명");
+}
+
 function nicknameLookupKey(value) {
   return normalizeParticipantName(value)
     .replace(/^@+/, "")
@@ -334,9 +345,9 @@ function findUsersByName(db, room, query, excludeId = "", options = {}) {
 function nameLookupFailure(name, matches) {
   if (matches.length <= 1) return "";
   return [
-    `${name} 닉네임이 여러 명입니다.`,
+    `${displayNickname(name)} 닉네임이 여러 명입니다.`,
     "전체 닉네임으로 다시 입력해주세요.",
-    ...matches.slice(0, 5).map((user) => `• ${user.nickname}`)
+    ...matches.slice(0, 5).map((user) => `• ${displayUserName(user)}`)
   ].join("\n");
 }
 
@@ -420,6 +431,12 @@ function mergeUsers(db, targetId, sourceId, reason = "merge") {
   target.attendanceStreak = Math.max(target.attendanceStreak || 0, source.attendanceStreak || 0);
   target.lastAttendanceDate = [target.lastAttendanceDate, source.lastAttendanceDate].filter(Boolean).sort().at(-1) || "";
   target.aliases = uniqueValues([...(target.aliases || []), source.nickname, ...(source.aliases || [])]);
+  target.autoAdventureAllowed ||= Boolean(source.autoAdventureAllowed);
+  target.equipment ||= {};
+  for (const [slot, item] of Object.entries(source.equipment || {})) {
+    if (!target.equipment[slot] || (item?.level || 0) > (target.equipment[slot]?.level || 0)) target.equipment[slot] = item;
+  }
+  if (!target.pet && source.pet) target.pet = source.pet;
   target.nicknameHistory = [...(target.nicknameHistory || []), ...(source.nicknameHistory || [])]
     .filter((row) => row?.nickname)
     .sort((a, b) => String(a.firstSeenAt || "").localeCompare(String(b.firstSeenAt || "")));
@@ -472,6 +489,7 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
       accountRegistered: false,
       registeredAt: "",
       isAdmin: false,
+      autoAdventureAllowed: false,
       aliases: [],
       nicknameHistory: [],
       activeQuiz: null,
@@ -479,6 +497,8 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
       activeInitialQuiz: null,
       activeBaseball: null,
       rpg: {},
+      pet: null,
+      equipment: {},
       cooldowns: {},
       createdAt: nowIso(),
       updatedAt: nowIso()
@@ -500,6 +520,7 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
   user.accountRegistered ??= false;
   user.registeredAt ||= "";
   user.isAdmin ??= false;
+  user.autoAdventureAllowed ??= false;
   user.aliases ||= [];
   user.nicknameHistory ||= [];
   user.activeQuiz ??= null;
@@ -508,6 +529,8 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
   user.activeBaseball ??= null;
   user.activeUpDown ??= null;
   user.rpg ||= {};
+  user.pet ??= null;
+  user.equipment ||= {};
   user.inventory ||= {};
   user.daily ||= {};
   user.cooldowns ||= {};
@@ -585,7 +608,7 @@ function rankingText(title, rows, selector, suffix) {
     "",
     ...rows.map((user, index) => {
       const rank = medals[index] || `${index + 1}위`;
-      return `${rank} ${user.nickname} - ${selector(user).toLocaleString()}${suffix} / LV.${user.level}`;
+      return `${rank} ${displayUserName(user)} - ${selector(user).toLocaleString()}${suffix} / LV.${user.level}`;
     })
   ].join("\n");
 }
@@ -644,7 +667,7 @@ function periodTypingRankText(db, room, period = "day", metric = "chars") {
     const userId = canonicalUserId(db, event.userId);
     if (db.users[userId] && !isPlayableUser(db.users[userId])) continue;
     const amount = metric === "messages" ? 1 : Number(event.meta?.textLength || 0);
-    totals[userId] ||= { userId, nickname: db.users[userId]?.nickname || event.nickname || "익명", value: 0, level: db.users[userId]?.level || 1 };
+    totals[userId] ||= { userId, nickname: displayNickname(db.users[userId]?.nickname || event.nickname || "익명"), value: 0, level: db.users[userId]?.level || 1 };
     totals[userId].value += amount;
   }
 
@@ -657,7 +680,7 @@ function periodTypingRankText(db, room, period = "day", metric = "chars") {
   return [
     title,
     "",
-    ...rows.map((row, index) => `${index + 1}위 ${row.nickname} - ${row.value.toLocaleString()}${metric === "messages" ? "회" : "타"} / LV.${row.level}`)
+    ...rows.map((row, index) => `${index + 1}위 ${displayNickname(row.nickname)} - ${row.value.toLocaleString()}${metric === "messages" ? "회" : "타"} / LV.${row.level}`)
   ].join("\n");
 }
 
@@ -673,7 +696,7 @@ function periodRoomStats(db, room, period = "day") {
     const textLength = Number(event.meta?.textLength || 0);
     totals[userId] ||= {
       userId,
-      nickname: db.users[userId]?.nickname || event.nickname || "익명",
+      nickname: displayNickname(db.users[userId]?.nickname || event.nickname || "익명"),
       level: db.users[userId]?.level || 1,
       messages: 0,
       chars: 0
@@ -730,10 +753,10 @@ function periodOverviewText(db, room, period = "day") {
     `타수: ${stats.totalChars.toLocaleString()}타`,
     "",
     "타수 TOP5",
-    ...(charRows.length ? charRows.map((row, index) => `${index + 1}위 ${row.nickname} - ${row.chars.toLocaleString()}타`) : ["기록 없음"]),
+    ...(charRows.length ? charRows.map((row, index) => `${index + 1}위 ${displayNickname(row.nickname)} - ${row.chars.toLocaleString()}타`) : ["기록 없음"]),
     "",
     "채팅 TOP5",
-    ...(messageRows.length ? messageRows.map((row, index) => `${index + 1}위 ${row.nickname} - ${row.messages.toLocaleString()}회`) : ["기록 없음"])
+    ...(messageRows.length ? messageRows.map((row, index) => `${index + 1}위 ${displayNickname(row.nickname)} - ${row.messages.toLocaleString()}회`) : ["기록 없음"])
   ];
   return lines.join("\n");
 }
@@ -762,7 +785,7 @@ function myRankText(db, user, period = "day") {
   const messages = rankPosition(stats.rows, canonicalId, "messages");
   const points = cumulativePointRank(db, user);
   return [
-    `${user.nickname}님의 ${periodLabel(period)} 실시간 순위`,
+    `${displayUserName(user)}님의 ${periodLabel(period)} 실시간 순위`,
     `기준: 지금`,
     rankLine("타수", chars) + "타",
     rankLine("채팅", messages) + "회",
@@ -782,6 +805,7 @@ function botIntroText() {
     "/모험 - RPG 도움말",
     "/캐릭터 - 내 RPG 상태",
     "/낚시, /채집, /탐험, /사냥, /던전",
+    "/상점, /판매, /강화, /펫, /오토모험",
     "/타자, /초성, /야구, /끝말",
     "/게임순위 - 게임 승리 순위"
   ].join("\n");
@@ -805,6 +829,8 @@ function noticeText() {
     "/탐험 또는 /ㅌㅎ",
     "/사냥 또는 /ㅅㄴ",
     "/던전 또는 /ㄷㅈ",
+    "/상점, /판매, /강화",
+    "/펫, /펫훈련, /펫대전",
     "/휴식 또는 /ㅎㅅ",
     "/가방 또는 /ㄱㅂ",
     "",
@@ -842,6 +868,7 @@ function helpText(text = "") {
     "",
     "기본/순위",
     "/상태, /봇소개, /내정보, /?",
+    "/버전",
     "/실시간순위, /방순위, /내순위",
     "",
     "자동 적립",
@@ -857,6 +884,9 @@ function gameHelpText() {
     "/캐릭터 또는 /캐릭 - RPG 상태",
     "/낚시(/ㄴㅅ), /채집(/ㅊㅈ), /탐험(/ㅌㅎ)",
     "/사냥(/ㅅㄴ), /던전(/ㄷㅈ), /휴식(/ㅎㅅ)",
+    "/상점, /구매, /판매, /강화, /대장간, /연금술",
+    "/펫, /펫입양, /펫훈련, /펫대전",
+    "/오토모험 - 권한 있는 사람만 자동 진행",
     "",
     "타이핑 게임",
     "/타자 또는 /ㅌㅈ - 제시문 빨리 입력",
@@ -908,6 +938,9 @@ function adminHelpText() {
     "/관리자추가 닉네임",
     "/관리자해제 닉네임",
     "/지급 닉네임 금액",
+    "/송금 닉네임 금액 - 관리자는 차감 없이 생성 송금",
+    "/오토권한 닉네임",
+    "/오토해제 닉네임",
     "/자동공지 - 현재 설정",
     "/자동공지 켜기|끄기",
     "/자동공지 간격 30",
@@ -950,7 +983,7 @@ function registrationGuideText(user) {
 function registerAccount(db, user) {
   if (user.accountRegistered) {
     return [
-      `${user.nickname}님은 이미 가입되어 있습니다.`,
+      `${displayUserName(user)}님은 이미 가입되어 있습니다.`,
       user.isAdmin ? "권한: 관리자" : "권한: 일반",
       "게임은 /게임 또는 /모험"
     ].join("\n");
@@ -962,7 +995,7 @@ function registerAccount(db, user) {
   if (firstInRoom) user.isAdmin = true;
   user.updatedAt = nowIso();
   return [
-    `${user.nickname}님 계정 등록 완료!`,
+    `${displayUserName(user)}님 계정 등록 완료!`,
     firstInRoom ? "이 방 첫 가입자라 관리자 권한이 부여되었습니다." : "이제 픽셀곰 게임을 이용할 수 있습니다.",
     "",
     "시작 명령어",
@@ -979,7 +1012,7 @@ function requireAdmin(user) {
 function adminListText(db, room) {
   const admins = registeredRoomUsers(db, room).filter((user) => user.isAdmin);
   if (!admins.length) return "등록된 관리자가 없습니다.";
-  return ["픽셀곰 관리자 목록", ...admins.map((user) => `• ${user.nickname}`)].join("\n");
+  return ["픽셀곰 관리자 목록", ...admins.map((user) => `• ${displayUserName(user)}`)].join("\n");
 }
 
 function setAdminRole(db, user, text, enabled) {
@@ -989,10 +1022,10 @@ function setAdminRole(db, user, text, enabled) {
   if (!targetName) return enabled ? "사용법: /관리자추가 닉네임" : "사용법: /관리자해제 닉네임";
   const result = findOneUserByName(db, user.room, targetName, user.id);
   if (result.error) return result.error;
-  if (!result.user || !isRegisteredUser(result.user)) return `${targetName}님은 가입된 계정이 아닙니다.`;
+  if (!result.user || !isRegisteredUser(result.user)) return `${displayNickname(targetName)}님은 가입된 계정이 아닙니다.`;
   result.user.isAdmin = enabled;
   result.user.updatedAt = nowIso();
-  return `${result.user.nickname}님 관리자 권한을 ${enabled ? "부여" : "해제"}했습니다.`;
+  return `${displayUserName(result.user)}님 관리자 권한을 ${enabled ? "부여" : "해제"}했습니다.`;
 }
 
 function grantPoints(db, user, text) {
@@ -1005,10 +1038,10 @@ function grantPoints(db, user, text) {
   if (!Number.isInteger(amount) || amount <= 0) return "지급 포인트는 1 이상의 숫자로 입력해주세요.";
   const result = findOneUserByName(db, user.room, targetName, user.id);
   if (result.error) return result.error;
-  if (!result.user || !isRegisteredUser(result.user)) return `${targetName}님은 가입된 계정이 아닙니다.`;
+  if (!result.user || !isRegisteredUser(result.user)) return `${displayNickname(targetName)}님은 가입된 계정이 아닙니다.`;
   const level = addPoints(db, result.user, amount, "admin_grant", { from: user.nickname });
   return [
-    `${result.user.nickname}님에게 ${amount.toLocaleString()}P 지급 완료`,
+    `${displayUserName(result.user)}님에게 ${amount.toLocaleString()}P 지급 완료`,
     `현재 포인트: ${result.user.points.toLocaleString()}P / LV.${result.user.level}`,
     level.leveledUp ? `레벨업! LV.${level.beforeLevel} -> LV.${level.afterLevel}` : ""
   ].filter(Boolean).join("\n");
@@ -1072,12 +1105,22 @@ function statusText() {
   ].join("\n");
 }
 
+function versionText() {
+  return [
+    "픽셀곰 버전",
+    `버전: ${APP_VERSION}`,
+    `시간: ${new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
+    `기능: ${FEATURES.join(", ")}`
+  ].join("\n");
+}
+
 function profileText(user) {
   const itemCount = Object.values(user.inventory || {}).reduce((sum, count) => sum + count, 0);
   return [
-    `${user.nickname}님의 정보`,
+    `${displayUserName(user)}님의 정보`,
     user.accountRegistered ? "계정: 등록됨" : "계정: 미등록",
     user.isAdmin ? "권한: 관리자" : "권한: 일반",
+    user.autoAdventureAllowed ? "오토모험: 허용" : "오토모험: 미허용",
     `칭호: ${titleFor(user)}`,
     `레벨: LV.${user.level}`,
     `포인트: ${user.points.toLocaleString()}P`,
@@ -1093,7 +1136,7 @@ function profileText(user) {
 function attendance(db, user) {
   const today = todayKst();
   if (user.attendanceDates.includes(today)) {
-    return `${user.nickname}님은 오늘 이미 출석했습니다.\n현재 포인트: ${user.points.toLocaleString()}P / LV.${user.level}`;
+    return `${displayUserName(user)}님은 오늘 이미 출석했습니다.\n현재 포인트: ${user.points.toLocaleString()}P / LV.${user.level}`;
   }
 
   const prevDay = yesterday(today);
@@ -1102,7 +1145,7 @@ function attendance(db, user) {
   user.attendanceDates.push(today);
 
   let gained = POINT_RULES.attendance;
-  const lines = [`${user.nickname}님 출석 완료!`, `+${POINT_RULES.attendance}P`];
+  const lines = [`${displayUserName(user)}님 출석 완료!`, `+${POINT_RULES.attendance}P`];
   if (user.attendanceStreak > 0 && user.attendanceStreak % 7 === 0) {
     gained += POINT_RULES.sevenDayStreak;
     lines.push(`7일 연속 보너스 +${POINT_RULES.sevenDayStreak}P`);
@@ -1125,7 +1168,7 @@ function registerRegion(db, user, text) {
   user.region = region;
   user.updatedAt = nowIso();
 
-  const lines = [`${nickname}님 지역을 ${region}(으)로 등록했습니다.`];
+  const lines = [`${displayNickname(nickname)}님 지역을 ${region}(으)로 등록했습니다.`];
   if (wasEmpty) {
     const level = addPoints(db, user, POINT_RULES.firstRegion, "first_region");
     lines.push(`최초 지역등록 +${POINT_RULES.firstRegion}P`);
@@ -1141,7 +1184,7 @@ function regionListText(db, room = "") {
     .sort((a, b) => a.nickname.localeCompare(b.nickname, "ko"))
     .reduce((acc, user) => {
       acc[user.region] ||= [];
-      acc[user.region].push(`• ${user.nickname}`);
+      acc[user.region].push(`• ${displayUserName(user)}`);
       return acc;
     }, {});
 
@@ -1243,14 +1286,14 @@ function nicknameHistoryText(db, user, text) {
     const result = findOneUserByName(db, user.room, query, "", { includeInactive: true });
     if (result.error) return result.error;
     target = result.user;
-    if (!target) return `${query}님의 닉네임 이력을 찾지 못했습니다.`;
+    if (!target) return `${displayNickname(query)}님의 닉네임 이력을 찾지 못했습니다.`;
   }
   const history = target.nicknameHistory || [];
-  if (!history.length) return `${target.nickname}님의 닉네임 이력이 아직 없습니다.`;
+  if (!history.length) return `${displayUserName(target)}님의 닉네임 이력이 아직 없습니다.`;
   return [
-    `${target.nickname}님의 닉네임 이력`,
+    `${displayUserName(target)}님의 닉네임 이력`,
     "",
-    ...history.map((row, index) => `${index + 1}. ${row.nickname} (${dateKeyKst(row.firstSeenAt)}부터)`)
+    ...history.map((row, index) => `${index + 1}. ${displayNickname(row.nickname)} (${dateKeyKst(row.firstSeenAt)}부터)`)
   ].join("\n");
 }
 
@@ -1265,8 +1308,8 @@ function linkNickname(db, user, text) {
   addNicknameSeen(merged, previousName, "linked");
   return [
     "닉네임 기록을 연결했습니다.",
-    `이전 닉네임: ${previousName}`,
-    `현재 닉네임: ${merged.nickname}`,
+    `이전 닉네임: ${displayNickname(previousName)}`,
+    `현재 닉네임: ${displayUserName(merged)}`,
     "이후 순위/포인트/채팅 기록은 합산됩니다."
   ].join("\n");
 }
@@ -1516,7 +1559,7 @@ function membershipStatusText(db, room) {
   if (events.length) {
     lines.push("", "최근 기록");
     for (const event of events) {
-      lines.push(`• ${dateKeyKst(event.createdAt)} ${event.nickname} - ${label[event.action] || event.action}`);
+      lines.push(`• ${dateKeyKst(event.createdAt)} ${displayNickname(event.nickname)} - ${label[event.action] || event.action}`);
     }
   }
   return lines.join("\n");
@@ -1718,7 +1761,7 @@ function fastFinger(db, user, text) {
   user.gamePlays += 1;
   user.gameWins += 1;
   addPoints(db, user, 15, "fast_finger", { answer });
-  return [`선착순 성공! ${user.nickname}님`, `정답: ${answer}`, "+15P", `현재: ${user.points.toLocaleString()}P / LV.${user.level}`].join("\n");
+  return [`선착순 성공! ${displayUserName(user)}님`, `정답: ${answer}`, "+15P", `현재: ${user.points.toLocaleString()}P / LV.${user.level}`].join("\n");
 }
 
 function rpgLevelFor(exp) {
@@ -1736,6 +1779,24 @@ function ensureRpg(user) {
   user.rpg.hp = Math.min(user.rpg.maxHp, Math.max(0, user.rpg.hp));
   user.rpg.energy = Math.min(user.rpg.maxEnergy, Math.max(0, user.rpg.energy));
   return user.rpg;
+}
+
+function rpgStats(user) {
+  const rpg = ensureRpg(user);
+  const itemCount = Object.values(user.inventory || {}).reduce((sum, count) => sum + count, 0);
+  const weapon = user.equipment?.weapon || { level: 0 };
+  const armor = user.equipment?.armor || { level: 0 };
+  const pet = user.pet || {};
+  return {
+    attack: 8 + rpg.level * 3 + weapon.level * 4 + Math.floor((pet.level || 0) / 2) + Math.floor((user.gameWins || 0) / 5),
+    defense: 7 + rpg.level * 2 + armor.level * 4 + Math.floor((pet.level || 0) / 3) + Math.floor(itemCount / 5),
+    speed: 6 + rpg.level + (pet.level || 0) + Math.floor((user.attendanceStreak || 0) / 3),
+    luck: 5 + Math.floor((user.points || 0) / 200) + Math.floor((user.chatCount || 0) / 30) + Math.floor((pet.wins || 0) / 3)
+  };
+}
+
+function formatStats(stats) {
+  return `⚔️공격 ${stats.attack} / 🛡️방어 ${stats.defense} / 💨민첩 ${stats.speed} / 🍀행운 ${stats.luck}`;
 }
 
 function addInventory(user, key, count = 1) {
@@ -1772,15 +1833,180 @@ function pickWeighted(rows) {
   }) || rows[0];
 }
 
+const RPG_POOL_SIZE = 120;
+
+function buildPool(leftRows, rightRows, maker, limit = RPG_POOL_SIZE) {
+  const rows = [];
+  for (const left of leftRows) {
+    for (const right of rightRows) {
+      rows.push(maker(left, right, rows.length));
+      if (rows.length >= limit) return rows;
+    }
+  }
+  return rows;
+}
+
+function rarityByIndex(index) {
+  const slot = index % 10;
+  if (slot >= 9) return { points: 55, exp: 55, weight: 3, difficulty: 5 };
+  if (slot >= 7) return { points: 32, exp: 34, weight: 8, difficulty: 4 };
+  if (slot >= 4) return { points: 16, exp: 18, weight: 18, difficulty: 3 };
+  return { points: 6, exp: 8, weight: 30, difficulty: 1 };
+}
+
+function inventoryKey(category, label) {
+  return `${category}:${label}`;
+}
+
+const FISHING_CATCHES = buildPool(
+  ["은빛", "별빛", "황금", "달빛", "새벽", "노을", "유리", "그림자", "폭신", "고대", "무지개", "픽셀"],
+  ["송사리", "잉어", "연어", "도미", "복어", "장어", "메기", "산천어", "참치", "고래 조각"],
+  (prefix, fish, index) => {
+    const rarity = rarityByIndex(index);
+    const label = `${prefix} ${fish}`;
+    return {
+      label,
+      key: inventoryKey("fish", label),
+      points: rarity.points,
+      exp: rarity.exp,
+      weight: rarity.weight
+    };
+  }
+);
+
+const GATHERING_ITEMS = buildPool(
+  ["싱싱한", "달콤한", "반짝이는", "따뜻한", "차가운", "향긋한", "고요한", "폭신한", "희귀한", "고대의", "무지개", "픽셀"],
+  ["허브", "꿀열매", "버섯", "꽃잎", "씨앗", "나뭇가지", "수정", "이끼", "열매", "별조각"],
+  (prefix, item, index) => {
+    const rarity = rarityByIndex(index);
+    const label = `${prefix} ${item}`;
+    return {
+      label,
+      key: inventoryKey("gather", label),
+      points: Math.max(1, rarity.points - 2),
+      exp: rarity.exp,
+      weight: rarity.weight
+    };
+  }
+);
+
+const ADVENTURE_EVENTS = buildPool(
+  ["곰숲", "달빛 언덕", "꿀벌 들판", "픽셀 폐허", "노을 계곡", "유리 호수", "별무리 길", "안개 숲", "고대 다리", "무지개 습지", "바람 초원", "비밀 오두막"],
+  ["샘물을 발견했습니다", "보물상자를 열었습니다", "반짝 발자국을 따라갔습니다", "가시덤불에 긁혔습니다", "길을 잃고 경험을 얻었습니다", "숨은 꿀단지를 찾았습니다", "작은 요정에게 도움을 받았습니다", "낡은 지도를 주웠습니다", "돌풍을 만나 기력이 줄었습니다", "빛나는 흔적을 기록했습니다"],
+  (place, event, index) => {
+    const rarity = rarityByIndex(index);
+    const isBad = index % 10 === 3 || index % 10 === 8;
+    const label = `${place} ${event}`;
+    return {
+      text: `${place}에서 ${event}.`,
+      points: isBad ? 0 : rarity.points,
+      exp: isBad ? Math.max(7, rarity.exp - 4) : rarity.exp,
+      hp: index % 10 === 3 ? -12 : index % 10 === 6 ? 12 : 0,
+      energy: index % 10 === 8 ? -8 : index % 10 === 0 ? 8 : 0,
+      item: isBad ? "" : inventoryKey("adventure", label),
+      itemLabel: label,
+      weight: rarity.weight
+    };
+  }
+);
+
+const HUNT_MONSTERS = buildPool(
+  ["장난꾸러기", "숲속", "꿀도둑", "별빛", "그림자", "고대", "노을", "얼음", "폭풍", "무지개", "픽셀", "왕관"],
+  ["슬라임", "고블린", "늑대", "버섯병정", "멧돼지", "박쥐", "해골", "골렘", "드레이크", "곰수호자"],
+  (prefix, monster, index) => {
+    const rarity = rarityByIndex(index);
+    const name = `${prefix} ${monster}`;
+    return {
+      name,
+      difficulty: rarity.difficulty,
+      points: rarity.points + 8,
+      exp: rarity.exp + 10,
+      damage: 6 + rarity.difficulty * 7,
+      item: inventoryKey("hunt", `${name} 전리품`),
+      itemLabel: `${name} 전리품`,
+      weight: rarity.weight
+    };
+  }
+);
+
+const DUNGEON_REWARDS = buildPool(
+  ["낡은", "푸른", "붉은", "황금", "달빛", "별빛", "고대", "왕관", "무지개", "픽셀", "비밀", "전설의"],
+  ["비늘", "룬", "보석", "열쇠", "문장", "유물", "팔찌", "망토 조각", "왕관 조각", "심장석"],
+  (prefix, reward, index) => {
+    const rarity = rarityByIndex(index);
+    const label = `${prefix} ${reward}`;
+    return {
+      key: inventoryKey("dungeon", label),
+      label,
+      weight: rarity.weight
+    };
+  }
+);
+
+const FORGE_RESULTS = buildPool(
+  ["튼튼한", "가벼운", "날카로운", "묵직한", "빛나는", "그림자", "불꽃", "얼음", "바람", "왕관", "픽셀", "전설의"],
+  ["단검", "검", "방패", "장갑", "부츠", "망치", "낚싯대", "활", "갑옷 조각", "부적"],
+  (prefix, item, index) => {
+    const rarity = rarityByIndex(index);
+    const label = `${prefix} ${item}`;
+    return {
+      key: inventoryKey("forge", label),
+      label,
+      points: Math.floor(rarity.points / 2),
+      exp: rarity.exp,
+      weight: rarity.weight
+    };
+  }
+);
+
+const ALCHEMY_RESULTS = buildPool(
+  ["맑은", "달콤한", "쌉쌀한", "반짝이는", "따뜻한", "차가운", "고요한", "폭신한", "무지개", "픽셀", "비밀", "전설의"],
+  ["회복약", "기력약", "행운약", "용기약", "집중약", "수다약", "낚시약", "탐험약", "사냥약", "별가루"],
+  (prefix, item, index) => {
+    const rarity = rarityByIndex(index);
+    const label = `${prefix} ${item}`;
+    return {
+      key: inventoryKey("alchemy", label),
+      label,
+      points: Math.floor(rarity.points / 2),
+      exp: rarity.exp,
+      hp: item.includes("회복") ? 25 : 0,
+      energy: item.includes("기력") ? 25 : 0,
+      weight: rarity.weight
+    };
+  }
+);
+
+const PET_TYPES = buildPool(
+  ["꿀잠", "달빛", "별빛", "복슬", "용감한", "장난꾸러기", "고대", "무지개", "픽셀", "폭풍", "그림자", "왕관"],
+  ["곰", "여우", "고양이", "강아지", "토끼", "펭귄", "용", "햄스터", "수달", "늑대"],
+  (prefix, animal, index) => {
+    const rarity = rarityByIndex(index);
+    const emojis = ["🐻", "🦊", "🐱", "🐶", "🐰", "🐧", "🐉", "🐹", "🦦", "🐺"];
+    return {
+      name: `${prefix} ${animal}`,
+      emoji: emojis[index % emojis.length],
+      attack: 4 + rarity.difficulty * 2,
+      defense: 3 + rarity.difficulty * 2,
+      speed: 3 + rarity.difficulty,
+      weight: rarity.weight
+    };
+  }
+);
+
 function rpgHelpText() {
   return [
     "픽셀곰 RPG",
+    "결과에는 닉네임을 표시하고, 성별 표기는 빼고 불러요.",
     "/캐릭터 또는 /캐릭 - 내 RPG 상태",
     "/낚시 또는 /ㄴㅅ - 물고기/보물",
     "/채집 또는 /ㅊㅈ - 재료 수집",
     "/탐험 또는 /ㅌㅎ - 랜덤 이벤트",
     "/사냥 또는 /ㅅㄴ - 몬스터 전투",
     "/던전 또는 /ㄷㅈ - 큰 보상 도전",
+    "/상점, /구매, /판매, /시세",
+    "/대장간 또는 /제련 - 장비 제작",
+    "/연금술 또는 /연금 - 물약 제작",
     "/휴식 또는 /ㅎㅅ - HP/기력 회복",
     "/가방 또는 /ㄱㅂ - 아이템 확인",
     "",
@@ -1790,20 +2016,26 @@ function rpgHelpText() {
 
 function rpgProfile(user) {
   const rpg = ensureRpg(user);
+  const stats = rpgStats(user);
+  const weaponLevel = user.equipment?.weapon?.level || 0;
+  const armorLevel = user.equipment?.armor?.level || 0;
   return [
-    `${user.nickname}님의 픽셀곰 RPG`,
+    `🐻 ${displayUserName(user)}님의 픽셀곰 RPG`,
     `RPG LV.${rpg.level} / EXP ${rpg.exp.toLocaleString()}`,
-    `HP ${rpg.hp}/${rpg.maxHp}`,
-    `기력 ${rpg.energy}/${rpg.maxEnergy}`,
-    `포인트 ${user.points.toLocaleString()}P`,
-    `게임 ${user.gameWins.toLocaleString()}승 / ${user.gamePlays.toLocaleString()}회`,
-    "명령어: /낚시 /채집 /탐험 /사냥 /던전 /휴식"
+    `❤️ HP ${rpg.hp}/${rpg.maxHp}`,
+    `⚡ 기력 ${rpg.energy}/${rpg.maxEnergy}`,
+    formatStats(stats),
+    `🗡️ 무기 +${weaponLevel} / 🛡️ 방어구 +${armorLevel}`,
+    user.pet ? `🐾 펫 ${user.pet.emoji || "🐾"} ${user.pet.name} LV.${user.pet.level}` : "🐾 펫 없음",
+    `💰 포인트 ${user.points.toLocaleString()}P`,
+    `🎮 게임 ${user.gameWins.toLocaleString()}승 / ${user.gamePlays.toLocaleString()}회`,
+    "명령어: /낚시 /채집 /탐험 /사냥 /던전 /강화 /펫"
   ].join("\n");
 }
 
 function formatRpgResult(title, user, rows, levelResult = null) {
   const rpg = ensureRpg(user);
-  const lines = [title, ...rows, `RPG LV.${rpg.level} / HP ${rpg.hp}/${rpg.maxHp} / 기력 ${rpg.energy}/${rpg.maxEnergy}`, `포인트 ${user.points.toLocaleString()}P`];
+  const lines = [title, `닉네임: ${displayUserName(user)}`, ...rows, `RPG LV.${rpg.level} / ❤️HP ${rpg.hp}/${rpg.maxHp} / ⚡기력 ${rpg.energy}/${rpg.maxEnergy}`, formatStats(rpgStats(user)), `💰 포인트 ${user.points.toLocaleString()}P`];
   if (levelResult?.leveledUp) lines.splice(1, 0, `RPG 레벨업! LV.${levelResult.before} -> LV.${levelResult.after}`);
   return lines.join("\n");
 }
@@ -1815,20 +2047,13 @@ function fishing(db, user) {
 
   user.cooldowns.fishing = Date.now();
   user.gamePlays += 1;
-  const result = pickWeighted([
-    { label: "은빛 송사리", key: "silver_minnow", points: 5, exp: 8, weight: 34 },
-    { label: "별빛 잉어", key: "star_carp", points: 12, exp: 14, weight: 25 },
-    { label: "황금 연어", key: "gold_salmon", points: 25, exp: 25, weight: 14 },
-    { label: "달빛 고래 조각", key: "moon_whale_shard", points: 60, exp: 55, weight: 4 },
-    { label: "젖은 장화", key: "wet_boot", points: 0, exp: 3, weight: 12 },
-    { label: "빈 낚싯줄", key: "", points: 0, exp: 1, weight: 11 }
-  ]);
+  const result = pickWeighted(FISHING_CATCHES);
 
   if (result.key) addInventory(user, result.key);
   if (result.points) addPoints(db, user, result.points, "fishing", { item: result.label });
   if (result.points > 0) user.gameWins += 1;
   const level = addRpgExp(user, result.exp);
-  return formatRpgResult("픽셀곰 낚시", user, [`획득: ${result.label}`, `+${result.points}P / +${result.exp}EXP`], level);
+  return formatRpgResult("🎣 픽셀곰 낚시", user, [`획득: ${result.label}`, `+${result.points}P / +${result.exp}EXP`], level);
 }
 
 function gathering(db, user) {
@@ -1838,19 +2063,13 @@ function gathering(db, user) {
 
   user.cooldowns.gather = Date.now();
   user.gamePlays += 1;
-  const result = pickWeighted([
-    { label: "허브", key: "herb", points: 4, exp: 7, weight: 34 },
-    { label: "꿀열매", key: "honey_berry", points: 8, exp: 11, weight: 25 },
-    { label: "반짝 버섯", key: "glow_mushroom", points: 15, exp: 18, weight: 18 },
-    { label: "별조각", key: "star_piece", points: 25, exp: 26, weight: 8 },
-    { label: "마른 나뭇가지", key: "dry_branch", points: 1, exp: 3, weight: 15 }
-  ]);
+  const result = pickWeighted(GATHERING_ITEMS);
 
   addInventory(user, result.key);
   addPoints(db, user, result.points, "gathering", { item: result.label });
   user.gameWins += 1;
   const level = addRpgExp(user, result.exp);
-  return formatRpgResult("픽셀곰 채집", user, [`획득: ${result.label}`, `+${result.points}P / +${result.exp}EXP`], level);
+  return formatRpgResult("🌿 픽셀곰 채집", user, [`획득: ${result.label}`, `+${result.points}P / +${result.exp}EXP`], level);
 }
 
 function adventure(db, user) {
@@ -1861,14 +2080,7 @@ function adventure(db, user) {
   const rpg = ensureRpg(user);
   user.cooldowns.adventure = Date.now();
   user.gamePlays += 1;
-  const event = pickWeighted([
-    { text: "곰숲 샘물을 발견했습니다.", points: 8, exp: 12, hp: 15, energy: 10, item: "spring_water", weight: 24 },
-    { text: "숨겨진 꿀단지를 찾았습니다.", points: 18, exp: 18, item: "honey_pot", weight: 20 },
-    { text: "반짝이는 발자국을 따라갔습니다.", points: 12, exp: 25, item: "bear_mark", weight: 18 },
-    { text: "가시덤불에 긁혔습니다.", points: 0, exp: 7, hp: -12, weight: 16 },
-    { text: "길을 잃었지만 경험을 얻었습니다.", points: 0, exp: 16, energy: -5, weight: 14 },
-    { text: "작은 보물상자를 발견했습니다.", points: 35, exp: 30, item: "tiny_treasure", weight: 8 }
-  ]);
+  const event = pickWeighted(ADVENTURE_EVENTS);
 
   if (event.item) addInventory(user, event.item);
   if (event.points) addPoints(db, user, event.points, "adventure", { event: event.text });
@@ -1876,7 +2088,7 @@ function adventure(db, user) {
   rpg.hp = Math.min(rpg.maxHp, Math.max(0, rpg.hp + (event.hp || 0)));
   rpg.energy = Math.min(rpg.maxEnergy, Math.max(0, rpg.energy + (event.energy || 0)));
   const level = addRpgExp(user, event.exp);
-  return formatRpgResult("픽셀곰 탐험", user, [event.text, `+${event.points}P / +${event.exp}EXP`], level);
+  return formatRpgResult("🗺️ 픽셀곰 탐험", user, [event.text, `+${event.points}P / +${event.exp}EXP`], level);
 }
 
 function hunt(db, user) {
@@ -1888,12 +2100,7 @@ function hunt(db, user) {
 
   user.cooldowns.hunt = Date.now();
   user.gamePlays += 1;
-  const monster = pickWeighted([
-    { name: "장난꾸러기 슬라임", difficulty: 1, points: 12, exp: 18, damage: 8, item: "slime_jelly", weight: 34 },
-    { name: "숲 그림자", difficulty: 2, points: 22, exp: 30, damage: 15, item: "shadow_leaf", weight: 26 },
-    { name: "꿀도둑 멧돼지", difficulty: 3, points: 35, exp: 45, damage: 24, item: "wild_tusk", weight: 18 },
-    { name: "별빛 골렘", difficulty: 4, points: 60, exp: 70, damage: 35, item: "golem_core", weight: 8 }
-  ]);
+  const monster = pickWeighted(HUNT_MONSTERS);
   const winChance = Math.min(85, 55 + rpg.level * 5 - monster.difficulty * 6);
   const won = randomInt(1, 100) <= winChance;
 
@@ -1902,12 +2109,12 @@ function hunt(db, user) {
     addPoints(db, user, monster.points, "hunt_win", { monster: monster.name });
     user.gameWins += 1;
     const level = addRpgExp(user, monster.exp);
-    return formatRpgResult("픽셀곰 사냥 성공", user, [`상대: ${monster.name}`, `+${monster.points}P / +${monster.exp}EXP`, `획득: ${monster.item}`], level);
+    return formatRpgResult("⚔️ 픽셀곰 사냥 성공", user, [`상대: ${monster.name}`, `+${monster.points}P / +${monster.exp}EXP`, `획득: ${itemDisplayName(monster.item)}`], level);
   }
 
   rpg.hp = Math.max(0, rpg.hp - monster.damage);
   const level = addRpgExp(user, Math.ceil(monster.exp / 3));
-  return formatRpgResult("픽셀곰 사냥 실패", user, [`상대: ${monster.name}`, `피해: -${monster.damage}HP`, `+${Math.ceil(monster.exp / 3)}EXP`], level);
+  return formatRpgResult("⚔️ 픽셀곰 사냥 실패", user, [`상대: ${monster.name}`, `피해: -${monster.damage}HP`, `+${Math.ceil(monster.exp / 3)}EXP`], level);
 }
 
 function dungeon(db, user) {
@@ -1923,23 +2130,19 @@ function dungeon(db, user) {
   if (success) {
     const points = randomInt(45, 90);
     const exp = randomInt(70, 120);
-    const item = pickWeighted([
-      { key: "ancient_scale", label: "고대 비늘", weight: 35 },
-      { key: "pixel_relic", label: "픽셀 유물", weight: 25 },
-      { key: "bear_crown", label: "곰왕관 조각", weight: 10 }
-    ]);
+    const item = pickWeighted(DUNGEON_REWARDS);
     addInventory(user, item.key);
     addPoints(db, user, points, "dungeon_clear", { item: item.label });
     user.gameWins += 1;
     const level = addRpgExp(user, exp);
-    return formatRpgResult("던전 클리어!", user, [`보상: ${item.label}`, `+${points}P / +${exp}EXP`], level);
+    return formatRpgResult("🏰 던전 클리어!", user, [`보상: ${item.label}`, `+${points}P / +${exp}EXP`], level);
   }
 
   const damage = randomInt(18, 40);
   rpg.hp = Math.max(0, rpg.hp - damage);
   const exp = randomInt(20, 40);
   const level = addRpgExp(user, exp);
-  return formatRpgResult("던전 실패", user, [`피해: -${damage}HP`, `그래도 +${exp}EXP`], level);
+  return formatRpgResult("🏰 던전 실패", user, [`피해: -${damage}HP`, `그래도 +${exp}EXP`], level);
 }
 
 function restRpg(user) {
@@ -1987,7 +2190,7 @@ function rps(db, user, text) {
   if (gained) addPoints(db, user, gained, win ? "rps_win" : "rps_draw", { mine, bot });
 
   const result = win ? "승리" : draw ? "비김" : "패배";
-  return [`${user.nickname}: ${mine}`, `픽셀곰: ${bot}`, `결과: ${result}`, `획득: +${gained}P`, `현재: ${user.points.toLocaleString()}P / LV.${user.level}`].join("\n");
+  return [`${displayUserName(user)}: ${mine}`, `픽셀곰: ${bot}`, `결과: ${result}`, `획득: +${gained}P`, `현재: ${user.points.toLocaleString()}P / LV.${user.level}`].join("\n");
 }
 
 function dice(db, user) {
@@ -2131,46 +2334,529 @@ function gacha(db, user) {
   return [`뽑기 결과: ${item.name}`, `비용: -${POINT_RULES.gachaCost}P`, `보너스: +${item.points}P`, `현재: ${user.points.toLocaleString()}P / LV.${user.level}`].join("\n");
 }
 
+const ITEM_CATALOG = {
+  bear_jelly: { name: "곰젤리", sell: 2 },
+  star_piece: { name: "별조각", sell: 5 },
+  lucky_ticket: { name: "행운권", sell: 10 },
+  golden_bear: { name: "황금곰", sell: 24 },
+  legend_badge: { name: "전설 배지", sell: 60 },
+  silver_minnow: { name: "은빛 송사리", sell: 4 },
+  star_carp: { name: "별빛 잉어", sell: 8 },
+  gold_salmon: { name: "황금 연어", sell: 18 },
+  moon_whale_shard: { name: "달빛 고래 조각", sell: 45 },
+  wet_boot: { name: "젖은 장화", sell: 1 },
+  herb: { name: "허브", sell: 3 },
+  honey_berry: { name: "꿀열매", sell: 5 },
+  glow_mushroom: { name: "반짝 버섯", sell: 10 },
+  dry_branch: { name: "마른 나뭇가지", sell: 1 },
+  spring_water: { name: "샘물", sell: 4 },
+  honey_pot: { name: "꿀단지", sell: 10 },
+  bear_mark: { name: "곰 발자국", sell: 8 },
+  tiny_treasure: { name: "작은 보물상자", sell: 20 },
+  slime_jelly: { name: "슬라임 젤리", sell: 7 },
+  shadow_leaf: { name: "그림자 잎", sell: 12 },
+  wild_tusk: { name: "멧돼지 엄니", sell: 16 },
+  golem_core: { name: "골렘 코어", sell: 30 },
+  ancient_scale: { name: "고대 비늘", sell: 24 },
+  pixel_relic: { name: "픽셀 유물", sell: 35 },
+  bear_crown: { name: "곰왕관 조각", sell: 50 },
+  healing_potion: { name: "회복 물약", cost: 35, sell: 12, shop: true, use: "heal" },
+  energy_potion: { name: "기력 물약", cost: 35, sell: 12, shop: true, use: "energy" },
+  iron_ore: { name: "철광석", cost: 25, sell: 9, shop: true },
+  alchemy_dust: { name: "연금 가루", cost: 30, sell: 10, shop: true },
+  lucky_charm: { name: "행운 부적", cost: 80, sell: 25, shop: true, use: "points" },
+  weapon_scroll: { name: "무기 주문서", cost: 60, sell: 20, shop: true },
+  armor_scroll: { name: "방어구 주문서", cost: 60, sell: 20, shop: true },
+  blessed_scroll: { name: "축복 주문서", cost: 150, sell: 45, shop: true },
+  pet_food: { name: "펫 간식", cost: 25, sell: 8, shop: true },
+  pet_ticket: { name: "펫 입양권", cost: 100, sell: 35, shop: true }
+};
+
+const CATEGORY_SELL_VALUES = {
+  fish: 6,
+  gather: 5,
+  adventure: 8,
+  hunt: 14,
+  dungeon: 24,
+  forge: 22,
+  alchemy: 16
+};
+
+function itemDisplayName(key) {
+  if (ITEM_CATALOG[key]) return ITEM_CATALOG[key].name;
+  if (String(key).includes(":")) return String(key).split(":").slice(1).join(":");
+  return String(key);
+}
+
+function itemSellValue(key) {
+  if (ITEM_CATALOG[key]?.sell != null) return ITEM_CATALOG[key].sell;
+  const category = String(key).split(":")[0];
+  return CATEGORY_SELL_VALUES[category] || 3;
+}
+
+function shopItems() {
+  return Object.entries(ITEM_CATALOG)
+    .filter(([, item]) => item.shop)
+    .map(([key, item]) => ({ key, ...item }));
+}
+
+function findShopItem(query) {
+  const key = nicknameLookupKey(query);
+  return shopItems().find((item) => nicknameLookupKey(item.name) === key || nicknameLookupKey(item.name).includes(key));
+}
+
+function findInventoryKey(user, query) {
+  const wanted = nicknameLookupKey(query);
+  if (!wanted) return "";
+  const keys = Object.keys(user.inventory || {}).filter((key) => (user.inventory[key] || 0) > 0);
+  return keys.find((key) => nicknameLookupKey(itemDisplayName(key)) === wanted)
+    || keys.find((key) => nicknameLookupKey(itemDisplayName(key)).includes(wanted))
+    || "";
+}
+
+function removeInventory(user, key, count = 1) {
+  user.inventory ||= {};
+  user.inventory[key] = Math.max(0, (user.inventory[key] || 0) - count);
+  if (user.inventory[key] <= 0) delete user.inventory[key];
+}
+
 function inventoryText(user) {
-  const names = {
-    bear_jelly: "곰젤리",
-    star_piece: "별조각",
-    lucky_ticket: "행운권",
-    golden_bear: "황금곰",
-    legend_badge: "전설 배지",
-    silver_minnow: "은빛 송사리",
-    star_carp: "별빛 잉어",
-    gold_salmon: "황금 연어",
-    moon_whale_shard: "달빛 고래 조각",
-    wet_boot: "젖은 장화",
-    herb: "허브",
-    honey_berry: "꿀열매",
-    glow_mushroom: "반짝 버섯",
-    dry_branch: "마른 나뭇가지",
-    spring_water: "샘물",
-    honey_pot: "꿀단지",
-    bear_mark: "곰 발자국",
-    tiny_treasure: "작은 보물상자",
-    slime_jelly: "슬라임 젤리",
-    shadow_leaf: "그림자 잎",
-    wild_tusk: "멧돼지 엄니",
-    golem_core: "골렘 코어",
-    ancient_scale: "고대 비늘",
-    pixel_relic: "픽셀 유물",
-    bear_crown: "곰왕관 조각"
-  };
   const rows = Object.entries(user.inventory || {}).filter(([, count]) => count > 0);
   if (!rows.length) return "가방이 비어 있습니다.\n/뽑기 로 아이템을 얻어보세요.";
-  return ["픽셀곰 가방", "", ...rows.map(([key, count]) => `• ${names[key] || key} x${count}`)].join("\n");
+  return [
+    `${displayUserName(user)}님의 가방`,
+    "",
+    ...rows.map(([key, count]) => `• ${itemDisplayName(key)} x${count} / 판매 ${itemSellValue(key)}P`)
+  ].join("\n");
 }
 
 function shopText() {
   return [
-    "픽셀곰 상점",
-    `현재 구매형 아이템은 준비 중입니다.`,
+    "🛒 픽셀곰 상점",
+    ...shopItems().map((item) => `• ${item.name} ${item.cost}P / 판매 ${item.sell}P`),
+    "",
+    "명령어",
+    "/구매 아이템명 [수량]",
+    "/판매 아이템명 [수량]",
+    "/판매 전체",
+    "/시세",
+    "/사용 회복 물약",
+    "/대장간, /강화, /연금술",
+    "/펫, /펫훈련, /펫대전",
     `/뽑기 - ${POINT_RULES.gachaCost}P로 아이템/보상 획득`,
-    "/가방 - 내 아이템 보기",
-    "/송금 닉네임 금액 - 포인트 보내기"
+    "/가방 - 내 아이템 보기"
+  ].join("\n");
+}
+
+function buyItem(db, user, text) {
+  const raw = text.replace(/^(\/?구매|\/?buy)\s*/i, "").trim();
+  if (!raw) return shopText();
+  const args = raw.split(/\s+/).filter(Boolean);
+  const last = Number(args.at(-1));
+  const count = Number.isInteger(last) && last > 0 ? Math.min(20, last) : 1;
+  const itemName = (count > 1 ? args.slice(0, -1) : args).join(" ");
+  const item = findShopItem(itemName);
+  if (!item) return "상점에서 찾지 못했습니다.\n/상점 으로 목록을 확인해주세요.";
+  const cost = item.cost * count;
+  if (user.points < cost) return `포인트가 부족합니다.\n필요: ${cost.toLocaleString()}P\n현재: ${user.points.toLocaleString()}P`;
+  addPoints(db, user, -cost, "shop_buy", { item: item.name, count });
+  addInventory(user, item.key, count);
+  return [
+    "구매 완료",
+    `닉네임: ${displayUserName(user)}`,
+    `${item.name} x${count}`,
+    `비용: -${cost.toLocaleString()}P`,
+    `현재: ${user.points.toLocaleString()}P / LV.${user.level}`
+  ].join("\n");
+}
+
+function sellItem(db, user, text) {
+  const raw = text.replace(/^(\/?판매|\/?팔기|\/sell)\s*/i, "").trim();
+  const rows = Object.entries(user.inventory || {}).filter(([, count]) => count > 0);
+  if (!raw) return "사용법: /판매 아이템명 [수량]\n예시: /판매 별조각 2\n전체 판매: /판매 전체";
+  if (!rows.length) return "가방이 비어 있습니다.";
+
+  if (["전체", "전부", "all"].includes(raw.toLowerCase())) {
+    const total = rows.reduce((sum, [key, count]) => sum + itemSellValue(key) * count, 0);
+    user.inventory = {};
+    addPoints(db, user, total, "sell_all", { items: rows.length });
+    return [
+      "전체 판매 완료",
+      `닉네임: ${displayUserName(user)}`,
+      `판매금: +${total.toLocaleString()}P`,
+      `현재: ${user.points.toLocaleString()}P / LV.${user.level}`
+    ].join("\n");
+  }
+
+  const args = raw.split(/\s+/).filter(Boolean);
+  const last = Number(args.at(-1));
+  const count = Number.isInteger(last) && last > 0 ? last : 1;
+  const itemName = (count > 1 ? args.slice(0, -1) : args).join(" ");
+  const key = findInventoryKey(user, itemName);
+  if (!key) return `${itemName} 아이템을 가방에서 찾지 못했습니다.\n/가방 으로 확인해주세요.`;
+  const owned = user.inventory[key] || 0;
+  const sellCount = Math.min(count, owned);
+  const gained = itemSellValue(key) * sellCount;
+  removeInventory(user, key, sellCount);
+  addPoints(db, user, gained, "sell_item", { item: itemDisplayName(key), count: sellCount });
+  return [
+    "판매 완료",
+    `닉네임: ${displayUserName(user)}`,
+    `${itemDisplayName(key)} x${sellCount}`,
+    `판매금: +${gained.toLocaleString()}P`,
+    `현재: ${user.points.toLocaleString()}P / LV.${user.level}`
+  ].join("\n");
+}
+
+function priceText(user, text) {
+  const raw = text.replace(/^(\/?시세|\/?가격|\/price)\s*/i, "").trim();
+  if (raw) {
+    const key = findInventoryKey(user, raw) || findShopItem(raw)?.key || raw;
+    return [`픽셀곰 시세`, `${itemDisplayName(key)}: 판매 ${itemSellValue(key)}P`].join("\n");
+  }
+  return [
+    "픽셀곰 시세",
+    "낚시 물고기: 6P",
+    "채집 재료: 5P",
+    "탐험 보물: 8P",
+    "사냥 전리품: 14P",
+    "던전 보상: 24P",
+    "대장간 장비: 22P",
+    "연금술 결과물: 16P",
+    "",
+    "내 아이템 상세는 /가방"
+  ].join("\n");
+}
+
+function useItem(db, user, text) {
+  const raw = text.replace(/^(\/?사용|\/?use)\s*/i, "").trim();
+  if (!raw) return "사용법: /사용 회복 물약\n사용 가능: 회복 물약, 기력 물약, 행운 부적";
+  const key = findInventoryKey(user, raw);
+  if (!key) return `${raw} 아이템을 가방에서 찾지 못했습니다.`;
+  const item = ITEM_CATALOG[key];
+  if (!item?.use) return `${itemDisplayName(key)}은(는) 바로 사용할 수 없는 아이템입니다.\n/판매 로 포인트로 바꿀 수 있어요.`;
+
+  const rpg = ensureRpg(user);
+  removeInventory(user, key, 1);
+  if (item.use === "heal") {
+    rpg.hp = Math.min(rpg.maxHp, rpg.hp + 60);
+    return [`아이템 사용`, `닉네임: ${displayUserName(user)}`, `${item.name}: HP +60`, `HP ${rpg.hp}/${rpg.maxHp}`].join("\n");
+  }
+  if (item.use === "energy") {
+    rpg.energy = Math.min(rpg.maxEnergy, rpg.energy + 60);
+    return [`아이템 사용`, `닉네임: ${displayUserName(user)}`, `${item.name}: 기력 +60`, `기력 ${rpg.energy}/${rpg.maxEnergy}`].join("\n");
+  }
+  const gained = randomInt(8, 20);
+  addPoints(db, user, gained, "use_lucky_charm");
+  return [`아이템 사용`, `닉네임: ${displayUserName(user)}`, `${item.name}: +${gained}P`, `현재: ${user.points.toLocaleString()}P / LV.${user.level}`].join("\n");
+}
+
+function forgeItem(db, user, text) {
+  const raw = text.replace(/^(\/?대장간|\/?제련|\/forge)\s*/i, "").trim();
+  if (!raw && !/^\/?(제련|강화|forge)/i.test(text)) {
+    return [
+      "⚒️ 픽셀곰 대장간",
+      "철광석 1개와 40P로 장비를 제작합니다.",
+      "장비 결과물은 120종입니다.",
+      "",
+      "/제련",
+      "/강화 무기 또는 /강화 방어구",
+      "/구매 철광석"
+    ].join("\n");
+  }
+  const cost = 40;
+  if ((user.inventory?.iron_ore || 0) < 1) return "철광석이 필요합니다.\n/구매 철광석";
+  if (user.points < cost) return `포인트가 부족합니다.\n필요: ${cost}P\n현재: ${user.points.toLocaleString()}P`;
+  removeInventory(user, "iron_ore", 1);
+  addPoints(db, user, -cost, "forge_cost");
+  const item = pickWeighted(FORGE_RESULTS);
+  addInventory(user, item.key);
+  if (item.points) addPoints(db, user, item.points, "forge_bonus", { item: item.label });
+  const level = addRpgExp(user, item.exp);
+  return formatRpgResult("대장간 제련 완료", user, [`획득: ${item.label}`, `비용: 철광석 x1 / -${cost}P`, `보너스: +${item.points}P / +${item.exp}EXP`], level);
+}
+
+function alchemyItem(db, user, text) {
+  const raw = text.replace(/^(\/?연금술|\/?연금|\/alchemy)\s*/i, "").trim();
+  if (!raw && !/^\/?(연금|alchemy)/i.test(text)) {
+    return [
+      "픽셀곰 연금술",
+      "연금 가루 1개와 35P로 물약/가루를 만듭니다.",
+      "연금 결과물은 120종입니다.",
+      "",
+      "/연금",
+      "/구매 연금 가루"
+    ].join("\n");
+  }
+  const cost = 35;
+  if ((user.inventory?.alchemy_dust || 0) < 1) return "연금 가루가 필요합니다.\n/구매 연금 가루";
+  if (user.points < cost) return `포인트가 부족합니다.\n필요: ${cost}P\n현재: ${user.points.toLocaleString()}P`;
+  removeInventory(user, "alchemy_dust", 1);
+  addPoints(db, user, -cost, "alchemy_cost");
+  const item = pickWeighted(ALCHEMY_RESULTS);
+  addInventory(user, item.key);
+  if (item.points) addPoints(db, user, item.points, "alchemy_bonus", { item: item.label });
+  const rpg = ensureRpg(user);
+  rpg.hp = Math.min(rpg.maxHp, rpg.hp + (item.hp || 0));
+  rpg.energy = Math.min(rpg.maxEnergy, rpg.energy + (item.energy || 0));
+  const level = addRpgExp(user, item.exp);
+  return formatRpgResult("연금술 성공", user, [`획득: ${item.label}`, `비용: 연금 가루 x1 / -${cost}P`, `보너스: +${item.points}P / +${item.exp}EXP`], level);
+}
+
+function enhanceEquipment(db, user, text) {
+  const raw = text.replace(/^(\/?강화|\/enhance)\s*/i, "").trim();
+  if (!raw) {
+    const weapon = user.equipment?.weapon?.level || 0;
+    const armor = user.equipment?.armor?.level || 0;
+    return [
+      "✨ 픽셀곰 강화",
+      `닉네임: ${displayUserName(user)}`,
+      `🗡️ 무기 +${weapon}`,
+      `🛡️ 방어구 +${armor}`,
+      "",
+      "/강화 무기",
+      "/강화 방어구",
+      "/구매 무기 주문서",
+      "/구매 방어구 주문서",
+      "/구매 축복 주문서"
+    ].join("\n");
+  }
+  const type = /방어|갑옷|armor/i.test(raw) ? "armor" : "weapon";
+  const label = type === "armor" ? "방어구" : "무기";
+  const scrollKey = /축복|bless/i.test(raw) ? "blessed_scroll" : type === "armor" ? "armor_scroll" : "weapon_scroll";
+  const scrollName = itemDisplayName(scrollKey);
+  if ((user.inventory?.[scrollKey] || 0) < 1) return `${scrollName}가 필요합니다.\n/구매 ${scrollName}`;
+  user.equipment ||= {};
+  user.equipment[type] ||= { level: 0, attempts: 0 };
+  const level = user.equipment[type].level || 0;
+  const cost = 50 + level * 25;
+  if (user.points < cost) return `포인트가 부족합니다.\n필요: ${cost.toLocaleString()}P\n현재: ${user.points.toLocaleString()}P`;
+
+  removeInventory(user, scrollKey, 1);
+  addPoints(db, user, -cost, "enhance_cost", { type, level });
+  user.equipment[type].attempts = (user.equipment[type].attempts || 0) + 1;
+  const chance = Math.max(25, 82 - level * 6 + (scrollKey === "blessed_scroll" ? 12 : 0));
+  const success = randomInt(1, 100) <= chance;
+  if (success) user.equipment[type].level = level + 1;
+  return [
+    success ? "✨ 강화 성공!" : "💥 강화 실패",
+    `닉네임: ${displayUserName(user)}`,
+    `${label}: +${level} -> +${user.equipment[type].level}`,
+    `주문서: ${scrollName}`,
+    `성공률: ${chance}%`,
+    `비용: -${cost.toLocaleString()}P`,
+    formatStats(rpgStats(user))
+  ].join("\n");
+}
+
+function petLevelFor(exp) {
+  return Math.floor(Math.sqrt(Math.max(0, exp) / 35)) + 1;
+}
+
+function syncPet(pet) {
+  if (!pet) return null;
+  pet.exp ||= 0;
+  pet.level = petLevelFor(pet.exp);
+  pet.wins ||= 0;
+  pet.battles ||= 0;
+  return pet;
+}
+
+function petStats(pet) {
+  const row = syncPet(pet);
+  if (!row) return { attack: 0, defense: 0, speed: 0 };
+  return {
+    attack: row.attack + row.level * 2,
+    defense: row.defense + row.level * 2,
+    speed: row.speed + row.level
+  };
+}
+
+function formatPetStats(pet) {
+  const stats = petStats(pet);
+  return `⚔️공격 ${stats.attack} / 🛡️방어 ${stats.defense} / 💨민첩 ${stats.speed}`;
+}
+
+function petStatusText(user) {
+  const pet = syncPet(user.pet);
+  if (!pet) {
+    return [
+      "🐾 픽셀곰 펫",
+      "아직 펫이 없습니다.",
+      "/펫입양 으로 첫 펫을 무료 입양할 수 있어요.",
+      "",
+      "명령어",
+      "/펫입양",
+      "/펫훈련",
+      "/펫대전"
+    ].join("\n");
+  }
+  return [
+    `🐾 ${displayUserName(user)}님의 펫`,
+    `${pet.emoji || "🐾"} ${pet.name} LV.${pet.level}`,
+    `EXP ${pet.exp.toLocaleString()}`,
+    formatPetStats(pet),
+    `대전 ${pet.wins.toLocaleString()}승 / ${pet.battles.toLocaleString()}회`,
+    "",
+    "/펫훈련, /펫대전"
+  ].join("\n");
+}
+
+function adoptPet(db, user) {
+  const replacing = Boolean(user.pet);
+  if (replacing && (user.inventory?.pet_ticket || 0) < 1) {
+    return "이미 펫이 있습니다.\n새 펫을 다시 입양하려면 /구매 펫 입양권 후 /펫입양";
+  }
+  if (replacing) removeInventory(user, "pet_ticket", 1);
+  const template = pickWeighted(PET_TYPES);
+  user.pet = {
+    name: template.name,
+    emoji: template.emoji,
+    attack: template.attack,
+    defense: template.defense,
+    speed: template.speed,
+    exp: 0,
+    level: 1,
+    wins: 0,
+    battles: 0,
+    adoptedAt: nowIso()
+  };
+  addEvent(db, user, "pet_adopt", { pet: user.pet.name });
+  return [
+    replacing ? "🐾 새 펫 입양 완료" : "🐾 첫 펫 입양 완료",
+    `닉네임: ${displayUserName(user)}`,
+    `${user.pet.emoji} ${user.pet.name}`,
+    formatPetStats(user.pet),
+    "/펫훈련 으로 키우고 /펫대전 으로 싸울 수 있어요."
+  ].join("\n");
+}
+
+function petCommand(db, user, text) {
+  const raw = text.replace(/^(\/?펫|\/pet)\s*/i, "").trim();
+  if (!raw) return petStatusText(user);
+  if (["입양", "분양", "adopt"].includes(raw)) return adoptPet(db, user);
+  return petStatusText(user);
+}
+
+function petTrain(db, user) {
+  const pet = syncPet(user.pet);
+  if (!pet) return "펫이 없습니다.\n/펫입양 먼저 해주세요.";
+  const left = cooldownLeft(user, "petTrain", COOLDOWNS.petTrainMs);
+  if (left > 0) return `펫훈련은 ${left}초 뒤에 다시 가능합니다.`;
+  user.cooldowns.petTrain = Date.now();
+  const usedFood = (user.inventory?.pet_food || 0) > 0;
+  if (usedFood) removeInventory(user, "pet_food", 1);
+  const exp = usedFood ? randomInt(35, 55) : randomInt(15, 25);
+  pet.exp += exp;
+  syncPet(pet);
+  const points = usedFood ? 10 : 4;
+  addPoints(db, user, points, "pet_train", { pet: pet.name, exp, usedFood });
+  return [
+    "🐾 펫훈련 완료",
+    `닉네임: ${displayUserName(user)}`,
+    `${pet.emoji} ${pet.name} LV.${pet.level}`,
+    usedFood ? "펫 간식 사용: 훈련 효과 증가" : "펫 간식 없이 기본 훈련",
+    `+${exp} PET EXP / +${points}P`,
+    formatPetStats(pet)
+  ].join("\n");
+}
+
+function petBattle(db, user, text) {
+  const pet = syncPet(user.pet);
+  if (!pet) return "펫이 없습니다.\n/펫입양 먼저 해주세요.";
+  const left = cooldownLeft(user, "petBattle", COOLDOWNS.petBattleMs);
+  if (left > 0) return `펫대전은 ${left}초 뒤에 다시 가능합니다.`;
+
+  const targetName = text.replace(/^(\/?펫대전|\/petbattle)\s*/i, "").trim();
+  let enemyOwner = null;
+  let enemy = null;
+  if (targetName) {
+    const result = findOneUserByName(db, user.room, targetName, user.id);
+    if (result.error) return result.error;
+    enemyOwner = result.user;
+    enemy = syncPet(enemyOwner?.pet);
+  }
+  if (!enemy) {
+    const wild = pickWeighted(PET_TYPES);
+    enemy = {
+      ...wild,
+      exp: randomInt(0, 180),
+      level: randomInt(1, Math.max(2, pet.level + 1)),
+      wins: 0,
+      battles: 0
+    };
+    enemyOwner = null;
+  }
+
+  user.cooldowns.petBattle = Date.now();
+  const mineStats = petStats(pet);
+  const enemyStats = petStats(enemy);
+  const myPower = mineStats.attack * 2 + mineStats.defense + mineStats.speed + randomInt(1, 30);
+  const enemyPower = enemyStats.attack * 2 + enemyStats.defense + enemyStats.speed + randomInt(1, 30);
+  const won = myPower >= enemyPower;
+  pet.battles += 1;
+  pet.exp += won ? 45 : 18;
+  if (won) pet.wins += 1;
+  syncPet(pet);
+  if (enemyOwner?.pet) {
+    enemyOwner.pet.battles = (enemyOwner.pet.battles || 0) + 1;
+    enemyOwner.pet.exp = (enemyOwner.pet.exp || 0) + (won ? 8 : 25);
+    if (!won) enemyOwner.pet.wins = (enemyOwner.pet.wins || 0) + 1;
+    syncPet(enemyOwner.pet);
+  }
+
+  const reward = won ? 25 : 7;
+  addPoints(db, user, reward, won ? "pet_battle_win" : "pet_battle_lose", { enemy: enemy.name });
+  user.gamePlays += 1;
+  if (won) user.gameWins += 1;
+  return [
+    won ? "🏆 펫대전 승리!" : "🐾 펫대전 패배",
+    `닉네임: ${displayUserName(user)}`,
+    `내 펫: ${pet.emoji} ${pet.name} LV.${pet.level}`,
+    `상대: ${enemy.emoji || "🐾"} ${enemy.name} LV.${enemy.level}${enemyOwner ? ` (${displayUserName(enemyOwner)})` : " (야생)"}`,
+    `전투력: ${myPower} vs ${enemyPower}`,
+    `보상: +${reward}P`,
+    formatPetStats(pet)
+  ].join("\n");
+}
+
+function setAutoAdventurePermission(db, user, text, enabled) {
+  const denied = requireAdmin(user);
+  if (denied) return denied;
+  const targetName = text.replace(/^(\/?(오토권한|오토허용|오토해제|오토금지))\s*/i, "").trim();
+  if (!targetName) return enabled ? "사용법: /오토권한 닉네임" : "사용법: /오토해제 닉네임";
+  const result = findOneUserByName(db, user.room, targetName, user.id);
+  if (result.error) return result.error;
+  if (!result.user || !isRegisteredUser(result.user)) return `${displayNickname(targetName)}님은 가입된 계정이 아닙니다.`;
+  result.user.autoAdventureAllowed = enabled;
+  result.user.updatedAt = nowIso();
+  return `${displayUserName(result.user)}님 오토모험 권한을 ${enabled ? "허용" : "해제"}했습니다.`;
+}
+
+function compactAutoResult(label, result) {
+  const lines = String(result || "").split("\n").filter(Boolean);
+  const detail = lines.find((line) => /획득|상대|보상|피해|뒤에|부족|낮아서|클리어|실패/.test(line)) || lines[0] || "결과 없음";
+  return `${label} ${detail}`;
+}
+
+function autoAdventure(db, user) {
+  if (!user.isAdmin && !user.autoAdventureAllowed) {
+    return "오토모험 권한이 필요합니다.\n관리자가 /오토권한 닉네임 으로 허용할 수 있습니다.";
+  }
+  const results = [
+    compactAutoResult("🎣 낚시:", fishing(db, user)),
+    compactAutoResult("🌿 채집:", gathering(db, user)),
+    compactAutoResult("🗺️ 탐험:", adventure(db, user)),
+    compactAutoResult("⚔️ 사냥:", hunt(db, user)),
+    compactAutoResult("🏰 던전:", dungeon(db, user))
+  ];
+  return [
+    "🤖 오토모험 결과",
+    `닉네임: ${displayUserName(user)}`,
+    ...results,
+    "",
+    `현재: ${user.points.toLocaleString()}P / LV.${user.level}`,
+    formatStats(rpgStats(user))
   ].join("\n");
 }
 
@@ -2231,17 +2917,17 @@ function compatibility(db, user, text) {
   const target = result.user?.nickname || targetName;
   const score = Math.abs(hash(`${todayKst()}:${user.nickname}:${target}`)) % 101;
   const comment = stablePick(COMPATIBILITY_MESSAGES, `${todayKst()}:${user.nickname}:${target}:compatibility`);
-  return [`${user.nickname}님과 ${target}님의 오늘 궁합`, `${score}%`, comment].join("\n");
+  return [`${displayUserName(user)}님과 ${displayNickname(target)}님의 오늘 궁합`, `${score}%`, comment].join("\n");
 }
 
 function compliment(user) {
   const message = stablePick(COMPLIMENT_MESSAGES, `${todayKst()}:${user.id}:${user.nickname}:compliment`);
-  return `${user.nickname}님\n${message}`;
+  return `${displayUserName(user)}님\n${message}`;
 }
 
 function mission(user) {
   const message = stablePick(MISSION_MESSAGES, `${todayKst()}:${user.id}:${user.nickname}:mission`);
-  return `${user.nickname}님의 오늘 미션\n${message}`;
+  return `${displayUserName(user)}님의 오늘 미션\n${message}`;
 }
 
 function findUserByNickname(db, room, nickname, excludeId = "") {
@@ -2254,16 +2940,20 @@ function transferPoints(db, user, text) {
   const amount = Number(args.at(-1));
   const targetName = args.slice(0, -1).join(" ");
   if (!Number.isInteger(amount) || amount <= 0) return "보낼 포인트는 1 이상의 숫자로 입력해주세요.";
-  if (user.points < amount + POINT_RULES.transferFee) return `포인트가 부족합니다.\n현재: ${user.points.toLocaleString()}P`;
+  if (!user.isAdmin && user.points < amount + POINT_RULES.transferFee) return `포인트가 부족합니다.\n현재: ${user.points.toLocaleString()}P`;
 
   const result = findOneUserByName(db, user.room, targetName, user.id);
   if (result.error) return result.error;
   const target = result.user;
-  if (!target) return `같은 방에서 ${targetName}님을 찾지 못했습니다.\n상대가 먼저 한 번 채팅하거나 /내정보 를 사용해야 합니다.`;
+  if (!target) return `같은 방에서 ${displayNickname(targetName)}님을 찾지 못했습니다.\n상대가 먼저 한 번 채팅하거나 /내정보 를 사용해야 합니다.`;
 
+  if (user.isAdmin) {
+    addPoints(db, target, amount, "admin_transfer_create", { from: user.nickname });
+    return [`${displayUserName(target)}님에게 ${amount.toLocaleString()}P 생성 송금 완료`, `관리자 송금은 차감되지 않습니다.`, `상대 포인트: ${target.points.toLocaleString()}P / LV.${target.level}`].join("\n");
+  }
   addPoints(db, user, -amount - POINT_RULES.transferFee, "transfer_out", { to: target.nickname });
   addPoints(db, target, amount, "transfer_in", { from: user.nickname });
-  return [`${target.nickname}님에게 ${amount.toLocaleString()}P를 보냈습니다.`, `내 포인트: ${user.points.toLocaleString()}P`].join("\n");
+  return [`${displayUserName(target)}님에게 ${amount.toLocaleString()}P를 보냈습니다.`, `내 포인트: ${user.points.toLocaleString()}P`].join("\n");
 }
 
 function wordChain(db, user, text) {
@@ -2308,12 +2998,31 @@ function wordChain(db, user, text) {
 }
 
 function makeMessagePool(starts, endings) {
+  const variants = [
+    "가볍게 시작하면 좋습니다.",
+    "너무 급하게 몰아가지 마세요.",
+    "짧은 리액션이 도움이 됩니다.",
+    "오늘 안에 한 번 더 기회가 옵니다.",
+    "분위기를 보고 천천히 움직이세요.",
+    "작은 농담 하나가 흐름을 바꿉니다.",
+    "상대 말에 먼저 맞춰보세요.",
+    "무리하지 않으면 결과가 좋아집니다.",
+    "편한 말투가 가장 강합니다.",
+    "한 박자 쉬면 더 잘 보입니다.",
+    "먼저 웃어주면 길이 열립니다.",
+    "대화의 온도를 낮게 유지하세요."
+  ];
   const rows = [];
   for (const start of starts) {
     for (const ending of endings) {
       rows.push(`${start} ${ending}`);
-      if (rows.length === 100) return rows;
+      if (rows.length === 120) return rows;
     }
+  }
+  let index = 0;
+  while (rows.length < 120) {
+    rows.push(`${starts[index % starts.length]} ${endings[(index * 3) % endings.length]} ${variants[index % variants.length]}`);
+    index += 1;
   }
   return rows;
 }
@@ -2459,7 +3168,7 @@ const MISSION_MESSAGES = makeMessagePool(
 
 function fortune(user) {
   const message = stablePick(FORTUNE_MESSAGES, `${todayKst()}:${user.id}:${user.nickname}:fortune`);
-  return `${user.nickname}님의 오늘 운세\n${message}`;
+  return `${displayUserName(user)}님의 오늘 운세\n${message}`;
 }
 
 function relationshipFortune(user, text) {
@@ -2469,9 +3178,9 @@ function relationshipFortune(user, text) {
     .replace(/^@?픽셀아?\s*/i, "")
     .replace(/(남친|여친|연애|썸|언제|생겨|\?|는|은|이|가|에게|한테)/g, "")
     .trim();
-  const label = target || user.nickname;
+  const label = target || displayUserName(user);
   const message = stablePick(RELATIONSHIP_MESSAGES, `${todayKst()}:${user.id}:${label}:relationship`);
-  return `${label}님의 연애운\n${message}`;
+  return `${displayNickname(label)}님의 연애운\n${message}`;
 }
 
 function hash(text) {
@@ -2510,6 +3219,7 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/도움말", "도움말", "도움", "/도움", "명령어", "/명령어", "/help", "help", "/?", "?"]) || startsWithAny(commandText, ["/?", "/도움말", "/도움", "/help"]) || blockNames.includes("도움말")) return helpText(commandText);
   if (aliasesMatch(commandText, ["/공지", "/간단", "/notice"])) return noticeText();
   if (aliasesMatch(commandText, ["/상태", "상태", "/status", "status"])) return statusText();
+  if (aliasesMatch(commandText, ["/버전", "/version", "/ver"])) return versionText();
   if (aliasesMatch(commandText, ["/봇소개", "봇소개", "/픽셀곰소개", "픽셀곰소개", "/픽셀소개", "픽셀소개", "/브리핑", "브리핑", "/설명", "설명", "픽셀곰", "픽셀"]) || (isPixelgomMentionCommand(commandText) && /(뭐|누구|로봇|봇|설명)/.test(commandText))) return botIntroText();
   if (aliasesMatch(commandText, ["/가입", "/계정등록", "/계정", "/등록"])) return registerAccount(db, user);
   if (!isRegisteredUser(user)) return registrationGuideText(user);
@@ -2558,6 +3268,9 @@ async function runCommand(db, user, text, blockNames = []) {
   if (startsWithAny(commandText, ["/관리자추가", "/관리자등록"])) return setAdminRole(db, user, commandText, true);
   if (startsWithAny(commandText, ["/관리자해제", "/관리자삭제"])) return setAdminRole(db, user, commandText, false);
   if (startsWithAny(commandText, ["/포인트지급", "/지급", "/포인트주기"])) return grantPoints(db, user, commandText);
+  if (startsWithAny(commandText, ["/오토권한", "/오토허용"])) return setAutoAdventurePermission(db, user, commandText, true);
+  if (startsWithAny(commandText, ["/오토해제", "/오토금지"])) return setAutoAdventurePermission(db, user, commandText, false);
+  if (aliasesMatch(commandText, ["/오토모험", "/자동모험", "/automode"])) return autoAdventure(db, user);
   if (startsWithAny(commandText, ["/자동공지", "/오토", "/자동"])) return autoNoticeText(db, user, commandText);
 
   if (startsWithAny(commandText, ["/가위바위보", "가위바위보", "/rps"])) return rps(db, user, commandText);
@@ -2569,6 +3282,10 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/뽑기", "뽑기", "/가챠", "가챠", "/gacha"])) return gacha(db, user);
   if (aliasesMatch(commandText, ["/가방", "가방", "/ㄱㅂ", "/인벤", "인벤", "/inventory"])) return inventoryText(user);
   if (aliasesMatch(commandText, ["/상점", "상점", "/shop"])) return shopText();
+  if (startsWithAny(commandText, ["/구매", "/buy"])) return buyItem(db, user, commandText);
+  if (startsWithAny(commandText, ["/판매", "/팔기", "/sell"])) return sellItem(db, user, commandText);
+  if (startsWithAny(commandText, ["/시세", "/가격", "/price"])) return priceText(user, commandText);
+  if (startsWithAny(commandText, ["/사용", "/use"])) return useItem(db, user, commandText);
   if (aliasesMatch(commandText, ["/모험", "모험", "/ㅁㅎ", "/rpg", "rpg"])) return rpgHelpText();
   if (aliasesMatch(commandText, ["/캐릭터", "캐릭터", "/캐릭", "/내캐릭", "내캐릭", "/character"])) return rpgProfile(user);
   if (aliasesMatch(commandText, ["/낚시", "낚시", "/ㄴㅅ", "/fish", "fish"])) return fishing(db, user);
@@ -2577,6 +3294,13 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/사냥", "사냥", "/ㅅㄴ", "/hunt", "hunt"])) return hunt(db, user);
   if (aliasesMatch(commandText, ["/던전", "던전", "/ㄷㅈ", "/dungeon", "dungeon"])) return dungeon(db, user);
   if (aliasesMatch(commandText, ["/휴식", "휴식", "/ㅎㅅ", "/rest", "rest"])) return restRpg(user);
+  if (startsWithAny(commandText, ["/대장간", "/제련", "/forge"])) return forgeItem(db, user, commandText);
+  if (startsWithAny(commandText, ["/강화", "/enhance"])) return enhanceEquipment(db, user, commandText);
+  if (startsWithAny(commandText, ["/연금술", "/연금", "/alchemy"])) return alchemyItem(db, user, commandText);
+  if (aliasesMatch(commandText, ["/펫입양", "/petadopt"])) return adoptPet(db, user);
+  if (startsWithAny(commandText, ["/펫훈련", "/pettrain"])) return petTrain(db, user);
+  if (startsWithAny(commandText, ["/펫대전", "/petbattle"])) return petBattle(db, user, commandText);
+  if (startsWithAny(commandText, ["/펫", "/pet"])) return petCommand(db, user, commandText);
   if (startsWithAny(commandText, ["/타자게임", "타자게임", "/타자", "타자", "/ㅌㅈ", "/typing"])) return typingGame(db, user, commandText);
   if (startsWithAny(commandText, ["/초성퀴즈", "초성퀴즈", "/초성", "초성", "/초", "/initial"])) return initialQuiz(db, user, commandText);
   if (startsWithAny(commandText, ["/숫자야구", "숫자야구", "/야구", "야구", "/ㅇㄱ", "/baseball"])) return numberBaseball(db, user, commandText);
