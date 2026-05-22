@@ -1284,6 +1284,62 @@ function membershipStatusText(db, room) {
   return lines.join("\n");
 }
 
+function resetRoomData(db, room) {
+  const roomName = normalizeText(room);
+  if (!roomName) return null;
+  const userPrefix = `chat:${roomName}:`;
+  const userIds = new Set();
+  for (const [id, row] of Object.entries(db.users || {})) {
+    if (row.room === roomName || id.startsWith(userPrefix)) userIds.add(id);
+  }
+
+  let users = 0;
+  for (const id of userIds) {
+    if (db.users[id]) {
+      delete db.users[id];
+      users += 1;
+    }
+  }
+
+  const beforeEvents = (db.events || []).length;
+  db.events = (db.events || []).filter((event) => {
+    const userId = canonicalUserId(db, event.userId);
+    return event.meta?.room !== roomName && !userIds.has(userId) && !String(event.userId || "").startsWith(userPrefix);
+  });
+
+  const beforeMembership = (db.membershipEvents || []).length;
+  db.membershipEvents = (db.membershipEvents || []).filter((event) => event.room !== roomName);
+
+  let importKeys = 0;
+  for (const key of Object.keys(db.importKeys || {})) {
+    if (key.startsWith(`chat:${roomName}:`) || key.startsWith(`member:${roomName}:`)) {
+      delete db.importKeys[key];
+      importKeys += 1;
+    }
+  }
+
+  let identityLinks = 0;
+  for (const [source, target] of Object.entries(db.identityLinks || {})) {
+    if (source.startsWith(userPrefix) || String(target || "").startsWith(userPrefix) || userIds.has(source) || userIds.has(target)) {
+      delete db.identityLinks[source];
+      identityLinks += 1;
+    }
+  }
+
+  const hadRoom = Boolean(db.rooms?.[roomName]);
+  if (db.rooms) delete db.rooms[roomName];
+
+  return {
+    room: roomName,
+    users,
+    events: beforeEvents - db.events.length,
+    membershipEvents: beforeMembership - db.membershipEvents.length,
+    importKeys,
+    identityLinks,
+    roomDeleted: hadRoom
+  };
+}
+
 function rps(db, user, text) {
   const now = Date.now();
   const last = user.cooldowns?.rps || 0;
@@ -2031,6 +2087,21 @@ export async function requestHandler(req, res) {
 
     if (req.method === "POST") {
       const payload = await readBody(req);
+      if (pathname === "/admin/reset-room-temp") {
+        if (payload.confirm !== "DELETE_ROOM_20260522_1803") {
+          jsonResponse(res, 403, { ok: false, error: "forbidden" });
+          return;
+        }
+        const db = await loadDb();
+        const result = resetRoomData(db, payload.room);
+        if (!result) {
+          jsonResponse(res, 400, { ok: false, error: "room required" });
+          return;
+        }
+        await saveDb(db);
+        jsonResponse(res, 200, { ok: true, result });
+        return;
+      }
       if (pathname === "/skill" || pathname === "/api/skill" || payload?.userRequest) {
         jsonResponse(res, 200, await handleSkill(payload));
         return;
