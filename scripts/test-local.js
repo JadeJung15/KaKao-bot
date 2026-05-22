@@ -81,10 +81,19 @@ assert.match(profile.reply, /포인트|채팅/);
 const chatRank = await chat("/채팅순위", sender);
 assert.match(chatRank.reply, /채팅 순위|민지/);
 
+const intro = await chat("/봇소개", sender);
+assert.match(intro.reply, /방 활동 기록 봇/);
+const mentionIntro = await chat("픽셀곰 로봇이야?", sender);
+assert.match(mentionIntro.reply, /방 활동 기록 봇/);
+const relationship = await chat("픽셀곰 요아는 언제 남친 생겨?", sender);
+assert.match(relationship.reply, /연애운/);
+
 const typingUser = `타수-${Date.now()}`;
 await chat("가나다라마바사", typingUser);
 const typingRank = await chat("/타수순위", typingUser);
 assert.match(typingRank.reply, /누적 타수 순위|타수/);
+const shortTypingRank = await chat("/타수", typingUser);
+assert.match(shortTypingRank.reply, /오늘 타수 순위|타수/);
 const dayTypingRank = await chat("/일간타수순위", typingUser);
 assert.match(dayTypingRank.reply, /오늘 타수 순위|타수/);
 const weekTypingRank = await chat("/주간타수순위", typingUser);
@@ -93,6 +102,11 @@ const monthTypingRank = await chat("/월간타수순위", typingUser);
 assert.match(monthTypingRank.reply, /이번 달 타수 순위|타수/);
 const dayChatRank = await chat("/일간채팅순위", typingUser);
 assert.match(dayChatRank.reply, /오늘 채팅 순위|채팅/);
+const roomRank = await chat("/방순위", typingUser);
+assert.match(roomRank.reply, /오늘 방순위/);
+assert.match(roomRank.reply, /타수 TOP5/);
+const typoRank = await chat("/순웨", typingUser);
+assert.match(typoRank.reply, /오늘 방순위/);
 
 const shortHelp = await chat("/?");
 assert.match(shortHelp.reply, /픽셀곰 도움말/);
