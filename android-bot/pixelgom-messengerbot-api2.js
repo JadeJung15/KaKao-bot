@@ -32,6 +32,15 @@ function postJson(url, payload) {
     .text();
 }
 
+function authorHash(message) {
+  try {
+    if (message.author && message.author.hash) return String(message.author.hash || "");
+    if (message.author && message.author.id) return String(message.author.id || "");
+    if (message.author && message.author.userHash) return String(message.author.userHash || "");
+  } catch (error) {}
+  return "";
+}
+
 function onMessage(message) {
   const room = String(message.room || "");
   const content = String(message.content || "");
@@ -50,6 +59,7 @@ function onMessage(message) {
       room: room,
       msg: content,
       sender: sender,
+      senderHash: authorHash(message),
       isGroupChat: Boolean(message.isGroupChat),
       packageName: String(message.packageName || "com.kakao.talk")
     });

@@ -9,8 +9,8 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "pixelgom-db.json");
 const PORT = Number(process.env.PORT || 3000);
 const STATE_ID = process.env.PIXELGOM_STATE_ID || "main";
-const APP_VERSION = "0.7.3";
-const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "rpg-combat-ranks", "name-only-nicknames", "typing-games", "rpg-120-pools", "equipable-forge-items", "equipment-synthesis", "item-sell", "shop-forge-alchemy", "pets", "enhancement-scrolls", "equipment-views", "requirement-guides", "auto-adventure"];
+const APP_VERSION = "0.7.4";
+const FEATURES = ["chat-import", "nickname-history", "nickname-change-command", "period-ranks", "room-overview", "rpg-combat-ranks", "name-only-nicknames", "typing-games", "rpg-120-pools", "equipable-forge-items", "equipment-synthesis", "admin-point-create", "item-sell", "shop-forge-alchemy", "pets", "enhancement-scrolls", "equipment-views", "requirement-guides", "auto-adventure"];
 
 let pgPool;
 
@@ -276,6 +276,22 @@ function userKeyForChat(room, sender) {
   return `chat:${room}:${sender}`;
 }
 
+function stableSenderKey(payload, room, sender) {
+  const candidate = normalizeText(
+    payload.userId
+    || payload.userKey
+    || payload.senderKey
+    || payload.senderHash
+    || payload.senderUserHash
+    || payload.authorHash
+    || payload.profileHash
+    || payload.author?.hash
+    || payload.author?.id
+    || payload.senderInfo?.hash
+  );
+  return candidate ? `chat:${room}:stable:${candidate}` : userKeyForChat(room, sender);
+}
+
 function normalizeParticipantName(value) {
   return normalizeText(value).replace(/\s+/g, " ").replace(/님$/, "");
 }
@@ -358,6 +374,19 @@ function findOneUserByName(db, room, query, excludeId = "", options = {}) {
   return { user: null, error: "" };
 }
 
+function ensureNamedRoomUser(db, room, nickname, options = {}) {
+  const name = normalizeParticipantName(nickname);
+  if (!name) return null;
+  const user = ensureUser(db, userKeyForChat(room, name), name, room, { source: options.source || "admin_create" });
+  if (options.register !== false) {
+    user.accountRegistered = true;
+    user.registeredAt ||= nowIso();
+  }
+  user.status = "active";
+  user.updatedAt = nowIso();
+  return user;
+}
+
 function canonicalUserId(db, id) {
   let current = id;
   const seen = new Set();
@@ -421,6 +450,9 @@ function mergeUsers(db, targetId, sourceId, reason = "merge") {
 
   target.points += source.points || 0;
   target.level = levelFor(target.points);
+  target.accountRegistered ||= Boolean(source.accountRegistered);
+  target.registeredAt ||= source.registeredAt || "";
+  target.isAdmin ||= Boolean(source.isAdmin);
   target.chatCount += source.chatCount || 0;
   target.chatPoints += source.chatPoints || 0;
   target.chatChars = (target.chatChars || 0) + (source.chatChars || 0);
@@ -436,7 +468,14 @@ function mergeUsers(db, targetId, sourceId, reason = "merge") {
   for (const [slot, item] of Object.entries(source.equipment || {})) {
     if (!target.equipment[slot] || (item?.level || 0) > (target.equipment[slot]?.level || 0)) target.equipment[slot] = item;
   }
+  target.rpg ||= {};
+  target.rpg.exp = (target.rpg.exp || 0) + (source.rpg?.exp || 0);
+  target.rpgEquipment ||= {};
+  for (const [slot, itemKey] of Object.entries(source.rpgEquipment || {})) {
+    if (!target.rpgEquipment[slot]) target.rpgEquipment[slot] = itemKey;
+  }
   if (!target.pet && source.pet) target.pet = source.pet;
+  target.daily = { ...(source.daily || {}), ...(target.daily || {}) };
   target.nicknameHistory = [...(target.nicknameHistory || []), ...(source.nicknameHistory || [])]
     .filter((row) => row?.nickname)
     .sort((a, b) => String(a.firstSeenAt || "").localeCompare(String(b.firstSeenAt || "")));
@@ -446,6 +485,7 @@ function mergeUsers(db, targetId, sourceId, reason = "merge") {
   }
   target.mergedFrom = uniqueValues([...(target.mergedFrom || []), sourceKey, ...(source.mergedFrom || [])]);
   target.updatedAt = nowIso();
+  ensureRpg(target);
 
   for (const event of db.events || []) {
     if (event.userId === sourceKey) {
@@ -499,6 +539,7 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
       rpg: {},
       pet: null,
       equipment: {},
+      rpgEquipment: {},
       cooldowns: {},
       createdAt: nowIso(),
       updatedAt: nowIso()
@@ -531,6 +572,7 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
   user.rpg ||= {};
   user.pet ??= null;
   user.equipment ||= {};
+  user.rpgEquipment ||= {};
   user.inventory ||= {};
   user.daily ||= {};
   user.cooldowns ||= {};
@@ -874,6 +916,7 @@ function helpText(text = "") {
     "기본/순위",
     "/상태, /봇소개, /내정보, /?",
     "/버전",
+    "/닉변 이전닉 - 닉네임 변경 기록 연결",
     "/랭킹 - RPG 전투 랭킹",
     "/방순위 - 채팅/타수 순위",
     "/실시간순위, /내순위",
@@ -952,7 +995,7 @@ function adminHelpText() {
     "/관리자목록",
     "/관리자추가 닉네임",
     "/관리자해제 닉네임",
-    "/지급 닉네임 금액",
+    "/지급 닉네임 금액 - 대상이 없어도 새 계정 생성 후 지급",
     "/송금 닉네임 금액 - 관리자는 차감 없이 생성 송금",
     "/오토권한 닉네임",
     "/오토해제 닉네임",
@@ -967,7 +1010,9 @@ function adminHelpText() {
     "/입퇴장현황 - 입장/퇴장/내보냄 기록",
     "/닉이력 - 내 닉네임 이력",
     "/닉이력 닉네임 - 해당 닉네임 이력 조회",
-    "/닉연결 이전닉 - 이전 닉네임 기록을 내 현재 닉네임으로 합치기"
+    "/닉연결 이전닉 - 이전 닉네임 기록을 내 현재 닉네임으로 합치기",
+    "/닉변 이전닉 - 닉네임 변경 후 이전 기록 연결",
+    "/닉변 이전닉 새닉 - 관리자가 두 닉네임 직접 연결"
   ].join("\n");
 }
 
@@ -978,6 +1023,7 @@ function pointHelpText() {
     `출석 +${POINT_RULES.attendance}P, 7일 연속 +${POINT_RULES.sevenDayStreak}P`,
     `지역 최초 등록 +${POINT_RULES.firstRegion}P`,
     "/송금 닉네임 금액 - 같은 방 유저에게 포인트 보내기",
+    "/지급 닉네임 금액 - 관리자 전용 포인트 생성",
     "/상점 - 현재 준비된 아이템 보기",
     "/가방 - 내 아이템 보기"
   ].join("\n");
@@ -1051,13 +1097,18 @@ function grantPoints(db, user, text) {
   const amount = Number(args.at(-1));
   const targetName = args.slice(0, -1).join(" ");
   if (!Number.isInteger(amount) || amount <= 0) return "지급 포인트는 1 이상의 숫자로 입력해주세요.";
-  const result = findOneUserByName(db, user.room, targetName, user.id);
+  const result = findOneUserByName(db, user.room, targetName, "", { includeInactive: true });
   if (result.error) return result.error;
-  if (!result.user || !isRegisteredUser(result.user)) return `${displayNickname(targetName)}님은 가입된 계정이 아닙니다.`;
-  const level = addPoints(db, result.user, amount, "admin_grant", { from: user.nickname });
+  const target = result.user || ensureNamedRoomUser(db, user.room, targetName, { source: "admin_grant_create" });
+  if (!target) return "지급할 닉네임을 입력해주세요.";
+  target.accountRegistered = true;
+  target.registeredAt ||= nowIso();
+  target.status = "active";
+  const level = addPoints(db, target, amount, "admin_grant", { from: user.nickname });
   return [
-    `${displayUserName(result.user)}님에게 ${amount.toLocaleString()}P 지급 완료`,
-    `현재 포인트: ${result.user.points.toLocaleString()}P / LV.${result.user.level}`,
+    `${displayUserName(target)}님에게 ${amount.toLocaleString()}P 지급 완료`,
+    result.user ? "" : "대상이 없어서 새 계정으로 등록했습니다.",
+    `현재 포인트: ${target.points.toLocaleString()}P / LV.${target.level}`,
     level.leveledUp ? `레벨업! LV.${level.beforeLevel} -> LV.${level.afterLevel}` : ""
   ].filter(Boolean).join("\n");
 }
@@ -1321,11 +1372,75 @@ function linkNickname(db, user, text) {
   if (!previous) return `${previousName} 기록을 찾지 못했습니다.\n먼저 /일괄등록 으로 이전 닉네임을 등록할 수 있습니다.`;
   const merged = mergeUsers(db, user.id, previous.id, "nickname_link");
   addNicknameSeen(merged, previousName, "linked");
+  merged.accountRegistered = true;
+  merged.registeredAt ||= nowIso();
+  merged.status = "active";
   return [
     "닉네임 기록을 연결했습니다.",
     `이전 닉네임: ${displayNickname(previousName)}`,
     `현재 닉네임: ${displayUserName(merged)}`,
     "이후 순위/포인트/채팅 기록은 합산됩니다."
+  ].join("\n");
+}
+
+function changeNicknameLink(db, user, text) {
+  const raw = text.replace(/^\/?(닉변경|닉변|닉변연결)\s*/i, "").trim();
+  if (!raw) {
+    return [
+      "사용법",
+      "/닉변 이전닉",
+      "/닉변 이전닉 새닉",
+      "",
+      "내가 닉네임을 바꾼 뒤에는 새 닉네임으로 /닉변 이전닉 을 입력하면 이전 기록이 합쳐집니다.",
+      "관리자는 /닉변 이전닉 새닉 으로 두 닉네임을 직접 연결할 수 있습니다."
+    ].join("\n");
+  }
+
+  const args = raw.split(/\s+/).filter(Boolean);
+  let previousName = raw;
+  let target = user;
+  let targetName = user.nickname;
+
+  if (args.length >= 2) {
+    if (!user.isAdmin) return "두 닉네임을 직접 연결하는 기능은 관리자만 사용할 수 있습니다.\n내 닉네임 변경은 /닉변 이전닉 으로 입력해주세요.";
+    previousName = args[0];
+    targetName = args.slice(1).join(" ");
+    const targetResult = findOneUserByName(db, user.room, targetName, "", { includeInactive: true });
+    if (targetResult.error) return targetResult.error;
+    target = targetResult.user || ensureNamedRoomUser(db, user.room, targetName, { source: "nickname_change_target" });
+  }
+
+  if (userNicknameCandidates(target).some((name) => nicknameLookupKey(name) === nicknameLookupKey(previousName))) {
+    return [
+      "이미 닉네임 이력에 연결되어 있습니다.",
+      `현재 닉네임: ${displayUserName(target)}`,
+      `확인: /닉이력 ${displayUserName(target)}`
+    ].join("\n");
+  }
+
+  const previousResult = findOneUserByName(db, user.room, previousName, target.id, { includeInactive: true });
+  if (previousResult.error) return previousResult.error;
+  const previous = previousResult.user;
+  if (!previous) {
+    return [
+      `${displayNickname(previousName)} 기록을 찾지 못했습니다.`,
+      "이전 닉네임으로 한 번이라도 채팅했거나 /일괄등록 된 기록이 있어야 자동 병합할 수 있습니다.",
+      `임시 등록 후 연결: /일괄등록 ${displayNickname(previousName)}`
+    ].join("\n");
+  }
+
+  const merged = mergeUsers(db, target.id, previous.id, "nickname_change");
+  addNicknameSeen(merged, previousName, "nickname_change_previous");
+  addNicknameSeen(merged, targetName, "nickname_change_current");
+  merged.accountRegistered = true;
+  merged.registeredAt ||= nowIso();
+  merged.status = "active";
+  return [
+    "닉네임 변경 기록을 연결했습니다.",
+    `이전 닉네임: ${displayNickname(previousName)}`,
+    `현재 닉네임: ${displayUserName(merged)}`,
+    "포인트/가방/장비/랭킹/채팅 기록이 합산됩니다.",
+    `확인: /닉이력 ${displayUserName(merged)}`
   ].join("\n");
 }
 
@@ -3404,14 +3519,18 @@ function transferPoints(db, user, text) {
   if (!Number.isInteger(amount) || amount <= 0) return "보낼 포인트는 1 이상의 숫자로 입력해주세요.";
   if (!user.isAdmin && user.points < amount + POINT_RULES.transferFee) return pointRequirementText(amount + POINT_RULES.transferFee, user, [`송금액: ${amount.toLocaleString()}P`, `수수료: ${POINT_RULES.transferFee.toLocaleString()}P`]);
 
-  const result = findOneUserByName(db, user.room, targetName, user.id);
+  const result = findOneUserByName(db, user.room, targetName, user.isAdmin ? "" : user.id, { includeInactive: true });
   if (result.error) return result.error;
-  const target = result.user;
+  const target = result.user || (user.isAdmin ? ensureNamedRoomUser(db, user.room, targetName, { source: "admin_transfer_create" }) : null);
   if (!target) return `같은 방에서 ${displayNickname(targetName)}님을 찾지 못했습니다.\n상대가 먼저 한 번 채팅하거나 /내정보 를 사용해야 합니다.`;
+  if (!user.isAdmin && target.id === user.id) return "본인에게는 송금할 수 없습니다.";
 
   if (user.isAdmin) {
+    target.accountRegistered = true;
+    target.registeredAt ||= nowIso();
+    target.status = "active";
     addPoints(db, target, amount, "admin_transfer_create", { from: user.nickname });
-    return [`${displayUserName(target)}님에게 ${amount.toLocaleString()}P 생성 송금 완료`, `관리자 송금은 차감되지 않습니다.`, `상대 포인트: ${target.points.toLocaleString()}P / LV.${target.level}`].join("\n");
+    return [`${displayUserName(target)}님에게 ${amount.toLocaleString()}P 생성 송금 완료`, result.user ? "" : "대상이 없어서 새 계정으로 등록했습니다.", `관리자 송금은 차감되지 않습니다.`, `상대 포인트: ${target.points.toLocaleString()}P / LV.${target.level}`].filter(Boolean).join("\n");
   }
   addPoints(db, user, -amount - POINT_RULES.transferFee, "transfer_out", { to: target.nickname });
   addPoints(db, target, amount, "transfer_in", { from: user.nickname });
@@ -3684,6 +3803,8 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/버전", "/version", "/ver"])) return versionText();
   if (aliasesMatch(commandText, ["/봇소개", "봇소개", "/픽셀곰소개", "픽셀곰소개", "/픽셀소개", "픽셀소개", "/브리핑", "브리핑", "/설명", "설명", "픽셀곰", "픽셀"]) || (isPixelgomMentionCommand(commandText) && /(뭐|누구|로봇|봇|설명)/.test(commandText))) return botIntroText();
   if (aliasesMatch(commandText, ["/가입", "/계정등록", "/계정", "/등록"])) return registerAccount(db, user);
+  if (startsWithAny(commandText, ["/닉변", "/닉변경", "/닉변연결"])) return changeNicknameLink(db, user, commandText);
+  if (startsWithAny(commandText, ["/닉연결"])) return linkNickname(db, user, commandText);
   if (!isRegisteredUser(user)) return registrationGuideText(user);
 
   if (aliasesMatch(commandText, ["/랭킹", "랭킹", "/순위", "순위", "/전투랭킹", "전투랭킹", "/rpg랭킹", "/rpgrank"])) return rpgRankOverviewText(db, user.room);
@@ -3821,7 +3942,7 @@ export async function handleChatEvent(payload) {
     return { ok: true, reply: null, ignored: true };
   }
 
-  const userId = userKeyForChat(room, sender);
+  const userId = stableSenderKey(payload, room, sender);
   const user = ensureUser(db, userId, sender, room, { source: "seen" });
   const isCommand = msg.startsWith("/");
   let awarded = 0;

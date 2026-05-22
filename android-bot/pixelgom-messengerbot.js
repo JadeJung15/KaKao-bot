@@ -33,6 +33,13 @@ function postJson(url, payload) {
     .text();
 }
 
+function profileHash(imageDB) {
+  try {
+    if (imageDB && imageDB.getProfileHash) return String(imageDB.getProfileHash() || "");
+  } catch (error) {}
+  return "";
+}
+
 function response(room, msg, sender, isGroupChat, replier, imageDB, packageName, isMultiChat) {
   if (!isAllowedRoom(room)) return;
   if (!msg || !sender || isBotSender(sender)) return;
@@ -47,6 +54,7 @@ function response(room, msg, sender, isGroupChat, replier, imageDB, packageName,
       room: room,
       msg: msg,
       sender: sender,
+      senderHash: profileHash(imageDB),
       isGroupChat: isGroupChat,
       isMultiChat: isMultiChat,
       packageName: packageName

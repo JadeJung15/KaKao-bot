@@ -304,9 +304,36 @@ assert.match(nameTransfer.reply, /소영님에게 10P/);
 const ambiguousName = await chat("/닉이력 민지", admin, nameRoom);
 assert.match(ambiguousName.reply, /여러 명/);
 assert.match(ambiguousName.reply, /민지/);
+const selfGrant = await chat(`/지급 ${admin} 10`, admin, nameRoom);
+assert.match(selfGrant.reply, /10P 지급 완료/);
+const grantNewUser = await chat("/지급 새친구 77", admin, nameRoom);
+assert.match(grantNewUser.reply, /새친구님에게 77P 지급 완료/);
+assert.match(grantNewUser.reply, /새 계정으로 등록/);
+const adminTransferNewUser = await chat("/송금 새송금 12", admin, nameRoom);
+assert.match(adminTransferNewUser.reply, /새송금님에게 12P 생성 송금 완료/);
+assert.match(adminTransferNewUser.reply, /새 계정으로 등록/);
+
+const nickChangeRoom = `닉변방-${stamp}`;
+const oldChangedNick = `달곰${stamp}`;
+const newChangedNick = `별곰${stamp}`;
+await chat("/가입", oldChangedNick, nickChangeRoom);
+await chat("이전 닉 채팅", oldChangedNick, nickChangeRoom);
+const nickChanged = await rawChat(`/닉변 ${oldChangedNick}`, newChangedNick, nickChangeRoom);
+assert.match(nickChanged.reply, /닉네임 변경 기록을 연결/);
+const changedHistory = await chat("/닉이력", newChangedNick, nickChangeRoom);
+assert.match(changedHistory.reply, new RegExp(oldChangedNick));
+assert.match(changedHistory.reply, new RegExp(newChangedNick));
+const adminNickChanged = await chat(`/닉변 ${newChangedNick} 관리자변경${stamp}`, newChangedNick, nickChangeRoom);
+assert.match(adminNickChanged.reply, /닉네임 변경 기록을 연결|이미 닉네임 이력/);
+const stableRoom = `안정닉방-${stamp}`;
+await rawChat("/가입", `초코${stamp}`, stableRoom, { senderHash: `stable-${stamp}` });
+await rawChat("닉네임 바꾼 뒤 채팅", `바닐라${stamp}`, stableRoom, { senderHash: `stable-${stamp}` });
+const stableHistory = await rawChat("/닉이력", `바닐라${stamp}`, stableRoom, { senderHash: `stable-${stamp}` });
+assert.match(stableHistory.reply, new RegExp(`초코${stamp}`));
+assert.match(stableHistory.reply, new RegExp(`바닐라${stamp}`));
 
 const version = await chat("/버전", admin, nameRoom);
-assert.match(version.reply, /0\.7\.3/);
+assert.match(version.reply, /0\.7\.4/);
 
 const shop = await chat("/상점", admin, nameRoom);
 assert.match(shop.reply, /무기 주문서|펫 입양권/);
