@@ -1022,18 +1022,20 @@ async function readBody(req) {
 
 export async function requestHandler(req, res) {
   try {
-    if (req.method === "GET" && req.url === "/health") {
+    const pathname = new URL(req.url || "/", "http://localhost").pathname;
+
+    if (req.method === "GET") {
       jsonResponse(res, 200, { ok: true, service: "pixelgom-chatroom-bot" });
       return;
     }
 
-    if (req.method === "POST" && req.url === "/skill") {
-      jsonResponse(res, 200, await handleSkill(await readBody(req)));
-      return;
-    }
-
-    if (req.method === "POST" && req.url === "/chat-event") {
-      jsonResponse(res, 200, await handleChatEvent(await readBody(req)));
+    if (req.method === "POST") {
+      const payload = await readBody(req);
+      if (pathname === "/skill" || pathname === "/api/skill" || payload?.userRequest) {
+        jsonResponse(res, 200, await handleSkill(payload));
+        return;
+      }
+      jsonResponse(res, 200, await handleChatEvent(payload));
       return;
     }
 
