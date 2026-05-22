@@ -69,16 +69,16 @@ PGSSL=require
 PIXELGOM_STATE_ID=main
 ```
 
-배포 후 폰 스크립트의 `BOT_SERVER`를 Vercel 주소로 한 번만 바꿉니다.
+폰 스크립트의 `BOT_SERVER`는 운영 Vercel 주소를 사용합니다.
 
 ```js
-const BOT_SERVER = "https://YOUR-VERCEL-APP.vercel.app/chat-event";
+const BOT_SERVER = "https://ka-kao-bot.vercel.app/chat-event";
 ```
 
-현재 임시 외부 연결 URL:
+운영 외부 연결 URL:
 
 ```text
-https://routines-eleven-mariah-feel.trycloudflare.com/chat-event
+https://ka-kao-bot.vercel.app/chat-event
 ```
 
 ## 채팅방 등록 방법

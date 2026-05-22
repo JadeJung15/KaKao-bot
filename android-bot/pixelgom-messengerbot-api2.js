@@ -6,7 +6,7 @@
 
 const bot = BotManager.getCurrentBot();
 
-const BOT_SERVER = "https://routines-eleven-mariah-feel.trycloudflare.com/chat-event";
+const BOT_SERVER = "https://ka-kao-bot.vercel.app/chat-event";
 const BOT_NAME = "픽셀곰";
 
 // Empty list means all rooms. Put exact KakaoTalk room names here to restrict.
