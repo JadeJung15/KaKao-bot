@@ -7,5 +7,5 @@ const root = path.dirname(__dirname);
 const dbPath = process.env.DB_PATH || path.join(root, "data", "pixelgom-db.json");
 
 await mkdir(path.dirname(dbPath), { recursive: true });
-await writeFile(dbPath, `${JSON.stringify({ users: {}, rooms: {}, events: [] }, null, 2)}\n`, "utf8");
+await writeFile(dbPath, `${JSON.stringify({ users: {}, rooms: {}, events: [], identityLinks: {}, membershipEvents: [], importKeys: {} }, null, 2)}\n`, "utf8");
 console.log(`Reset ${dbPath}`);

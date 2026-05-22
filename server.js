@@ -56,7 +56,10 @@ const COOLDOWNS = {
 const initialDb = {
   users: {},
   rooms: {},
-  events: []
+  events: [],
+  identityLinks: {},
+  membershipEvents: [],
+  importKeys: {}
 };
 
 function nowIso() {
@@ -150,6 +153,9 @@ async function loadDb() {
     db.users ||= {};
     db.rooms ||= {};
     db.events ||= [];
+    db.identityLinks ||= {};
+    db.membershipEvents ||= [];
+    db.importKeys ||= {};
     return db;
   }
 
@@ -159,6 +165,9 @@ async function loadDb() {
   db.users ||= {};
   db.rooms ||= {};
   db.events ||= [];
+  db.identityLinks ||= {};
+  db.membershipEvents ||= [];
+  db.importKeys ||= {};
   return db;
 }
 
@@ -207,6 +216,13 @@ function normalizeText(value) {
   return String(value || "").trim();
 }
 
+function botNames() {
+  return (process.env.BOT_NAMES || "픽셀곰,하리보,오픈채팅봇")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
 function aliasesMatch(text, aliases) {
   return aliases.includes(normalizeText(text));
 }
@@ -218,7 +234,12 @@ function blockNamesFrom(payload) {
 }
 
 function startsWithAny(text, prefixes) {
-  return prefixes.some((prefix) => text === prefix || text.startsWith(`${prefix} `));
+  return prefixes.some((prefix) => {
+    if (text === prefix) return true;
+    if (!text.startsWith(prefix)) return false;
+    const next = text.slice(prefix.length, prefix.length + 1);
+    return /\s/.test(next);
+  });
 }
 
 function userIdFromSkill(payload) {
@@ -234,7 +255,129 @@ function userKeyForChat(room, sender) {
   return `chat:${room}:${sender}`;
 }
 
-function ensureUser(db, id, nickname, room = "") {
+function userKeyForProfile(room, profileHash) {
+  return `profile:${room}:${profileHash}`;
+}
+
+function normalizeParticipantName(value) {
+  return normalizeText(value).replace(/\s+/g, " ").replace(/님$/, "");
+}
+
+function canonicalUserId(db, id) {
+  let current = id;
+  const seen = new Set();
+  while (db.identityLinks?.[current] && !seen.has(current)) {
+    seen.add(current);
+    current = db.identityLinks[current];
+  }
+  return current;
+}
+
+function uniqueValues(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function addNicknameSeen(user, nickname, source = "seen") {
+  const name = normalizeText(nickname);
+  if (!name) return;
+  const now = nowIso();
+  user.aliases ||= [];
+  user.nicknameHistory ||= [];
+  if (!user.aliases.includes(name)) user.aliases.push(name);
+
+  const last = user.nicknameHistory.at(-1);
+  if (!last || last.nickname !== name) {
+    if (last && !last.lastSeenAt) last.lastSeenAt = now;
+    user.nicknameHistory.push({
+      nickname: name,
+      firstSeenAt: now,
+      lastSeenAt: now,
+      source
+    });
+  } else {
+    last.lastSeenAt = now;
+  }
+}
+
+function mergeUsers(db, targetId, sourceId, reason = "merge") {
+  const targetKey = canonicalUserId(db, targetId);
+  const sourceKey = canonicalUserId(db, sourceId);
+  if (targetKey === sourceKey) return db.users[targetKey];
+
+  const target = db.users[targetKey];
+  const source = db.users[sourceKey];
+  if (!target || !source) return target || source;
+
+  target.points += source.points || 0;
+  target.level = levelFor(target.points);
+  target.chatCount += source.chatCount || 0;
+  target.chatPoints += source.chatPoints || 0;
+  target.chatChars = (target.chatChars || 0) + (source.chatChars || 0);
+  target.commandCount += source.commandCount || 0;
+  target.gameWins += source.gameWins || 0;
+  target.gamePlays += source.gamePlays || 0;
+  target.attendanceDates = uniqueValues([...(target.attendanceDates || []), ...(source.attendanceDates || [])]).sort();
+  target.attendanceStreak = Math.max(target.attendanceStreak || 0, source.attendanceStreak || 0);
+  target.lastAttendanceDate = [target.lastAttendanceDate, source.lastAttendanceDate].filter(Boolean).sort().at(-1) || "";
+  target.aliases = uniqueValues([...(target.aliases || []), source.nickname, ...(source.aliases || [])]);
+  target.profileHashes = uniqueValues([...(target.profileHashes || []), ...(source.profileHashes || [])]);
+  target.nicknameHistory = [...(target.nicknameHistory || []), ...(source.nicknameHistory || [])]
+    .filter((row) => row?.nickname)
+    .sort((a, b) => String(a.firstSeenAt || "").localeCompare(String(b.firstSeenAt || "")));
+  target.inventory ||= {};
+  for (const [key, count] of Object.entries(source.inventory || {})) {
+    target.inventory[key] = (target.inventory[key] || 0) + count;
+  }
+  target.mergedFrom = uniqueValues([...(target.mergedFrom || []), sourceKey, ...(source.mergedFrom || [])]);
+  target.updatedAt = nowIso();
+
+  for (const event of db.events || []) {
+    if (event.userId === sourceKey) {
+      event.userId = targetKey;
+      event.mergedFrom = sourceKey;
+    }
+  }
+  db.identityLinks ||= {};
+  db.identityLinks[sourceKey] = targetKey;
+  delete db.users[sourceKey];
+  db.events.push({
+    userId: targetKey,
+    nickname: target.nickname,
+    amount: 0,
+    reason,
+    meta: { sourceId: sourceKey },
+    createdAt: nowIso()
+  });
+  return target;
+}
+
+function findUserByProfileHash(db, room, profileHash) {
+  const hashValue = normalizeText(profileHash);
+  if (!hashValue) return null;
+  const matches = Object.values(db.users).filter((user) =>
+    user.room === room &&
+    Array.isArray(user.profileHashes) &&
+    user.profileHashes.includes(hashValue)
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function ensureUser(db, id, nickname, room = "", options = {}) {
+  id = canonicalUserId(db, id);
+  if (!db.users[id]) {
+    const legacyId = room && nickname ? userKeyForChat(room, nickname) : "";
+    if (options.profileHash && legacyId && db.users[legacyId] && legacyId !== id) {
+      db.users[id] = db.users[legacyId];
+      db.users[id].id = id;
+      delete db.users[legacyId];
+      for (const event of db.events || []) {
+        if (event.userId === legacyId) event.userId = id;
+      }
+      db.identityLinks ||= {};
+      db.identityLinks[legacyId] = id;
+    }
+  }
+
   if (!db.users[id]) {
     db.users[id] = {
       id,
@@ -251,6 +394,10 @@ function ensureUser(db, id, nickname, room = "") {
       commandCount: 0,
       gameWins: 0,
       gamePlays: 0,
+      chatChars: 0,
+      aliases: [],
+      nicknameHistory: [],
+      profileHashes: [],
       activeQuiz: null,
       cooldowns: {},
       createdAt: nowIso(),
@@ -269,15 +416,26 @@ function ensureUser(db, id, nickname, room = "") {
   user.commandCount ??= 0;
   user.gameWins ??= 0;
   user.gamePlays ??= 0;
+  user.chatChars ??= 0;
+  user.aliases ||= [];
+  user.nicknameHistory ||= [];
+  user.profileHashes ||= [];
   user.activeQuiz ??= null;
   user.activeUpDown ??= null;
   user.inventory ||= {};
   user.daily ||= {};
   user.cooldowns ||= {};
+  user.status ||= "active";
   user.createdAt ||= nowIso();
   user.updatedAt ||= nowIso();
+  if (options.profileHash && !user.profileHashes.includes(options.profileHash)) {
+    user.profileHashes.push(options.profileHash);
+  }
+  addNicknameSeen(user, nickname, options.source || "seen");
   if (nickname && user.nickname !== nickname) user.nickname = nickname;
   if (room && user.room !== room) user.room = room;
+  user.lastSeenAt = nowIso();
+  if (options.markActive !== false) user.status = "active";
   user.level = levelFor(user.points);
   return user;
 }
@@ -311,6 +469,17 @@ function addPoints(db, user, amount, reason, meta = {}) {
   };
 }
 
+function addEvent(db, user, reason, meta = {}) {
+  db.events.push({
+    userId: user.id,
+    nickname: user.nickname,
+    amount: 0,
+    reason,
+    meta,
+    createdAt: nowIso()
+  });
+}
+
 function rankUsers(db, selector, limit = 10, room = "") {
   return Object.values(db.users)
     .filter((user) => selector(user) > 0 && (!room || user.room === room))
@@ -331,17 +500,89 @@ function rankingText(title, rows, selector, suffix) {
   ].join("\n");
 }
 
+function dateKeyKst(value = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date(value));
+}
+
+function parseYmd(ymd) {
+  const [year, month, day] = ymd.split("-").map(Number);
+  return { year, month, day };
+}
+
+function shiftYmd(ymd, days) {
+  const { year, month, day } = parseYmd(ymd);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
+}
+
+function weekKeyKst(value = new Date()) {
+  const ymd = dateKeyKst(value);
+  const { year, month, day } = parseYmd(ymd);
+  const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  return shiftYmd(ymd, mondayOffset);
+}
+
+function monthKeyKst(value = new Date()) {
+  return dateKeyKst(value).slice(0, 7);
+}
+
+function periodKeyKst(period, value = new Date()) {
+  if (period === "week") return weekKeyKst(value);
+  if (period === "month") return monthKeyKst(value);
+  return dateKeyKst(value);
+}
+
+function periodLabel(period) {
+  if (period === "week") return "이번 주";
+  if (period === "month") return "이번 달";
+  return "오늘";
+}
+
+function periodTypingRankText(db, room, period = "day", metric = "chars") {
+  const targetKey = periodKeyKst(period);
+  const totals = {};
+  for (const event of db.events || []) {
+    if (event.reason !== "chat") continue;
+    if (room && event.meta?.room !== room) continue;
+    if (periodKeyKst(period, event.createdAt) !== targetKey) continue;
+    const userId = canonicalUserId(db, event.userId);
+    const amount = metric === "messages" ? 1 : Number(event.meta?.textLength || 0);
+    totals[userId] ||= { userId, nickname: db.users[userId]?.nickname || event.nickname || "익명", value: 0, level: db.users[userId]?.level || 1 };
+    totals[userId].value += amount;
+  }
+
+  const rows = Object.values(totals)
+    .filter((row) => row.value > 0)
+    .sort((a, b) => b.value - a.value || a.nickname.localeCompare(b.nickname, "ko"))
+    .slice(0, 10);
+  const title = `픽셀곰 ${periodLabel(period)} ${metric === "messages" ? "채팅" : "타수"} 순위`;
+  if (!rows.length) return `${title}\n\n아직 기록이 없습니다.`;
+  return [
+    title,
+    "",
+    ...rows.map((row, index) => `${index + 1}위 ${row.nickname} - ${row.value.toLocaleString()}${metric === "messages" ? "회" : "타"} / LV.${row.level}`)
+  ].join("\n");
+}
+
 function helpText(text = "") {
   const topic = normalizeText(text).replace(/^(\/?\?|\/?도움말|\/?도움|명령어|\/help)\s*/i, "");
   if (["게임", "game", "놀이"].includes(topic)) return gameHelpText();
   if (["랭킹", "순위", "rank"].includes(topic)) return rankingHelpText();
   if (["포인트", "point", "경제"].includes(topic)) return pointHelpText();
+  if (["관리", "admin", "등록"].includes(topic)) return adminHelpText();
 
   return [
     "픽셀곰 도움말",
     "/? 게임 - 게임 명령어",
     "/? 랭킹 - 순위 명령어",
     "/? 포인트 - 포인트/경제 명령어",
+    "/? 관리 - 일괄등록/닉네임 이력",
     "",
     "기본",
     "/상태, /내정보, /도움말, /?",
@@ -378,10 +619,27 @@ function rankingHelpText() {
     "픽셀곰 랭킹",
     "/포인트순위 또는 랭킹",
     "/채팅순위",
+    "/타수순위",
+    "/일간타수순위, /주간타수순위, /월간타수순위",
+    "/일간채팅순위, /주간채팅순위, /월간채팅순위",
     "/레벨순위",
     "/출석순위",
     "/게임순위",
     "/지역통계"
+  ].join("\n");
+}
+
+function adminHelpText() {
+  return [
+    "픽셀곰 관리",
+    "/일괄등록 닉네임1, 닉네임2",
+    "/일괄등록 후 줄바꿈으로 여러 명 입력 가능",
+    "/대화가져오기 - 카카오 대화 복사본으로 참여자/타수 가져오기",
+    "/등록현황 - 이 방 등록 인원 수",
+    "/입퇴장현황 - 입장/퇴장/내보냄 기록",
+    "/닉이력 - 내 닉네임 이력",
+    "/닉이력 닉네임 - 해당 닉네임 이력 조회",
+    "/닉연결 이전닉 - 이전 닉네임 기록을 내 현재 닉네임으로 합치기"
   ].join("\n");
 }
 
@@ -413,6 +671,7 @@ function profileText(user) {
     `레벨: LV.${user.level}`,
     `포인트: ${user.points.toLocaleString()}P`,
     `채팅: ${user.chatCount.toLocaleString()}회`,
+    `타수: ${(user.chatChars || 0).toLocaleString()}타`,
     `출석 연속: ${user.attendanceStreak || 0}일`,
     `게임: ${user.gameWins.toLocaleString()}승 / ${user.gamePlays.toLocaleString()}회`,
     `아이템: ${itemCount.toLocaleString()}개`,
@@ -495,6 +754,352 @@ function regionStatsText(db, room = "") {
   const rows = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko"));
   if (!rows.length) return "아직 지역 통계가 없습니다.\n/지역등록 서울 처럼 등록해주세요.";
   return ["픽셀곰 지역 통계", "", ...rows.map(([region, count], index) => `${index + 1}위 ${region} - ${count}명`)].join("\n");
+}
+
+function parseBulkNames(text) {
+  const raw = text.replace(/^\/?일괄등록\s*/i, "").trim();
+  return raw
+    .split(/[\n,;]+/)
+    .map((name) => name.replace(/^[\s•\-*0-9.()]+/, "").trim())
+    .filter((name) => !/^\[[^\]]+\]$/.test(name))
+    .filter((name) => !/^\d{4}년\s+\d{1,2}월\s+\d{1,2}일/.test(name))
+    .filter((name) => name !== "..." && name !== "…")
+    .filter((name) => name.length > 0 && name.length <= 30);
+}
+
+function bulkRegister(db, user, text) {
+  if (!user.room) return "일괄등록은 채팅방에서만 사용할 수 있습니다.";
+  const names = uniqueValues(parseBulkNames(text));
+  if (!names.length) {
+    return [
+      "사용법:",
+      "/일괄등록 민지, 철수, 영희",
+      "",
+      "또는",
+      "/일괄등록",
+      "민지",
+      "철수",
+      "영희"
+    ].join("\n");
+  }
+
+  let created = 0;
+  let existing = 0;
+  for (const name of names) {
+    const id = userKeyForChat(user.room, name);
+    if (db.users[id]) existing += 1;
+    else created += 1;
+    const row = ensureUser(db, id, name, user.room, { source: "bulk" });
+    row.bulkRegisteredAt ||= nowIso();
+  }
+  return [
+    "일괄등록 완료",
+    `신규: ${created}명`,
+    `기존: ${existing}명`,
+    `총 입력: ${names.length}명`,
+    "참고: 카카오 알림 봇은 방 전체 명단을 자동으로 읽을 수 없어, 붙여넣은 명단 기준으로 등록합니다."
+  ].join("\n");
+}
+
+function registrationStatusText(db, room) {
+  const users = Object.values(db.users).filter((user) => !room || user.room === room);
+  const active = users.filter((user) => user.status !== "left" && user.status !== "kicked").length;
+  const chatted = users.filter((user) => (user.chatCount || 0) > 0).length;
+  const left = users.filter((user) => user.status === "left").length;
+  const kicked = users.filter((user) => user.status === "kicked").length;
+  const bulk = users.filter((user) => user.bulkRegisteredAt).length;
+  return [
+    "픽셀곰 등록현황",
+    `등록 인원: ${users.length}명`,
+    `현재 추정: ${active}명`,
+    `채팅 감지: ${chatted}명`,
+    `퇴장: ${left}명`,
+    `내보냄: ${kicked}명`,
+    `일괄등록: ${bulk}명`
+  ].join("\n");
+}
+
+function nicknameHistoryText(db, user, text) {
+  const query = text.replace(/^\/?닉이력\s*/i, "").trim();
+  let target = user;
+  if (query) {
+    target = Object.values(db.users).find((candidate) =>
+      candidate.room === user.room &&
+      (candidate.nickname === query || candidate.aliases?.includes(query))
+    );
+    if (!target) return `${query}님의 닉네임 이력을 찾지 못했습니다.`;
+  }
+  const history = target.nicknameHistory || [];
+  if (!history.length) return `${target.nickname}님의 닉네임 이력이 아직 없습니다.`;
+  return [
+    `${target.nickname}님의 닉네임 이력`,
+    "",
+    ...history.map((row, index) => `${index + 1}. ${row.nickname} (${dateKeyKst(row.firstSeenAt)}부터)`)
+  ].join("\n");
+}
+
+function linkNickname(db, user, text) {
+  const previousName = text.replace(/^\/?닉연결\s*/i, "").trim();
+  if (!previousName) return "사용법: /닉연결 이전닉\n예시: /닉연결 우주";
+  const previous = Object.values(db.users).find((candidate) =>
+    candidate.room === user.room &&
+    candidate.id !== user.id &&
+    (candidate.nickname === previousName || candidate.aliases?.includes(previousName))
+  );
+  if (!previous) return `${previousName} 기록을 찾지 못했습니다.\n먼저 /일괄등록 으로 이전 닉네임을 등록할 수 있습니다.`;
+  const merged = mergeUsers(db, user.id, previous.id, "nickname_link");
+  addNicknameSeen(merged, previousName, "linked");
+  return [
+    "닉네임 기록을 연결했습니다.",
+    `이전 닉네임: ${previousName}`,
+    `현재 닉네임: ${merged.nickname}`,
+    "이후 순위/포인트/채팅 기록은 합산됩니다."
+  ].join("\n");
+}
+
+function stripTranscriptCommand(text) {
+  return text.replace(/^\/?(대화가져오기|대화등록)\s*/i, "").trim();
+}
+
+function isTranscriptImportCommand(text) {
+  return /^\/?(대화가져오기|대화등록)(\s|$)/i.test(normalizeText(text));
+}
+
+function parseKoreanDateLine(line) {
+  const match = normalizeText(line).match(/^(\d{4})년\s+(\d{1,2})월\s+(\d{1,2})일/);
+  if (!match) return "";
+  const [, year, month, day] = match;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function parseKoreanTime(date, ampm, hourText, minuteText) {
+  let hour = Number(hourText);
+  if (ampm === "오전" && hour === 12) hour = 0;
+  if (ampm === "오후" && hour !== 12) hour += 12;
+  const hh = String(hour).padStart(2, "0");
+  return new Date(`${date}T${hh}:${minuteText}:00+09:00`).toISOString();
+}
+
+function parseMembershipLine(line, date) {
+  const text = normalizeText(line);
+  const rules = [
+    { action: "join", regex: /^(.+?)님이 들어왔습니다\./ },
+    { action: "leave", regex: /^(.+?)님이 나갔습니다\./ },
+    { action: "kick", regex: /^(.+?)님을 내보냈습니다\./ }
+  ];
+  for (const rule of rules) {
+    const match = text.match(rule.regex);
+    if (!match) continue;
+    const nickname = normalizeParticipantName(match[1]);
+    if (!nickname) return null;
+    return {
+      action: rule.action,
+      nickname,
+      createdAt: new Date(`${date || todayKst()}T00:00:00+09:00`).toISOString()
+    };
+  }
+  return null;
+}
+
+function parseChatTranscript(text) {
+  const raw = stripTranscriptCommand(text);
+  const messages = [];
+  const memberships = [];
+  const lines = raw.split(/\r?\n/);
+  let currentDate = "";
+  let currentMessage = null;
+  let sequence = 0;
+
+  const flushMessage = () => {
+    if (!currentMessage) return;
+    currentMessage.text = currentMessage.text.trim();
+    messages.push(currentMessage);
+    currentMessage = null;
+  };
+
+  for (const line of lines) {
+    const date = parseKoreanDateLine(line);
+    if (date) {
+      flushMessage();
+      currentDate = date;
+      continue;
+    }
+
+    const chat = line.match(/^\[([^\]]+)\]\s+\[(오전|오후)\s+(\d{1,2}):(\d{2})\]\s?(.*)$/);
+    if (chat) {
+      flushMessage();
+      const [, senderRaw, ampm, hour, minute, body] = chat;
+      const dateForMessage = currentDate || todayKst();
+      currentMessage = {
+        sender: normalizeParticipantName(senderRaw),
+        text: body || "",
+        createdAt: parseKoreanTime(dateForMessage, ampm, hour, minute),
+        seq: sequence++
+      };
+      continue;
+    }
+
+    const membership = parseMembershipLine(line, currentDate);
+    if (membership) {
+      flushMessage();
+      membership.seq = sequence++;
+      memberships.push(membership);
+      continue;
+    }
+
+    if (/^관리자가 메시지를 가렸습니다\./.test(normalizeText(line))) {
+      flushMessage();
+      continue;
+    }
+
+    if (currentMessage) {
+      currentMessage.text += `\n${line}`;
+    }
+  }
+
+  flushMessage();
+  return { messages, memberships };
+}
+
+function markMembership(db, room, nickname, action, createdAt) {
+  const id = userKeyForChat(room, nickname);
+  const existed = Boolean(db.users[canonicalUserId(db, id)] || db.users[id]);
+  const user = ensureUser(db, id, nickname, room, { source: "membership", markActive: action === "join" });
+  if (action === "join") {
+    user.status = "active";
+    user.joinedAt = createdAt;
+  } else if (action === "leave") {
+    user.status = "left";
+    user.leftAt = createdAt;
+  } else if (action === "kick") {
+    user.status = "kicked";
+    user.kickedAt = createdAt;
+  }
+  user.membershipUpdatedAt = nowIso();
+  return { user, existed };
+}
+
+function importTranscript(db, user, text) {
+  if (!user.room) return "대화가져오기는 채팅방에서만 사용할 수 있습니다.";
+  const raw = stripTranscriptCommand(text);
+  if (!raw) {
+    return [
+      "사용법:",
+      "/대화가져오기",
+      "2026년 5월 22일 금요일",
+      "[미정 남] [오후 4:49] 안녕",
+      "우주 남님이 나갔습니다."
+    ].join("\n");
+  }
+
+  db.importKeys ||= {};
+  db.membershipEvents ||= [];
+  const parsed = parseChatTranscript(text);
+  const createdUserIds = new Set();
+  const touchedUserIds = new Set();
+  let importedMessages = 0;
+  let duplicateMessages = 0;
+  let importedChars = 0;
+  const membershipCounts = { join: 0, leave: 0, kick: 0 };
+
+  const items = [
+    ...parsed.memberships.map((event) => ({ type: "membership", ...event })),
+    ...parsed.messages.map((message) => ({ type: "message", ...message }))
+  ].sort((a, b) => a.seq - b.seq);
+
+  for (const item of items) {
+    if (item.type === "membership") {
+      if (botNames().includes(item.nickname)) continue;
+      const key = `member:${user.room}:${item.action}:${item.createdAt}:${item.nickname}`;
+      if (db.importKeys[key]) continue;
+      const result = markMembership(db, user.room, item.nickname, item.action, item.createdAt);
+      touchedUserIds.add(result.user.id);
+      if (!result.existed) createdUserIds.add(result.user.id);
+      membershipCounts[item.action] += 1;
+      db.membershipEvents.push({
+        room: user.room,
+        nickname: item.nickname,
+        action: item.action,
+        createdAt: item.createdAt,
+        importedAt: nowIso()
+      });
+      db.importKeys[key] = nowIso();
+      continue;
+    }
+
+    if (!item.sender || botNames().includes(item.sender)) continue;
+    const key = `chat:${user.room}:${item.createdAt}:${item.sender}:${hash(item.text)}`;
+    if (db.importKeys[key]) {
+      duplicateMessages += 1;
+      continue;
+    }
+    const id = userKeyForChat(user.room, item.sender);
+    const existed = Boolean(db.users[canonicalUserId(db, id)] || db.users[id]);
+    const target = ensureUser(db, id, item.sender, user.room, { source: "import" });
+    touchedUserIds.add(target.id);
+    if (!existed) createdUserIds.add(target.id);
+    const textLength = textLengthForStats(item.text);
+    target.chatCount += 1;
+    target.chatChars = (target.chatChars || 0) + textLength;
+    target.lastSeenAt = item.createdAt;
+    target.status = "active";
+    target.updatedAt = nowIso();
+    db.events.push({
+      userId: target.id,
+      nickname: target.nickname,
+      amount: 0,
+      reason: "chat",
+      meta: {
+        room: user.room,
+        textLength,
+        imported: true,
+        importKey: key
+      },
+      createdAt: item.createdAt
+    });
+    db.importKeys[key] = nowIso();
+    importedMessages += 1;
+    importedChars += textLength;
+  }
+
+  if (!importedMessages && !parsed.memberships.length) {
+    return "가져올 수 있는 대화 형식을 찾지 못했습니다.\n카카오 대화 내보내기처럼 [닉네임] [오후 4:49] 메시지 형식으로 붙여넣어주세요.";
+  }
+
+  return [
+    "대화가져오기 완료",
+    `메시지: ${importedMessages.toLocaleString()}건`,
+    `중복 제외: ${duplicateMessages.toLocaleString()}건`,
+    `타수: ${importedChars.toLocaleString()}타`,
+    `참여자: ${touchedUserIds.size.toLocaleString()}명 처리 / 신규 ${createdUserIds.size.toLocaleString()}명`,
+    `입퇴장: 입장 ${membershipCounts.join}명 / 퇴장 ${membershipCounts.leave}명 / 내보냄 ${membershipCounts.kick}명`,
+    "과거 대화는 순위 집계에만 반영하고 포인트는 소급 지급하지 않습니다."
+  ].join("\n");
+}
+
+function membershipStatusText(db, room) {
+  const users = Object.values(db.users).filter((row) => !room || row.room === room);
+  const active = users.filter((row) => row.status !== "left" && row.status !== "kicked").length;
+  const left = users.filter((row) => row.status === "left").length;
+  const kicked = users.filter((row) => row.status === "kicked").length;
+  const events = (db.membershipEvents || [])
+    .filter((event) => !room || event.room === room)
+    .slice(-10)
+    .reverse();
+  const label = { join: "입장", leave: "퇴장", kick: "내보냄" };
+  const lines = [
+    "픽셀곰 입퇴장현황",
+    `현재 추정: ${active}명`,
+    `퇴장: ${left}명`,
+    `내보냄: ${kicked}명`
+  ];
+  if (events.length) {
+    lines.push("", "최근 기록");
+    for (const event of events) {
+      lines.push(`• ${dateKeyKst(event.createdAt)} ${event.nickname} - ${label[event.action] || event.action}`);
+    }
+  }
+  return lines.join("\n");
 }
 
 function rps(db, user, text) {
@@ -867,17 +1472,24 @@ function hash(text) {
 }
 
 function isBotMessage(sender, text) {
-  const names = (process.env.BOT_NAMES || "픽셀곰,하리보").split(",").map((name) => name.trim()).filter(Boolean);
-  return names.includes(sender) || text.startsWith("[픽셀곰]");
+  return botNames().includes(sender) || text.startsWith("[픽셀곰]");
 }
 
-function awardChatPoint(db, user, room, text) {
+function textLengthForStats(text) {
+  const normalized = normalizeText(text).replace(/\s+/g, " ");
+  if (["사진", "이모티콘", "동영상", "음성메시지", "파일"].includes(normalized)) return 0;
+  return Array.from(String(text || "").trim()).length;
+}
+
+function awardChatPoint(db, user, room, text, options = {}) {
   if (!text || text.length > 1000) return;
+  const textLength = options.textLength ?? textLengthForStats(text);
   user.chatCount += 1;
   user.chatPoints += POINT_RULES.chat;
+  user.chatChars += textLength;
   user.updatedAt = nowIso();
   if (room && db.rooms[room]) db.rooms[room].chatCount += 1;
-  addPoints(db, user, POINT_RULES.chat, "chat", { room });
+  addPoints(db, user, POINT_RULES.chat, "chat", { room, textLength });
 }
 
 async function runCommand(db, user, text, blockNames = []) {
@@ -892,12 +1504,27 @@ async function runCommand(db, user, text, blockNames = []) {
   if (startsWithAny(commandText, ["/지역등록", "지역등록"]) || blockNames.includes("지역등록")) return registerRegion(db, user, commandText);
   if (aliasesMatch(commandText, ["/지역전체", "지역전체", "지역 목록", "지역"]) || blockNames.includes("지역전체")) return regionListText(db, user.room);
   if (aliasesMatch(commandText, ["/지역통계", "지역통계", "/지역순위", "지역순위"])) return regionStatsText(db, user.room);
+  if (startsWithAny(commandText, ["/일괄등록", "일괄등록"])) return bulkRegister(db, user, commandText);
+  if (startsWithAny(commandText, ["/대화가져오기", "대화가져오기", "/대화등록", "대화등록"])) return importTranscript(db, user, commandText);
+  if (aliasesMatch(commandText, ["/등록현황", "등록현황"])) return registrationStatusText(db, user.room);
+  if (aliasesMatch(commandText, ["/입퇴장현황", "입퇴장현황", "/입장현황", "입장현황"])) return membershipStatusText(db, user.room);
+  if (startsWithAny(commandText, ["/닉이력", "닉이력"])) return nicknameHistoryText(db, user, commandText);
+  if (startsWithAny(commandText, ["/닉연결", "닉연결"])) return linkNickname(db, user, commandText);
   if (aliasesMatch(commandText, ["/포인트순위", "포인트순위", "포인트 순위", "랭킹", "/rank"]) || blockNames.includes("포인트순위")) {
     return rankingText("픽셀곰 포인트 순위", rankUsers(db, (row) => row.points, 10, user.room), (row) => row.points, "P");
   }
   if (aliasesMatch(commandText, ["/채팅순위", "채팅순위", "채팅 순위", "/chatrank"])) {
     return rankingText("픽셀곰 채팅 순위", rankUsers(db, (row) => row.chatCount, 10, user.room), (row) => row.chatCount, "회");
   }
+  if (aliasesMatch(commandText, ["/타수순위", "타수순위", "/typerank"])) {
+    return rankingText("픽셀곰 누적 타수 순위", rankUsers(db, (row) => row.chatChars || 0, 10, user.room), (row) => row.chatChars || 0, "타");
+  }
+  if (aliasesMatch(commandText, ["/일간타수순위", "일간타수순위", "/오늘타수", "오늘타수"])) return periodTypingRankText(db, user.room, "day", "chars");
+  if (aliasesMatch(commandText, ["/주간타수순위", "주간타수순위", "/이번주타수", "이번주타수"])) return periodTypingRankText(db, user.room, "week", "chars");
+  if (aliasesMatch(commandText, ["/월간타수순위", "월간타수순위", "/이번달타수", "이번달타수"])) return periodTypingRankText(db, user.room, "month", "chars");
+  if (aliasesMatch(commandText, ["/일간채팅순위", "일간채팅순위", "/오늘채팅", "오늘채팅"])) return periodTypingRankText(db, user.room, "day", "messages");
+  if (aliasesMatch(commandText, ["/주간채팅순위", "주간채팅순위", "/이번주채팅", "이번주채팅"])) return periodTypingRankText(db, user.room, "week", "messages");
+  if (aliasesMatch(commandText, ["/월간채팅순위", "월간채팅순위", "/이번달채팅", "이번달채팅"])) return periodTypingRankText(db, user.room, "month", "messages");
   if (aliasesMatch(commandText, ["/레벨순위", "레벨순위", "레벨 순위", "/levelrank"])) {
     return rankingText("픽셀곰 레벨 순위", rankUsers(db, (row) => row.level * 1000000 + row.points, 10, user.room), (row) => row.level, "레벨");
   }
@@ -946,6 +1573,7 @@ export async function handleChatEvent(payload) {
   const room = normalizeText(payload.room);
   const msg = normalizeText(payload.msg || payload.message);
   const sender = normalizeText(payload.sender) || "익명";
+  const profileHash = normalizeText(payload.profileHash || payload.profile_hash);
   touchRoom(db, room);
 
   if (isBotMessage(sender, msg)) {
@@ -953,8 +1581,14 @@ export async function handleChatEvent(payload) {
     return { ok: true, reply: null, ignored: true };
   }
 
-  const user = ensureUser(db, userKeyForChat(room, sender), sender, room);
-  awardChatPoint(db, user, room, msg);
+  const matchedByProfile = profileHash ? findUserByProfileHash(db, room, profileHash) : null;
+  const userId = matchedByProfile
+    ? matchedByProfile.id
+    : profileHash
+      ? userKeyForProfile(room, profileHash)
+      : userKeyForChat(room, sender);
+  const user = ensureUser(db, userId, sender, room, { profileHash, source: profileHash ? "profile" : "seen" });
+  awardChatPoint(db, user, room, msg, { textLength: isTranscriptImportCommand(msg) ? 0 : undefined });
 
   const commandPrefixes = [
     "/",
@@ -970,7 +1604,12 @@ export async function handleChatEvent(payload) {
     "선택",
     "궁합",
     "송금",
-    "선물"
+    "선물",
+    "일괄등록",
+    "대화가져오기",
+    "대화등록",
+    "닉이력",
+    "닉연결"
   ];
   const exactCommands = [
     "?",
@@ -984,6 +1623,13 @@ export async function handleChatEvent(payload) {
     "지역통계",
     "포인트순위",
     "채팅순위",
+    "타수순위",
+    "일간타수순위",
+    "주간타수순위",
+    "월간타수순위",
+    "일간채팅순위",
+    "주간채팅순위",
+    "월간채팅순위",
     "레벨순위",
     "출석순위",
     "게임순위",
@@ -999,7 +1645,10 @@ export async function handleChatEvent(payload) {
     "퀴즈",
     "운세",
     "미션",
-    "칭찬"
+    "칭찬",
+    "등록현황",
+    "입퇴장현황",
+    "입장현황"
   ];
   const isCommand = commandPrefixes.some((prefix) => msg.startsWith(prefix)) || exactCommands.includes(msg);
   const reply = isCommand ? await runCommand(db, user, msg) : null;

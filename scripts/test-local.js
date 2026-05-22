@@ -35,7 +35,7 @@ async function skill(utterance, id) {
   return json.template.outputs[0].simpleText.text;
 }
 
-async function chat(msg, sender = `민지-${Date.now()}`, room = "테스트방") {
+async function chat(msg, sender = `민지-${Date.now()}`, room = "테스트방", extra = {}) {
   const response = await fetch(`${baseUrl}/chat-event`, {
     method: "POST",
     headers: {
@@ -46,7 +46,8 @@ async function chat(msg, sender = `민지-${Date.now()}`, room = "테스트방")
       msg,
       sender,
       isGroupChat: true,
-      packageName: "com.kakao.talk"
+      packageName: "com.kakao.talk",
+      ...extra
     })
   });
   assert.equal(response.status, 200);
@@ -79,6 +80,19 @@ assert.match(profile.reply, /포인트|채팅/);
 
 const chatRank = await chat("/채팅순위", sender);
 assert.match(chatRank.reply, /채팅 순위|민지/);
+
+const typingUser = `타수-${Date.now()}`;
+await chat("가나다라마바사", typingUser);
+const typingRank = await chat("/타수순위", typingUser);
+assert.match(typingRank.reply, /누적 타수 순위|타수/);
+const dayTypingRank = await chat("/일간타수순위", typingUser);
+assert.match(dayTypingRank.reply, /오늘 타수 순위|타수/);
+const weekTypingRank = await chat("/주간타수순위", typingUser);
+assert.match(weekTypingRank.reply, /이번 주 타수 순위|타수/);
+const monthTypingRank = await chat("/월간타수순위", typingUser);
+assert.match(monthTypingRank.reply, /이번 달 타수 순위|타수/);
+const dayChatRank = await chat("/일간채팅순위", typingUser);
+assert.match(dayChatRank.reply, /오늘 채팅 순위|채팅/);
 
 const shortHelp = await chat("/?");
 assert.match(shortHelp.reply, /픽셀곰 도움말/);
@@ -130,5 +144,62 @@ assert.match(compat.reply, /궁합/);
 
 const levelRank = await chat("/레벨순위", sender);
 assert.match(levelRank.reply, /레벨 순위/);
+
+const stamp = Date.now();
+const admin = `관리자-${stamp}`;
+const oldNick = `우주${stamp}`;
+const nextNick = `천사${stamp}`;
+const thirdNick = `민지${stamp}`;
+const bulk = await chat(`/일괄등록
+[ 경기 ]
+• ${oldNick}
+• ${nextNick}
+
+[ 서울 ]
+• ${thirdNick}`, admin, `명단방-${stamp}`);
+assert.match(bulk.reply, /일괄등록 완료/);
+assert.match(bulk.reply, /총 입력: 3명/);
+const registerStatus = await chat("/등록현황", admin, `명단방-${stamp}`);
+assert.match(registerStatus.reply, /등록 인원/);
+const bulkHistory = await chat(`/닉이력 ${oldNick}`, admin, `명단방-${stamp}`);
+assert.match(bulkHistory.reply, new RegExp(oldNick));
+
+const linkRoom = `닉방-${stamp}`;
+await chat(`/일괄등록 ${oldNick}`, admin, linkRoom);
+await chat("한달 뒤 재입장", nextNick, linkRoom);
+const link = await chat(`/닉연결 ${oldNick}`, nextNick, linkRoom);
+assert.match(link.reply, /닉네임 기록을 연결/);
+const linkedHistory = await chat("/닉이력", nextNick, linkRoom);
+assert.match(linkedHistory.reply, new RegExp(oldNick));
+assert.match(linkedHistory.reply, new RegExp(nextNick));
+
+const profileRoom = `프로필방-${stamp}`;
+const profileHash = `profile-${stamp}`;
+await chat("처음 입장", oldNick, profileRoom, { profileHash });
+await chat("닉네임 변경 후 입장", nextNick, profileRoom, { profileHash });
+const autoHistory = await chat("/닉이력", nextNick, profileRoom, { profileHash });
+assert.match(autoHistory.reply, new RegExp(oldNick));
+assert.match(autoHistory.reply, new RegExp(nextNick));
+
+const transcriptRoom = `대화방-${stamp}`;
+const transcriptImport = await chat(`/대화가져오기
+2026년 5월 22일 금요일
+미정 남님이 들어왔습니다. 타인, 기관 등의 사칭에 유의해 주세요.
+[미정 남] [오전 11:26] 하이하이
+[소영 여] [오전 11:26] /신입환영
+[오픈채팅봇] [오전 11:26] 어서와
+유진 남님이 나갔습니다.
+[우주 남] [오전 11:27] 이모티콘
+흐물한 어피치님을 내보냈습니다.
+[지오 남] [오후 2:02] 🌸닉넴 / 성별 : 지오 남
+🌸상세지역 :인천 부평`, admin, transcriptRoom);
+assert.match(transcriptImport.reply, /대화가져오기 완료/);
+assert.match(transcriptImport.reply, /메시지: 4건/);
+assert.match(transcriptImport.reply, /입장 1명 \/ 퇴장 1명 \/ 내보냄 1명/);
+const importedTypingRank = await chat("/일간타수순위", admin, transcriptRoom);
+assert.match(importedTypingRank.reply, /미정 남|소영 여|지오 남/);
+const membership = await chat("/입퇴장현황", admin, transcriptRoom);
+assert.match(membership.reply, /유진 남/);
+assert.match(membership.reply, /흐물한 어피치/);
 
 console.log("Local skill and chat-event tests passed.");
