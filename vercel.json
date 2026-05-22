@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    { "source": "/health", "destination": "/api/health" },
+    { "source": "/chat-event", "destination": "/api/chat-event" },
+    { "source": "/skill", "destination": "/api/skill" }
+  ],
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 10
+    }
+  }
+}

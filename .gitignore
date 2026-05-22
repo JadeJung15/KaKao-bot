@@ -1,0 +1,12 @@
+node_modules/
+.env
+.vercel/
+tools/
+data/*.tmp
+data/pixelgom-db.json
+server.out.log
+server.err.log
+tunnel.out.log
+tunnel.err.log
+cloudflared.out.log
+cloudflared.err.log

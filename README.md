@@ -1,0 +1,183 @@
+# 픽셀곰 채팅방 봇
+
+하리보처럼 카카오톡 채팅방에 들어가서 포인트, 출석, 랭킹, 게임을 처리하는 봇 서버입니다.
+
+주의: 이 방식은 카카오 공식 채널 챗봇이 아니라 안드로이드 알림/자동응답 앱을 이용하는 비공식 채팅방 봇 방식입니다. 봇 계정 제재나 앱 동작 변경 가능성이 있으니 과도한 자동응답/홍보성 메시지는 피해야 합니다.
+
+## 구조
+
+- `server.js`: 포인트/지역/출석/게임 저장 서버
+- `android-bot/pixelgom-messengerbot.js`: 레거시 `response(...)` 방식 스크립트
+- `android-bot/pixelgom-messengerbot-api2.js`: MessengerBotR API2 방식 스크립트
+- `data/pixelgom-db.json`: 유저/포인트 DB
+
+공식 카카오 채널 챗봇용 엔드포인트도 유지합니다.
+
+- 채팅방 봇: `POST /chat-event`
+- 카카오 i 스킬: `POST /skill`
+- 상태 확인: `GET /health`
+
+## 실행
+
+처음 받은 PC에서는 의존성을 설치합니다.
+
+```powershell
+npm.cmd install
+```
+
+로컬 실행:
+
+```powershell
+npm.cmd start
+```
+
+로컬 테스트:
+
+```powershell
+npm.cmd run test:local
+```
+
+## 집/회사에서 같이 작업하기
+
+GitHub에 올린 뒤 집 PC에서는 이렇게 이어서 작업합니다.
+
+```powershell
+git clone https://github.com/JadeJung15/KaKao-bot.git
+cd KaKao-bot
+npm.cmd install
+npm.cmd run test:local
+npm.cmd start
+```
+
+집/회사 로컬 실행은 `data/pixelgom-db.json`에 저장됩니다. 운영 서버에서는 `DATABASE_URL`이 있으면 PostgreSQL에 저장됩니다.
+
+## 무료 운영 배포
+
+무료 운영 추천 조합:
+
+```text
+Vercel Hobby 무료 서버
++ Supabase 또는 Neon 무료 PostgreSQL
++ GitHub 저장소
+```
+
+Vercel 환경변수에 아래 값을 넣으면 로컬 JSON 대신 PostgreSQL을 사용합니다.
+
+```text
+DATABASE_URL=postgresql://...
+PGSSL=require
+PIXELGOM_STATE_ID=main
+```
+
+배포 후 폰 스크립트의 `BOT_SERVER`를 Vercel 주소로 한 번만 바꿉니다.
+
+```js
+const BOT_SERVER = "https://YOUR-VERCEL-APP.vercel.app/chat-event";
+```
+
+현재 임시 외부 연결 URL:
+
+```text
+https://routines-eleven-mariah-feel.trycloudflare.com/chat-event
+```
+
+## 채팅방 등록 방법
+
+1. 안드로이드폰 또는 안드로이드 에뮬레이터에 봇용 카카오톡 계정으로 로그인합니다.
+2. 봇 계정을 원하는 채팅방에 참여시킵니다.
+3. MessengerBotR/KakaoTalkBot 계열 자동응답 앱을 설치합니다.
+4. 새 스크립트에 `android-bot/pixelgom-messengerbot-api2.js` 내용을 먼저 넣고 실행합니다.
+5. API2 스크립트가 반응하지 않는 구버전 앱이면 `android-bot/pixelgom-messengerbot.js`를 사용합니다.
+6. 카카오톡 알림 미리보기와 자동응답 앱 알림 접근 권한을 켭니다.
+
+특정 방에서만 동작시키려면 `android-bot/pixelgom-messengerbot.js`의 `ALLOWED_ROOMS`에 방 이름을 넣습니다.
+
+## 유지보수 방식
+
+폰에 붙여넣는 스크립트는 한 번만 등록합니다.
+
+```text
+카카오톡 알림 수신
+-> 폰 스크립트가 /chat-event 로 메시지 전달
+-> server.js 가 명령어/포인트/게임 처리
+-> 폰 스크립트가 답장만 전송
+```
+
+새 명령어, 포인트 규칙, 게임 추가는 `server.js`만 수정하면 됩니다. 폰 스크립트는 서버 주소나 방 제한을 바꿀 때만 수정합니다.
+
+## 명령어
+
+```text
+/도움말
+/?
+/상태
+/로컬상태
+/내정보
+/출석
+/ㅊㅊ
+/출첵
+/지역등록 지역
+/지역등록 닉네임 지역
+/지역전체
+/지역통계
+/포인트순위
+/채팅순위
+/레벨순위
+/출석순위
+/게임순위
+/게임
+/가위바위보 가위|바위|보
+/rps rock|paper|scissors
+/주사위
+/동전 앞|뒤
+/홀짝 홀|짝
+/룰렛
+/뽑기
+/행운상자
+/업다운
+/업다운 50
+/끝말 시작 사과
+/끝말 과자
+/퀴즈
+/정답 숫자
+/운세
+/미션
+/칭찬
+/궁합 닉네임
+/랜덤 1 100
+/골라 치킨 피자 족발
+/송금 닉네임 금액
+/가방
+/상점
+```
+
+## 포인트 규칙
+
+```text
+일반 채팅 1회: +1P
+출석: 하루 1회 +30P
+7일 연속 출석: 추가 +50P
+최초 지역등록: +10P
+가위바위보 승리: +20P
+가위바위보 비김: +5P
+주사위: 10분마다 +1~6P
+동전 맞히기: +8P
+홀짝 맞히기: +12P
+룰렛: 1분마다 +0~50P
+행운상자: 하루 1회 +5~50P
+업다운 성공: +5~35P
+끝말잇기 성공: +3P
+뽑기: -10P, 아이템/보너스 획득
+퀴즈 정답: +20P
+조회 명령어: 0P
+```
+
+일반 채팅에는 답장하지 않고 조용히 포인트만 적립합니다. 답장은 명령어일 때만 보냅니다.
+
+## 초기화
+
+등록 인원과 포인트를 전부 비울 때:
+
+```powershell
+npm.cmd run reset
+```

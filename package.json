@@ -1,0 +1,17 @@
+{
+  "name": "kakao-pixelgom-skill",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test:local": "node scripts/test-local.js",
+    "reset": "node scripts/reset-db.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pg": "^8.21.0"
+  }
+}
