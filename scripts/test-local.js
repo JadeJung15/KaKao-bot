@@ -84,14 +84,14 @@ assert.match(chatRank.reply, /채팅 순위|민지/);
 const intro = await chat("/봇소개", sender);
 assert.match(intro.reply, /텍스트 RPG 봇/);
 const mentionIntro = await chat("픽셀곰 로봇이야?", sender);
-assert.match(mentionIntro.reply, /텍스트 RPG 봇/);
+assert.equal(mentionIntro.reply, null);
 const shortMentionIntro = await chat("픽셀 로봇이야?", sender);
-assert.match(shortMentionIntro.reply, /텍스트 RPG 봇/);
+assert.equal(shortMentionIntro.reply, null);
 const echoedIntro = await chat("픽셀곰은 방 활동 기록 봇입니다.", sender);
 assert.equal(echoedIntro.reply, null);
 const selfMessage = await chat("픽셀곰은 방 활동 기록 봇입니다.", "픽셀");
 assert.equal(selfMessage.ignored, true);
-const relationship = await chat("픽셀곰 요아는 언제 남친 생겨?", sender);
+const relationship = await chat("/남친 요아", sender);
 assert.match(relationship.reply, /연애운/);
 
 const typingUser = `타수-${Date.now()}`;
@@ -129,6 +129,10 @@ assert.match(shortCheckin.reply, /출석 완료|이미 출석/);
 
 const plainCheckin = await chat("ㅊㅊ", `일반채팅-${Date.now()}`);
 assert.equal(plainCheckin.reply, null);
+const plainGame = await chat("게임", `일반게임-${Date.now()}`);
+assert.equal(plainGame.reply, null);
+const notice = await chat("/공지", `공지-${Date.now()}`);
+assert.match(notice.reply, /반드시 \//);
 
 const rps = await chat("/rps rock", `${sender}-game`);
 assert.match(rps.reply, /결과|획득/);
@@ -151,12 +155,16 @@ assert.match(luckyBox.reply, /행운상자/);
 
 const gameHelp = await chat("/게임", `${sender}-game-help`);
 assert.match(gameHelp.reply, /픽셀곰 게임센터|낚시/);
+const shortGameHelp = await chat("/ㄱㅇ", `${sender}-short-game-help`);
+assert.match(shortGameHelp.reply, /픽셀곰 게임센터|낚시/);
 const rpgHelp = await chat("/모험", `${sender}-rpg-help`);
 assert.match(rpgHelp.reply, /픽셀곰 RPG/);
 const character = await chat("/캐릭터", `${sender}-character`);
 assert.match(character.reply, /RPG LV/);
 const fishing = await chat("/낚시", `${sender}-fish`);
 assert.match(fishing.reply, /픽셀곰 낚시/);
+const shortFishing = await chat("/ㄴㅅ", `${sender}-short-fish`);
+assert.match(shortFishing.reply, /픽셀곰 낚시/);
 const gathering = await chat("/채집", `${sender}-gather`);
 assert.match(gathering.reply, /픽셀곰 채집/);
 const adventure = await chat("/탐험", `${sender}-adventure`);

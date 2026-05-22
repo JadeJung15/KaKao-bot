@@ -9,7 +9,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "pixelgom-db.json");
 const PORT = Number(process.env.PORT || 3000);
 const STATE_ID = process.env.PIXELGOM_STATE_ID || "main";
-const APP_VERSION = "0.6.0";
+const APP_VERSION = "0.6.1";
 const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "live-user-rank", "name-only-nicknames", "typing-games"];
 
 let pgPool;
@@ -763,15 +763,48 @@ function botIntroText() {
   ].join("\n");
 }
 
+function noticeText() {
+  return [
+    "🐻 픽셀곰 RPG 간단 사용법",
+    "",
+    "명령어는 반드시 / 로 시작합니다.",
+    "",
+    "시작",
+    "/게임 또는 /ㄱㅇ - 전체 게임",
+    "/모험 또는 /ㅁㅎ - RPG 도움말",
+    "/캐릭터 또는 /캐릭 - 내 상태",
+    "",
+    "자주 쓰는 명령어",
+    "/ㅊㅊ - 출석",
+    "/낚시 또는 /ㄴㅅ",
+    "/채집 또는 /ㅊㅈ",
+    "/탐험 또는 /ㅌㅎ",
+    "/사냥 또는 /ㅅㄴ",
+    "/던전 또는 /ㄷㅈ",
+    "/휴식 또는 /ㅎㅅ",
+    "/가방 또는 /ㄱㅂ",
+    "",
+    "미니게임",
+    "/타자 또는 /ㅌㅈ",
+    "/초성 또는 /초",
+    "/야구 또는 /ㅇㄱ",
+    "/선착순 시작 단어",
+    "",
+    "자세한 사용법은 /도움말 참고"
+  ].join("\n");
+}
+
 function helpText(text = "") {
   const topic = normalizeText(text).replace(/^(\/?\?|\/?도움말|\/?도움|명령어|\/help)\s*/i, "");
   if (["게임", "game", "놀이"].includes(topic)) return gameHelpText();
+  if (["공지", "notice", "간단"].includes(topic)) return noticeText();
   if (["랭킹", "순위", "rank"].includes(topic)) return rankingHelpText();
   if (["포인트", "point", "경제"].includes(topic)) return pointHelpText();
   if (["관리", "admin", "등록"].includes(topic)) return adminHelpText();
 
   return [
     "픽셀곰 도움말",
+    "/공지 - 간단 사용법",
     "/? 게임 - 게임 명령어",
     "/모험 - 픽셀곰 RPG",
     "/? 랭킹 - 순위 명령어",
@@ -796,15 +829,16 @@ function helpText(text = "") {
 function gameHelpText() {
   return [
     "픽셀곰 게임센터",
-    "/모험 - 픽셀곰 RPG 도움말",
-    "/캐릭터 - RPG 상태",
-    "/낚시, /채집, /탐험, /사냥, /던전, /휴식",
+    "/모험 또는 /ㅁㅎ - 픽셀곰 RPG 도움말",
+    "/캐릭터 또는 /캐릭 - RPG 상태",
+    "/낚시(/ㄴㅅ), /채집(/ㅊㅈ), /탐험(/ㅌㅎ)",
+    "/사냥(/ㅅㄴ), /던전(/ㄷㅈ), /휴식(/ㅎㅅ)",
     "",
     "타이핑 게임",
-    "/타자 - 제시문 빨리 입력",
-    "/초성 - 초성 보고 단어 맞히기",
-    "/야구 - 숫자야구 3자리",
-    "/선착순 시작 단어, /선착순 단어",
+    "/타자 또는 /ㅌㅈ - 제시문 빨리 입력",
+    "/초성 또는 /초 - 초성 보고 단어 맞히기",
+    "/야구 또는 /ㅇㄱ - 숫자야구 3자리",
+    "/선착순 시작 단어, /ㅅㅊ 단어",
     "/끝말 시작 사과, /끝말 과자",
     "/업다운 - 1~100 숫자 맞히기",
     "/퀴즈 - 산수 퀴즈",
@@ -817,7 +851,9 @@ function gameHelpText() {
     "/룰렛 - 1분마다 랜덤 보상",
     "/뽑기 - 10P로 아이템/보상 뽑기",
     "/행운상자 - 하루 1회 +5~50P",
-    "/랜덤 1 100, /골라 치킨 피자"
+    "/랜덤 1 100, /골라 치킨 피자",
+    "",
+    "자세한 사용법은 /도움말 참고"
   ].join("\n");
 }
 
@@ -1565,14 +1601,16 @@ function pickWeighted(rows) {
 function rpgHelpText() {
   return [
     "픽셀곰 RPG",
-    "/캐릭터 - 내 RPG 상태",
-    "/낚시 - 물고기/보물 낚기",
-    "/채집 - 허브/꿀열매/별조각 수집",
-    "/탐험 - 곰숲 랜덤 이벤트",
-    "/사냥 - 몬스터와 전투",
-    "/던전 - 큰 보상 도전",
-    "/휴식 - HP/기력 회복",
-    "/가방 - 얻은 아이템 확인"
+    "/캐릭터 또는 /캐릭 - 내 RPG 상태",
+    "/낚시 또는 /ㄴㅅ - 물고기/보물",
+    "/채집 또는 /ㅊㅈ - 재료 수집",
+    "/탐험 또는 /ㅌㅎ - 랜덤 이벤트",
+    "/사냥 또는 /ㅅㄴ - 몬스터 전투",
+    "/던전 또는 /ㄷㅈ - 큰 보상 도전",
+    "/휴식 또는 /ㅎㅅ - HP/기력 회복",
+    "/가방 또는 /ㄱㅂ - 아이템 확인",
+    "",
+    "전체 도움말은 /도움말 참고"
   ].join("\n");
 }
 
@@ -2293,14 +2331,17 @@ async function runCommand(db, user, text, blockNames = []) {
   const commandText = normalizeText(text);
   user.commandCount += 1;
 
+  if (!commandText.startsWith("/") && !blockNames.length) return null;
+
   if (aliasesMatch(commandText, ["/도움말", "도움말", "도움", "/도움", "명령어", "/명령어", "/help", "help", "/?", "?"]) || startsWithAny(commandText, ["/?", "/도움말", "/도움", "/help"]) || blockNames.includes("도움말")) return helpText(commandText);
+  if (aliasesMatch(commandText, ["/공지", "/간단", "/notice"])) return noticeText();
   if (aliasesMatch(commandText, ["/상태", "상태", "/status", "status"])) return statusText();
   if (aliasesMatch(commandText, ["/봇소개", "봇소개", "/픽셀곰소개", "픽셀곰소개", "/픽셀소개", "픽셀소개", "/브리핑", "브리핑", "/설명", "설명", "픽셀곰", "픽셀"]) || (isPixelgomMentionCommand(commandText) && /(뭐|누구|로봇|봇|설명)/.test(commandText))) return botIntroText();
   if (aliasesMatch(commandText, ["/실시간순위", "실시간순위", "/실시간랭킹", "실시간랭킹", "/현재순위", "현재순위", "/방순위", "방순위", "/오늘순위", "오늘순위", "/오늘랭킹", "오늘랭킹", "/랭킹", "랭킹", "/순위", "순위", "/순웨", "순웨"])) return periodOverviewText(db, user.room, "day");
   if (aliasesMatch(commandText, ["/내순위", "내순위", "/내등수", "내등수", "/내랭킹", "내랭킹", "/나는몇등", "나는몇등"])) return myRankText(db, user, "day");
   if (aliasesMatch(commandText, ["/주간순위", "주간순위", "/주간랭킹", "주간랭킹"])) return periodOverviewText(db, user.room, "week");
   if (aliasesMatch(commandText, ["/월간순위", "월간순위", "/월간랭킹", "월간랭킹"])) return periodOverviewText(db, user.room, "month");
-  if (aliasesMatch(commandText, ["/게임", "게임", "/game"])) return gameHelpText();
+  if (aliasesMatch(commandText, ["/게임", "게임", "/ㄱㅇ", "/game"])) return gameHelpText();
   if (aliasesMatch(commandText, ["/내정보", "내정보", "내정보", "정보", "/정보", "/profile", "/me"])) return profileText(user);
   if (aliasesMatch(commandText, ["/출석", "/출석체크", "/출첵", "/ㅊㅊ", "/ㅊㅅ", "/checkin", "/cc"]) || blockNames.includes("출석체크")) return attendance(db, user);
   if (startsWithAny(commandText, ["/지역등록", "지역등록"]) || blockNames.includes("지역등록")) return registerRegion(db, user, commandText);
@@ -2343,26 +2384,26 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/룰렛", "룰렛", "/roulette"])) return roulette(db, user);
   if (aliasesMatch(commandText, ["/행운상자", "행운상자", "/상자", "상자", "/luckybox"])) return luckyBox(db, user);
   if (aliasesMatch(commandText, ["/뽑기", "뽑기", "/가챠", "가챠", "/gacha"])) return gacha(db, user);
-  if (aliasesMatch(commandText, ["/가방", "가방", "/인벤", "인벤", "/inventory"])) return inventoryText(user);
+  if (aliasesMatch(commandText, ["/가방", "가방", "/ㄱㅂ", "/인벤", "인벤", "/inventory"])) return inventoryText(user);
   if (aliasesMatch(commandText, ["/상점", "상점", "/shop"])) return shopText();
-  if (aliasesMatch(commandText, ["/모험", "모험", "/rpg", "rpg"])) return rpgHelpText();
-  if (aliasesMatch(commandText, ["/캐릭터", "캐릭터", "/내캐릭", "내캐릭", "/character"])) return rpgProfile(user);
-  if (aliasesMatch(commandText, ["/낚시", "낚시", "/fish", "fish"])) return fishing(db, user);
-  if (aliasesMatch(commandText, ["/채집", "채집", "/gather", "gather"])) return gathering(db, user);
-  if (aliasesMatch(commandText, ["/탐험", "탐험", "/adventure", "adventure"])) return adventure(db, user);
-  if (aliasesMatch(commandText, ["/사냥", "사냥", "/hunt", "hunt"])) return hunt(db, user);
-  if (aliasesMatch(commandText, ["/던전", "던전", "/dungeon", "dungeon"])) return dungeon(db, user);
-  if (aliasesMatch(commandText, ["/휴식", "휴식", "/rest", "rest"])) return restRpg(user);
-  if (startsWithAny(commandText, ["/타자게임", "타자게임", "/타자", "타자", "/typing"])) return typingGame(db, user, commandText);
-  if (startsWithAny(commandText, ["/초성퀴즈", "초성퀴즈", "/초성", "초성", "/initial"])) return initialQuiz(db, user, commandText);
-  if (startsWithAny(commandText, ["/숫자야구", "숫자야구", "/야구", "야구", "/baseball"])) return numberBaseball(db, user, commandText);
-  if (startsWithAny(commandText, ["/선착순", "선착순", "/fast"])) return fastFinger(db, user, commandText);
+  if (aliasesMatch(commandText, ["/모험", "모험", "/ㅁㅎ", "/rpg", "rpg"])) return rpgHelpText();
+  if (aliasesMatch(commandText, ["/캐릭터", "캐릭터", "/캐릭", "/내캐릭", "내캐릭", "/character"])) return rpgProfile(user);
+  if (aliasesMatch(commandText, ["/낚시", "낚시", "/ㄴㅅ", "/fish", "fish"])) return fishing(db, user);
+  if (aliasesMatch(commandText, ["/채집", "채집", "/ㅊㅈ", "/gather", "gather"])) return gathering(db, user);
+  if (aliasesMatch(commandText, ["/탐험", "탐험", "/ㅌㅎ", "/adventure", "adventure"])) return adventure(db, user);
+  if (aliasesMatch(commandText, ["/사냥", "사냥", "/ㅅㄴ", "/hunt", "hunt"])) return hunt(db, user);
+  if (aliasesMatch(commandText, ["/던전", "던전", "/ㄷㅈ", "/dungeon", "dungeon"])) return dungeon(db, user);
+  if (aliasesMatch(commandText, ["/휴식", "휴식", "/ㅎㅅ", "/rest", "rest"])) return restRpg(user);
+  if (startsWithAny(commandText, ["/타자게임", "타자게임", "/타자", "타자", "/ㅌㅈ", "/typing"])) return typingGame(db, user, commandText);
+  if (startsWithAny(commandText, ["/초성퀴즈", "초성퀴즈", "/초성", "초성", "/초", "/initial"])) return initialQuiz(db, user, commandText);
+  if (startsWithAny(commandText, ["/숫자야구", "숫자야구", "/야구", "야구", "/ㅇㄱ", "/baseball"])) return numberBaseball(db, user, commandText);
+  if (startsWithAny(commandText, ["/선착순", "선착순", "/ㅅㅊ", "/fast"])) return fastFinger(db, user, commandText);
   if (startsWithAny(commandText, ["/업다운", "업다운", "/updown"])) return upDown(db, user, commandText);
   if (startsWithAny(commandText, ["/끝말", "끝말", "/wordchain"])) return wordChain(db, user, commandText);
   if (aliasesMatch(commandText, ["/퀴즈", "퀴즈", "/quiz"])) return quiz(user);
   if (startsWithAny(commandText, ["/정답", "정답", "/answer"])) return answerQuiz(db, user, commandText);
   if (aliasesMatch(commandText, ["/운세", "운세", "/fortune"])) return fortune(user);
-  if (aliasesMatch(commandText, ["/연애운", "연애운", "/남친", "남친", "/여친", "여친", "/썸운", "썸운"]) || (isPixelgomMentionCommand(commandText) && /(남친|여친|연애|썸)/.test(commandText))) return relationshipFortune(user, commandText);
+  if (startsWithAny(commandText, ["/연애운", "연애운", "/남친", "남친", "/여친", "여친", "/썸운", "썸운"])) return relationshipFortune(user, commandText);
   if (aliasesMatch(commandText, ["/미션", "미션", "/mission"])) return mission(user);
   if (aliasesMatch(commandText, ["/칭찬", "칭찬", "/compliment"])) return compliment(user);
   if (startsWithAny(commandText, ["/궁합", "궁합", "/compat"])) return compatibility(db, user, commandText);
@@ -2505,8 +2546,7 @@ export async function handleChatEvent(payload) {
     "입퇴장현황",
     "입장현황"
   ];
-  const botMentionCommand = isPixelgomMentionCommand(msg) && /(뭐|누구|로봇|봇|설명|남친|여친|연애|썸)/.test(msg);
-  const isCommand = commandPrefixes.some((prefix) => msg.startsWith(prefix)) || exactCommands.includes(msg) || botMentionCommand;
+  const isCommand = msg.startsWith("/");
   const reply = isCommand ? await runCommand(db, user, msg) : null;
   await saveDb(db);
   return {
