@@ -1,15 +1,12 @@
 /*
- * MessengerBotR API2 style script.
- *
- * Use this file if the legacy response(...) script does not react at all.
+ * MessengerBotR API2 script.
  */
 
 const bot = BotManager.getCurrentBot();
 
 const BOT_SERVER = "https://ka-kao-bot.vercel.app/chat-event";
-const BOT_NAMES = ["픽셀곰", "픽셀"];
+const BOT_NAMES = ["운영봇", "봇"];
 
-// Empty list means all rooms. Put exact KakaoTalk room names here to restrict.
 const ALLOWED_ROOMS = [];
 
 function isAllowedRoom(room) {
@@ -51,7 +48,7 @@ function onMessage(message) {
 
   try {
     if (content.trim() === "/로컬상태") {
-      message.reply("픽셀곰 API2 스크립트 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.");
+      message.reply("운영봇 API2 스크립트 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.");
       return;
     }
 
@@ -69,7 +66,7 @@ function onMessage(message) {
     }
   } catch (error) {
     if (content.trim() === "/상태") {
-      message.reply("픽셀곰 서버에 연결할 수 없습니다.");
+      message.reply("운영봇 서버에 연결할 수 없습니다.");
     }
   }
 }

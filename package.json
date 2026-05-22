@@ -1,5 +1,5 @@
 {
-  "name": "kakao-pixelgom-skill",
+  "name": "kakao-room-ops-bot",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,5 @@
   "engines": {
     "node": ">=20"
   },
-  "dependencies": {
-    "pg": "^8.21.0"
-  }
+  "dependencies": {}
 }

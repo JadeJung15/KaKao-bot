@@ -1,16 +1,10 @@
 /*
- * MessengerBotR / KakaoTalkBot style script.
- *
- * 1. Install an Android auto-reply bot app that supports the response(...) API.
- * 2. Create a new script and paste this file.
- * 3. Keep KakaoTalk notifications enabled for the target chatroom.
- * 4. The bot account must be in the chatroom.
+ * MessengerBotR / KakaoTalkBot legacy response(...) script.
  */
 
 const BOT_SERVER = "https://ka-kao-bot.vercel.app/chat-event";
-const BOT_NAMES = ["픽셀곰", "픽셀"];
+const BOT_NAMES = ["운영봇", "봇"];
 
-// Empty list means all rooms. Put exact KakaoTalk room names here to restrict.
 const ALLOWED_ROOMS = [];
 
 function isAllowedRoom(room) {
@@ -46,7 +40,7 @@ function response(room, msg, sender, isGroupChat, replier, imageDB, packageName,
 
   try {
     if (String(msg).trim() === "/로컬상태") {
-      replier.reply("픽셀곰 스크립트 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.");
+      replier.reply("운영봇 스크립트 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.");
       return;
     }
 
@@ -65,7 +59,7 @@ function response(room, msg, sender, isGroupChat, replier, imageDB, packageName,
     }
   } catch (error) {
     if (String(msg).trim() === "/상태") {
-      replier.reply("픽셀곰 서버에 연결할 수 없습니다.");
+      replier.reply("운영봇 서버에 연결할 수 없습니다.");
     }
   }
 }

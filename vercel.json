@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/", "destination": "/api/health" },
     { "source": "/health", "destination": "/api/health" },
     { "source": "/chat-event", "destination": "/api/chat-event" },
     { "source": "/skill", "destination": "/api/skill" }

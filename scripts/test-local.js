@@ -2,447 +2,85 @@ import assert from "node:assert/strict";
 
 const baseUrl = process.env.TEST_BASE_URL || "http://localhost:3000";
 
-function payload(utterance, id = "u1") {
-  return {
+async function request(path, options = {}) {
+  const response = await fetch(`${baseUrl}${path}`, options);
+  const json = await response.json();
+  return { response, json };
+}
+
+const health = await request("/health");
+assert.equal(health.response.status, 200);
+assert.equal(health.json.ok, true);
+assert.equal(health.json.service, "kakao-room-ops-bot");
+assert.equal(health.json.gamesEnabled, false);
+
+const skill = await request("/skill", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
     userRequest: {
       timezone: "Asia/Seoul",
-      utterance,
+      utterance: "/도움말",
       user: {
-        id,
+        id: "test-user",
         type: "accountId",
-        properties: {
-          nickname: "테스터"
-        }
+        properties: { nickname: "테스터" }
       }
-    },
-    bot: {
-      id: "691bfe71c2e8b90caa9b9ad4",
-      name: "픽셀곰"
     }
-  };
-}
+  })
+});
+assert.equal(skill.response.status, 200);
+assert.match(skill.json.template.outputs[0].simpleText.text, /새 봇 골격/);
+assert.match(skill.json.template.outputs[0].simpleText.text, /게임.*제거/);
 
-async function skill(utterance, id) {
-  const response = await fetch(`${baseUrl}/skill`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
-    body: JSON.stringify(payload(utterance, id))
-  });
-  assert.equal(response.status, 200);
-  const json = await response.json();
-  return json.template.outputs[0].simpleText.text;
-}
+const chatStatus = await request("/chat-event", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    room: "테스트방",
+    msg: "/상태",
+    sender: "사용자",
+    isGroupChat: true,
+    packageName: "com.kakao.talk"
+  })
+});
+assert.equal(chatStatus.response.status, 200);
+assert.equal(chatStatus.json.ok, true);
+assert.equal(chatStatus.json.handled, true);
+assert.match(chatStatus.json.reply, /서버 정상 연결/);
+assert.match(chatStatus.json.reply, /게임 기능: 사용 안 함/);
 
-async function rawChat(msg, sender = `민지-${Date.now()}`, room = "테스트방", extra = {}) {
-  const response = await fetch(`${baseUrl}/chat-event`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      room,
-      msg,
-      sender,
-      isGroupChat: true,
-      packageName: "com.kakao.talk",
-      ...extra
-    })
-  });
-  assert.equal(response.status, 200);
-  return response.json();
-}
+const normalChat = await request("/chat-event", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    room: "테스트방",
+    msg: "일반 대화",
+    sender: "사용자",
+    isGroupChat: true,
+    packageName: "com.kakao.talk"
+  })
+});
+assert.equal(normalChat.response.status, 200);
+assert.equal(normalChat.json.ok, true);
+assert.equal(normalChat.json.reply, null);
+assert.equal(normalChat.json.handled, false);
 
-const registeredKeys = new Set();
+const removedGame = await request("/chat-event", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    room: "테스트방",
+    msg: "/낚시",
+    sender: "사용자",
+    isGroupChat: true,
+    packageName: "com.kakao.talk"
+  })
+});
+assert.equal(removedGame.response.status, 200);
+assert.match(removedGame.json.reply, /아직 등록되지 않은 명령어/);
 
-async function chat(msg, sender = `민지-${Date.now()}`, room = "테스트방", extra = {}) {
-  const { autoRegister = true, ...payloadExtra } = extra;
-  const key = `${room}:${sender}`;
-  if (autoRegister && msg !== "/가입" && sender !== "픽셀" && !registeredKeys.has(key)) {
-    await rawChat("/가입", sender, room, payloadExtra);
-    registeredKeys.add(key);
-  }
-  return rawChat(msg, sender, room, payloadExtra);
-}
+const chatGet = await request("/chat-event");
+assert.equal(chatGet.response.status, 405);
 
-const help = await skill("/도움말");
-assert.match(help, /픽셀곰 도움말/);
-
-const region = await skill("/지역등록 민지 서울", "u-minji");
-assert.match(region, /서울/);
-
-const attendance = await skill("/출석", "u-minji");
-assert.match(attendance, /출석 완료|이미 출석/);
-
-const ranking = await skill("/포인트순위");
-assert.match(ranking, /민지|테스터|포인트/);
-
-const regions = await skill("/지역전체");
-assert.match(regions, /서울/);
-
-const blockedUser = `미가입-${Date.now()}`;
-const blockedGame = await rawChat("/낚시", blockedUser, "가입테스트방");
-assert.match(blockedGame.reply, /계정 등록이 필요/);
-assert.equal(blockedGame.awarded, 0);
-const joined = await rawChat("/가입", blockedUser, "가입테스트방");
-assert.match(joined.reply, /계정 등록 완료/);
-assert.match(joined.reply, /관리자 권한/);
-const memberUser = `회원-${Date.now()}`;
-await rawChat("/가입", memberUser, "가입테스트방");
-const grant = await rawChat(`/지급 ${memberUser} 50`, blockedUser, "가입테스트방");
-assert.match(grant.reply, /50P 지급 완료/);
-const adminList = await rawChat("/관리자목록", blockedUser, "가입테스트방");
-assert.match(adminList.reply, new RegExp(blockedUser));
-await rawChat("/자동공지 설정 /가입 후 /게임 참고", blockedUser, "가입테스트방");
-await rawChat("/자동공지 간격 5", blockedUser, "가입테스트방");
-await rawChat("/자동공지 켜기", blockedUser, "가입테스트방");
-let autoNotice = null;
-for (let i = 0; i < 5; i += 1) {
-  autoNotice = await rawChat(`자동공지 테스트 ${i}`, memberUser, "가입테스트방");
-}
-assert.match(autoNotice.reply, /\/가입 후 \/게임 참고/);
-
-const sender = `민지-${Date.now()}`;
-const normalChat = await chat("안녕하세요", sender);
-assert.equal(normalChat.ok, true);
-assert.equal(normalChat.awarded, 1);
-assert.equal(normalChat.reply, null);
-
-const profile = await chat("/내정보", sender);
-assert.match(profile.reply, /포인트|채팅/);
-
-const chatRank = await chat("/채팅순위", sender);
-assert.match(chatRank.reply, /채팅 순위|민지/);
-
-const intro = await chat("/봇소개", sender);
-assert.match(intro.reply, /텍스트 RPG 봇/);
-const mentionIntro = await chat("픽셀곰 로봇이야?", sender);
-assert.equal(mentionIntro.reply, null);
-const shortMentionIntro = await chat("픽셀 로봇이야?", sender);
-assert.equal(shortMentionIntro.reply, null);
-const echoedIntro = await chat("픽셀곰은 방 활동 기록 봇입니다.", sender);
-assert.equal(echoedIntro.reply, null);
-const selfMessage = await chat("픽셀곰은 방 활동 기록 봇입니다.", "픽셀");
-assert.equal(selfMessage.ignored, true);
-const relationship = await chat("/남친 요아", sender);
-assert.match(relationship.reply, /연애운/);
-
-const typingUser = `타수-${Date.now()}`;
-await chat("가나다라마바사", typingUser);
-const typingRank = await chat("/타수순위", typingUser);
-assert.match(typingRank.reply, /누적 타수 순위|타수/);
-const shortTypingRank = await chat("/타수", typingUser);
-assert.match(shortTypingRank.reply, /오늘 타수 순위|타수/);
-const dayTypingRank = await chat("/일간타수순위", typingUser);
-assert.match(dayTypingRank.reply, /오늘 타수 순위|타수/);
-const weekTypingRank = await chat("/주간타수순위", typingUser);
-assert.match(weekTypingRank.reply, /이번 주 타수 순위|타수/);
-const monthTypingRank = await chat("/월간타수순위", typingUser);
-assert.match(monthTypingRank.reply, /이번 달 타수 순위|타수/);
-const dayChatRank = await chat("/일간채팅순위", typingUser);
-assert.match(dayChatRank.reply, /오늘 채팅 순위|채팅/);
-const roomRank = await chat("/방순위", typingUser);
-assert.match(roomRank.reply, /오늘 실시간 방순위/);
-assert.match(roomRank.reply, /타수 TOP5/);
-const liveRank = await chat("/실시간순위", typingUser);
-assert.match(liveRank.reply, /오늘 실시간 방순위/);
-const spacedLiveRank = await chat("/실시간 순위", typingUser);
-assert.match(spacedLiveRank.reply, /오늘 실시간 방순위/);
-const myRank = await chat("/내순위", typingUser);
-assert.match(myRank.reply, /실시간 순위/);
-assert.match(myRank.reply, /타수:/);
-const typoRank = await chat("/순웨", typingUser);
-assert.match(typoRank.reply, /오늘 실시간 방순위/);
-const rpgRanking = await chat("/랭킹", typingUser);
-assert.match(rpgRanking.reply, /RPG 랭킹/);
-assert.match(rpgRanking.reply, /공격 TOP3|방어 TOP3|민첩 TOP3/);
-
-const shortHelp = await chat("/?");
-assert.match(shortHelp.reply, /픽셀곰 도움말/);
-
-const shortCheckin = await chat("/ㅊㅊ", `출석-${Date.now()}`);
-assert.match(shortCheckin.reply, /출석 완료|이미 출석/);
-
-const plainCheckin = await chat("ㅊㅊ", `일반채팅-${Date.now()}`);
-assert.equal(plainCheckin.reply, null);
-const plainGame = await chat("게임", `일반게임-${Date.now()}`);
-assert.equal(plainGame.reply, null);
-const notice = await chat("/공지", `공지-${Date.now()}`);
-assert.match(notice.reply, /반드시 \//);
-
-const rps = await chat("/rps rock", `${sender}-game`);
-assert.match(rps.reply, /결과|획득/);
-
-const dice = await chat("/dice", `${sender}-dice`);
-assert.match(dice.reply, /주사위 결과/);
-
-const coin = await chat("/동전 앞", `${sender}-coin`);
-assert.match(coin.reply, /동전 결과/);
-
-const oddEven = await chat("/홀짝 홀", `${sender}-oe`);
-assert.match(oddEven.reply, /숫자:/);
-
-const roulette = await chat("/룰렛", `${sender}-roulette`);
-assert.match(roulette.reply, /룰렛 결과/);
-
-const luckyBoxUser = `${sender}-box`;
-const luckyBox = await chat("/행운상자", luckyBoxUser);
-assert.match(luckyBox.reply, /행운상자/);
-
-const gameHelp = await chat("/게임", `${sender}-game-help`);
-assert.match(gameHelp.reply, /픽셀곰 게임센터|낚시/);
-const shortGameHelp = await chat("/ㄱㅇ", `${sender}-short-game-help`);
-assert.match(shortGameHelp.reply, /픽셀곰 게임센터|낚시/);
-const rpgHelp = await chat("/모험", `${sender}-rpg-help`);
-assert.match(rpgHelp.reply, /픽셀곰 RPG/);
-const character = await chat("/캐릭터", `${sender}-character`);
-assert.match(character.reply, /RPG LV/);
-const fishing = await chat("/낚시", `${sender}-fish`);
-assert.match(fishing.reply, /픽셀곰 낚시/);
-const shortFishing = await chat("/ㄴㅅ", `${sender}-short-fish`);
-assert.match(shortFishing.reply, /픽셀곰 낚시/);
-const gathering = await chat("/채집", `${sender}-gather`);
-assert.match(gathering.reply, /픽셀곰 채집/);
-const adventure = await chat("/탐험", `${sender}-adventure`);
-assert.match(adventure.reply, /픽셀곰 탐험/);
-const huntGame = await chat("/사냥", `${sender}-hunt`);
-assert.match(huntGame.reply, /픽셀곰 사냥/);
-const dungeonGame = await chat("/던전", `${sender}-dungeon`);
-assert.match(dungeonGame.reply, /던전/);
-const restGame = await chat("/휴식", `${sender}-rest`);
-assert.match(restGame.reply, /휴식 완료/);
-
-const typingGameUser = `${sender}-typing-game`;
-const typingStart = await chat("/타자", typingGameUser);
-assert.match(typingStart.reply, /타자게임 시작/);
-const typingPrompt = typingStart.reply.split("\n")[3];
-const typingDone = await chat(`/타자 ${typingPrompt}`, typingGameUser);
-assert.match(typingDone.reply, /타자 성공/);
-
-const initialUser = `${sender}-initial`;
-const initialStart = await chat("/초성", initialUser);
-assert.match(initialStart.reply, /초성퀴즈/);
-const initialWrong = await chat("/초성 오답", initialUser);
-assert.match(initialWrong.reply, /오답|정답/);
-
-const baseballUser = `${sender}-baseball`;
-const baseballStart = await chat("/야구", baseballUser);
-assert.match(baseballStart.reply, /숫자야구 시작/);
-const baseballGuess = await chat("/야구 123", baseballUser);
-assert.match(baseballGuess.reply, /S|정답|실패/);
-
-const fastRoom = `선착순방-${Date.now()}`;
-const fastStart = await chat("/선착순 시작 꿀단지", `${sender}-fast-host`, fastRoom);
-assert.match(fastStart.reply, /선착순 시작/);
-const fastWin = await chat("/선착순 꿀단지", `${sender}-fast-player`, fastRoom);
-assert.match(fastWin.reply, /선착순 성공/);
-
-const gachaUser = `${sender}-gacha`;
-await chat("/출석", gachaUser);
-const gacha = await chat("/뽑기", gachaUser);
-assert.match(gacha.reply, /뽑기 결과/);
-
-const updownUser = `${sender}-updown`;
-const updownStart = await chat("/업다운", updownUser);
-assert.match(updownStart.reply, /업다운 시작/);
-const updownGuess = await chat("/업다운 50", updownUser);
-assert.match(updownGuess.reply, /UP|DOWN|정답|실패/);
-
-const random = await chat("/랜덤 1 3", `${sender}-random`);
-assert.match(random.reply, /랜덤 결과/);
-
-const pick = await chat("/골라 치킨 피자", `${sender}-pick`);
-assert.match(pick.reply, /픽셀곰의 선택/);
-
-const compat = await chat("/궁합 철수", `${sender}-compat`);
-assert.match(compat.reply, /궁합/);
-
-const levelRank = await chat("/레벨순위", sender);
-assert.match(levelRank.reply, /레벨 순위/);
-
-const stamp = Date.now();
-const admin = `관리자-${stamp}`;
-const oldNick = `우주${stamp}`;
-const nextNick = `천사${stamp}`;
-const thirdNick = `민지${stamp}`;
-const bulk = await chat(`/일괄등록
-[ 경기 ]
-• ${oldNick}
-• ${nextNick}
-
-[ 서울 ]
-• ${thirdNick}`, admin, `명단방-${stamp}`);
-assert.match(bulk.reply, /일괄등록 완료/);
-assert.match(bulk.reply, /총 입력: 3명/);
-const registerStatus = await chat("/등록현황", admin, `명단방-${stamp}`);
-assert.match(registerStatus.reply, /계정 등록/);
-const bulkHistory = await chat(`/닉이력 ${oldNick}`, admin, `명단방-${stamp}`);
-assert.match(bulkHistory.reply, new RegExp(oldNick));
-
-const linkRoom = `닉방-${stamp}`;
-await chat(`/일괄등록 ${oldNick}`, admin, linkRoom);
-await chat("한달 뒤 재입장", nextNick, linkRoom);
-const link = await chat(`/닉연결 ${oldNick}`, nextNick, linkRoom);
-assert.match(link.reply, /닉네임 기록을 연결/);
-const linkedHistory = await chat("/닉이력", nextNick, linkRoom);
-assert.match(linkedHistory.reply, new RegExp(oldNick));
-assert.match(linkedHistory.reply, new RegExp(nextNick));
-
-const nameRoom = `이름방-${stamp}`;
-await chat(`/일괄등록 소영 여, 민지 여, 민지 남`, admin, nameRoom);
-const nameHistory = await chat("/닉이력 소영", admin, nameRoom);
-assert.match(nameHistory.reply, /소영/);
-assert.doesNotMatch(nameHistory.reply, /소영 여님의/);
-const player = "정현기 남";
-const nameCompat = await chat("/궁합 소영", player, nameRoom);
-assert.match(nameCompat.reply, /소영/);
-assert.doesNotMatch(nameCompat.reply, /소영 여님/);
-await chat("/출석", player, nameRoom);
-const nameTransfer = await chat("/송금 소영 10", player, nameRoom);
-assert.match(nameTransfer.reply, /소영님에게 10P/);
-const ambiguousName = await chat("/닉이력 민지", admin, nameRoom);
-assert.match(ambiguousName.reply, /여러 명/);
-assert.match(ambiguousName.reply, /민지/);
-const selfGrant = await chat(`/지급 ${admin} 10`, admin, nameRoom);
-assert.match(selfGrant.reply, /10P 지급 완료/);
-const grantNewUser = await chat("/지급 새친구 77", admin, nameRoom);
-assert.match(grantNewUser.reply, /새친구님에게 77P 지급 완료/);
-assert.match(grantNewUser.reply, /새 계정으로 등록/);
-const reclaimNewUser = await chat("/회수 새친구 27", admin, nameRoom);
-assert.match(reclaimNewUser.reply, /새친구님에게 27P 회수 완료/);
-assert.match(reclaimNewUser.reply, /레벨은 회수\/사용으로 내려가지 않습니다/);
-const adminTransferNewUser = await chat("/송금 새송금 12", admin, nameRoom);
-assert.match(adminTransferNewUser.reply, /새송금님에게 12P 생성 송금 완료/);
-assert.match(adminTransferNewUser.reply, /새 계정으로 등록/);
-
-const nickChangeRoom = `닉변방-${stamp}`;
-const oldChangedNick = `달곰${stamp}`;
-const newChangedNick = `별곰${stamp}`;
-await chat("/가입", oldChangedNick, nickChangeRoom);
-await chat("이전 닉 채팅", oldChangedNick, nickChangeRoom);
-const nickChanged = await rawChat(`/닉변 ${oldChangedNick}`, newChangedNick, nickChangeRoom);
-assert.match(nickChanged.reply, /닉네임 변경 기록을 연결/);
-const changedHistory = await chat("/닉이력", newChangedNick, nickChangeRoom);
-assert.match(changedHistory.reply, new RegExp(oldChangedNick));
-assert.match(changedHistory.reply, new RegExp(newChangedNick));
-const adminNickChanged = await chat(`/닉변 ${newChangedNick} 관리자변경${stamp}`, newChangedNick, nickChangeRoom);
-assert.match(adminNickChanged.reply, /닉네임 변경 기록을 연결|이미 닉네임 이력/);
-const stableRoom = `안정닉방-${stamp}`;
-await rawChat("/가입", `초코${stamp}`, stableRoom, { senderHash: `stable-${stamp}` });
-await rawChat("닉네임 바꾼 뒤 채팅", `바닐라${stamp}`, stableRoom, { senderHash: `stable-${stamp}` });
-const stableHistory = await rawChat("/닉이력", `바닐라${stamp}`, stableRoom, { senderHash: `stable-${stamp}` });
-assert.match(stableHistory.reply, new RegExp(`초코${stamp}`));
-assert.match(stableHistory.reply, new RegExp(`바닐라${stamp}`));
-
-const version = await chat("/버전", admin, nameRoom);
-assert.match(version.reply, /0\.8\.1/);
-
-const shop = await chat("/상점", admin, nameRoom);
-assert.match(shop.reply, /무기 주문서|펫 입양권/);
-const stableLevelUser = `레벨유지-${stamp}`;
-await chat("/가입", stableLevelUser, nameRoom);
-await chat(`/지급 ${stableLevelUser} 1000`, admin, nameRoom);
-const stableLevelBefore = await chat("/내정보", stableLevelUser, nameRoom);
-assert.match(stableLevelBefore.reply, /레벨: LV\.4/);
-await chat("/구매 무기 주문서 1", stableLevelUser, nameRoom);
-const stableLevelAfterBuy = await chat("/내정보", stableLevelUser, nameRoom);
-assert.match(stableLevelAfterBuy.reply, /레벨: LV\.4/);
-const stableLevelReclaim = await chat(`/회수 ${stableLevelUser} 900`, admin, nameRoom);
-assert.match(stableLevelReclaim.reply, /회수 완료/);
-const stableLevelAfterReclaim = await chat("/내정보", stableLevelUser, nameRoom);
-assert.match(stableLevelAfterReclaim.reply, /레벨: LV\.4/);
-const adminGrantForRpg = await chat(`/지급 정현기 1000`, admin, nameRoom);
-assert.match(adminGrantForRpg.reply, /1,000P 지급 완료/);
-const buyScroll = await chat("/구매 무기 주문서 2", player, nameRoom);
-assert.match(buyScroll.reply, /무기 주문서/);
-const inventoryWithNumbers = await chat("/가방", player, nameRoom);
-assert.match(inventoryWithNumbers.reply, /1\. 무기 주문서/);
-assert.match(inventoryWithNumbers.reply, /\/판매 1 3/);
-const sellByNumber = await chat("/판매 1 1", player, nameRoom);
-assert.match(sellByNumber.reply, /무기 주문서 x1/);
-const enhance = await chat("/강화 무기", player, nameRoom);
-assert.match(enhance.reply, /강화/);
-const missingScroll = await chat("/강화 무기", player, nameRoom);
-assert.match(missingScroll.reply, /무기 주문서.*필요합니다/s);
-assert.match(missingScroll.reply, /구매 가격: 60P/);
-const forgeNeedOre = await chat("/제작", player, nameRoom);
-assert.match(forgeNeedOre.reply, /철광석.*필요합니다/s);
-assert.match(forgeNeedOre.reply, /구매 가격: 25P/);
-await chat("/구매 철광석 2", player, nameRoom);
-const craftedOne = await chat("/제작", player, nameRoom);
-assert.match(craftedOne.reply, /대장간 제련 완료/);
-assert.match(craftedOne.reply, /능력치:/);
-const craftedTwo = await chat("/제작", player, nameRoom);
-assert.match(craftedTwo.reply, /120종|능력치|제련 완료/);
-const synthesis = await chat("/합성 1 2", player, nameRoom);
-assert.match(synthesis.reply, /장비 합성 완료/);
-const equip = await chat("/장착 1", player, nameRoom);
-assert.match(equip.reply, /장착 완료/);
-assert.match(equip.reply, /능력치:/);
-const equipment = await chat("/장비", player, nameRoom);
-assert.match(equipment.reply, /장착 장비/);
-assert.match(equipment.reply, /종합 전투력/);
-const weaponView = await chat("/무기", player, nameRoom);
-assert.match(weaponView.reply, /무기/);
-const armorView = await chat("/방어구", player, nameRoom);
-assert.match(armorView.reply, /방어구/);
-const itemAlias = await chat("/아이템", player, nameRoom);
-assert.match(itemAlias.reply, /판매 방법|가방이 비어/);
-const attackRank = await chat("/공격랭킹", player, nameRoom);
-assert.match(attackRank.reply, /공격 랭킹/);
-const autoEquip = await chat("/자동장착", player, nameRoom);
-assert.match(autoEquip.reply, /자동장착/);
-const setList = await chat("/세트", player, nameRoom);
-assert.match(setList.reply, /세트 아이템 40종/);
-const monsterGuide = await chat("/몬스터", player, nameRoom);
-assert.match(monsterGuide.reply, /총 140종/);
-const buyAutoScroll = await chat("/구매 무기 주문서 2", player, nameRoom);
-assert.match(buyAutoScroll.reply, /무기 주문서/);
-const autoEnhance = await chat("/자동강화 무기 2", player, nameRoom);
-assert.match(autoEnhance.reply, /자동강화 결과/);
-const dungeonUser = `${sender}-던전-${stamp}`;
-await chat("/가입", dungeonUser, nameRoom);
-const dungeonEasy = await chat("/던전 쉬움", dungeonUser, nameRoom);
-assert.match(dungeonEasy.reply, /던전/);
-const towerUser = `${sender}-무탑-${stamp}`;
-await chat("/가입", towerUser, nameRoom);
-const tower = await chat("/무탑", towerUser, nameRoom);
-assert.match(tower.reply, /무한의탑/);
-const petAdopt = await chat("/펫입양", player, nameRoom);
-assert.match(petAdopt.reply, /펫 입양/);
-const petTrain = await chat("/펫훈련", player, nameRoom);
-assert.match(petTrain.reply, /펫훈련/);
-const petBattle = await chat("/펫대전", player, nameRoom);
-assert.match(petBattle.reply, /펫대전/);
-const autoPermission = await chat(`/오토권한 정현기`, admin, nameRoom);
-assert.match(autoPermission.reply, /오토모험 권한/);
-const autoAdventure = await chat("/오토모험", player, nameRoom);
-assert.match(autoAdventure.reply, /오토모험 결과/);
-
-const transcriptRoom = `대화방-${stamp}`;
-const transcriptImport = await chat(`/대화가져오기
-2026년 5월 22일 금요일
-미정 남님이 들어왔습니다. 타인, 기관 등의 사칭에 유의해 주세요.
-[미정 남] [오전 11:26] 하이하이
-[소영 여] [오전 11:26] /신입환영
-[오픈채팅봇] [오전 11:26] 어서와
-유진 남님이 나갔습니다.
-[우주 남] [오전 11:27] 이모티콘
-흐물한 어피치님을 내보냈습니다.
-[지오 남] [오후 2:02] 🌸닉넴 / 성별 : 지오 남
-🌸상세지역 :인천 부평`, admin, transcriptRoom);
-assert.match(transcriptImport.reply, /대화가져오기 완료/);
-assert.match(transcriptImport.reply, /포인트: 메시지 1건당/);
-assert.match(transcriptImport.reply, /메시지: 4건/);
-assert.match(transcriptImport.reply, /입장 1명 \/ 퇴장 1명 \/ 내보냄 1명/);
-const importedTypingRank = await chat("/일간타수순위", admin, transcriptRoom);
-assert.match(importedTypingRank.reply, /미정|소영|지오/);
-const membership = await chat("/입퇴장현황", admin, transcriptRoom);
-assert.match(membership.reply, /유진/);
-assert.match(membership.reply, /흐물한 어피치/);
-const transcriptStatus = await chat("/등록현황", admin, transcriptRoom);
-assert.match(transcriptStatus.reply, /계정 등록/);
-assert.match(transcriptStatus.reply, /제외 기록: 퇴장 1명 \/ 내보냄 1명/);
-
-console.log("Local skill and chat-event tests passed.");
+console.log("Clean bot scaffold tests passed.");
