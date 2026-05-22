@@ -1020,7 +1020,7 @@ async function readBody(req) {
   return raw ? JSON.parse(raw) : {};
 }
 
-const server = http.createServer(async (req, res) => {
+export async function requestHandler(req, res) {
   try {
     if (req.method === "GET" && req.url === "/health") {
       jsonResponse(res, 200, { ok: true, service: "pixelgom-chatroom-bot" });
@@ -1042,7 +1042,11 @@ const server = http.createServer(async (req, res) => {
     console.error(error);
     jsonResponse(res, 500, { ok: false, reply: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요." });
   }
-});
+}
+
+export default requestHandler;
+
+const server = http.createServer(requestHandler);
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   server.listen(PORT, () => {
