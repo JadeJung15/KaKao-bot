@@ -9,6 +9,8 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "pixelgom-db.json");
 const PORT = Number(process.env.PORT || 3000);
 const STATE_ID = process.env.PIXELGOM_STATE_ID || "main";
+const APP_VERSION = "0.2.0";
+const FEATURES = ["chat-import", "nickname-history", "period-ranks"];
 
 let pgPool;
 
@@ -1674,7 +1676,7 @@ export async function requestHandler(req, res) {
     const pathname = new URL(req.url || "/", "http://localhost").pathname;
 
     if (req.method === "GET") {
-      jsonResponse(res, 200, { ok: true, service: "pixelgom-chatroom-bot" });
+      jsonResponse(res, 200, { ok: true, service: "pixelgom-chatroom-bot", version: APP_VERSION, features: FEATURES });
       return;
     }
 
