@@ -9,8 +9,8 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "pixelgom-db.json");
 const PORT = Number(process.env.PORT || 3000);
 const STATE_ID = process.env.PIXELGOM_STATE_ID || "main";
-const APP_VERSION = "0.5.1";
-const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "live-user-rank", "name-only-nicknames"];
+const APP_VERSION = "0.6.0";
+const FEATURES = ["chat-import", "nickname-history", "period-ranks", "room-overview", "live-user-rank", "name-only-nicknames", "typing-games"];
 
 let pgPool;
 
@@ -52,7 +52,13 @@ const COOLDOWNS = {
   coinMs: 15 * 1000,
   oddEvenMs: 20 * 1000,
   rouletteMs: 60 * 1000,
-  gachaMs: 2 * 60 * 1000
+  gachaMs: 2 * 60 * 1000,
+  fishingMs: 30 * 1000,
+  gatherMs: 25 * 1000,
+  adventureMs: 45 * 1000,
+  huntMs: 45 * 1000,
+  dungeonMs: 2 * 60 * 1000,
+  restMs: 60 * 1000
 };
 
 const initialDb = {
@@ -454,6 +460,10 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
       aliases: [],
       nicknameHistory: [],
       activeQuiz: null,
+      activeTyping: null,
+      activeInitialQuiz: null,
+      activeBaseball: null,
+      rpg: {},
       cooldowns: {},
       createdAt: nowIso(),
       updatedAt: nowIso()
@@ -475,7 +485,11 @@ function ensureUser(db, id, nickname, room = "", options = {}) {
   user.aliases ||= [];
   user.nicknameHistory ||= [];
   user.activeQuiz ??= null;
+  user.activeTyping ??= null;
+  user.activeInitialQuiz ??= null;
+  user.activeBaseball ??= null;
   user.activeUpDown ??= null;
+  user.rpg ||= {};
   user.inventory ||= {};
   user.daily ||= {};
   user.cooldowns ||= {};
@@ -496,6 +510,7 @@ function touchRoom(db, room) {
   db.rooms[room] ||= { name: room, chatCount: 0, wordChain: null, createdAt: nowIso(), updatedAt: nowIso() };
   db.rooms[room].chatCount ??= 0;
   db.rooms[room].wordChain ??= null;
+  db.rooms[room].fastFinger ??= null;
   db.rooms[room].updatedAt = nowIso();
 }
 
@@ -735,16 +750,16 @@ function myRankText(db, user, period = "day") {
 
 function botIntroText() {
   return [
-    "픽셀곰은 방 활동 기록 봇입니다.",
-    "일반 채팅은 조용히 +1P만 적립하고, 명령어에만 답합니다.",
+    "픽셀곰은 카톡 텍스트 RPG 봇입니다.",
+    "일반 채팅은 +1P, 게임 승리는 추가 보상으로 쌓입니다.",
     "",
     "자주 쓰는 명령어",
-    "/ㅊㅊ - 출석",
-    "/방순위 - 오늘 채팅/타수 TOP",
-    "/내순위 - 내 현재 등수",
-    "/내정보 - 내 포인트/채팅",
-    "/운세 - 오늘 운세",
-    "/? - 전체 도움말"
+    "/게임 - 전체 게임 목록",
+    "/모험 - RPG 도움말",
+    "/캐릭터 - 내 RPG 상태",
+    "/낚시, /채집, /탐험, /사냥, /던전",
+    "/타자, /초성, /야구, /끝말",
+    "/게임순위 - 게임 승리 순위"
   ].join("\n");
 }
 
@@ -758,16 +773,19 @@ function helpText(text = "") {
   return [
     "픽셀곰 도움말",
     "/? 게임 - 게임 명령어",
+    "/모험 - 픽셀곰 RPG",
     "/? 랭킹 - 순위 명령어",
     "/? 포인트 - 포인트/경제 명령어",
     "/? 관리 - 일괄등록/닉네임 이력",
     "",
-    "기본",
-    "/상태, /봇소개, /내정보, /도움말, /?",
-    "/출석, /ㅊㅊ, /출첵",
+    "게임",
+    "/낚시, /채집, /탐험, /사냥, /던전, /휴식",
+    "/타자, /초성, /야구, /선착순, /끝말",
+    "/캐릭터, /가방, /게임순위",
+    "",
+    "기본/순위",
+    "/상태, /봇소개, /내정보, /?",
     "/실시간순위, /방순위, /내순위",
-    "/지역등록 서울, /지역전체",
-    "/운세, /미션, /칭찬",
     "",
     "자동 적립",
     `카톡방 메시지 1회당 +${POINT_RULES.chat}P`,
@@ -777,7 +795,21 @@ function helpText(text = "") {
 
 function gameHelpText() {
   return [
-    "픽셀곰 게임",
+    "픽셀곰 게임센터",
+    "/모험 - 픽셀곰 RPG 도움말",
+    "/캐릭터 - RPG 상태",
+    "/낚시, /채집, /탐험, /사냥, /던전, /휴식",
+    "",
+    "타이핑 게임",
+    "/타자 - 제시문 빨리 입력",
+    "/초성 - 초성 보고 단어 맞히기",
+    "/야구 - 숫자야구 3자리",
+    "/선착순 시작 단어, /선착순 단어",
+    "/끝말 시작 사과, /끝말 과자",
+    "/업다운 - 1~100 숫자 맞히기",
+    "/퀴즈 - 산수 퀴즈",
+    "",
+    "운빨/포인트 게임",
     "/가위바위보 가위|바위|보 - 승리 +20P, 비김 +5P",
     "/주사위 - 10분마다 1~6P",
     "/동전 앞|뒤 - 맞히면 +8P",
@@ -785,10 +817,6 @@ function gameHelpText() {
     "/룰렛 - 1분마다 랜덤 보상",
     "/뽑기 - 10P로 아이템/보상 뽑기",
     "/행운상자 - 하루 1회 +5~50P",
-    "/업다운 - 1~100 숫자 맞히기",
-    "/끝말 시작 사과, /끝말 과자",
-    "/퀴즈 - 산수 퀴즈 받기",
-    "/정답 숫자 - 퀴즈 정답 제출",
     "/랜덤 1 100, /골라 치킨 피자"
   ].join("\n");
 }
@@ -1284,6 +1312,434 @@ function membershipStatusText(db, room) {
   return lines.join("\n");
 }
 
+const TYPING_PROMPTS = [
+  "오늘도 방 분위기는 우리가 살린다",
+  "픽셀곰은 조용히 포인트를 적립한다",
+  "퇴근 전까지 수다력 충전 완료",
+  "오타 없이 빠르게 치면 보너스",
+  "채팅방의 주인공은 바로 지금",
+  "불금에는 타자 속도도 올라간다",
+  "한 글자씩 침착하게 입력하기",
+  "빠른 손가락이 포인트를 부른다",
+  "오늘의 수다왕은 누구일까요",
+  "웃긴 말 한마디가 방을 살린다",
+  "순위는 조용히 올라가는 중",
+  "반응 속도보다 정확도가 먼저",
+  "카톡 게임은 타이밍이 생명",
+  "모두가 보는 앞에서 정답 도전",
+  "오늘도 재미있게 놀아보자",
+  "점수보다 중요한 건 참여",
+  "방 분위기는 다 같이 만든다",
+  "짧고 굵게 한 판 더",
+  "빠르게 치고 포인트 받자",
+  "픽셀곰 게임방 오픈"
+];
+
+const INITIAL_QUIZ_WORDS = [
+  { word: "보이스룸", hint: "카카오 오픈채팅 기능" },
+  { word: "출석체크", hint: "하루 한 번 포인트" },
+  { word: "포인트", hint: "채팅하면 쌓이는 것" },
+  { word: "수다왕", hint: "채팅 많이 하는 사람" },
+  { word: "불금", hint: "금요일 분위기" },
+  { word: "퇴근", hint: "직장인이 기다리는 순간" },
+  { word: "타자게임", hint: "빠르게 입력하는 게임" },
+  { word: "끝말잇기", hint: "단어 이어가기" },
+  { word: "숫자야구", hint: "스트라이크와 볼" },
+  { word: "초성퀴즈", hint: "자음만 보고 맞히기" },
+  { word: "카카오톡", hint: "지금 쓰는 메신저" },
+  { word: "오픈채팅", hint: "방 이름에 자주 붙는 말" },
+  { word: "랜덤뽑기", hint: "운에 맡기는 선택" },
+  { word: "행운상자", hint: "하루 한 번 여는 보상" },
+  { word: "실시간순위", hint: "오늘 랭킹 확인" },
+  { word: "닉네임", hint: "방에서 보이는 이름" },
+  { word: "신입환영", hint: "새로 온 사람에게 하는 말" },
+  { word: "공질", hint: "자기소개 질문" },
+  { word: "하트인증", hint: "신입 절차 중 하나" },
+  { word: "게임순위", hint: "승리 랭킹" }
+];
+
+const INITIALS = [
+  "ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"
+];
+
+function compactGameAnswer(value) {
+  return normalizeText(value)
+    .toLowerCase()
+    .replace(/[\s.,!?'"`~…:;()[\]{}<>·ㆍ|/\\_-]+/g, "");
+}
+
+function initialsOf(text) {
+  return Array.from(normalizeText(text)).map((char) => {
+    const code = char.charCodeAt(0) - 0xac00;
+    if (code < 0 || code > 11171) return char;
+    return INITIALS[Math.floor(code / 588)] || char;
+  }).join("");
+}
+
+function randomDigits(count = 3) {
+  const digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+  for (let i = digits.length - 1; i > 0; i -= 1) {
+    const j = randomInt(0, i);
+    [digits[i], digits[j]] = [digits[j], digits[i]];
+  }
+  return digits.slice(0, count).join("");
+}
+
+function typingGame(db, user, text) {
+  const raw = text.replace(/^(\/?타자게임|\/?타자|\/typing)\s*/i, "").trim();
+  if (["포기", "그만", "종료", "stop", "quit"].includes(raw)) {
+    user.activeTyping = null;
+    return "타자게임을 종료했습니다.";
+  }
+
+  if (!raw || ["시작", "start"].includes(raw) || !user.activeTyping) {
+    const prompt = TYPING_PROMPTS[Math.floor(Math.random() * TYPING_PROMPTS.length)];
+    user.activeTyping = { prompt, createdAt: nowIso() };
+    user.gamePlays += 1;
+    return ["타자게임 시작", "아래 문장을 /타자 뒤에 그대로 입력하세요.", "", prompt, "", `예시: /타자 ${prompt}`].join("\n");
+  }
+
+  const active = user.activeTyping;
+  const elapsed = Math.max(1, Math.round((Date.now() - Date.parse(active.createdAt)) / 1000));
+  if (compactGameAnswer(raw) !== compactGameAnswer(active.prompt)) {
+    return ["오타가 있습니다.", "제시문", active.prompt].join("\n");
+  }
+
+  user.activeTyping = null;
+  user.gameWins += 1;
+  const reward = elapsed <= 15 ? 30 : elapsed <= 30 ? 22 : elapsed <= 60 ? 15 : 8;
+  addPoints(db, user, reward, "typing_game", { elapsed, prompt: active.prompt });
+  return [`타자 성공! ${elapsed}초`, `+${reward}P`, `현재: ${user.points.toLocaleString()}P / LV.${user.level}`].join("\n");
+}
+
+function initialQuiz(db, user, text) {
+  const raw = text.replace(/^(\/?초성퀴즈|\/?초성|\/initial)\s*/i, "").trim();
+  if (["포기", "그만", "종료", "stop", "quit"].includes(raw)) {
+    user.activeInitialQuiz = null;
+    return "초성퀴즈를 종료했습니다.";
+  }
+
+  if (!raw || ["시작", "start"].includes(raw) || !user.activeInitialQuiz) {
+    const quiz = INITIAL_QUIZ_WORDS[Math.floor(Math.random() * INITIAL_QUIZ_WORDS.length)];
+    user.activeInitialQuiz = { ...quiz, initials: initialsOf(quiz.word), createdAt: nowIso() };
+    user.gamePlays += 1;
+    return [`초성퀴즈`, `초성: ${user.activeInitialQuiz.initials}`, `힌트: ${quiz.hint}`, `정답: /초성 단어`].join("\n");
+  }
+
+  const quiz = user.activeInitialQuiz;
+  if (compactGameAnswer(raw) !== compactGameAnswer(quiz.word)) {
+    return [`오답입니다.`, `초성: ${quiz.initials}`, `힌트: ${quiz.hint}`].join("\n");
+  }
+
+  user.activeInitialQuiz = null;
+  user.gameWins += 1;
+  addPoints(db, user, 20, "initial_quiz", { word: quiz.word });
+  return [`정답! ${quiz.word}`, "+20P", `현재: ${user.points.toLocaleString()}P / LV.${user.level}`].join("\n");
+}
+
+function numberBaseball(db, user, text) {
+  const raw = text.replace(/^(\/?숫자야구|\/?야구|\/baseball)\s*/i, "").trim();
+  if (["포기", "그만", "종료", "stop", "quit"].includes(raw)) {
+    const answer = user.activeBaseball?.answer;
+    user.activeBaseball = null;
+    return answer ? `숫자야구 종료. 정답은 ${answer}였습니다.` : "진행 중인 숫자야구가 없습니다.";
+  }
+
+  if (!raw || ["시작", "start"].includes(raw) || !user.activeBaseball) {
+    user.activeBaseball = { answer: randomDigits(3), attempts: 0, createdAt: nowIso() };
+    user.gamePlays += 1;
+    return "숫자야구 시작!\n서로 다른 숫자 3개를 맞혀보세요.\n예시: /야구 123";
+  }
+
+  if (!/^\d{3}$/.test(raw) || new Set(raw).size !== 3) {
+    return "서로 다른 숫자 3개를 입력해주세요.\n예시: /야구 123";
+  }
+
+  const game = user.activeBaseball;
+  game.attempts += 1;
+  let strikes = 0;
+  let balls = 0;
+  for (let i = 0; i < raw.length; i += 1) {
+    if (raw[i] === game.answer[i]) strikes += 1;
+    else if (game.answer.includes(raw[i])) balls += 1;
+  }
+
+  if (strikes === 3) {
+    const reward = Math.max(8, 38 - game.attempts * 4);
+    user.activeBaseball = null;
+    user.gameWins += 1;
+    addPoints(db, user, reward, "number_baseball", { attempts: game.attempts });
+    return [`정답! ${raw}`, `${game.attempts}번 만에 성공`, `+${reward}P`, `현재: ${user.points.toLocaleString()}P / LV.${user.level}`].join("\n");
+  }
+
+  if (game.attempts >= 9) {
+    const answer = game.answer;
+    user.activeBaseball = null;
+    return `실패! 정답은 ${answer}였습니다.`;
+  }
+  return `${raw}: ${strikes}S ${balls}B\n남은 기회: ${9 - game.attempts}번`;
+}
+
+function fastFinger(db, user, text) {
+  if (!user.room) return "선착순은 채팅방에서만 사용할 수 있습니다.";
+  touchRoom(db, user.room);
+  const room = db.rooms[user.room];
+  const raw = text.replace(/^(\/?선착순|\/fast)\s*/i, "").trim();
+  const [mode, ...rest] = raw.split(/\s+/).filter(Boolean);
+
+  if (["종료", "끝", "stop"].includes(mode)) {
+    room.fastFinger = null;
+    return "선착순 게임을 종료했습니다.";
+  }
+
+  if (["시작", "start"].includes(mode)) {
+    const answer = rest.join(" ");
+    if (!answer) return "사용법: /선착순 시작 단어";
+    room.fastFinger = { answer, starterId: user.id, createdAt: nowIso() };
+    return [`선착순 시작!`, `제시어: ${answer}`, `가장 먼저 /선착순 ${answer} 입력하면 승리`].join("\n");
+  }
+
+  if (!room.fastFinger) return "진행 중인 선착순 게임이 없습니다.\n/선착순 시작 단어";
+  if (!raw) return `제시어: ${room.fastFinger.answer}`;
+  if (compactGameAnswer(raw) !== compactGameAnswer(room.fastFinger.answer)) return "오답입니다.";
+
+  const answer = room.fastFinger.answer;
+  room.fastFinger = null;
+  user.gamePlays += 1;
+  user.gameWins += 1;
+  addPoints(db, user, 15, "fast_finger", { answer });
+  return [`선착순 성공! ${user.nickname}님`, `정답: ${answer}`, "+15P", `현재: ${user.points.toLocaleString()}P / LV.${user.level}`].join("\n");
+}
+
+function rpgLevelFor(exp) {
+  return Math.floor(Math.sqrt(Math.max(0, exp) / 45)) + 1;
+}
+
+function ensureRpg(user) {
+  user.rpg ||= {};
+  user.rpg.exp ||= 0;
+  user.rpg.level = rpgLevelFor(user.rpg.exp);
+  user.rpg.maxHp = 100 + (user.rpg.level - 1) * 8;
+  user.rpg.maxEnergy = 100 + (user.rpg.level - 1) * 5;
+  user.rpg.hp ??= user.rpg.maxHp;
+  user.rpg.energy ??= user.rpg.maxEnergy;
+  user.rpg.hp = Math.min(user.rpg.maxHp, Math.max(0, user.rpg.hp));
+  user.rpg.energy = Math.min(user.rpg.maxEnergy, Math.max(0, user.rpg.energy));
+  return user.rpg;
+}
+
+function addInventory(user, key, count = 1) {
+  user.inventory ||= {};
+  user.inventory[key] = (user.inventory[key] || 0) + count;
+}
+
+function addRpgExp(user, exp) {
+  const rpg = ensureRpg(user);
+  const before = rpg.level;
+  rpg.exp += exp;
+  ensureRpg(user);
+  return { before, after: user.rpg.level, leveledUp: user.rpg.level > before };
+}
+
+function cooldownLeft(user, key, durationMs) {
+  const last = user.cooldowns?.[key] || 0;
+  return Math.max(0, Math.ceil((durationMs - (Date.now() - last)) / 1000));
+}
+
+function spendEnergy(user, amount) {
+  const rpg = ensureRpg(user);
+  if (rpg.energy < amount) return false;
+  rpg.energy -= amount;
+  return true;
+}
+
+function pickWeighted(rows) {
+  const total = rows.reduce((sum, row) => sum + row.weight, 0);
+  let roll = randomInt(1, total);
+  return rows.find((row) => {
+    roll -= row.weight;
+    return roll <= 0;
+  }) || rows[0];
+}
+
+function rpgHelpText() {
+  return [
+    "픽셀곰 RPG",
+    "/캐릭터 - 내 RPG 상태",
+    "/낚시 - 물고기/보물 낚기",
+    "/채집 - 허브/꿀열매/별조각 수집",
+    "/탐험 - 곰숲 랜덤 이벤트",
+    "/사냥 - 몬스터와 전투",
+    "/던전 - 큰 보상 도전",
+    "/휴식 - HP/기력 회복",
+    "/가방 - 얻은 아이템 확인"
+  ].join("\n");
+}
+
+function rpgProfile(user) {
+  const rpg = ensureRpg(user);
+  return [
+    `${user.nickname}님의 픽셀곰 RPG`,
+    `RPG LV.${rpg.level} / EXP ${rpg.exp.toLocaleString()}`,
+    `HP ${rpg.hp}/${rpg.maxHp}`,
+    `기력 ${rpg.energy}/${rpg.maxEnergy}`,
+    `포인트 ${user.points.toLocaleString()}P`,
+    `게임 ${user.gameWins.toLocaleString()}승 / ${user.gamePlays.toLocaleString()}회`,
+    "명령어: /낚시 /채집 /탐험 /사냥 /던전 /휴식"
+  ].join("\n");
+}
+
+function formatRpgResult(title, user, rows, levelResult = null) {
+  const rpg = ensureRpg(user);
+  const lines = [title, ...rows, `RPG LV.${rpg.level} / HP ${rpg.hp}/${rpg.maxHp} / 기력 ${rpg.energy}/${rpg.maxEnergy}`, `포인트 ${user.points.toLocaleString()}P`];
+  if (levelResult?.leveledUp) lines.splice(1, 0, `RPG 레벨업! LV.${levelResult.before} -> LV.${levelResult.after}`);
+  return lines.join("\n");
+}
+
+function fishing(db, user) {
+  const left = cooldownLeft(user, "fishing", COOLDOWNS.fishingMs);
+  if (left > 0) return `낚시는 ${left}초 뒤에 다시 가능합니다.`;
+  if (!spendEnergy(user, 8)) return "기력이 부족합니다.\n/휴식 으로 회복하세요.";
+
+  user.cooldowns.fishing = Date.now();
+  user.gamePlays += 1;
+  const result = pickWeighted([
+    { label: "은빛 송사리", key: "silver_minnow", points: 5, exp: 8, weight: 34 },
+    { label: "별빛 잉어", key: "star_carp", points: 12, exp: 14, weight: 25 },
+    { label: "황금 연어", key: "gold_salmon", points: 25, exp: 25, weight: 14 },
+    { label: "달빛 고래 조각", key: "moon_whale_shard", points: 60, exp: 55, weight: 4 },
+    { label: "젖은 장화", key: "wet_boot", points: 0, exp: 3, weight: 12 },
+    { label: "빈 낚싯줄", key: "", points: 0, exp: 1, weight: 11 }
+  ]);
+
+  if (result.key) addInventory(user, result.key);
+  if (result.points) addPoints(db, user, result.points, "fishing", { item: result.label });
+  if (result.points > 0) user.gameWins += 1;
+  const level = addRpgExp(user, result.exp);
+  return formatRpgResult("픽셀곰 낚시", user, [`획득: ${result.label}`, `+${result.points}P / +${result.exp}EXP`], level);
+}
+
+function gathering(db, user) {
+  const left = cooldownLeft(user, "gather", COOLDOWNS.gatherMs);
+  if (left > 0) return `채집은 ${left}초 뒤에 다시 가능합니다.`;
+  if (!spendEnergy(user, 6)) return "기력이 부족합니다.\n/휴식 으로 회복하세요.";
+
+  user.cooldowns.gather = Date.now();
+  user.gamePlays += 1;
+  const result = pickWeighted([
+    { label: "허브", key: "herb", points: 4, exp: 7, weight: 34 },
+    { label: "꿀열매", key: "honey_berry", points: 8, exp: 11, weight: 25 },
+    { label: "반짝 버섯", key: "glow_mushroom", points: 15, exp: 18, weight: 18 },
+    { label: "별조각", key: "star_piece", points: 25, exp: 26, weight: 8 },
+    { label: "마른 나뭇가지", key: "dry_branch", points: 1, exp: 3, weight: 15 }
+  ]);
+
+  addInventory(user, result.key);
+  addPoints(db, user, result.points, "gathering", { item: result.label });
+  user.gameWins += 1;
+  const level = addRpgExp(user, result.exp);
+  return formatRpgResult("픽셀곰 채집", user, [`획득: ${result.label}`, `+${result.points}P / +${result.exp}EXP`], level);
+}
+
+function adventure(db, user) {
+  const left = cooldownLeft(user, "adventure", COOLDOWNS.adventureMs);
+  if (left > 0) return `탐험은 ${left}초 뒤에 다시 가능합니다.`;
+  if (!spendEnergy(user, 10)) return "기력이 부족합니다.\n/휴식 으로 회복하세요.";
+
+  const rpg = ensureRpg(user);
+  user.cooldowns.adventure = Date.now();
+  user.gamePlays += 1;
+  const event = pickWeighted([
+    { text: "곰숲 샘물을 발견했습니다.", points: 8, exp: 12, hp: 15, energy: 10, item: "spring_water", weight: 24 },
+    { text: "숨겨진 꿀단지를 찾았습니다.", points: 18, exp: 18, item: "honey_pot", weight: 20 },
+    { text: "반짝이는 발자국을 따라갔습니다.", points: 12, exp: 25, item: "bear_mark", weight: 18 },
+    { text: "가시덤불에 긁혔습니다.", points: 0, exp: 7, hp: -12, weight: 16 },
+    { text: "길을 잃었지만 경험을 얻었습니다.", points: 0, exp: 16, energy: -5, weight: 14 },
+    { text: "작은 보물상자를 발견했습니다.", points: 35, exp: 30, item: "tiny_treasure", weight: 8 }
+  ]);
+
+  if (event.item) addInventory(user, event.item);
+  if (event.points) addPoints(db, user, event.points, "adventure", { event: event.text });
+  if (event.points > 0) user.gameWins += 1;
+  rpg.hp = Math.min(rpg.maxHp, Math.max(0, rpg.hp + (event.hp || 0)));
+  rpg.energy = Math.min(rpg.maxEnergy, Math.max(0, rpg.energy + (event.energy || 0)));
+  const level = addRpgExp(user, event.exp);
+  return formatRpgResult("픽셀곰 탐험", user, [event.text, `+${event.points}P / +${event.exp}EXP`], level);
+}
+
+function hunt(db, user) {
+  const left = cooldownLeft(user, "hunt", COOLDOWNS.huntMs);
+  if (left > 0) return `사냥은 ${left}초 뒤에 다시 가능합니다.`;
+  const rpg = ensureRpg(user);
+  if (rpg.hp < 20) return "HP가 낮아서 사냥할 수 없습니다.\n/휴식 으로 회복하세요.";
+  if (!spendEnergy(user, 12)) return "기력이 부족합니다.\n/휴식 으로 회복하세요.";
+
+  user.cooldowns.hunt = Date.now();
+  user.gamePlays += 1;
+  const monster = pickWeighted([
+    { name: "장난꾸러기 슬라임", difficulty: 1, points: 12, exp: 18, damage: 8, item: "slime_jelly", weight: 34 },
+    { name: "숲 그림자", difficulty: 2, points: 22, exp: 30, damage: 15, item: "shadow_leaf", weight: 26 },
+    { name: "꿀도둑 멧돼지", difficulty: 3, points: 35, exp: 45, damage: 24, item: "wild_tusk", weight: 18 },
+    { name: "별빛 골렘", difficulty: 4, points: 60, exp: 70, damage: 35, item: "golem_core", weight: 8 }
+  ]);
+  const winChance = Math.min(85, 55 + rpg.level * 5 - monster.difficulty * 6);
+  const won = randomInt(1, 100) <= winChance;
+
+  if (won) {
+    addInventory(user, monster.item);
+    addPoints(db, user, monster.points, "hunt_win", { monster: monster.name });
+    user.gameWins += 1;
+    const level = addRpgExp(user, monster.exp);
+    return formatRpgResult("픽셀곰 사냥 성공", user, [`상대: ${monster.name}`, `+${monster.points}P / +${monster.exp}EXP`, `획득: ${monster.item}`], level);
+  }
+
+  rpg.hp = Math.max(0, rpg.hp - monster.damage);
+  const level = addRpgExp(user, Math.ceil(monster.exp / 3));
+  return formatRpgResult("픽셀곰 사냥 실패", user, [`상대: ${monster.name}`, `피해: -${monster.damage}HP`, `+${Math.ceil(monster.exp / 3)}EXP`], level);
+}
+
+function dungeon(db, user) {
+  const left = cooldownLeft(user, "dungeon", COOLDOWNS.dungeonMs);
+  if (left > 0) return `던전은 ${left}초 뒤에 다시 가능합니다.`;
+  const rpg = ensureRpg(user);
+  if (rpg.hp < 35) return "HP가 낮아서 던전에 들어갈 수 없습니다.\n/휴식 으로 회복하세요.";
+  if (!spendEnergy(user, 20)) return "기력이 부족합니다.\n/휴식 으로 회복하세요.";
+
+  user.cooldowns.dungeon = Date.now();
+  user.gamePlays += 1;
+  const success = randomInt(1, 100) <= Math.min(78, 42 + rpg.level * 6);
+  if (success) {
+    const points = randomInt(45, 90);
+    const exp = randomInt(70, 120);
+    const item = pickWeighted([
+      { key: "ancient_scale", label: "고대 비늘", weight: 35 },
+      { key: "pixel_relic", label: "픽셀 유물", weight: 25 },
+      { key: "bear_crown", label: "곰왕관 조각", weight: 10 }
+    ]);
+    addInventory(user, item.key);
+    addPoints(db, user, points, "dungeon_clear", { item: item.label });
+    user.gameWins += 1;
+    const level = addRpgExp(user, exp);
+    return formatRpgResult("던전 클리어!", user, [`보상: ${item.label}`, `+${points}P / +${exp}EXP`], level);
+  }
+
+  const damage = randomInt(18, 40);
+  rpg.hp = Math.max(0, rpg.hp - damage);
+  const exp = randomInt(20, 40);
+  const level = addRpgExp(user, exp);
+  return formatRpgResult("던전 실패", user, [`피해: -${damage}HP`, `그래도 +${exp}EXP`], level);
+}
+
+function restRpg(user) {
+  const left = cooldownLeft(user, "rest", COOLDOWNS.restMs);
+  if (left > 0) return `휴식은 ${left}초 뒤에 다시 가능합니다.`;
+  const rpg = ensureRpg(user);
+  user.cooldowns.rest = Date.now();
+  rpg.hp = rpg.maxHp;
+  rpg.energy = rpg.maxEnergy;
+  return [`휴식 완료`, `HP ${rpg.hp}/${rpg.maxHp}`, `기력 ${rpg.energy}/${rpg.maxEnergy}`].join("\n");
+}
+
 function rps(db, user, text) {
   const now = Date.now();
   const last = user.cooldowns?.rps || 0;
@@ -1469,7 +1925,27 @@ function inventoryText(user) {
     star_piece: "별조각",
     lucky_ticket: "행운권",
     golden_bear: "황금곰",
-    legend_badge: "전설 배지"
+    legend_badge: "전설 배지",
+    silver_minnow: "은빛 송사리",
+    star_carp: "별빛 잉어",
+    gold_salmon: "황금 연어",
+    moon_whale_shard: "달빛 고래 조각",
+    wet_boot: "젖은 장화",
+    herb: "허브",
+    honey_berry: "꿀열매",
+    glow_mushroom: "반짝 버섯",
+    dry_branch: "마른 나뭇가지",
+    spring_water: "샘물",
+    honey_pot: "꿀단지",
+    bear_mark: "곰 발자국",
+    tiny_treasure: "작은 보물상자",
+    slime_jelly: "슬라임 젤리",
+    shadow_leaf: "그림자 잎",
+    wild_tusk: "멧돼지 엄니",
+    golem_core: "골렘 코어",
+    ancient_scale: "고대 비늘",
+    pixel_relic: "픽셀 유물",
+    bear_crown: "곰왕관 조각"
   };
   const rows = Object.entries(user.inventory || {}).filter(([, count]) => count > 0);
   if (!rows.length) return "가방이 비어 있습니다.\n/뽑기 로 아이템을 얻어보세요.";
@@ -1869,6 +2345,18 @@ async function runCommand(db, user, text, blockNames = []) {
   if (aliasesMatch(commandText, ["/뽑기", "뽑기", "/가챠", "가챠", "/gacha"])) return gacha(db, user);
   if (aliasesMatch(commandText, ["/가방", "가방", "/인벤", "인벤", "/inventory"])) return inventoryText(user);
   if (aliasesMatch(commandText, ["/상점", "상점", "/shop"])) return shopText();
+  if (aliasesMatch(commandText, ["/모험", "모험", "/rpg", "rpg"])) return rpgHelpText();
+  if (aliasesMatch(commandText, ["/캐릭터", "캐릭터", "/내캐릭", "내캐릭", "/character"])) return rpgProfile(user);
+  if (aliasesMatch(commandText, ["/낚시", "낚시", "/fish", "fish"])) return fishing(db, user);
+  if (aliasesMatch(commandText, ["/채집", "채집", "/gather", "gather"])) return gathering(db, user);
+  if (aliasesMatch(commandText, ["/탐험", "탐험", "/adventure", "adventure"])) return adventure(db, user);
+  if (aliasesMatch(commandText, ["/사냥", "사냥", "/hunt", "hunt"])) return hunt(db, user);
+  if (aliasesMatch(commandText, ["/던전", "던전", "/dungeon", "dungeon"])) return dungeon(db, user);
+  if (aliasesMatch(commandText, ["/휴식", "휴식", "/rest", "rest"])) return restRpg(user);
+  if (startsWithAny(commandText, ["/타자게임", "타자게임", "/타자", "타자", "/typing"])) return typingGame(db, user, commandText);
+  if (startsWithAny(commandText, ["/초성퀴즈", "초성퀴즈", "/초성", "초성", "/initial"])) return initialQuiz(db, user, commandText);
+  if (startsWithAny(commandText, ["/숫자야구", "숫자야구", "/야구", "야구", "/baseball"])) return numberBaseball(db, user, commandText);
+  if (startsWithAny(commandText, ["/선착순", "선착순", "/fast"])) return fastFinger(db, user, commandText);
   if (startsWithAny(commandText, ["/업다운", "업다운", "/updown"])) return upDown(db, user, commandText);
   if (startsWithAny(commandText, ["/끝말", "끝말", "/wordchain"])) return wordChain(db, user, commandText);
   if (aliasesMatch(commandText, ["/퀴즈", "퀴즈", "/quiz"])) return quiz(user);
@@ -1918,6 +2406,13 @@ export async function handleChatEvent(payload) {
     "정답",
     "동전",
     "홀짝",
+    "타자게임",
+    "타자",
+    "초성퀴즈",
+    "초성",
+    "숫자야구",
+    "야구",
+    "선착순",
     "업다운",
     "끝말",
     "랜덤",
@@ -1988,6 +2483,16 @@ export async function handleChatEvent(payload) {
     "상자",
     "가방",
     "상점",
+    "모험",
+    "rpg",
+    "캐릭터",
+    "내캐릭",
+    "낚시",
+    "채집",
+    "탐험",
+    "사냥",
+    "던전",
+    "휴식",
     "퀴즈",
     "운세",
     "연애운",

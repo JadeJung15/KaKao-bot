@@ -82,11 +82,11 @@ const chatRank = await chat("/채팅순위", sender);
 assert.match(chatRank.reply, /채팅 순위|민지/);
 
 const intro = await chat("/봇소개", sender);
-assert.match(intro.reply, /방 활동 기록 봇/);
+assert.match(intro.reply, /텍스트 RPG 봇/);
 const mentionIntro = await chat("픽셀곰 로봇이야?", sender);
-assert.match(mentionIntro.reply, /방 활동 기록 봇/);
+assert.match(mentionIntro.reply, /텍스트 RPG 봇/);
 const shortMentionIntro = await chat("픽셀 로봇이야?", sender);
-assert.match(shortMentionIntro.reply, /방 활동 기록 봇/);
+assert.match(shortMentionIntro.reply, /텍스트 RPG 봇/);
 const echoedIntro = await chat("픽셀곰은 방 활동 기록 봇입니다.", sender);
 assert.equal(echoedIntro.reply, null);
 const selfMessage = await chat("픽셀곰은 방 활동 기록 봇입니다.", "픽셀");
@@ -148,6 +148,50 @@ assert.match(roulette.reply, /룰렛 결과/);
 const luckyBoxUser = `${sender}-box`;
 const luckyBox = await chat("/행운상자", luckyBoxUser);
 assert.match(luckyBox.reply, /행운상자/);
+
+const gameHelp = await chat("/게임", `${sender}-game-help`);
+assert.match(gameHelp.reply, /픽셀곰 게임센터|낚시/);
+const rpgHelp = await chat("/모험", `${sender}-rpg-help`);
+assert.match(rpgHelp.reply, /픽셀곰 RPG/);
+const character = await chat("/캐릭터", `${sender}-character`);
+assert.match(character.reply, /RPG LV/);
+const fishing = await chat("/낚시", `${sender}-fish`);
+assert.match(fishing.reply, /픽셀곰 낚시/);
+const gathering = await chat("/채집", `${sender}-gather`);
+assert.match(gathering.reply, /픽셀곰 채집/);
+const adventure = await chat("/탐험", `${sender}-adventure`);
+assert.match(adventure.reply, /픽셀곰 탐험/);
+const huntGame = await chat("/사냥", `${sender}-hunt`);
+assert.match(huntGame.reply, /픽셀곰 사냥/);
+const dungeonGame = await chat("/던전", `${sender}-dungeon`);
+assert.match(dungeonGame.reply, /던전/);
+const restGame = await chat("/휴식", `${sender}-rest`);
+assert.match(restGame.reply, /휴식 완료/);
+
+const typingGameUser = `${sender}-typing-game`;
+const typingStart = await chat("/타자", typingGameUser);
+assert.match(typingStart.reply, /타자게임 시작/);
+const typingPrompt = typingStart.reply.split("\n")[3];
+const typingDone = await chat(`/타자 ${typingPrompt}`, typingGameUser);
+assert.match(typingDone.reply, /타자 성공/);
+
+const initialUser = `${sender}-initial`;
+const initialStart = await chat("/초성", initialUser);
+assert.match(initialStart.reply, /초성퀴즈/);
+const initialWrong = await chat("/초성 오답", initialUser);
+assert.match(initialWrong.reply, /오답|정답/);
+
+const baseballUser = `${sender}-baseball`;
+const baseballStart = await chat("/야구", baseballUser);
+assert.match(baseballStart.reply, /숫자야구 시작/);
+const baseballGuess = await chat("/야구 123", baseballUser);
+assert.match(baseballGuess.reply, /S|정답|실패/);
+
+const fastRoom = `선착순방-${Date.now()}`;
+const fastStart = await chat("/선착순 시작 꿀단지", `${sender}-fast-host`, fastRoom);
+assert.match(fastStart.reply, /선착순 시작/);
+const fastWin = await chat("/선착순 꿀단지", `${sender}-fast-player`, fastRoom);
+assert.match(fastWin.reply, /선착순 성공/);
 
 const gachaUser = `${sender}-gacha`;
 await chat("/출석", gachaUser);
