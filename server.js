@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.3";
+export const APP_VERSION = "0.4.4";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -824,9 +824,6 @@ function adminListCommand(roomState) {
 }
 
 function recentEventsCommand(roomState, sender, text) {
-  const denied = requireAdmin(roomState, sender);
-  if (denied) return denied;
-
   const count = Math.min(20, Math.max(1, Number(text.match(/\d+/)?.[0] || 10)));
   const events = (roomState.rawEvents || []).slice(-count);
   if (!events.length) return "최근 원본 이벤트가 없습니다.";
@@ -847,7 +844,7 @@ function recentEventsCommand(roomState, sender, text) {
     if (candidateText) lines.push(`• id 후보 : ${candidateText}`);
     lines.push("");
   });
-  lines.push("원본 JSON은 /원본로그 로 확인하세요.");
+  lines.push("원본 JSON 확인은 관리자 전용 /원본로그 를 사용하세요.");
   return lines.join("\n").trim();
 }
 

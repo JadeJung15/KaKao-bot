@@ -161,11 +161,14 @@ try {
   assert.match(uniqueReentry.json.reply, /고유대상 남/);
   assert.match(uniqueReentry.json.reply, /바뀐대상 남/);
 
-  const recentEvents = await chat("/최근이벤트 5", "관리자", "고유값방");
+  const recentEvents = await chat("/최근이벤트 5", "일반사용자", "고유값방");
   assert.match(recentEvents.json.reply, /targetUserId : openchat-user-1/);
   assert.match(recentEvents.json.reply, /id 후보/);
 
-  const rawLog = await chat("/원본로그 3", "관리자", "고유값방");
+  const rawLogDenied = await chat("/원본로그 3", "일반사용자", "고유값방");
+  assert.match(rawLogDenied.json.reply, /관리자 전용/);
+
+  const rawLog = await chat("/원본로그 4", "관리자", "고유값방");
   assert.match(rawLog.json.reply, /원본 이벤트 로그/);
   assert.match(rawLog.json.reply, /targetUserId/);
 
