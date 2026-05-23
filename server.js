@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.13";
+export const APP_VERSION = "0.4.15";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -1166,23 +1166,24 @@ function firstChatReentryNotice(roomState, person, sender) {
   });
   if (isCandidate) {
     return [
-      "【 첫 채팅 기준 재입장 후보 】",
+      "【 닉네임 변경 후보 / 첫 채팅 기준 재입장 후보 】",
       "",
       `현재닉 : ${currentName}`,
       `이전닉 후보 : ${formatNameCandidates(previousNames)}`,
       "",
       "같은 고유값의 이전 활동 기록을 찾았습니다.",
+      "닉네임 변경 또는 재입장일 수 있습니다.",
       "브릿지 고유값이 여러 사람에게 겹칠 수 있어 후보로 표시합니다."
     ].join("\n");
   }
 
   return [
-    "【 첫 채팅 기준 재입장 감지 】",
+    "【 닉네임 변경 / 첫 채팅 기준 재입장 감지 】",
     "",
-    `현재닉 : ${currentName}`,
     `이전닉 : ${previousNames.join(", ")}`,
+    `현재닉 : ${currentName}`,
     "",
-    "같은 고유값의 이전 활동 기록을 찾았습니다."
+    "같은 고유값으로 닉네임 변경 또는 재입장을 감지했습니다."
   ].join("\n");
 }
 
@@ -1658,7 +1659,6 @@ export function healthPayload() {
     mode: "operations",
     storage: process.env.DATABASE_URL ? "postgres" : "local-json",
     gamesEnabled: false,
-    benchmark: "https://laggobot.com/",
     features: FEATURES
   };
 }
@@ -1670,7 +1670,6 @@ function helpText() {
     "기본",
     "/상태 - 서버 연결 상태 확인",
     "/도움말 - 현재 명령어 확인",
-    "/벤치마크 - 참고 방향 확인",
     "",
     "운영",
     "/공질 - 공식질문 양식",
@@ -1715,27 +1714,6 @@ function helpText() {
   ].join("\n");
 }
 
-function benchmarkText() {
-  return [
-    "벤치마크: 라꼬봇",
-    "https://laggobot.com/",
-    "",
-    "현재 반영 방향",
-    "- 프로필/별명 DB",
-    "- 입장/퇴장/재입장 기록",
-    "- 닉네임 변경 기록",
-    "- 메시지함",
-    "- 관리자 전용 운영 명령어",
-    "- 포인트/좋아요/출석/순위",
-    "- 공질/방 링크 운영 명령어",
-    "",
-    "제외 범위",
-    "- 게임",
-    "- 아이템/상점",
-    "- RPG/레벨 경쟁"
-  ].join("\n");
-}
-
 function kakaoText(text) {
   return {
     version: "2.0",
@@ -1753,7 +1731,6 @@ async function handleCommand(state, room, sender, message) {
   if (command === "/상태" || command === "/status") return statusText(room);
   if (command === "/로컬상태") return `${DEFAULT_BOT_NAME} 자동응답 스크립트가 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.`;
   if (command === "/도움말" || command === "/help" || command === "/?") return helpText();
-  if (command === "/벤치마크" || command === "/benchmark") return benchmarkText();
   if (command === "/공질") return PROFILE_FORM;
   if (["/건의방", "/얼공방", "/무한성"].includes(command)) return linkCommand(roomState, command);
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);

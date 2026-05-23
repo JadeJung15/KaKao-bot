@@ -62,6 +62,7 @@ try {
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
   assert.equal(health.json.gamesEnabled, false);
+  assert.equal(Object.hasOwn(health.json, "benchmark"), false);
   assert.match(health.json.features.join(","), /profile-registry/);
   assert.match(health.json.features.join(","), /message-inbox/);
   assert.match(health.json.features.join(","), /detailed-member-history/);
@@ -105,6 +106,7 @@ try {
   assert.match(help.json.template.outputs[0].simpleText.text, /좋아요/);
   assert.match(help.json.template.outputs[0].simpleText.text, /이체/);
   assert.match(help.json.template.outputs[0].simpleText.text, /출석/);
+  assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /벤치마크|laggobot|라꼬봇/i);
   assert.match(help.json.template.outputs[0].simpleText.text, /게임.*사용하지 않습니다/);
 
   const form = await chat("/공질", "관리자");
@@ -250,6 +252,7 @@ try {
     sender: "첫채팅현재닉 남",
     profileHash: "first-chat-reentry-hash-1"
   });
+  assert.match(firstChatReentry.json.reply, /닉네임 변경/);
   assert.match(firstChatReentry.json.reply, /첫 채팅 기준 재입장 감지/);
   assert.match(firstChatReentry.json.reply, /현재닉 : 첫채팅현재닉 남/);
   assert.match(firstChatReentry.json.reply, /이전닉 : 첫채팅예전닉 남/);
@@ -280,6 +283,7 @@ try {
     sender: "충돌셋닉 남",
     profileHash: "collision-prone-hash-1"
   });
+  assert.match(collisionProneChat.json.reply, /닉네임 변경 후보/);
   assert.match(collisionProneChat.json.reply, /첫 채팅 기준 재입장 후보/);
   assert.match(collisionProneChat.json.reply, /현재닉 : 충돌셋닉 남/);
   assert.match(collisionProneChat.json.reply, /이전닉 후보 : 충돌첫닉 남, 충돌둘닉 남/);
