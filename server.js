@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.15";
+export const APP_VERSION = "0.4.16";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -1186,47 +1186,69 @@ function grantExpAndLevel(person, expAmount) {
   return notices;
 }
 
-function formatNameCandidates(names, limit = 6) {
-  const visibleNames = names.slice(0, limit);
-  const hiddenCount = names.length - visibleNames.length;
-  return hiddenCount > 0 ? `${visibleNames.join(", ")} 외 ${hiddenCount}개` : visibleNames.join(", ");
+function recentPreviousIdentityName(roomState, identityId, currentName) {
+  const targetId = normalizeIdentityId(identityId);
+  const currentKey = keyFor(currentName);
+  if (!targetId || !currentKey) return "";
+
+  const events = roomState.rawEvents || [];
+  for (let index = events.length - 2; index >= 0; index -= 1) {
+    const event = events[index];
+    const identity = event.identity || {};
+    if (!identityIds(identity).includes(targetId)) continue;
+
+    const names = uniqueNames([
+      normalizeIdentityId(identity.senderId) === targetId ? event.sender : "",
+      normalizeIdentityId(identity.targetUserId) === targetId ? event.eventName : ""
+    ]).filter((name) => keyFor(name) !== currentKey);
+
+    if (names.length) return names[0];
+  }
+  return "";
 }
 
-function firstChatReentryNotice(roomState, person, sender) {
+function firstChatReentryNotice(roomState, person, sender, identityId = "") {
   const currentName = stripKakaoSuffix(sender);
   const currentKey = keyFor(currentName);
+  const recentPreviousName = recentPreviousIdentityName(roomState, identityId, currentName);
   const previousNames = uniqueNames([...(person.names || []), person.currentName])
     .filter((name) => keyFor(name) !== currentKey);
-  if (!currentName || !previousNames.length) return null;
+  const orderedPreviousNames = uniqueNames([recentPreviousName, ...previousNames]);
+  if (!currentName || !orderedPreviousNames.length) return null;
 
   person.firstChatReentryNotices ||= [];
   if (person.firstChatReentryNotices.includes(currentKey)) return null;
   person.firstChatReentryNotices.push(currentKey);
   if (person.firstChatReentryNotices.length > 30) person.firstChatReentryNotices = person.firstChatReentryNotices.slice(-30);
 
-  const isCandidate = previousNames.length > 1;
+  const isCandidate = orderedPreviousNames.length > 1;
+  const otherCandidateCount = Math.max(0, orderedPreviousNames.length - 1);
   recordRoomEvent(roomState, {
     type: isCandidate ? "first_chat_reentry_candidate_notice" : "first_chat_reentry_notice",
     name: currentName,
-    previousNames
+    previousNames: orderedPreviousNames
   });
   if (isCandidate) {
-    return [
+    const lines = [
       "【 닉네임 변경 후보 / 첫 채팅 기준 재입장 후보 】",
       "",
-      `현재닉 : ${currentName}`,
-      `이전닉 후보 : ${formatNameCandidates(previousNames)}`,
+      `직전닉 후보 : ${orderedPreviousNames[0]}`,
+      `현재닉 : ${currentName}`
+    ];
+    if (otherCandidateCount > 0) lines.push(`다른 고유값 후보 : ${otherCandidateCount}개`);
+    lines.push(
       "",
       "같은 고유값의 이전 활동 기록을 찾았습니다.",
       "닉네임 변경 또는 재입장일 수 있습니다.",
       "브릿지 고유값이 여러 사람에게 겹칠 수 있어 후보로 표시합니다."
-    ].join("\n");
+    );
+    return lines.join("\n");
   }
 
   return [
     "【 닉네임 변경 / 첫 채팅 기준 재입장 감지 】",
     "",
-    `이전닉 : ${previousNames.join(", ")}`,
+    `이전닉 : ${orderedPreviousNames[0]}`,
     `현재닉 : ${currentName}`,
     "",
     "같은 고유값으로 닉네임 변경 또는 재입장을 감지했습니다."
@@ -1236,7 +1258,7 @@ function firstChatReentryNotice(roomState, person, sender) {
 function recordActivity(roomState, sender, identityId = "", options = {}) {
   const person = ensurePerson(roomState, sender, identityId);
   if (!person) return null;
-  const reentryNotice = options.firstChatNotice ? firstChatReentryNotice(roomState, person, sender) : null;
+  const reentryNotice = options.firstChatNotice ? firstChatReentryNotice(roomState, person, sender, identityId) : null;
   const dateKey = kstDateKey();
   const weekKey = kstWeekKey();
   person.lastSeenAt = nowIso();
