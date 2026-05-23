@@ -52,7 +52,12 @@ async function chatPayload(payload) {
   return request("/chat-event", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      isGroupChat: true,
+      rawIsGroupChat: true,
+      packageName: "com.kakao.talk",
+      ...payload
+    })
   });
 }
 
@@ -133,6 +138,28 @@ try {
   const removedProfileForm = await chat("/공질", "관리자");
   assert.equal(removedProfileForm.response.status, 200);
   assert.match(removedProfileForm.json.reply, /등록되지 않은 명령어/);
+
+  const privateChat = await chatPayload({
+    room: "개인차단방",
+    msg: "개인 대화는 기록되면 안 됨",
+    sender: "미정",
+    isGroupChat: false,
+    rawIsGroupChat: false,
+    isMultiChat: false
+  });
+  assert.equal(privateChat.json.ignored, true);
+  assert.equal(privateChat.json.reason, "non_group_chat");
+
+  const privateRank = await chat("/채팅오늘", "관리자", "개인차단방");
+  assert.doesNotMatch(privateRank.json.reply, /미정/);
+
+  await chatPayload({
+    room: "예약이름차단방",
+    msg: "예약 이름은 순위에 노출되면 안 됨",
+    sender: "미정"
+  });
+  const reservedRank = await chat("/채팅오늘", "관리자", "예약이름차단방");
+  assert.doesNotMatch(reservedRank.json.reply, /미정/);
 
   const unsafeAdminRegister = await chat("/관리자등록 침입자", "침입자", "관리자보안방");
   assert.match(unsafeAdminRegister.json.reply, /초기 관리자는 환경변수/);

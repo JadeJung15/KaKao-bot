@@ -27,7 +27,6 @@ function effectiveRoom(room) {
 }
 
 function effectiveGroupFlag(message) {
-  if (String(ROOM_NAME_OVERRIDE || "").trim()) return true;
   return Boolean(message.isGroupChat);
 }
 
@@ -108,6 +107,8 @@ function onMessage(message) {
       ].join("\n"));
       return;
     }
+
+    if (!isGroupChat) return;
 
     const raw = postJson(BOT_SERVER, {
       room: room,

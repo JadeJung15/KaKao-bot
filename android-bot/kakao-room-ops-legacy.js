@@ -25,7 +25,6 @@ function effectiveRoom(room) {
 }
 
 function effectiveGroupFlag(isGroupChat, isMultiChat) {
-  if (String(ROOM_NAME_OVERRIDE || "").trim()) return true;
   return Boolean(isGroupChat || isMultiChat);
 }
 
@@ -103,6 +102,8 @@ function response(room, msg, sender, isGroupChat, replier, imageDB, packageName,
       ].join("\n"));
       return;
     }
+
+    if (!sendIsGroupChat) return;
 
     var raw = postJson(BOT_SERVER, {
       room: sendRoom,

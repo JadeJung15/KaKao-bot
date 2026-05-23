@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.28";
+export const APP_VERSION = "0.4.29";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -59,6 +59,7 @@ export const FEATURES = [
   "identity-scoped-recent-events",
   "first-chat-reentry-notice",
   "room-safe-bridge-defaults",
+  "private-chat-guard",
   "no-games"
 ];
 
@@ -369,6 +370,21 @@ function personKey(name) {
   return keyFor(stripKakaoSuffix(name));
 }
 
+const RESERVED_PERSON_KEYS = new Set([
+  "미정",
+  "익명",
+  "unknown",
+  "unknown user",
+  "anonymous",
+  "undefined",
+  "null"
+].map(keyFor));
+
+function isReservedPersonName(name) {
+  const key = personKey(name);
+  return !key || RESERVED_PERSON_KEYS.has(key);
+}
+
 function stripKakaoSuffix(name) {
   return normalizeText(name)
     .replace(/님$/, "")
@@ -604,6 +620,32 @@ function payloadValue(payload, paths) {
     if (normalized) return normalized;
   }
   return "";
+}
+
+function booleanPayloadValue(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return null;
+  if (["true", "1", "yes", "y", "group", "multi", "openchat", "open_chat"].includes(text)) return true;
+  if (["false", "0", "no", "n", "private", "direct", "dm", "personal", "one_to_one"].includes(text)) return false;
+  return null;
+}
+
+function isGroupChatPayload(payload = {}) {
+  const rawGroup = booleanPayloadValue(payload.rawIsGroupChat);
+  const rawMulti = booleanPayloadValue(payload.rawIsMultiChat ?? payload.isMultiChat);
+  if (rawGroup === true || rawMulti === true) return true;
+  if (rawGroup === false || rawMulti === false) return false;
+
+  const group = booleanPayloadValue(payload.isGroupChat);
+  if (group !== null) return group;
+
+  const chatType = String(payload.chatType || payload.roomType || "").trim().toLowerCase();
+  if (/(group|multi|open)/.test(chatType)) return true;
+  if (/(private|direct|dm|personal|one)/.test(chatType)) return false;
+
+  return false;
 }
 
 function collectPayloadIds(value, basePath = "", depth = 0, results = []) {
@@ -1693,7 +1735,7 @@ function rankedPeople(roomState, scoreFn) {
       normalizePersonState(person);
       return { key, person, score: scoreFn(person) };
     })
-    .filter((item) => item.score > 0)
+    .filter((item) => item.score > 0 && !isReservedPersonName(item.person.currentName))
     .sort((a, b) => b.score - a.score || keyFor(a.person.currentName).localeCompare(keyFor(b.person.currentName)));
 }
 
@@ -2164,6 +2206,9 @@ export async function handleChatEvent(payload) {
   const sender = normalizeText(payload?.sender) || "익명";
   const event = payloadSystemEvent(payload, message);
   const identity = payloadIdentity(payload);
+  if (!isGroupChatPayload(payload)) {
+    return { ok: true, reply: null, ignored: true, reason: "non_group_chat" };
+  }
   const state = await loadState();
   const roomState = ensureRoom(state, room);
   recordRawEvent(roomState, payload, { room, sender, message, event });
