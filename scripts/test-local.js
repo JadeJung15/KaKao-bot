@@ -317,6 +317,33 @@ try {
   assert.doesNotMatch(collisionProneChat.json.reply, /고유값|후보|재입장/);
 
   await chatPayload({
+    room: "공유해시오탐방",
+    msg: "미정 첫 활동",
+    sender: "미정",
+    profileHash: "shared-profile-hash-1"
+  });
+  await chatPayload({
+    room: "공유해시오탐방",
+    msg: "두팔 독립 활동",
+    sender: "두팔"
+  });
+  const sharedHashFalseRename = await chatPayload({
+    room: "공유해시오탐방",
+    msg: "트ㅋㅋㅋㅋㅋㅋ",
+    sender: "두팔",
+    profileHash: "shared-profile-hash-1"
+  });
+  assert.equal(sharedHashFalseRename.json.reply, null);
+
+  const sharedHashFlipFlop = await chatPayload({
+    room: "공유해시오탐방",
+    msg: "엥?",
+    sender: "미정",
+    profileHash: "shared-profile-hash-1"
+  });
+  assert.equal(sharedHashFlipFlop.json.reply, null);
+
+  await chatPayload({
     room: "활성사용자방",
     msg: "기존 활동",
     sender: "활성예전닉 남",

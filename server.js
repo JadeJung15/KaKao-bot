@@ -24,12 +24,13 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.21";
+export const APP_VERSION = "0.4.22";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
   "kakao-skill-webhook",
   "role-based-help",
+  "identity-conflict-guard",
   "profile-registry",
   "alias-registry",
   "join-exit-history",
@@ -362,7 +363,8 @@ function ensureRoom(state, room) {
     inbox: {},
     events: [],
     rawEvents: [],
-    peopleByIdentity: {}
+    peopleByIdentity: {},
+    ambiguousIdentities: []
   };
   const roomState = state.rooms[key];
   roomState.name ||= roomTitle(room);
@@ -375,6 +377,7 @@ function ensureRoom(state, room) {
   roomState.events ||= [];
   roomState.rawEvents ||= [];
   roomState.peopleByIdentity ||= {};
+  roomState.ambiguousIdentities ||= [];
   for (const person of Object.values(roomState.people)) normalizePersonState(person);
   return roomState;
 }
@@ -398,8 +401,58 @@ function normalizeIdentityId(value) {
 
 function identityPersonKey(roomState, identityId) {
   const id = normalizeIdentityId(identityId);
+  if (isAmbiguousIdentity(roomState, id)) return "";
   const key = id ? roomState.peopleByIdentity?.[id] : "";
   return key && roomState.people?.[key] ? key : "";
+}
+
+function isAmbiguousIdentity(roomState, identityId) {
+  const id = normalizeIdentityId(identityId);
+  return Boolean(id && roomState.ambiguousIdentities?.includes(id));
+}
+
+function markAmbiguousIdentity(roomState, identityId) {
+  const id = normalizeIdentityId(identityId);
+  if (!id) return;
+  roomState.ambiguousIdentities ||= [];
+  addUnique(roomState.ambiguousIdentities, id);
+  if (roomState.peopleByIdentity) delete roomState.peopleByIdentity[id];
+  for (const person of Object.values(roomState.people || {})) {
+    person.identities = (person.identities || []).filter((value) => normalizeIdentityId(value) !== id);
+  }
+}
+
+function identityNamesForEvent(event, identityId) {
+  const id = normalizeIdentityId(identityId);
+  if (!id) return [];
+  const identity = event?.identity || {};
+  return uniqueNames([
+    normalizeIdentityId(identity.senderId) === id ? event.sender : "",
+    normalizeIdentityId(identity.targetUserId) === id ? event.eventName : ""
+  ]);
+}
+
+function identityLooksShared(roomState, identityId, currentName) {
+  const id = normalizeIdentityId(identityId);
+  const currentKey = keyFor(currentName);
+  if (!id || !currentKey) return false;
+  if (isAmbiguousIdentity(roomState, id)) return true;
+
+  const sequence = [];
+  for (const event of (roomState.rawEvents || []).slice(-30)) {
+    for (const name of identityNamesForEvent(event, id)) {
+      const nameKey = keyFor(name);
+      if (nameKey && nameKey !== sequence.at(-1)) sequence.push(nameKey);
+    }
+  }
+
+  const lastIndex = sequence.length - 1;
+  if (lastIndex < 0 || sequence[lastIndex] !== currentKey) return false;
+  return sequence.some((nameKey, index) => (
+    index < lastIndex
+    && nameKey === currentKey
+    && sequence.slice(index + 1, lastIndex).some((laterKey) => laterKey !== currentKey)
+  ));
 }
 
 function remapPersonKey(roomState, oldKey, newKey, person) {
@@ -434,8 +487,14 @@ function attachPersonIdentity(roomState, key, person, identityId) {
 
 function ensurePerson(roomState, name, identityId = "") {
   const displayName = stripKakaoSuffix(name);
+  const displayKey = personKey(displayName);
+  if (identityLooksShared(roomState, identityId, displayName)) markAmbiguousIdentity(roomState, identityId);
   const existingKey = identityPersonKey(roomState, identityId);
-  const key = existingKey || personKey(displayName);
+  if (existingKey && displayKey && existingKey !== displayKey && roomState.people[displayKey]) {
+    markAmbiguousIdentity(roomState, identityId);
+  }
+  const trustedIdentityKey = isAmbiguousIdentity(roomState, identityId) ? "" : identityPersonKey(roomState, identityId);
+  const key = trustedIdentityKey || displayKey;
   if (!key) return null;
   roomState.people[key] ||= {
     currentName: displayName,
@@ -465,9 +524,8 @@ function ensurePerson(roomState, name, identityId = "") {
   person.currentName ||= displayName;
   if (displayName) person.currentName = displayName;
   addUnique(person.names, displayName);
-  const displayKey = personKey(displayName);
-  if (existingKey && displayKey && existingKey !== displayKey) remapPersonKey(roomState, existingKey, displayKey, person);
-  attachPersonIdentity(roomState, displayKey || key, person, identityId);
+  if (trustedIdentityKey && displayKey && trustedIdentityKey !== displayKey) remapPersonKey(roomState, trustedIdentityKey, displayKey, person);
+  if (!isAmbiguousIdentity(roomState, identityId)) attachPersonIdentity(roomState, displayKey || key, person, identityId);
   return person;
 }
 
@@ -1205,6 +1263,7 @@ function recentPreviousIdentityName(roomState, identityId, currentName) {
   const targetId = normalizeIdentityId(identityId);
   const currentKey = keyFor(currentName);
   if (!targetId || !currentKey) return "";
+  if (isAmbiguousIdentity(roomState, targetId)) return "";
 
   const events = roomState.rawEvents || [];
   for (let index = events.length - 2; index >= 0; index -= 1) {
@@ -1225,6 +1284,10 @@ function recentPreviousIdentityName(roomState, identityId, currentName) {
 function firstChatReentryNotice(roomState, person, sender, identityId = "") {
   const currentName = stripKakaoSuffix(sender);
   const currentKey = keyFor(currentName);
+  if (identityLooksShared(roomState, identityId, currentName)) {
+    markAmbiguousIdentity(roomState, identityId);
+    return null;
+  }
   const recentPreviousName = recentPreviousIdentityName(roomState, identityId, currentName);
   const previousNames = uniqueNames([...(person.names || []), person.currentName])
     .filter((name) => keyFor(name) !== currentKey);
