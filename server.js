@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.12";
+export const APP_VERSION = "0.4.13";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -1140,20 +1140,42 @@ function grantExpAndLevel(person, expAmount) {
   return notices;
 }
 
+function formatNameCandidates(names, limit = 6) {
+  const visibleNames = names.slice(0, limit);
+  const hiddenCount = names.length - visibleNames.length;
+  return hiddenCount > 0 ? `${visibleNames.join(", ")} 외 ${hiddenCount}개` : visibleNames.join(", ");
+}
+
 function firstChatReentryNotice(roomState, person, sender) {
   const currentName = stripKakaoSuffix(sender);
   const currentKey = keyFor(currentName);
   const previousNames = uniqueNames([...(person.names || []), person.currentName])
     .filter((name) => keyFor(name) !== currentKey);
   if (!currentName || !previousNames.length) return null;
-  if (previousNames.length > 1) return null;
 
   person.firstChatReentryNotices ||= [];
   if (person.firstChatReentryNotices.includes(currentKey)) return null;
   person.firstChatReentryNotices.push(currentKey);
   if (person.firstChatReentryNotices.length > 30) person.firstChatReentryNotices = person.firstChatReentryNotices.slice(-30);
 
-  recordRoomEvent(roomState, { type: "first_chat_reentry_notice", name: currentName, previousNames });
+  const isCandidate = previousNames.length > 1;
+  recordRoomEvent(roomState, {
+    type: isCandidate ? "first_chat_reentry_candidate_notice" : "first_chat_reentry_notice",
+    name: currentName,
+    previousNames
+  });
+  if (isCandidate) {
+    return [
+      "【 첫 채팅 기준 재입장 후보 】",
+      "",
+      `현재닉 : ${currentName}`,
+      `이전닉 후보 : ${formatNameCandidates(previousNames)}`,
+      "",
+      "같은 고유값의 이전 활동 기록을 찾았습니다.",
+      "브릿지 고유값이 여러 사람에게 겹칠 수 있어 후보로 표시합니다."
+    ].join("\n");
+  }
+
   return [
     "【 첫 채팅 기준 재입장 감지 】",
     "",

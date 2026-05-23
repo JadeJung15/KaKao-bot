@@ -280,7 +280,32 @@ try {
     sender: "충돌셋닉 남",
     profileHash: "collision-prone-hash-1"
   });
-  assert.equal(collisionProneChat.json.reply, null);
+  assert.match(collisionProneChat.json.reply, /첫 채팅 기준 재입장 후보/);
+  assert.match(collisionProneChat.json.reply, /현재닉 : 충돌셋닉 남/);
+  assert.match(collisionProneChat.json.reply, /이전닉 후보 : 충돌첫닉 남, 충돌둘닉 남/);
+  assert.match(collisionProneChat.json.reply, /브릿지 고유값이 여러 사람에게 겹칠 수 있어 후보로 표시합니다/);
+
+  await chatPayload({
+    room: "활성사용자방",
+    msg: "기존 활동",
+    sender: "활성예전닉 남",
+    profileHash: "active-user-hash-1"
+  });
+
+  await chatPayload({
+    room: "활성사용자방",
+    msg: "닉 변경 후 첫 안내",
+    sender: "활성현재닉 남",
+    profileHash: "active-user-hash-1"
+  });
+
+  const activeUserNormalChat = await chatPayload({
+    room: "활성사용자방",
+    msg: "그냥 일반 대화",
+    sender: "활성현재닉 남",
+    profileHash: "active-user-hash-1"
+  });
+  assert.equal(activeUserNormalChat.json.reply, null);
 
   await chatPayload({
     room: "원본복구방",
