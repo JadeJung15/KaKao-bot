@@ -4,6 +4,7 @@ node_modules/
 tools/
 data/*.tmp
 data/pixelgom-db.json
+data/room-ops-db.json
 data/test-*.json
 server.out.log
 server.err.log

@@ -8,13 +8,28 @@ async function request(path, options = {}) {
   return { response, json };
 }
 
+async function chat(msg, sender = "사용자", room = "테스트방") {
+  return request("/chat-event", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      room,
+      msg,
+      sender,
+      isGroupChat: true,
+      packageName: "com.kakao.talk"
+    })
+  });
+}
+
 const health = await request("/health");
 assert.equal(health.response.status, 200);
 assert.equal(health.json.ok, true);
 assert.equal(health.json.service, "kakao-room-ops-bot");
 assert.equal(health.json.gamesEnabled, false);
+assert.match(health.json.features.join(","), /profile-registry/);
 
-const skill = await request("/skill", {
+const help = await request("/skill", {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({
@@ -29,58 +44,62 @@ const skill = await request("/skill", {
     }
   })
 });
-assert.equal(skill.response.status, 200);
-assert.match(skill.json.template.outputs[0].simpleText.text, /새 봇 골격/);
-assert.match(skill.json.template.outputs[0].simpleText.text, /게임.*제거/);
+assert.equal(help.response.status, 200);
+assert.match(help.json.template.outputs[0].simpleText.text, /프로필등록/);
+assert.match(help.json.template.outputs[0].simpleText.text, /게임.*사용하지 않습니다/);
 
-const chatStatus = await request("/chat-event", {
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({
-    room: "테스트방",
-    msg: "/상태",
-    sender: "사용자",
-    isGroupChat: true,
-    packageName: "com.kakao.talk"
-  })
-});
-assert.equal(chatStatus.response.status, 200);
-assert.equal(chatStatus.json.ok, true);
-assert.equal(chatStatus.json.handled, true);
-assert.match(chatStatus.json.reply, /서버 정상 연결/);
-assert.match(chatStatus.json.reply, /게임 기능: 사용 안 함/);
+const form = await chat("/공질", "관리자");
+assert.equal(form.response.status, 200);
+assert.match(form.json.reply, /☑닉 \/성별/);
 
-const normalChat = await request("/chat-event", {
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({
-    room: "테스트방",
-    msg: "일반 대화",
-    sender: "사용자",
-    isGroupChat: true,
-    packageName: "com.kakao.talk"
-  })
-});
-assert.equal(normalChat.response.status, 200);
-assert.equal(normalChat.json.ok, true);
+const profileRegister = await chat(`/프로필등록 미미 여 && ☑닉 /성별 : 미미 / 여
+☑MBTI / 키 : 엔프피 / 153
+☑지역 / 기미돌 : 경기 / 기
+☑매력어필 : 작고소듕
+☑썸상 : 크고 건강하신 연하남`, "관리자");
+assert.match(profileRegister.json.reply, /프로필이 등록되었습니다/);
+
+const aliasRegister = await chat("/별명등록 미미 여 미미", "관리자");
+assert.match(aliasRegister.json.reply, /별명이 미미/);
+
+const profileView = await chat("/프로필 미미", "사용자");
+assert.match(profileView.json.reply, /미미 여/);
+assert.match(profileView.json.reply, /엔프피/);
+
+const linkMissing = await chat("/건의방", "사용자");
+assert.match(linkMissing.json.reply, /링크가 아직 등록되지 않았습니다/);
+
+const linkRegister = await chat("/링크등록 건의방 https://open.kakao.com/o/test", "관리자");
+assert.match(linkRegister.json.reply, /링크가 등록/);
+
+const linkView = await chat("/건의방", "사용자");
+assert.match(linkView.json.reply, /https:\/\/open\.kakao\.com\/o\/test/);
+
+const firstEntry = await chat("새친구 남님이 들어왔습니다.타인, 기관 등의 사칭에 유의해 주세요.", "오픈채팅봇");
+assert.match(firstEntry.json.reply, /첫 입장을 환영/);
+
+await chat("새친구 남님이 나갔습니다.", "오픈채팅봇");
+const secondEntry = await chat("새친구 남님이 들어왔습니다.", "오픈채팅봇");
+assert.match(secondEntry.json.reply, /2회 재입장/);
+assert.match(secondEntry.json.reply, /입장 히스토리/);
+assert.match(secondEntry.json.reply, /퇴장 히스토리/);
+
+const nickChange = await chat("새친구 남 ➙ 새이름 남", "오픈채팅봇");
+assert.match(nickChange.json.reply, /닉네임 변경/);
+assert.match(nickChange.json.reply, /새친구 남 ➙ 새이름 남/);
+
+const nickHistory = await chat("/닉이력 새이름", "사용자");
+assert.match(nickHistory.json.reply, /새친구 남/);
+assert.match(nickHistory.json.reply, /새이름 남/);
+
+const normalChat = await chat("일반 대화", "사용자");
 assert.equal(normalChat.json.reply, null);
 assert.equal(normalChat.json.handled, false);
 
-const removedGame = await request("/chat-event", {
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({
-    room: "테스트방",
-    msg: "/낚시",
-    sender: "사용자",
-    isGroupChat: true,
-    packageName: "com.kakao.talk"
-  })
-});
-assert.equal(removedGame.response.status, 200);
+const removedGame = await chat("/낚시", "사용자");
 assert.match(removedGame.json.reply, /아직 등록되지 않은 명령어/);
 
 const chatGet = await request("/chat-event");
 assert.equal(chatGet.response.status, 405);
 
-console.log("Clean bot scaffold tests passed.");
+console.log("Room ops bot tests passed.");
