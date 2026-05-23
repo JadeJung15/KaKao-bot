@@ -92,6 +92,8 @@ try {
   assert.match(health.json.features.join(","), /cross-room-identity-nickname-recovery/);
   assert.match(health.json.features.join(","), /identity-scoped-recent-events/);
   assert.match(health.json.features.join(","), /registered-room-guard/);
+  assert.match(health.json.features.join(","), /system-event-dedupe/);
+  assert.match(health.json.features.join(","), /compact-welcome-text/);
 
   const home = await fetch(`${baseUrl}/`);
   assert.equal(home.status, 200);
@@ -232,7 +234,7 @@ try {
     targetUserId: "openchat-user-1",
     senderId: "openchat-bot"
   });
-  assert.match(uniqueEntry.json.reply, /무잔썸에 와줘서 고마워/);
+  assert.match(uniqueEntry.json.reply, /고유대상 남님 어서오세요/);
 
   await chatPayload({
     room: "고유값방",
@@ -272,7 +274,37 @@ try {
     targetName: "자동대상 남",
     profileHash: "bridge-bot-hash"
   });
-  assert.match(explicitEntry.json.reply, /무잔썸에 와줘서 고마워/);
+  assert.match(explicitEntry.json.reply, /자동대상 남님 어서오세요/);
+  assert.doesNotMatch(explicitEntry.json.reply, /친구들과 함께 즐겁게 소통|좋아요 누르기|프로필작성/);
+
+  const duplicateExplicitEntry = await chatPayload({
+    room: "자동추출방",
+    msg: "브릿지 원문",
+    sender: "오픈채팅봇",
+    eventType: "entered",
+    targetName: "자동대상 남",
+    profileHash: "bridge-bot-hash"
+  });
+  assert.equal(duplicateExplicitEntry.json.reply, null);
+
+  await chatPayload({
+    room: "자동추출방",
+    msg: "브릿지 퇴장 원문",
+    sender: "오픈채팅봇",
+    eventType: "left",
+    targetName: "자동대상 남",
+    profileHash: "bridge-bot-hash"
+  });
+
+  const explicitReentry = await chatPayload({
+    room: "자동추출방",
+    msg: "브릿지 재입장 원문",
+    sender: "오픈채팅봇",
+    eventType: "entered",
+    targetName: "자동대상 남",
+    profileHash: "bridge-bot-hash"
+  });
+  assert.match(explicitReentry.json.reply, /2회 재입장/);
 
   const explicitNickChange = await chatPayload({
     room: "자동추출방",
@@ -641,10 +673,11 @@ try {
   assert.match(emptyInbox.json.reply, /메시지가 없습니다/);
 
   const firstEntry = await chat("새친구 남님이 들어왔습니다.타인, 기관 등의 사칭에 유의해 주세요.", "오픈채팅봇");
-  assert.match(firstEntry.json.reply, /무잔썸에 와줘서 고마워/);
-  assert.match(firstEntry.json.reply, /친구들과 함께 즐겁게 소통/);
-  assert.match(firstEntry.json.reply, /두글자로 해주고 뒤에 성별/);
-  assert.match(firstEntry.json.reply, /프로필작성/);
+  assert.match(firstEntry.json.reply, /새친구 남님 어서오세요/);
+  assert.doesNotMatch(firstEntry.json.reply, /친구들과 함께 즐겁게 소통|두글자로 해주고 뒤에 성별|프로필작성/);
+
+  const duplicateFirstEntry = await chat("새친구 남님이 들어왔습니다.", "오픈채팅봇");
+  assert.equal(duplicateFirstEntry.json.reply, null);
 
   const exitReply = await chat("새친구 남님이 나갔습니다.", "오픈채팅봇");
   assert.match(exitReply.json.reply, /새친구 남님 안녕히 가세요/);
@@ -672,7 +705,7 @@ try {
   assert.match(nickChange.json.reply, /• 새이름 남/);
 
   const kickedFirstEntry = await chat("재입장 남님이 들어왔습니다.", "오픈채팅봇");
-  assert.match(kickedFirstEntry.json.reply, /무잔썸에 와줘서 고마워/);
+  assert.match(kickedFirstEntry.json.reply, /재입장 남님 어서오세요/);
 
   await chat("재입장 남님을 내보냈습니다.", "오픈채팅봇");
 

@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.34";
+export const APP_VERSION = "0.4.35";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -65,7 +65,9 @@ export const FEATURES = [
   "bridge-self-test-commands",
   "entry-reentry-candidate-history",
   "reserved-name-nickname-guard",
-  "reserved-history-cleanup"
+  "reserved-history-cleanup",
+  "system-event-dedupe",
+  "compact-welcome-text"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -81,6 +83,7 @@ const MAX_CHEER_MESSAGE_LENGTH = 80;
 const LUCKY_DRAW_POINT_COST = 100;
 const TRANSFER_FEE_RATE = 0.1;
 const REENTRY_CANDIDATE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const SYSTEM_EVENT_DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
 const LUCKY_DRAW_OUTCOMES = [
   { threshold: 0.05, label: "대박", reward: 500, chance: "5%" },
   { threshold: 0.20, label: "성공", reward: 200, chance: "15%" },
@@ -2001,28 +2004,7 @@ function nicknameHistoryText(person) {
 
 function welcomeText(person, reentryCandidateText = "") {
   const lines = [
-    `♟ ${person.currentName}님 ${ROOM_BRAND_NAME}에 와줘서 고마워♡☃`,
-    "친구들과 함께 즐겁게 소통하는 공간이야 ♡",
-    "",
-    "☻그냥 나가게되면 1년간 썸못탄다ㅋ",
-    "☻지금 나가면 뱃살 다머리~ ☻",
-    "",
-    "♡ 반말로 인사먼저 나눠보자!!",
-    "",
-    "♡ ①좋아요 누르기!!",
-    "♡ 하트는 우리 방에 큰 힘♧",
-    "",
-    "♛ ②대화의 규칙!!",
-    "☞ 두글자로 해주고 뒤에 성별 붙여줘",
-    "",
-    "♚ ③프로필작성!!",
-    "☞ 너의 썸상과 매력을 어필해줘",
-    "☞ 프로필 안내는 운영진 공지를 확인해줘",
-    "",
-    "☻ 자삭은 안돼, 가려야할게 있음 이야기해줘",
-    "빠르게 처리해줄게!",
-    "",
-    `♡ 즐겁게 소통하며, 썸상의 친구들을 알아보고 ${ROOM_BRAND_NAME}에서 썸타보자!!`
+    `${person.currentName}님 어서오세요👀`
   ];
   if (reentryCandidateText) lines.push("", reentryCandidateText);
   return lines.join("\n");
@@ -2146,6 +2128,38 @@ function detectSystemEvent(message) {
   match = text.match(/^(.+?)님이\s+(.+?)\(으\)로\s+닉네임을\s+변경/);
   if (match) return nicknameChangeEvent(match[1], match[2]);
   return null;
+}
+
+function systemEventKey(event) {
+  if (!event?.type) return "";
+  if (["entered", "left", "kicked"].includes(event.type)) {
+    const key = personKey(event.name);
+    return key ? `${event.type}:${key}` : "";
+  }
+  if (event.type === "nickname_changed") {
+    const fromKey = personKey(event.from);
+    const toKey = personKey(event.to);
+    return fromKey && toKey ? `${event.type}:${fromKey}->${toKey}` : "";
+  }
+  return "";
+}
+
+function isDuplicateSystemEvent(roomState, event) {
+  const currentKey = systemEventKey(event);
+  if (!currentKey) return false;
+
+  const events = roomState.events || [];
+  const now = Date.now();
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const previous = events[index];
+    const previousKey = systemEventKey(previous);
+    if (!previousKey) continue;
+
+    const previousAt = new Date(previous.at).getTime();
+    if (!Number.isFinite(previousAt) || now - previousAt > SYSTEM_EVENT_DUPLICATE_WINDOW_MS) return false;
+    return previousKey === currentKey;
+  }
+  return false;
 }
 
 function statusText(room = "") {
@@ -2326,6 +2340,7 @@ async function handleMessage(state, room, sender, message, identity = {}, detect
   const text = normalizeText(message);
   const event = detectedEvent || detectSystemEvent(message);
   const targetIdentity = identity.targetUserId || "";
+  if (isDuplicateSystemEvent(roomState, event)) return null;
   if (event?.type === "entered") return recordEntry(roomState, event.name, targetIdentity);
   if (event?.type === "left") return recordExit(roomState, event.name, "left", targetIdentity);
   if (event?.type === "kicked") return recordExit(roomState, event.name, "kicked", targetIdentity);
