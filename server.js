@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.4";
+export const APP_VERSION = "0.4.5";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -33,6 +33,7 @@ export const FEATURES = [
   "raw-event-log",
   "stable-user-ids",
   "bridge-auto-extract",
+  "identity-nickname-summary",
   "room-links",
   "profile-form",
   "no-games"
@@ -841,11 +842,30 @@ function recentEventsCommand(roomState, sender, text) {
     lines.push(`• event : ${event.eventType || "-"}`);
     lines.push(`• senderId : ${identity.senderId || "없음"}`);
     lines.push(`• targetUserId : ${identity.targetUserId || "없음"}`);
+    const memberText = identityMemberSummary(roomState, identity);
+    if (memberText) lines.push(`• 회원이력 : ${memberText}`);
     if (candidateText) lines.push(`• id 후보 : ${candidateText}`);
     lines.push("");
   });
   lines.push("원본 JSON 확인은 관리자 전용 /원본로그 를 사용하세요.");
   return lines.join("\n").trim();
+}
+
+function identityMemberSummary(roomState, identity = {}) {
+  const ids = [identity.senderId, identity.targetUserId, ...(identity.candidates || []).map((item) => item.value)]
+    .map(normalizeIdentityId)
+    .filter(Boolean);
+  for (const id of ids) {
+    const key = identityPersonKey(roomState, id);
+    const person = key ? roomState.people[key] : null;
+    if (!person) continue;
+    const names = (person.names || []).filter(Boolean);
+    const current = person.currentName || names.at(-1) || "";
+    const previous = names.filter((name) => keyFor(name) !== keyFor(current));
+    if (previous.length) return `${current} (이전닉: ${previous.join(", ")})`;
+    return current;
+  }
+  return "";
 }
 
 function rawLogCommand(roomState, sender, text) {

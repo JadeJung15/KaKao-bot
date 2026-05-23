@@ -73,6 +73,7 @@ try {
   assert.match(health.json.features.join(","), /raw-event-log/);
   assert.match(health.json.features.join(","), /stable-user-ids/);
   assert.match(health.json.features.join(","), /bridge-auto-extract/);
+  assert.match(health.json.features.join(","), /identity-nickname-summary/);
 
   const help = await request("/skill", {
     method: "POST",
@@ -203,6 +204,23 @@ try {
   const autoEvents = await chat("/최근이벤트 5", "관리자", "자동추출방");
   assert.match(autoEvents.json.reply, /event : nickname_changed/);
   assert.match(autoEvents.json.reply, /senderId : profile-hash-user-1/);
+
+  await chatPayload({
+    room: "해시닉변방",
+    msg: "예전 닉네임으로 보낸 채팅",
+    sender: "예전해시닉 남",
+    profileHash: "profile-hash-rename-1"
+  });
+
+  await chatPayload({
+    room: "해시닉변방",
+    msg: "새 닉네임으로 보낸 채팅",
+    sender: "새해시닉 남",
+    profileHash: "profile-hash-rename-1"
+  });
+
+  const hashRenameEvents = await chat("/최근이벤트 5", "일반사용자", "해시닉변방");
+  assert.match(hashRenameEvents.json.reply, /회원이력 : 새해시닉 남 \(이전닉: 예전해시닉 남\)/);
 
   const linkDenied = await chat("/링크등록 얼공방 https://open.kakao.com/o/denied", "사용자");
   assert.match(linkDenied.json.reply, /관리자 전용/);
