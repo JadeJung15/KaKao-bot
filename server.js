@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.7";
+export const APP_VERSION = "0.4.8";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -36,6 +36,7 @@ export const FEATURES = [
   "identity-nickname-summary",
   "raw-identity-nickname-recovery",
   "cross-room-identity-nickname-recovery",
+  "identity-scoped-recent-events",
   "room-links",
   "profile-form",
   "no-games"
@@ -828,10 +829,14 @@ function adminListCommand(roomState) {
 
 function recentEventsCommand(state, roomState, sender, text) {
   const count = Math.min(20, Math.max(1, Number(text.match(/\d+/)?.[0] || 10)));
-  const events = (roomState.rawEvents || []).slice(-count);
+  const roomEvents = roomState.rawEvents || [];
+  const requestIds = identityIds(roomEvents.at(-1)?.identity || {});
+  const identityEvents = requestIds.length ? identityRawEvents(state, roomState, requestIds) : [];
+  const events = (identityEvents.length ? identityEvents : roomEvents).slice(-count);
+  const isIdentityScoped = identityEvents.length > 0;
   if (!events.length) return "최근 원본 이벤트가 없습니다.";
 
-  const lines = [`최근 원본 이벤트 ${events.length}건`, ""];
+  const lines = [`최근 원본 이벤트 ${events.length}건${isIdentityScoped ? " (같은 고유값 기준)" : ""}`, ""];
   events.forEach((event, index) => {
     const identity = event.identity || {};
     const candidateText = (identity.candidates || [])
@@ -839,6 +844,7 @@ function recentEventsCommand(state, roomState, sender, text) {
       .map((item) => `${item.path}=${item.value}`)
       .join(" / ");
     lines.push(`${index + 1}. ${kstDateTime(new Date(event.at))}`);
+    if (isIdentityScoped) lines.push(`• room : ${event.room || "-"}`);
     lines.push(`• sender : ${event.sender || "-"}`);
     lines.push(`• msg : ${previewText(event.message) || "-"}`);
     lines.push(`• event : ${event.eventType || "-"}`);
@@ -864,6 +870,19 @@ function allRoomStates(state, currentRoomState) {
   const rooms = Object.values(state?.rooms || {}).filter(Boolean);
   if (!currentRoomState || rooms.includes(currentRoomState)) return rooms;
   return [currentRoomState, ...rooms];
+}
+
+function identityRawEvents(state, currentRoomState, ids) {
+  const targetIds = new Set((ids || []).map(normalizeIdentityId).filter(Boolean));
+  if (!targetIds.size) return [];
+  const events = [];
+  for (const roomState of allRoomStates(state, currentRoomState)) {
+    for (const event of roomState.rawEvents || []) {
+      const candidateIds = identityIds(event.identity || {});
+      if (candidateIds.some((id) => targetIds.has(id))) events.push(event);
+    }
+  }
+  return events.sort((left, right) => new Date(left.at).getTime() - new Date(right.at).getTime());
 }
 
 function identityPeopleFromRooms(state, currentRoomState, identityId) {
