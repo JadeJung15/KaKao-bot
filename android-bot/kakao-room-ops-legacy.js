@@ -4,7 +4,9 @@
 
 var BOT_SERVER = "https://ka-kao-bot.vercel.app/chat-event";
 var BOT_NAMES = ["픽셀곰", "운영봇", "봇"];
-var ROOM_NAME_OVERRIDE = "픽셀곰 RPG 🎮 놀이터";
+// 비워두면 카카오톡이 전달한 실제 방 이름을 사용합니다.
+// 방 이름이 내 닉네임처럼 잘못 잡히는 환경에서만 방별로 고정값을 넣으세요.
+var ROOM_NAME_OVERRIDE = "";
 
 var ALLOWED_ROOMS = [];
 

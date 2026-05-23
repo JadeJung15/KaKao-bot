@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.25";
+export const APP_VERSION = "0.4.26";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -58,6 +58,7 @@ export const FEATURES = [
   "cross-room-identity-nickname-recovery",
   "identity-scoped-recent-events",
   "first-chat-reentry-notice",
+  "room-safe-bridge-defaults",
   "room-links",
   "profile-form",
   "no-games"
