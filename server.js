@@ -24,11 +24,12 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.20";
+export const APP_VERSION = "0.4.21";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
   "kakao-skill-webhook",
+  "role-based-help",
   "profile-registry",
   "alias-registry",
   "join-exit-history",
@@ -1884,9 +1885,9 @@ export function healthPayload() {
   };
 }
 
-function helpText() {
-  return [
-    `${DEFAULT_BOT_NAME} 운영 명령어`,
+function helpText(isAdminUser = false) {
+  const lines = [
+    `${DEFAULT_BOT_NAME} ${isAdminUser ? "관리자 명령어" : "참여자 명령어"}`,
     "",
     "기본",
     "/상태 - 서버 연결 상태 확인",
@@ -1895,10 +1896,8 @@ function helpText() {
     "운영",
     "/공질 - 공식질문 양식",
     "/건의방, /얼공방, /무한성 - 방 링크",
-    "/링크등록 이름 URL - 방 링크 저장",
     "/메시지 - 내 메시지함 확인",
     "/최근이벤트 - 브릿지 원본 이벤트 확인",
-    "/원본로그 - 최신 원본 JSON 확인",
     "",
     "포인트",
     "/출석, /출석체크 - 일일 출석 보상",
@@ -1913,29 +1912,38 @@ function helpText() {
     "/채팅오늘, /채팅금주",
     "",
     "프로필",
-    "/프로필등록 닉네임 && 공질내용",
     "/프로필 닉네임",
-    "/프로필삭제 닉네임",
-    "/별명등록 닉네임 별명",
-    "/별명삭제 별명",
     "",
     "히스토리",
     "/입퇴장현황 닉네임",
-    "/입퇴장상세 닉네임",
     "/닉이력 닉네임",
-    "",
-    "관리자",
-    "/관리자등록 닉네임",
-    "/관리자삭제 닉네임",
-    "/관리자재설정 닉네임1,닉네임2",
-    "/관리자초기화 - 방 관리자 목록 초기화",
-    "/관리자목록",
-    "/포인트지급 닉네임 포인트",
-    "/포인트차감 닉네임 포인트",
-    "/포인트설정 닉네임 포인트",
-    "",
-    "실제 금전, 상점, 아이템 기능은 사용하지 않습니다."
-  ].join("\n");
+    ""
+  ];
+
+  if (isAdminUser) {
+    lines.push(
+      "관리자",
+      "/링크등록 이름 URL - 방 링크 저장",
+      "/원본로그 - 최신 원본 JSON 확인",
+      "/프로필등록 닉네임 && 공질내용",
+      "/프로필삭제 닉네임",
+      "/별명등록 닉네임 별명",
+      "/별명삭제 별명",
+      "/입퇴장상세 닉네임",
+      "/관리자등록 닉네임",
+      "/관리자삭제 닉네임",
+      "/관리자재설정 닉네임1,닉네임2",
+      "/관리자초기화 - 방 관리자 목록 초기화",
+      "/관리자목록",
+      "/포인트지급 닉네임 포인트",
+      "/포인트차감 닉네임 포인트",
+      "/포인트설정 닉네임 포인트",
+      ""
+    );
+  }
+
+  lines.push("실제 금전, 상점, 아이템 기능은 사용하지 않습니다.");
+  return lines.join("\n");
 }
 
 function kakaoText(text) {
@@ -1954,7 +1962,7 @@ async function handleCommand(state, room, sender, message) {
 
   if (command === "/상태" || command === "/status") return statusText(room);
   if (command === "/로컬상태") return `${DEFAULT_BOT_NAME} 자동응답 스크립트가 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.`;
-  if (command === "/도움말" || command === "/help" || command === "/?") return helpText();
+  if (command === "/도움말" || command === "/help" || command === "/?") return helpText(isAdmin(roomState, sender));
   if (command === "/공질") return PROFILE_FORM;
   if (["/건의방", "/얼공방", "/무한성"].includes(command)) return linkCommand(roomState, command);
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
@@ -2033,7 +2041,8 @@ export async function handleSkill(payload) {
   const utterance = normalizeText(payload?.userRequest?.utterance);
   const room = "카카오스킬";
   const sender = normalizeText(payload?.userRequest?.user?.properties?.nickname) || "스킬사용자";
-  const reply = (await handleCommand(state, room, sender, utterance)) || helpText();
+  const roomState = ensureRoom(state, room);
+  const reply = (await handleCommand(state, room, sender, utterance)) || helpText(isAdmin(roomState, sender));
   await saveState(state);
   return kakaoText(reply);
 }

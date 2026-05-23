@@ -72,6 +72,7 @@ try {
   assert.match(health.json.features.join(","), /attendance-rewards/);
   assert.match(health.json.features.join(","), /member-rankings/);
   assert.match(health.json.features.join(","), /raw-event-log/);
+  assert.match(health.json.features.join(","), /role-based-help/);
   assert.match(health.json.features.join(","), /stable-user-ids/);
   assert.match(health.json.features.join(","), /bridge-auto-extract/);
   assert.match(health.json.features.join(","), /identity-nickname-summary/);
@@ -106,13 +107,9 @@ try {
     })
   });
   assert.equal(help.response.status, 200);
-  assert.match(help.json.template.outputs[0].simpleText.text, /프로필등록/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /참여자 명령어/);
   assert.match(help.json.template.outputs[0].simpleText.text, /메시지/);
-  assert.match(help.json.template.outputs[0].simpleText.text, /입퇴장상세/);
-  assert.match(help.json.template.outputs[0].simpleText.text, /관리자등록/);
-  assert.match(help.json.template.outputs[0].simpleText.text, /관리자재설정/);
   assert.match(help.json.template.outputs[0].simpleText.text, /최근이벤트/);
-  assert.match(help.json.template.outputs[0].simpleText.text, /원본로그/);
   assert.match(help.json.template.outputs[0].simpleText.text, /포인트/);
   assert.match(help.json.template.outputs[0].simpleText.text, /좋아요/);
   assert.match(help.json.template.outputs[0].simpleText.text, /이체/);
@@ -120,6 +117,11 @@ try {
   assert.match(help.json.template.outputs[0].simpleText.text, /뽑기/);
   assert.match(help.json.template.outputs[0].simpleText.text, /홀짝/);
   assert.match(help.json.template.outputs[0].simpleText.text, /출석/);
+  assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /프로필등록/);
+  assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /입퇴장상세/);
+  assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /관리자등록/);
+  assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /관리자재설정/);
+  assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /원본로그/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /벤치마크|laggobot|라꼬봇/i);
   assert.match(help.json.template.outputs[0].simpleText.text, /실제 금전.*사용하지 않습니다/);
 
@@ -137,6 +139,15 @@ try {
 
   const adminList = await chat("/관리자목록", "관리자");
   assert.match(adminList.json.reply, /관리자/);
+
+  const adminHelp = await chat("/?", "관리자");
+  assert.match(adminHelp.json.reply, /관리자 명령어/);
+  assert.match(adminHelp.json.reply, /프로필등록/);
+  assert.match(adminHelp.json.reply, /입퇴장상세/);
+  assert.match(adminHelp.json.reply, /관리자등록/);
+  assert.match(adminHelp.json.reply, /관리자재설정/);
+  assert.match(adminHelp.json.reply, /원본로그/);
+  assert.match(adminHelp.json.reply, /포인트지급/);
 
   const tempAdminRegister = await chat("/관리자등록 임시관리자", "관리자");
   assert.match(tempAdminRegister.json.reply, /관리자로 등록/);
