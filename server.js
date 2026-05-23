@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.30";
+export const APP_VERSION = "0.4.31";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -61,7 +61,8 @@ export const FEATURES = [
   "room-safe-bridge-defaults",
   "private-chat-guard",
   "registered-room-guard",
-  "no-games"
+  "no-games",
+  "bridge-self-test-commands"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -2080,6 +2081,24 @@ function statusText(room = "") {
   ].join("\n");
 }
 
+function bridgeServerText(room = "") {
+  return [
+    "픽셀곰 브릿지 서버 명령 정상",
+    `시간: ${kstTimestamp()}`,
+    `방: ${room || "미지정"}`,
+    `서버 버전: ${APP_VERSION}`,
+    "앱 단독 테스트는 MessengerBot을 잠깐 중지한 뒤 /브릿지 를 다시 보내 확인하세요."
+  ].join("\n");
+}
+
+function bridgeJsServerText() {
+  return [
+    "픽셀곰 JS 호환 명령 수신 정상",
+    "서버 경로에서는 JS를 직접 실행하지 않습니다.",
+    "픽셀곰 브릿지 앱 단독 JS 응답은 앱 업데이트 후 /js상태 로 확인하세요."
+  ].join("\n");
+}
+
 export function healthPayload() {
   return {
     ok: true,
@@ -2099,6 +2118,8 @@ function helpText(isAdminUser = false) {
     "기본",
     "/상태 - 서버 연결 상태 확인",
     "/도움말 - 현재 명령어 확인",
+    "/브릿지 - 브릿지 연결 진단",
+    "/js상태 - 브릿지 JS 호환 진단",
     "",
     "운영",
     "/메시지 - 내 메시지함 확인",
@@ -2166,6 +2187,8 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   const command = compactSpaces(text);
 
   if (command === "/상태" || command === "/status") return statusText(room);
+  if (command === "/브릿지" || command === "/bridge") return bridgeServerText(room);
+  if (command === "/js상태" || command === "/jsstatus") return bridgeJsServerText();
   if (command === "/로컬상태") return `${DEFAULT_BOT_NAME} 자동응답 스크립트가 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.`;
   if (command === "/도움말" || command === "/help" || command === "/?") return helpText(isAdmin(roomState, sender));
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);

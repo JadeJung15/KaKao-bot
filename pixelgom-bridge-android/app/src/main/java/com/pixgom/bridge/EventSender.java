@@ -52,12 +52,19 @@ final class EventSender {
             String line;
             while ((line = reader.readLine()) != null) body.append(line);
             JSONObject response = new JSONObject(body.toString());
-            return new SendResult(status, response.optString("reply", ""), response.optBoolean("ignored", false), null);
+            return new SendResult(status, cleanReply(response), response.optBoolean("ignored", false), null);
         } catch (Exception error) {
             return new SendResult(0, "", false, error.getClass().getSimpleName() + ": " + error.getMessage());
         } finally {
             if (connection != null) connection.disconnect();
         }
+    }
+
+    private static String cleanReply(JSONObject response) {
+        if (response == null || !response.has("reply") || response.isNull("reply")) return "";
+        String value = response.optString("reply", "").trim();
+        if (value.equalsIgnoreCase("null") || value.equalsIgnoreCase("undefined")) return "";
+        return value;
     }
 
     static final class SendResult {

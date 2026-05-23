@@ -3,9 +3,11 @@ package com.pixgom.bridge;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
@@ -28,7 +30,9 @@ public class MainActivity extends Activity {
     private EditText serverUrlInput;
     private EditText roomNameInput;
     private EditText roomIdInput;
+    private EditText scriptSourceInput;
     private Switch enabledSwitch;
+    private Switch scriptEnabledSwitch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -106,6 +110,37 @@ public class MainActivity extends Activity {
         privacyButton.setOnClickListener(v -> openUrl("https://pixgom.com/privacy"));
         panel.addView(privacyButton);
 
+        TextView scriptTitle = text("로컬 JS 자동응답", 20, Color.rgb(58, 37, 24), true);
+        scriptTitle.setPadding(0, dp(18), 0, dp(8));
+        root.addView(scriptTitle);
+
+        LinearLayout scriptPanel = panel();
+        scriptPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        root.addView(scriptPanel);
+
+        scriptEnabledSwitch = new Switch(this);
+        scriptEnabledSwitch.setText("JS 자동응답 사용");
+        scriptEnabledSwitch.setTextSize(16);
+        scriptEnabledSwitch.setTextColor(Color.rgb(58, 37, 24));
+        scriptEnabledSwitch.setChecked(BridgeConfig.scriptEnabled(this));
+        scriptEnabledSwitch.setOnCheckedChangeListener((CompoundButton button, boolean checked) -> BridgeConfig.setScriptEnabled(this, checked));
+        scriptPanel.addView(scriptEnabledSwitch);
+
+        scriptSourceInput = scriptInput(BridgeConfig.scriptSource(this));
+        scriptPanel.addView(scriptSourceInput);
+
+        Button scriptSaveButton = primaryButton("JS 저장");
+        scriptSaveButton.setOnClickListener(v -> saveSettings());
+        scriptPanel.addView(scriptSaveButton);
+
+        Button scriptTestButton = secondaryButton("JS 테스트");
+        scriptTestButton.setOnClickListener(v -> testScript());
+        scriptPanel.addView(scriptTestButton);
+
+        Button scriptResetButton = secondaryButton("기본 예제 넣기");
+        scriptResetButton.setOnClickListener(v -> scriptSourceInput.setText(BridgeConfig.defaultScriptSource()));
+        scriptPanel.addView(scriptResetButton);
+
         TextView logTitle = text("전송 로그", 20, Color.rgb(58, 37, 24), true);
         logTitle.setPadding(0, dp(18), 0, dp(8));
         root.addView(logTitle);
@@ -134,7 +169,9 @@ public class MainActivity extends Activity {
         BridgeConfig.setServerUrl(this, serverUrlInput.getText().toString());
         BridgeConfig.setRoomName(this, roomNameInput.getText().toString());
         BridgeConfig.setRoomId(this, roomIdInput.getText().toString());
-        BridgeConfig.appendLog(this, "설정 저장됨 room=" + BridgeConfig.roomName(this) + " id=" + BridgeConfig.roomId(this));
+        BridgeConfig.setScriptEnabled(this, scriptEnabledSwitch.isChecked());
+        BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
+        BridgeConfig.appendLog(this, "설정 저장됨 room=" + BridgeConfig.roomName(this) + " id=" + BridgeConfig.roomId(this) + " js=" + BridgeConfig.scriptEnabled(this));
         refreshStatus();
         refreshLogs();
     }
@@ -167,6 +204,31 @@ public class MainActivity extends Activity {
                 refreshLogs();
             });
         });
+    }
+
+    private void testScript() {
+        BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
+        BridgeEvent event = new BridgeEvent();
+        event.room = BridgeConfig.roomName(this);
+        event.rawRoom = BridgeConfig.roomName(this);
+        event.roomId = BridgeConfig.roomId(this);
+        event.roomLink = BridgeConfig.roomLink(this);
+        event.sender = "픽셀곰앱테스트";
+        event.message = "/브릿지";
+        event.packageName = getPackageName();
+        event.groupChat = true;
+        event.eventType = "";
+        event.targetName = "";
+
+        ScriptBotEngine.Result result = ScriptBotEngine.test(scriptSourceInput.getText().toString(), event);
+        if (!result.ok()) {
+            BridgeConfig.appendLog(this, "JS 테스트 실패: " + result.error);
+        } else if (result.handled) {
+            BridgeConfig.appendLog(this, "JS 테스트 성공: " + result.reply.replace("\n", " / "));
+        } else {
+            BridgeConfig.appendLog(this, "JS 테스트 응답 없음");
+        }
+        refreshLogs();
     }
 
     private void refreshStatus() {
@@ -203,6 +265,24 @@ public class MainActivity extends Activity {
         editText.setTextSize(15);
         editText.setSelectAllOnFocus(false);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(10), 0, 0);
+        editText.setLayoutParams(params);
+        return editText;
+    }
+
+    private EditText scriptInput(String value) {
+        EditText editText = new EditText(this);
+        editText.setText(value);
+        editText.setTextSize(13);
+        editText.setTypeface(Typeface.MONOSPACE);
+        editText.setGravity(Gravity.TOP | Gravity.START);
+        editText.setSingleLine(false);
+        editText.setMinLines(10);
+        editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        editText.setHorizontallyScrolling(false);
+        editText.setBackgroundColor(Color.rgb(255, 252, 246));
+        editText.setPadding(dp(10), dp(10), dp(10), dp(10));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(240));
         params.setMargins(0, dp(10), 0, 0);
         editText.setLayoutParams(params);
         return editText;

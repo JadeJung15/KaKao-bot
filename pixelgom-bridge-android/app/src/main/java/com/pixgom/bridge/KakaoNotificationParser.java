@@ -15,25 +15,36 @@ final class KakaoNotificationParser {
 
         Bundle extras = notification.extras;
         String title = text(extras, Notification.EXTRA_TITLE);
-        String text = firstText(
+        String rawText = firstText(
                 lastMessageText(extras),
+                lastTextLine(extras),
                 text(extras, Notification.EXTRA_BIG_TEXT),
                 text(extras, Notification.EXTRA_TEXT)
         );
-        String room = firstText(
-                text(extras, Notification.EXTRA_CONVERSATION_TITLE),
-                text(extras, Notification.EXTRA_SUB_TEXT),
-                text(extras, Notification.EXTRA_SUMMARY_TEXT)
-        );
-        String sender = firstText(lastMessageSender(extras), title);
-        boolean group = extras.getBoolean("android.isGroupConversation", false) || !TextUtils.isEmpty(room);
+        String conversationTitle = text(extras, Notification.EXTRA_CONVERSATION_TITLE);
+        String subText = text(extras, Notification.EXTRA_SUB_TEXT);
+        String summaryText = text(extras, Notification.EXTRA_SUMMARY_TEXT);
+        String room = firstMatchingRoom(configuredRoom, conversationTitle, subText, summaryText, title);
+        if (TextUtils.isEmpty(room)) room = firstText(conversationTitle, subText, summaryText);
+        boolean androidGroup = extras.getBoolean("android.isGroupConversation", false);
 
-        if (TextUtils.isEmpty(room) && BridgeConfig.normalized(title).equals(BridgeConfig.normalized(configuredRoom))) {
+        if (TextUtils.isEmpty(room) && roomTitleMatches(title, configuredRoom)) {
             room = configuredRoom;
+        }
+        if (TextUtils.isEmpty(room)) return null;
+
+        ParsedMessage parsed = parseSenderMessage(rawText);
+        String sender = firstText(lastMessageSender(extras), parsed.sender);
+        String text = firstText(parsed.message, rawText);
+
+        if (TextUtils.isEmpty(sender) && !roomTitleMatches(title, configuredRoom)) sender = title;
+        if (BridgeConfig.normalized(sender).equals(BridgeConfig.normalized(room)) && !TextUtils.isEmpty(parsed.sender)) {
+            sender = parsed.sender;
         }
         if (TextUtils.isEmpty(room)) return null;
         if (TextUtils.isEmpty(sender) || BridgeConfig.normalized(sender).equals(BridgeConfig.normalized(room))) sender = "미정";
         if (TextUtils.isEmpty(text)) return null;
+        boolean group = androidGroup || !TextUtils.isEmpty(room);
 
         BridgeEvent event = new BridgeEvent();
         event.room = configuredRoom;
@@ -51,6 +62,16 @@ final class KakaoNotificationParser {
     private static String text(Bundle extras, String key) {
         CharSequence value = extras.getCharSequence(key);
         return value == null ? "" : value.toString().trim();
+    }
+
+    private static String lastTextLine(Bundle extras) {
+        CharSequence[] lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
+        if (lines == null || lines.length == 0) return "";
+        for (int i = lines.length - 1; i >= 0; i--) {
+            CharSequence line = lines[i];
+            if (!TextUtils.isEmpty(line)) return line.toString().trim();
+        }
+        return "";
     }
 
     private static String firstText(String... values) {
@@ -85,6 +106,56 @@ final class KakaoNotificationParser {
         return null;
     }
 
+    private static boolean roomTitleMatches(String value, String configuredRoom) {
+        String candidate = BridgeConfig.normalized(value);
+        String configured = BridgeConfig.normalized(configuredRoom);
+        if (candidate.isEmpty() || configured.isEmpty()) return false;
+        if (candidate.equals(configured)) return true;
+        return candidate.startsWith(configured + " ") || candidate.startsWith(configured + "(");
+    }
+
+    private static String firstMatchingRoom(String configuredRoom, String... values) {
+        for (String value : values) {
+            if (roomTitleMatches(value, configuredRoom)) return configuredRoom;
+        }
+        return "";
+    }
+
+    private static ParsedMessage parseSenderMessage(String value) {
+        String text = value == null ? "" : value.trim();
+        if (text.isEmpty()) return new ParsedMessage("", "");
+
+        ParsedMessage colon = splitByDelimiter(text, " : ");
+        if (colon.hasBoth()) return colon;
+        colon = splitByDelimiter(text, ": ");
+        if (colon.hasBoth()) return colon;
+        colon = splitByDelimiter(text, "： ");
+        if (colon.hasBoth()) return colon;
+
+        int newline = text.indexOf('\n');
+        if (newline > 0) {
+            String sender = text.substring(0, newline).trim();
+            String message = text.substring(newline + 1).trim();
+            if (looksLikeSender(sender) && !message.isEmpty()) return new ParsedMessage(sender, message);
+        }
+        return new ParsedMessage("", text);
+    }
+
+    private static ParsedMessage splitByDelimiter(String text, String delimiter) {
+        int index = text.indexOf(delimiter);
+        if (index <= 0) return new ParsedMessage("", "");
+        String sender = text.substring(0, index).trim();
+        String message = text.substring(index + delimiter.length()).trim();
+        if (!looksLikeSender(sender) || message.isEmpty()) return new ParsedMessage("", "");
+        return new ParsedMessage(sender, message);
+    }
+
+    private static boolean looksLikeSender(String sender) {
+        if (sender == null) return false;
+        String text = sender.trim();
+        return !text.isEmpty() && text.length() <= 40 && !text.startsWith("/");
+    }
+
     private static void fillSystemEvent(BridgeEvent event) {
         String message = event.message == null ? "" : event.message.trim();
         if (message.endsWith("님이 들어왔습니다")) {
@@ -99,6 +170,20 @@ final class KakaoNotificationParser {
         } else {
             event.eventType = "";
             event.targetName = "";
+        }
+    }
+
+    private static final class ParsedMessage {
+        final String sender;
+        final String message;
+
+        ParsedMessage(String sender, String message) {
+            this.sender = sender == null ? "" : sender;
+            this.message = message == null ? "" : message;
+        }
+
+        boolean hasBoth() {
+            return !TextUtils.isEmpty(sender) && !TextUtils.isEmpty(message);
         }
     }
 }

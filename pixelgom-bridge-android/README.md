@@ -7,6 +7,7 @@
 - 카카오톡 알림에서 등록된 오픈채팅방 메시지만 감지합니다.
 - 픽셀곰 서버 `POST /chat-event`로 `room`, `sender`, `msg`, `roomId`, `roomLink`를 전송합니다.
 - 서버 응답이 있으면 카카오 알림의 답장 액션을 통해 응답을 보냅니다.
+- 서버 응답이 없을 때는 앱 안의 로컬 JS 자동응답 스크립트가 보조 응답을 만들 수 있습니다.
 
 ## 기본 설정
 
@@ -20,6 +21,7 @@
 | 등록 링크 | `https://open.kakao.com/o/gu25P5vi` |
 | targetSdk | 35 |
 | 배포 형식 | Android App Bundle `.aab` |
+| 현재 버전 | `1.0.4` / versionCode `5` |
 
 ## 로컬 빌드
 
@@ -61,7 +63,35 @@ Copy-Item .\keystore.properties.example .\keystore.properties
 4. `픽셀곰 브릿지` 알림 접근 허용
 5. 방 이름이 실제 카카오방 이름과 다르면 앱 설정에서 수정
 6. `서버 테스트 전송`으로 서버 연결 확인
-7. 카카오방에서 `/상태` 테스트
+7. 필요한 경우 `JS 자동응답 사용`을 켜고 스크립트를 저장
+8. 카카오방에서 `/상태`, `/브릿지`, `/js상태` 테스트
+
+## 로컬 JS 자동응답
+
+`로컬 JS 자동응답`은 MessengerBot의 핵심 실행 형태를 픽셀곰 전용으로 줄여 넣은 기능입니다.
+`/브릿지`, `/js상태`, `/로컬상태`는 서버 설정과 무관하게 앱이 직접 응답합니다.
+그 외 서버가 응답을 만들지 않은 메시지나 서버의 미등록 명령어 응답에 대해 앱 내부 JS가 실행됩니다.
+
+지원하는 기본 형태:
+
+```javascript
+const bot = BotManager.getCurrentBot();
+
+bot.addListener(Event.MESSAGE, function(message) {
+  if (message.content === "/브릿지") {
+    message.reply("픽셀곰 브릿지 JS 자동응답 작동 중입니다.");
+  }
+});
+
+function response(room, msg, sender, isGroupChat, replier, imageDB, packageName) {
+  if (msg === "/js상태") {
+    replier.reply("JS 엔진 정상 작동");
+  }
+}
+```
+
+초기 버전은 안전을 위해 매 메시지마다 스크립트를 새로 실행하고 1.5초 제한을 둡니다.
+장기 상태 저장, 파일 API, 이미지 API, 전체 MessengerBot API 호환은 후속 업데이트 범위입니다.
 
 ## Play Store 준비
 
@@ -76,3 +106,4 @@ Copy-Item .\keystore.properties.example .\keystore.properties
 - NotificationListener 기반이라 카카오 알림에 방 이름이 포함되지 않으면 해당 알림은 전송하지 않습니다.
 - 서버 응답 전송은 카카오 알림에 답장 액션이 있을 때만 가능합니다.
 - 입장/퇴장/닉변 정확도는 카카오 알림 문구가 실제로 노출되는 경우에 한해 보강됩니다.
+- 로컬 JS는 픽셀곰 전용 보조 엔진이며, 범용 MessengerBot 전체 API를 모두 포함하지는 않습니다.

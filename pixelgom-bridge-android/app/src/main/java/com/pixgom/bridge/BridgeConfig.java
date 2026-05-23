@@ -23,6 +23,8 @@ final class BridgeConfig {
     private static final String KEY_ROOM_NAME = "room_name";
     private static final String KEY_ROOM_ID = "room_id";
     private static final String KEY_ROOM_LINK = "room_link";
+    private static final String KEY_SCRIPT_ENABLED = "script_enabled";
+    private static final String KEY_SCRIPT_SOURCE = "script_source";
     private static final String KEY_LOGS = "logs";
     private static final int MAX_LOG_LINES = 80;
 
@@ -68,13 +70,37 @@ final class BridgeConfig {
         return textOrDefault(prefs(context).getString(KEY_ROOM_LINK, DEFAULT_ROOM_LINK), DEFAULT_ROOM_LINK);
     }
 
+    static boolean scriptEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_SCRIPT_ENABLED, true);
+    }
+
+    static void setScriptEnabled(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_SCRIPT_ENABLED, enabled).apply();
+    }
+
+    static String scriptSource(Context context) {
+        return textOrDefault(prefs(context).getString(KEY_SCRIPT_SOURCE, DEFAULT_SCRIPT_SOURCE), DEFAULT_SCRIPT_SOURCE);
+    }
+
+    static void setScriptSource(Context context, String value) {
+        prefs(context).edit().putString(KEY_SCRIPT_SOURCE, textOrDefault(value, DEFAULT_SCRIPT_SOURCE)).apply();
+    }
+
+    static String defaultScriptSource() {
+        return DEFAULT_SCRIPT_SOURCE;
+    }
+
     static String normalized(String value) {
         if (value == null) return "";
-        return value.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
+        return value.replace('\u00a0', ' ').replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
     }
 
     static boolean roomMatches(Context context, String rawRoom) {
-        return normalized(roomName(context)).equals(normalized(rawRoom));
+        String configured = normalizedRoomName(roomName(context));
+        String raw = normalizedRoomName(rawRoom);
+        if (configured.isEmpty() || raw.isEmpty()) return false;
+        if (configured.equals(raw)) return true;
+        return raw.startsWith(configured + " ") || raw.startsWith(configured + "(");
     }
 
     static void appendLog(Context context, String line) {
@@ -104,4 +130,28 @@ final class BridgeConfig {
         String trimmed = value.trim();
         return trimmed.isEmpty() ? fallback : trimmed;
     }
+
+    private static String normalizedRoomName(String value) {
+        String text = normalized(value);
+        text = text.replaceAll("\\s*\\([0-9]+\\)$", "");
+        text = text.replaceAll("\\s+[0-9]+$", "");
+        return text.trim();
+    }
+
+    private static final String DEFAULT_SCRIPT_SOURCE =
+            "// MessengerBot 호환 예제입니다. 서버 응답이 없거나 미등록 명령이면 실행됩니다.\n" +
+            "const bot = BotManager.getCurrentBot();\n" +
+            "\n" +
+            "bot.addListener(Event.MESSAGE, function(message) {\n" +
+            "  if (message.content === '/브릿지') {\n" +
+            "    message.reply('픽셀곰 브릿지 JS 자동응답 작동 중입니다.');\n" +
+            "  }\n" +
+            "});\n" +
+            "\n" +
+            "// 레거시 MessengerBot 형식도 지원합니다.\n" +
+            "function response(room, msg, sender, isGroupChat, replier, imageDB, packageName) {\n" +
+            "  if (msg === '/js상태') {\n" +
+            "    replier.reply('JS 엔진 정상 작동');\n" +
+            "  }\n" +
+            "}\n";
 }
