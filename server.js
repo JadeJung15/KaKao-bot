@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.11";
+export const APP_VERSION = "0.4.12";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -1146,6 +1146,7 @@ function firstChatReentryNotice(roomState, person, sender) {
   const previousNames = uniqueNames([...(person.names || []), person.currentName])
     .filter((name) => keyFor(name) !== currentKey);
   if (!currentName || !previousNames.length) return null;
+  if (previousNames.length > 1) return null;
 
   person.firstChatReentryNotices ||= [];
   if (person.firstChatReentryNotices.includes(currentKey)) return null;

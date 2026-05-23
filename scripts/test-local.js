@@ -263,6 +263,26 @@ try {
   assert.equal(secondChatAfterReentry.json.reply, null);
 
   await chatPayload({
+    room: "고유값충돌방",
+    msg: "첫 번째 이름",
+    sender: "충돌첫닉 남",
+    profileHash: "collision-prone-hash-1"
+  });
+  await chatPayload({
+    room: "고유값충돌방",
+    msg: "두 번째 이름",
+    sender: "충돌둘닉 남",
+    profileHash: "collision-prone-hash-1"
+  });
+  const collisionProneChat = await chatPayload({
+    room: "고유값충돌방",
+    msg: "세 번째 이름",
+    sender: "충돌셋닉 남",
+    profileHash: "collision-prone-hash-1"
+  });
+  assert.equal(collisionProneChat.json.reply, null);
+
+  await chatPayload({
     room: "원본복구방",
     msg: "구버전 시점 채팅",
     sender: "복구전닉 남",
