@@ -109,7 +109,11 @@ try {
   assert.doesNotMatch(homeText, /"#Intent"/);
   assert.match(homeText, /targetUrl\.search\}#Intent`/);
   assert.match(homeText, /기본 브라우저/);
-  assert.match(homeText, /class="nav-contact" href="https:\/\/open\.kakao\.com\/o\/gu25P5vi"/);
+  assert.match(homeText, /픽셀곰 브릿지/);
+  assert.match(homeText, /다중방/);
+  assert.match(homeText, /방장봇 입장확인/);
+  assert.match(homeText, /화면 감지 없이/);
+  assert.match(homeText, /href="https:\/\/open\.kakao\.com\/o\/gu25P5vi"/);
   assert.match(homeText, />문의<\/a>/);
 
   const help = await request("/skill", {
