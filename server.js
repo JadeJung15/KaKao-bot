@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.18";
+export const APP_VERSION = "0.4.20";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -39,6 +39,9 @@ export const FEATURES = [
   "point-ledger",
   "like-points",
   "point-transfer",
+  "point-cheer",
+  "point-lucky-draw",
+  "point-odd-even",
   "attendance-rewards",
   "member-levels",
   "member-rankings",
@@ -61,7 +64,18 @@ const ATTENDANCE_POINT_REWARD = 100;
 const ATTENDANCE_EXP_REWARD = 10;
 const LEVEL_UP_POINT_REWARD = 100;
 const LIKE_POINT_COST = 4;
+const CHEER_POINT_COST = 50;
+const MAX_CHEER_MESSAGE_LENGTH = 80;
+const LUCKY_DRAW_POINT_COST = 100;
+const ODD_EVEN_POINT_COST = 100;
+const ODD_EVEN_REWARD = 200;
 const TRANSFER_FEE_RATE = 0.1;
+const LUCKY_DRAW_OUTCOMES = [
+  { threshold: 0.05, label: "대박", reward: 500, chance: "5%" },
+  { threshold: 0.20, label: "성공", reward: 200, chance: "15%" },
+  { threshold: 0.50, label: "본전", reward: 100, chance: "30%" },
+  { threshold: 1, label: "꽝", reward: 0, chance: "50%" }
+];
 const MAX_LIKE_AMOUNT = 999;
 
 const PROFILE_FORM = [
@@ -1259,6 +1273,27 @@ function pointViewCommand(roomState, text, sender) {
   return `${displayNameForKey(roomState, key, target)}님의 포인트 : ${formatPoint(person.points)}`;
 }
 
+function pointGuideText() {
+  return [
+    "포인트 콘텐츠",
+    "",
+    "모으기",
+    `• 일반 채팅 : ${formatPoint(CHAT_POINT_REWARD)}`,
+    `• 출석 : ${formatPoint(ATTENDANCE_POINT_REWARD)}`,
+    `• 레벨업 : ${formatPoint(LEVEL_UP_POINT_REWARD)}`,
+    "",
+    "사용하기",
+    `• /좋아요 닉네임 수량 : 1개당 ${formatPoint(LIKE_POINT_COST)}`,
+    `• /응원 닉네임 메시지 : 응원 카드 ${formatPoint(CHEER_POINT_COST)}`,
+    `• /뽑기 : 가상 포인트 뽑기 ${formatPoint(LUCKY_DRAW_POINT_COST)}`,
+    `• /홀짝 홀 또는 /홀짝 짝 : 맞히면 ${formatPoint(ODD_EVEN_REWARD)}`,
+    "• /이체 닉네임 포인트 : 수수료 10%",
+    "",
+    "순위",
+    "• /포인트순위, /좋아요순위, /레벨순위"
+  ].join("\n");
+}
+
 function attendanceCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
   const today = kstDateKey();
@@ -1305,6 +1340,142 @@ function likeCommand(roomState, sender, text) {
   receiver.hearts += parsed.amount;
   recordRoomEvent(roomState, { type: "liked", from: giver.currentName, to: receiver.currentName, amount: parsed.amount, cost });
   return "💕".repeat(parsed.amount);
+}
+
+function parseCheerTarget(roomState, body) {
+  const normalizedBody = compactSpaces(body);
+  const candidates = candidateMentionNames(roomState)
+    .filter((item, index, list) => list.findIndex((other) => other.key === item.key && keyFor(other.name) === keyFor(item.name)) === index)
+    .sort((left, right) => right.name.length - left.name.length);
+
+  for (const candidate of candidates) {
+    const name = stripKakaoSuffix(candidate.name);
+    if (normalizedBody === name) return { key: candidate.key, name, message: "" };
+    if (normalizedBody.startsWith(`${name} `)) {
+      return { key: candidate.key, name, message: normalizedBody.slice(name.length).trim() };
+    }
+  }
+  return null;
+}
+
+function cheerCommand(roomState, sender, text) {
+  const body = text.replace(/^\/(?:응원|응원카드)\s*/i, "").trim();
+  if (!body) return "형식: /응원 닉네임 메시지";
+
+  const parsed = parseCheerTarget(roomState, body);
+  if (!parsed?.key || !parsed.message) return "형식: /응원 닉네임 메시지";
+  if (parsed.message.length > MAX_CHEER_MESSAGE_LENGTH) return `응원 메시지는 ${MAX_CHEER_MESSAGE_LENGTH}자 이내로 입력해주세요.`;
+
+  const senderPerson = ensurePerson(roomState, sender);
+  if (parsed.key === personKey(sender)) return "본인에게는 응원 카드를 보낼 수 없습니다.";
+  if (senderPerson.points < CHEER_POINT_COST) {
+    return [
+      "포인트가 부족합니다.",
+      "",
+      `• 필요 포인트 : ${formatPoint(CHEER_POINT_COST)}`,
+      `• 보유 포인트 : ${formatPoint(senderPerson.points)}`
+    ].join("\n");
+  }
+
+  const receiverName = displayNameForKey(roomState, parsed.key, parsed.name);
+  const receiver = roomState.people[parsed.key] || ensurePerson(roomState, receiverName);
+  senderPerson.points -= CHEER_POINT_COST;
+  senderPerson.spentPoints += CHEER_POINT_COST;
+  receiver.hearts += 1;
+  recordRoomEvent(roomState, {
+    type: "point_cheer",
+    from: senderPerson.currentName,
+    to: receiver.currentName,
+    message: parsed.message,
+    cost: CHEER_POINT_COST
+  });
+  return [
+    "포인트 응원 카드",
+    "",
+    `${senderPerson.currentName} -> ${receiver.currentName}`,
+    `"${parsed.message}"`,
+    "",
+    `사용 포인트 : ${formatPoint(CHEER_POINT_COST)}`
+  ].join("\n");
+}
+
+function luckyDrawCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  if (person.points < LUCKY_DRAW_POINT_COST) {
+    return [
+      "포인트가 부족합니다.",
+      "",
+      `• 필요 포인트 : ${formatPoint(LUCKY_DRAW_POINT_COST)}`,
+      `• 보유 포인트 : ${formatPoint(person.points)}`
+    ].join("\n");
+  }
+
+  const roll = Math.random();
+  const outcome = LUCKY_DRAW_OUTCOMES.find((item) => roll < item.threshold) || LUCKY_DRAW_OUTCOMES.at(-1);
+  person.points -= LUCKY_DRAW_POINT_COST;
+  person.spentPoints += LUCKY_DRAW_POINT_COST;
+  if (outcome.reward > 0) person.points += outcome.reward;
+
+  recordRoomEvent(roomState, {
+    type: "lucky_draw",
+    name: person.currentName,
+    cost: LUCKY_DRAW_POINT_COST,
+    reward: outcome.reward,
+    outcome: outcome.label
+  });
+
+  return [
+    "뽑기 결과",
+    "",
+    `참여자 : ${person.currentName}`,
+    `결과 : ${outcome.label}`,
+    `사용 포인트 : ${formatPoint(LUCKY_DRAW_POINT_COST)}`,
+    `획득 포인트 : ${formatPoint(outcome.reward)}`,
+    `보유 포인트 : ${formatPoint(person.points)}`,
+    "",
+    "공개 확률",
+    LUCKY_DRAW_OUTCOMES.map((item) => `• ${item.label} ${item.chance} : ${formatPoint(item.reward)}`).join("\n")
+  ].join("\n");
+}
+
+function oddEvenCommand(roomState, sender, text) {
+  const choice = keyFor(text.replace(/^\/홀짝\s*/i, ""));
+  if (!["홀", "짝"].includes(choice)) return "형식: /홀짝 홀 또는 /홀짝 짝";
+
+  const person = ensurePerson(roomState, sender);
+  if (person.points < ODD_EVEN_POINT_COST) {
+    return [
+      "포인트가 부족합니다.",
+      "",
+      `• 필요 포인트 : ${formatPoint(ODD_EVEN_POINT_COST)}`,
+      `• 보유 포인트 : ${formatPoint(person.points)}`
+    ].join("\n");
+  }
+
+  const result = Math.random() < 0.5 ? "홀" : "짝";
+  const isWin = choice === result;
+  person.points -= ODD_EVEN_POINT_COST;
+  person.spentPoints += ODD_EVEN_POINT_COST;
+  if (isWin) person.points += ODD_EVEN_REWARD;
+
+  recordRoomEvent(roomState, {
+    type: "odd_even",
+    name: person.currentName,
+    choice,
+    result,
+    cost: ODD_EVEN_POINT_COST,
+    reward: isWin ? ODD_EVEN_REWARD : 0
+  });
+
+  return [
+    "홀짝 결과",
+    "",
+    `선택 : ${choice}`,
+    `결과 : ${result}`,
+    `사용 포인트 : ${formatPoint(ODD_EVEN_POINT_COST)}`,
+    `획득 포인트 : ${formatPoint(isWin ? ODD_EVEN_REWARD : 0)}`,
+    `보유 포인트 : ${formatPoint(person.points)}`
+  ].join("\n");
 }
 
 function transferCommand(roomState, sender, text) {
@@ -1734,6 +1905,9 @@ function helpText() {
     "/포인트, /내포인트 - 내 포인트 확인",
     "/내정보, /레벨 - 레벨/포인트/채팅 정보",
     "/좋아요 닉네임 1~999 - 포인트로 하트 보내기",
+    "/응원 닉네임 메시지 - 포인트 응원 카드",
+    "/뽑기 - 공개 확률 포인트 뽑기",
+    "/홀짝 홀|짝 - 포인트 홀짝",
     "/이체 닉네임 포인트 - 포인트 이체",
     "/포인트순위, /좋아요순위, /레벨순위",
     "/채팅오늘, /채팅금주",
@@ -1760,7 +1934,7 @@ function helpText() {
     "/포인트차감 닉네임 포인트",
     "/포인트설정 닉네임 포인트",
     "",
-    "게임, 상점 기능은 사용하지 않습니다."
+    "실제 금전, 상점, 아이템 기능은 사용하지 않습니다."
   ].join("\n");
 }
 
@@ -1787,6 +1961,7 @@ async function handleCommand(state, room, sender, message) {
   if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return recentEventsCommand(state, roomState, sender, text);
   if (/^\/(?:원본로그|원본이벤트)(?:\s|$)/.test(command)) return rawLogCommand(roomState, sender, text);
   if (/^\/(?:출석|출석체크|출첵)$/.test(command)) return attendanceCommand(roomState, sender);
+  if (/^\/(?:포인트안내|포인트규칙)$/.test(command)) return pointGuideText();
   if (/^\/포인트\s*순위$|^\/포인트순위$/.test(command)) return rankingText(roomState, sender, "points");
   if (/^\/좋아요\s*순위$|^\/좋아요순위$/.test(command)) return rankingText(roomState, sender, "likes");
   if (/^\/레벨\s*순위$|^\/레벨순위$/.test(command)) return rankingText(roomState, sender, "levels");
@@ -1797,6 +1972,9 @@ async function handleCommand(state, room, sender, message) {
   if (command.startsWith("/포인트설정 ")) return adminPointAdjustCommand(roomState, sender, text, "set");
   if (/^\/(?:포인트|내포인트)(?:\s|$)/.test(command)) return pointViewCommand(roomState, text, sender);
   if (command.startsWith("/좋아요 ")) return likeCommand(roomState, sender, text);
+  if (command.startsWith("/응원 ")) return cheerCommand(roomState, sender, text);
+  if (command === "/확률뽑기" || command === "/뽑기") return luckyDrawCommand(roomState, sender);
+  if (command.startsWith("/홀짝")) return oddEvenCommand(roomState, sender, text);
   if (command.startsWith("/이체 ")) return transferCommand(roomState, sender, text);
   if (/^\/(?:내정보|레벨)(?:\s|$)/.test(command) || command.startsWith("/정보 ")) return memberInfoCommand(roomState, text, sender);
   if (command.startsWith("/관리자등록 ")) return adminRegisterCommand(roomState, sender, text);
