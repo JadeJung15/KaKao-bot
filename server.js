@@ -11,7 +11,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.3.0";
+export const APP_VERSION = "0.3.1";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -283,7 +283,7 @@ function roomAdminKeys(roomState) {
   return new Set([...configuredAdmins(), ...(roomState.admins || [])].map(personKey).filter(Boolean));
 }
 
-function hasConfiguredAdmin(roomState) {
+function hasAnyAdmin(roomState) {
   return roomAdminKeys(roomState).size > 0;
 }
 
@@ -295,12 +295,20 @@ function isAdmin(roomState, sender) {
 function adminOnlyMessage() {
   return [
     "관리자 전용 명령어입니다.",
-    "관리자가 없으면 먼저 /관리자등록 닉네임 으로 초기 관리자를 등록해주세요."
+    "등록된 관리자에게 요청해주세요."
+  ].join("\n");
+}
+
+function initialAdminRequiredMessage() {
+  return [
+    "초기 관리자는 환경변수 ADMIN_NAMES로 먼저 지정해야 합니다.",
+    "예: ADMIN_NAMES=무잔,우유 여"
   ].join("\n");
 }
 
 function requireAdmin(roomState, sender) {
   if (isAdmin(roomState, sender)) return null;
+  if (!hasAnyAdmin(roomState)) return initialAdminRequiredMessage();
   return adminOnlyMessage();
 }
 
@@ -464,7 +472,8 @@ function linkRegisterCommand(roomState, text) {
 function adminRegisterCommand(roomState, sender, text) {
   const target = stripKakaoSuffix(text.replace(/^\/관리자등록\s*/i, ""));
   if (!target) return "형식: /관리자등록 닉네임";
-  if (hasConfiguredAdmin(roomState) && !isAdmin(roomState, sender)) return adminOnlyMessage();
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
 
   ensurePerson(roomState, target);
   addUnique(roomState.admins, target);
@@ -715,7 +724,12 @@ function recordExit(roomState, name, type = "left") {
   if (type === "kicked") person.kicks.push(event);
   else person.exits.push(event);
   recordRoomEvent(roomState, { type, name: person.currentName });
-  return null;
+  if (type === "kicked") return null;
+  return [
+    `${person.currentName}님 안녕히 가세요👀`,
+    "",
+    personHistoryText(roomState, person.currentName, person.currentName)
+  ].join("\n");
 }
 
 function recordNickChange(roomState, from, to) {
