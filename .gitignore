@@ -6,6 +6,7 @@ data/*.tmp
 data/pixelgom-db.json
 data/room-ops-db.json
 data/test-*.json
+data/test-*.log
 server.out.log
 server.err.log
 tunnel.out.log

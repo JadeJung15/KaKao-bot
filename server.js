@@ -11,7 +11,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.2.0";
+export const APP_VERSION = "0.3.0";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -20,6 +20,9 @@ export const FEATURES = [
   "alias-registry",
   "join-exit-history",
   "nickname-history",
+  "detailed-member-history",
+  "message-inbox",
+  "admin-commands",
   "room-links",
   "profile-form",
   "no-games"
@@ -82,10 +85,28 @@ function kstTimestamp() {
   }).format(new Date());
 }
 
+function kstDateTime(date = new Date()) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
 function botNames() {
   return (process.env.BOT_NAMES || `${DEFAULT_BOT_NAME},봇`)
     .split(",")
     .map((name) => normalizeText(name))
+    .filter(Boolean);
+}
+
+function configuredAdmins() {
+  return (process.env.ADMIN_NAMES || "")
+    .split(",")
+    .map((name) => stripKakaoSuffix(name))
     .filter(Boolean);
 }
 
@@ -204,6 +225,8 @@ function ensureRoom(state, room) {
     aliases: {},
     people: {},
     links: {},
+    admins: [],
+    inbox: {},
     events: []
   };
   const roomState = state.rooms[key];
@@ -212,6 +235,8 @@ function ensureRoom(state, room) {
   roomState.aliases ||= {};
   roomState.people ||= {};
   roomState.links ||= {};
+  roomState.admins ||= [];
+  roomState.inbox ||= {};
   roomState.events ||= [];
   return roomState;
 }
@@ -248,6 +273,35 @@ function ensurePerson(roomState, name) {
 function addUnique(list, value) {
   const normalized = normalizeText(value);
   if (normalized && !list.includes(normalized)) list.push(normalized);
+}
+
+function displayNameForKey(roomState, key, fallback = "") {
+  return roomState.profiles[key]?.name || roomState.people[key]?.currentName || stripKakaoSuffix(fallback) || key;
+}
+
+function roomAdminKeys(roomState) {
+  return new Set([...configuredAdmins(), ...(roomState.admins || [])].map(personKey).filter(Boolean));
+}
+
+function hasConfiguredAdmin(roomState) {
+  return roomAdminKeys(roomState).size > 0;
+}
+
+function isAdmin(roomState, sender) {
+  const senderKey = personKey(sender);
+  return Boolean(senderKey && roomAdminKeys(roomState).has(senderKey));
+}
+
+function adminOnlyMessage() {
+  return [
+    "관리자 전용 명령어입니다.",
+    "관리자가 없으면 먼저 /관리자등록 닉네임 으로 초기 관리자를 등록해주세요."
+  ].join("\n");
+}
+
+function requireAdmin(roomState, sender) {
+  if (isAdmin(roomState, sender)) return null;
+  return adminOnlyMessage();
 }
 
 function recordRoomEvent(roomState, event) {
@@ -407,6 +461,154 @@ function linkRegisterCommand(roomState, text) {
   return `${name} 링크가 등록되었습니다.\n${url}`;
 }
 
+function adminRegisterCommand(roomState, sender, text) {
+  const target = stripKakaoSuffix(text.replace(/^\/관리자등록\s*/i, ""));
+  if (!target) return "형식: /관리자등록 닉네임";
+  if (hasConfiguredAdmin(roomState) && !isAdmin(roomState, sender)) return adminOnlyMessage();
+
+  ensurePerson(roomState, target);
+  addUnique(roomState.admins, target);
+  recordRoomEvent(roomState, { type: "admin_registered", name: target, by: sender });
+  return `${target}님이 관리자로 등록되었습니다.`;
+}
+
+function adminDeleteCommand(roomState, sender, text) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+
+  const target = stripKakaoSuffix(text.replace(/^\/관리자삭제\s*/i, ""));
+  if (!target) return "형식: /관리자삭제 닉네임";
+  const targetKey = personKey(target);
+  const before = roomState.admins.length;
+  roomState.admins = roomState.admins.filter((name) => personKey(name) !== targetKey);
+  if (roomState.admins.length === before) return `${target}님은 등록된 관리자가 아닙니다.`;
+  recordRoomEvent(roomState, { type: "admin_deleted", name: target, by: sender });
+  return `${target}님이 관리자 목록에서 삭제되었습니다.`;
+}
+
+function adminListCommand(roomState) {
+  const names = [...configuredAdmins(), ...(roomState.admins || [])]
+    .filter(Boolean)
+    .filter((name, index, list) => list.findIndex((value) => personKey(value) === personKey(name)) === index);
+  if (!names.length) return "등록된 관리자가 없습니다.\n/관리자등록 닉네임 으로 초기 관리자를 등록해주세요.";
+  return ["관리자 목록", ...names.map((name) => `• ${name}`)].join("\n");
+}
+
+function messageId(roomState, targetKey) {
+  const count = (roomState.inbox?.[targetKey]?.length || 0) + 1;
+  return `${targetKey}-${Date.now().toString(36)}-${count}`;
+}
+
+function candidateMentionNames(roomState) {
+  const candidates = [];
+  for (const [key, person] of Object.entries(roomState.people || {})) {
+    for (const name of [person.currentName, ...(person.names || [])]) {
+      if (name) candidates.push({ key, name });
+    }
+  }
+  for (const [key, profile] of Object.entries(roomState.profiles || {})) {
+    for (const name of [profile.name, profile.alias, ...(profile.aliases || [])]) {
+      if (name) candidates.push({ key, name });
+    }
+  }
+  return candidates
+    .filter((candidate, index, list) => {
+      return list.findIndex((value) => value.key === candidate.key && keyFor(value.name) === keyFor(candidate.name)) === index;
+    })
+    .sort((a, b) => keyFor(b.name).length - keyFor(a.name).length);
+}
+
+function resolveMentionTarget(roomState, rawMention) {
+  const mention = compactSpaces(rawMention).replace(/^[\s@]+|[\s,.!?~ㅋㅎㅠㅜ]+$/g, "");
+  if (!mention || keyFor(mention) === "all") return "";
+
+  const direct = resolveName(roomState, mention);
+  if (roomState.people[direct] || roomState.profiles[direct]) return direct;
+
+  const mentionKey = keyFor(mention);
+  for (const candidate of candidateMentionNames(roomState)) {
+    const candidateKey = keyFor(candidate.name);
+    if (mentionKey === candidateKey || mentionKey.startsWith(`${candidateKey} `)) return candidate.key;
+  }
+
+  const words = mention.split(/\s+/);
+  for (const size of [2, 1]) {
+    const sliced = words.slice(0, size).join(" ");
+    if (!sliced) continue;
+    const key = resolveName(roomState, sliced);
+    if (roomState.people[key] || roomState.profiles[key]) return key;
+  }
+  return "";
+}
+
+function mentionedTargetKeys(roomState, message, sender) {
+  const senderKey = personKey(sender);
+  const keys = [];
+  for (const match of message.matchAll(/@([^@\r\n]+)/g)) {
+    const key = resolveMentionTarget(roomState, match[1]);
+    if (key && key !== senderKey && !keys.includes(key)) keys.push(key);
+  }
+  return keys;
+}
+
+function recordMentionMessages(roomState, sender, message) {
+  if (!message.includes("@")) return [];
+  const targetKeys = mentionedTargetKeys(roomState, message, sender);
+  if (!targetKeys.length) return [];
+
+  const at = nowIso();
+  for (const key of targetKeys) {
+    roomState.inbox[key] ||= [];
+    roomState.inbox[key].push({
+      id: messageId(roomState, key),
+      from: stripKakaoSuffix(sender),
+      content: message,
+      at,
+      readAt: null
+    });
+    if (roomState.inbox[key].length > 100) roomState.inbox[key] = roomState.inbox[key].slice(-100);
+  }
+  recordRoomEvent(roomState, { type: "message_stored", from: sender, targets: targetKeys.map((key) => displayNameForKey(roomState, key)) });
+  return targetKeys;
+}
+
+function unreadMessages(roomState, sender) {
+  const key = resolveName(roomState, sender);
+  return (roomState.inbox?.[key] || []).filter((message) => !message.readAt);
+}
+
+function unreadNoticeText(roomState, sender) {
+  const messages = unreadMessages(roomState, sender);
+  if (!messages.length) return null;
+  const displayName = displayNameForKey(roomState, resolveName(roomState, sender), sender);
+  return [
+    `${displayName}님`,
+    `읽지 않은 메시지가 ${messages.length}건 있습니다.`,
+    "",
+    "\"/메시지\" 명령어를 입력하여 메시지를 확인하세요."
+  ].join("\n");
+}
+
+function messageInboxCommand(roomState, sender) {
+  const key = resolveName(roomState, sender);
+  const messages = unreadMessages(roomState, sender);
+  if (!messages.length) return "메시지가 없습니다.";
+
+  const readAt = nowIso();
+  for (const message of messages) message.readAt = readAt;
+
+  const displayName = displayNameForKey(roomState, key, sender);
+  const lines = [`💌 ${displayName}님, ${messages.length}건의 메시지가 있습니다.`, ""];
+  messages.forEach((message, index) => {
+    lines.push(`${index + 1}.`);
+    lines.push(`‣ 시간 : ${kstDateTime(new Date(message.at))}`);
+    lines.push(`‣ 보낸사람 : ${message.from}`);
+    lines.push(`‣ 내용 : ${message.content}`);
+    if (index < messages.length - 1) lines.push("");
+  });
+  return lines.join("\n");
+}
+
 function personHistoryText(roomState, query, sender) {
   const target = stripKakaoSuffix(query) || sender;
   const key = resolveName(roomState, target);
@@ -440,6 +642,54 @@ function personHistoryText(roomState, query, sender) {
       lines.push(`· ${event.from} ➙ ${event.to} (${shortKstDate(new Date(event.at))})`);
     }
   }
+  return lines.join("\n");
+}
+
+function personDetailedHistoryText(roomState, query, sender) {
+  const target = stripKakaoSuffix(query) || sender;
+  const key = resolveName(roomState, target);
+  const person = roomState.people[key];
+  if (!person) return `"${target}" 닉네임 기록이 없습니다.`;
+
+  const entries = person.entries || [];
+  const exits = person.exits || [];
+  const kicks = person.kicks || [];
+  const nickChanges = person.nickChanges || [];
+  const timeline = [
+    ...entries.map((event) => ({ type: "입장", at: event.at })),
+    ...exits.map((event) => ({ type: "퇴장", at: event.at })),
+    ...kicks.map((event) => ({ type: "강퇴", at: event.at })),
+    ...nickChanges.map((event) => ({ type: "닉변", at: event.at, detail: `${event.from} ➙ ${event.to}` }))
+  ].sort((a, b) => new Date(a.at) - new Date(b.at));
+
+  const lines = [
+    `${person.currentName || target}님 입퇴장 상세`,
+    "",
+    `입장 ${entries.length}회 / 퇴장 ${exits.length}회 / 강퇴 ${kicks.length}회 / 닉변 ${nickChanges.length}회`,
+    "",
+    "상세 이벤트"
+  ];
+
+  if (!timeline.length) {
+    lines.push("기록 없음");
+    return lines.join("\n");
+  }
+
+  timeline.slice(-30).forEach((event, index) => {
+    const detail = event.detail ? ` - ${event.detail}` : "";
+    lines.push(`${index + 1}. ${event.type} - ${kstDateTime(new Date(event.at))}${detail}`);
+  });
+  return lines.join("\n");
+}
+
+function nicknameHistoryText(person) {
+  const names = person.names || [];
+  if (!names.length) return "기록 없음";
+  const currentKey = keyFor(person.currentName);
+  const firstName = names[0];
+  const previousNames = names.filter((name) => keyFor(name) !== currentKey);
+  const lines = [`최초닉 : ${firstName}`];
+  for (const name of previousNames.slice(1)) lines.push(`• ${name}`);
   return lines.join("\n");
 }
 
@@ -481,6 +731,11 @@ function recordNickChange(roomState, from, to) {
   person.nickChanges.push({ from: stripKakaoSuffix(from), to: stripKakaoSuffix(to), at });
   roomState.people[newKey] = person;
   if (oldKey !== newKey) delete roomState.people[oldKey];
+  if (roomState.inbox?.[oldKey]) {
+    roomState.inbox[newKey] = [...(roomState.inbox[newKey] || []), ...roomState.inbox[oldKey]];
+    delete roomState.inbox[oldKey];
+  }
+  roomState.admins = (roomState.admins || []).map((name) => (personKey(name) === oldKey ? stripKakaoSuffix(to) : name));
   if (roomState.profiles[oldKey] && !roomState.profiles[newKey]) {
     roomState.profiles[newKey] = { ...roomState.profiles[oldKey], name: stripKakaoSuffix(to) };
     delete roomState.profiles[oldKey];
@@ -494,7 +749,11 @@ function recordNickChange(roomState, from, to) {
     "",
     `${stripKakaoSuffix(from)} ➙ ${stripKakaoSuffix(to)}`,
     "",
-    personHistoryText(roomState, to, to)
+    "【 닉네임 히스토리 】",
+    "",
+    nicknameHistoryText(person),
+    "",
+    `변경 횟수 : ${person.nickChanges.length}회`
   ].join("\n");
 }
 
@@ -549,6 +808,7 @@ function helpText() {
     "/공질 - 공식질문 양식",
     "/건의방, /얼공방, /무한성 - 방 링크",
     "/링크등록 이름 URL - 방 링크 저장",
+    "/메시지 - 내 메시지함 확인",
     "",
     "프로필",
     "/프로필등록 닉네임 && 공질내용",
@@ -559,7 +819,13 @@ function helpText() {
     "",
     "히스토리",
     "/입퇴장현황 닉네임",
+    "/입퇴장상세 닉네임",
     "/닉이력 닉네임",
+    "",
+    "관리자",
+    "/관리자등록 닉네임",
+    "/관리자삭제 닉네임",
+    "/관리자목록",
     "",
     "게임, 포인트, 상점 기능은 사용하지 않습니다."
   ].join("\n");
@@ -574,6 +840,8 @@ function benchmarkText() {
     "- 프로필/별명 DB",
     "- 입장/퇴장/재입장 기록",
     "- 닉네임 변경 기록",
+    "- 메시지함",
+    "- 관리자 전용 운영 명령어",
     "- 공질/방 링크 운영 명령어",
     "",
     "제외 범위",
@@ -603,12 +871,24 @@ async function handleCommand(state, room, sender, message) {
   if (command === "/벤치마크" || command === "/benchmark") return benchmarkText();
   if (command === "/공질") return PROFILE_FORM;
   if (["/건의방", "/얼공방", "/무한성"].includes(command)) return linkCommand(roomState, command);
-  if (command.startsWith("/링크등록 ")) return linkRegisterCommand(roomState, text);
-  if (command.startsWith("/프로필등록 ") || command.startsWith("/프로필 등록 ")) return profileRegisterCommand(roomState, sender, text);
-  if (command.startsWith("/프로필삭제 ")) return profileDeleteCommand(roomState, text);
+  if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
+  if (command.startsWith("/관리자등록 ")) return adminRegisterCommand(roomState, sender, text);
+  if (command.startsWith("/관리자삭제 ")) return adminDeleteCommand(roomState, sender, text);
+  if (command === "/관리자목록") return adminListCommand(roomState);
+  if (command.startsWith("/링크등록 ")) return requireAdmin(roomState, sender) || linkRegisterCommand(roomState, text);
+  if (command.startsWith("/프로필등록 ") || command.startsWith("/프로필 등록 ")) {
+    return requireAdmin(roomState, sender) || profileRegisterCommand(roomState, sender, text);
+  }
+  if (command.startsWith("/프로필삭제 ")) return requireAdmin(roomState, sender) || profileDeleteCommand(roomState, text);
   if (command.startsWith("/프로필 ") || command === "/프로필" || command.startsWith("/프로칠 ")) return profileViewCommand(roomState, text, sender);
-  if (command.startsWith("/별명등록 ")) return aliasRegisterCommand(roomState, sender, text);
-  if (command.startsWith("/별명삭제 ")) return aliasDeleteCommand(roomState, text);
+  if (command.startsWith("/별명등록 ")) return requireAdmin(roomState, sender) || aliasRegisterCommand(roomState, sender, text);
+  if (command.startsWith("/별명삭제 ")) return requireAdmin(roomState, sender) || aliasDeleteCommand(roomState, text);
+  if (command.startsWith("/입퇴장상세")) {
+    const denied = requireAdmin(roomState, sender);
+    if (denied) return denied;
+    const query = text.replace(/^\/입퇴장상세\s*/i, "");
+    return personDetailedHistoryText(roomState, query, sender);
+  }
   if (command.startsWith("/입퇴장현황") || command.startsWith("/닉이력")) {
     const query = text.replace(/^\/(?:입퇴장현황|닉이력)\s*/i, "");
     return personHistoryText(roomState, query, sender);
@@ -626,6 +906,7 @@ async function handleCommand(state, room, sender, message) {
 
 async function handleMessage(state, room, sender, message) {
   const roomState = ensureRoom(state, room);
+  const text = normalizeText(message);
   const event = detectSystemEvent(message);
   if (event?.type === "entered") return recordEntry(roomState, event.name);
   if (event?.type === "left") return recordExit(roomState, event.name, "left");
@@ -634,7 +915,10 @@ async function handleMessage(state, room, sender, message) {
 
   const person = ensurePerson(roomState, sender);
   if (person) person.lastSeenAt = nowIso();
-  return handleCommand(state, room, sender, message);
+  if (text.startsWith("/")) return handleCommand(state, room, sender, message);
+
+  recordMentionMessages(roomState, sender, text);
+  return unreadNoticeText(roomState, sender);
 }
 
 export async function handleSkill(payload) {
