@@ -89,6 +89,8 @@ try {
   assert.match(homeText, /kakaotalk:\/\/web\/openExternal/);
   assert.match(homeText, /intent:\/\//);
   assert.doesNotMatch(homeText, /package=com\.android\.chrome/);
+  assert.doesNotMatch(homeText, /"#Intent"/);
+  assert.match(homeText, /targetUrl\.search\}#Intent`/);
   assert.match(homeText, /기본 브라우저/);
 
   const help = await request("/skill", {

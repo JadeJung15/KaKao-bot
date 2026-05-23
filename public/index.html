@@ -33,8 +33,7 @@
         const externalUrl = (() => {
           if (/Android/i.test(userAgent)) {
             return [
-              `intent://${targetUrl.host}${targetUrl.pathname}${targetUrl.search}`,
-              "#Intent",
+              `intent://${targetUrl.host}${targetUrl.pathname}${targetUrl.search}#Intent`,
               `scheme=${targetUrl.protocol.replace(":", "")}`,
               "action=android.intent.action.VIEW",
               "category=android.intent.category.BROWSABLE",
