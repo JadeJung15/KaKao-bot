@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.8";
+export const APP_VERSION = "0.4.9";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -830,7 +830,14 @@ function adminListCommand(roomState) {
 function recentEventsCommand(state, roomState, sender, text) {
   const count = Math.min(20, Math.max(1, Number(text.match(/\d+/)?.[0] || 10)));
   const roomEvents = roomState.rawEvents || [];
-  const requestIds = identityIds(roomEvents.at(-1)?.identity || {});
+  const requestEvent = roomEvents.at(-1) || null;
+  const requestIdentity = requestEvent?.identity || {};
+  const requestIds = identityIds(requestIdentity);
+  const requestCurrentNames = new Map(
+    requestIds
+      .map((id) => [id, currentIdentityName(requestIdentity, requestEvent, id)])
+      .filter(([, name]) => Boolean(name))
+  );
   const identityEvents = requestIds.length ? identityRawEvents(state, roomState, requestIds) : [];
   const events = (identityEvents.length ? identityEvents : roomEvents).slice(-count);
   const isIdentityScoped = identityEvents.length > 0;
@@ -850,7 +857,7 @@ function recentEventsCommand(state, roomState, sender, text) {
     lines.push(`• event : ${event.eventType || "-"}`);
     lines.push(`• senderId : ${identity.senderId || "없음"}`);
     lines.push(`• targetUserId : ${identity.targetUserId || "없음"}`);
-    const memberText = identityMemberSummary(state, roomState, identity, event);
+    const memberText = identityMemberSummary(state, roomState, identity, event, requestCurrentNames);
     if (memberText) lines.push(`• 회원이력 : ${memberText}`);
     if (candidateText) lines.push(`• id 후보 : ${candidateText}`);
     lines.push("");
@@ -915,14 +922,14 @@ function currentIdentityName(identity, event, identityId) {
   return "";
 }
 
-function identityMemberSummary(state, roomState, identity = {}, event = {}) {
+function identityMemberSummary(state, roomState, identity = {}, event = {}, currentNames = new Map()) {
   const ids = identityIds(identity);
   for (const id of ids) {
     const people = identityPeopleFromRooms(state, roomState, id);
     const rawNames = identityNamesFromRawEvents(state, roomState, id);
     if (!people.length && !rawNames.length) continue;
     const names = uniqueNames([...people.flatMap((person) => person.names || []), ...people.map((person) => person.currentName), ...rawNames]);
-    const current = currentIdentityName(identity, event, id) || people[0]?.currentName || rawNames.at(-1) || names.at(-1) || "";
+    const current = currentNames.get(id) || currentIdentityName(identity, event, id) || people[0]?.currentName || rawNames.at(-1) || names.at(-1) || "";
     const previous = names.filter((name) => keyFor(name) !== keyFor(current));
     if (previous.length) return `${current} (이전닉: ${previous.join(", ")})`;
     return current;

@@ -260,6 +260,7 @@ try {
   assert.match(crossRoomRecoverEvents.json.reply, /같은 고유값 기준/);
   assert.match(crossRoomRecoverEvents.json.reply, /sender : 이전방닉 남/);
   assert.match(crossRoomRecoverEvents.json.reply, /sender : 현재방닉 남/);
+  assert.match(crossRoomRecoverEvents.json.reply, /sender : 이전방닉 남[\s\S]+회원이력 : 현재방닉 남 \(이전닉: 이전방닉 남\)/);
 
   const linkDenied = await chat("/링크등록 얼공방 https://open.kakao.com/o/denied", "사용자");
   assert.match(linkDenied.json.reply, /관리자 전용/);
