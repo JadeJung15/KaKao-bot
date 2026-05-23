@@ -1,0 +1,6 @@
+<resources>
+    <color name="pixelgom_primary">#7A4A2A</color>
+    <color name="pixelgom_primary_dark">#3A2518</color>
+    <color name="pixelgom_accent">#F58BA3</color>
+    <color name="pixelgom_background">#FFF6E7</color>
+</resources>

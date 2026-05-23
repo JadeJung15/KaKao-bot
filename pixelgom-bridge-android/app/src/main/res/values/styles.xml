@@ -1,0 +1,9 @@
+<resources>
+    <style name="PixelgomBridgeTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/pixelgom_accent</item>
+        <item name="android:navigationBarColor">@color/pixelgom_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@color/pixelgom_background</item>
+    </style>
+</resources>
