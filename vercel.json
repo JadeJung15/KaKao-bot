@@ -1,11 +1,15 @@
 {
   "rewrites": [
-    { "source": "/", "destination": "/api/health" },
+    { "source": "/", "destination": "/index.html" },
     { "source": "/health", "destination": "/api/health" },
     { "source": "/chat-event", "destination": "/api/chat-event" },
     { "source": "/skill", "destination": "/api/skill" }
   ],
   "functions": {
+    "server.js": {
+      "includeFiles": "public/**",
+      "maxDuration": 10
+    },
     "api/*.js": {
       "maxDuration": 10
     }

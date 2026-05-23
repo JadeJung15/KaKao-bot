@@ -8,9 +8,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
 const DEFAULT_BOT_NAME = process.env.BOT_DISPLAY_NAME || "운영봇";
 const ROOM_BRAND_NAME = process.env.ROOM_BRAND_NAME || "무잔썸";
+const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
+const STATIC_CONTENT_TYPES = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".ico": "image/x-icon",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".js": "text/javascript; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp"
+};
 
 export const APP_VERSION = "0.4.15";
 export const FEATURES = [
@@ -192,6 +204,40 @@ function jsonResponse(res, statusCode, payload) {
     "cache-control": "no-store"
   });
   res.end(JSON.stringify(payload));
+}
+
+async function staticResponse(req, res, pathname) {
+  if (!["GET", "HEAD"].includes(req.method || "")) return false;
+
+  let relativePath;
+  try {
+    relativePath = pathname === "/" ? "index.html" : decodeURIComponent(pathname.replace(/^\/+/, ""));
+  } catch {
+    return false;
+  }
+  if (!relativePath || relativePath.includes("\0")) return false;
+
+  const filePath = path.join(PUBLIC_DIR, relativePath);
+  const safePath = path.relative(PUBLIC_DIR, filePath);
+  if (safePath.startsWith("..") || path.isAbsolute(safePath)) return false;
+
+  try {
+    const body = await readFile(filePath);
+    const extension = path.extname(filePath).toLowerCase();
+    const cacheControl = [".ico", ".jpg", ".jpeg", ".png", ".svg", ".webp"].includes(extension)
+      ? "public, max-age=31536000, immutable"
+      : "no-cache";
+    res.writeHead(200, {
+      "content-type": STATIC_CONTENT_TYPES[extension] || "application/octet-stream",
+      "cache-control": cacheControl
+    });
+    if (req.method === "HEAD") res.end();
+    else res.end(body);
+    return true;
+  } catch (error) {
+    if (error?.code !== "ENOENT" && error?.code !== "EISDIR") throw error;
+    return false;
+  }
 }
 
 function cloneInitialState() {
@@ -1845,6 +1891,8 @@ async function readBody(req) {
 export async function requestHandler(req, res) {
   try {
     const pathname = new URL(req.url || "/", "http://localhost").pathname;
+    if (await staticResponse(req, res, pathname)) return;
+
     const isHealthPath = pathname === "/" || pathname === "/health" || pathname === "/api/health";
     const isSkillPath = pathname === "/skill" || pathname === "/api/skill";
     const isChatEventPath = pathname === "/chat-event" || pathname === "/api/chat-event";

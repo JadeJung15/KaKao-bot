@@ -79,6 +79,11 @@ try {
   assert.match(health.json.features.join(","), /cross-room-identity-nickname-recovery/);
   assert.match(health.json.features.join(","), /identity-scoped-recent-events/);
 
+  const home = await fetch(`${baseUrl}/`);
+  assert.equal(home.status, 200);
+  assert.match(home.headers.get("content-type") || "", /text\/html/);
+  assert.match(await home.text(), /픽셀곰/);
+
   const help = await request("/skill", {
     method: "POST",
     headers: { "content-type": "application/json" },

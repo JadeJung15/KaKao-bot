@@ -8,7 +8,7 @@
 - 채팅방 봇 웹훅: `POST /chat-event`
 - 카카오 i 스킬 웹훅: `POST /skill`
 - 상태 확인: `GET /health`
-- 루트 상태 확인: `GET /`
+- 픽셀곰 기능 소개 홈페이지: `GET /`
 - 게임 기능: 사용 안 함
 - 저장소: 로컬 JSON 또는 PostgreSQL
 - 2차 운영 기능: 메시지함, 입퇴장 상세, 관리자 전용 명령어
@@ -169,7 +169,7 @@ Vercel 배포 기준입니다.
 /skill
 ```
 
-`vercel.json`에서 `/`와 `/health`는 `/api/health`로 연결됩니다.
+`vercel.json`에서 `/`는 픽셀곰 기능 소개 홈페이지로, `/health`는 서버 상태 확인 API로 연결됩니다.
 
 ## 안드로이드 자동응답 앱 연결
 
