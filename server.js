@@ -11,7 +11,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.3.1";
+export const APP_VERSION = "0.4.0";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -23,10 +23,25 @@ export const FEATURES = [
   "detailed-member-history",
   "message-inbox",
   "admin-commands",
+  "point-ledger",
+  "like-points",
+  "point-transfer",
+  "attendance-rewards",
+  "member-levels",
+  "member-rankings",
   "room-links",
   "profile-form",
   "no-games"
 ];
+
+const CHAT_POINT_REWARD = 2;
+const CHAT_EXP_REWARD = 1;
+const ATTENDANCE_POINT_REWARD = 100;
+const ATTENDANCE_EXP_REWARD = 10;
+const LEVEL_UP_POINT_REWARD = 100;
+const LIKE_POINT_COST = 4;
+const TRANSFER_FEE_RATE = 0.1;
+const MAX_LIKE_AMOUNT = 999;
 
 const PROFILE_FORM = [
   "☑닉 /성별 :",
@@ -93,6 +108,54 @@ function kstDateTime(date = new Date()) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit"
+  }).format(date);
+}
+
+function kstDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+}
+
+function kstDateKey(date = new Date()) {
+  const parts = kstDateParts(date);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function kstMonthKey(date = new Date()) {
+  const parts = kstDateParts(date);
+  return `${parts.year}-${parts.month}`;
+}
+
+function utcDateKey(date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function previousDateKey(dateKey) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return utcDateKey(new Date(Date.UTC(year, month - 1, day) - 86400000));
+}
+
+function kstWeekKey(date = new Date()) {
+  const [year, month, day] = kstDateKey(date).split("-").map(Number);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  const mondayOffset = (utcDate.getUTCDay() + 6) % 7;
+  return utcDateKey(new Date(utcDate.getTime() - mondayOffset * 86400000));
+}
+
+function kstLongDate(date = new Date()) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "long",
+    day: "numeric"
   }).format(date);
 }
 
@@ -238,6 +301,7 @@ function ensureRoom(state, room) {
   roomState.admins ||= [];
   roomState.inbox ||= {};
   roomState.events ||= [];
+  for (const person of Object.values(roomState.people)) normalizePersonState(person);
   return roomState;
 }
 
@@ -262,11 +326,42 @@ function ensurePerson(roomState, name) {
     entries: [],
     exits: [],
     kicks: [],
-    nickChanges: []
+    nickChanges: [],
+    joinedAt: nowIso(),
+    points: 0,
+    spentPoints: 0,
+    exp: 0,
+    level: 1,
+    hearts: 0,
+    attendance: { dates: [], currentStreak: 0 },
+    chats: { total: 0, byDate: {}, byWeek: {} }
   };
   const person = roomState.people[key];
+  normalizePersonState(person);
   person.currentName ||= displayName;
   addUnique(person.names, displayName);
+  return person;
+}
+
+function normalizePersonState(person) {
+  person.names ||= [];
+  person.entries ||= [];
+  person.exits ||= [];
+  person.kicks ||= [];
+  person.nickChanges ||= [];
+  person.joinedAt ||= nowIso();
+  person.points = Number.isFinite(Number(person.points)) ? Number(person.points) : 0;
+  person.spentPoints = Number.isFinite(Number(person.spentPoints)) ? Number(person.spentPoints) : 0;
+  person.exp = Number.isFinite(Number(person.exp)) ? Number(person.exp) : 0;
+  person.level = Math.max(1, Number.isFinite(Number(person.level)) ? Number(person.level) : 1);
+  person.hearts = Number.isFinite(Number(person.hearts)) ? Number(person.hearts) : 0;
+  person.attendance ||= {};
+  person.attendance.dates ||= [];
+  person.attendance.currentStreak = Math.max(0, Number(person.attendance.currentStreak || 0));
+  person.chats ||= {};
+  person.chats.total = Math.max(0, Number(person.chats.total || 0));
+  person.chats.byDate ||= {};
+  person.chats.byWeek ||= {};
   return person;
 }
 
@@ -277,6 +372,16 @@ function addUnique(list, value) {
 
 function displayNameForKey(roomState, key, fallback = "") {
   return roomState.profiles[key]?.name || roomState.people[key]?.currentName || stripKakaoSuffix(fallback) || key;
+}
+
+function existingPersonKey(roomState, query) {
+  const key = resolveName(roomState, query);
+  if (key && roomState.people[key]) return key;
+  if (key && roomState.profiles[key]) {
+    ensurePerson(roomState, roomState.profiles[key].name);
+    return key;
+  }
+  return "";
 }
 
 function roomAdminKeys(roomState) {
@@ -495,6 +600,41 @@ function adminDeleteCommand(roomState, sender, text) {
   return `${target}님이 관리자 목록에서 삭제되었습니다.`;
 }
 
+function parseAdminNames(value) {
+  const names = value
+    .split(/[,\n]/)
+    .map((name) => stripKakaoSuffix(name))
+    .filter(Boolean);
+  return names.filter((name, index, list) => list.findIndex((value) => personKey(value) === personKey(name)) === index);
+}
+
+function adminResetCommand(roomState, sender, text) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+
+  const isClearCommand = /^\/관리자초기화(?:\s|$)/i.test(text);
+  const body = text.replace(/^\/(?:관리자초기화|관리자재설정)\s*/i, "");
+  const names = parseAdminNames(body);
+
+  if (!names.length && isClearCommand) {
+    roomState.admins = [];
+    recordRoomEvent(roomState, { type: "admin_reset", names: [], by: sender });
+    const rootAdmins = configuredAdmins();
+    return [
+      "방 관리자 목록이 초기화되었습니다.",
+      "환경변수 ADMIN_NAMES 관리자는 계속 유지됩니다.",
+      rootAdmins.length ? ["", "현재 환경변수 관리자", ...rootAdmins.map((name) => `• ${name}`)].join("\n") : ""
+    ].filter(Boolean).join("\n");
+  }
+
+  if (!names.length) return "형식: /관리자재설정 닉네임1,닉네임2";
+
+  for (const name of names) ensurePerson(roomState, name);
+  roomState.admins = names;
+  recordRoomEvent(roomState, { type: "admin_reset", names, by: sender });
+  return ["관리자 목록이 재설정되었습니다.", ...names.map((name) => `• ${name}`)].join("\n");
+}
+
 function adminListCommand(roomState) {
   const names = [...configuredAdmins(), ...(roomState.admins || [])]
     .filter(Boolean)
@@ -615,6 +755,279 @@ function messageInboxCommand(roomState, sender) {
     lines.push(`‣ 내용 : ${message.content}`);
     if (index < messages.length - 1) lines.push("");
   });
+  return lines.join("\n");
+}
+
+function formatNumber(value) {
+  return Math.max(0, Math.trunc(Number(value) || 0)).toLocaleString("ko-KR");
+}
+
+function formatPoint(value) {
+  return `🅟${formatNumber(value)}`;
+}
+
+function requiredExpForLevel(level) {
+  return 48 + Math.max(1, Number(level) || 1) * 2;
+}
+
+function parseAmount(value) {
+  const amount = Number(String(value || "").replace(/,/g, ""));
+  if (!Number.isInteger(amount) || amount <= 0) return null;
+  return amount;
+}
+
+function parseTargetAndAmount(text, commandPattern) {
+  const body = text.replace(commandPattern, "").trim();
+  const match = body.match(/^(.+?)\s*([0-9][0-9,]*)$/);
+  if (!match) return null;
+  return {
+    target: stripKakaoSuffix(match[1]),
+    amount: parseAmount(match[2])
+  };
+}
+
+function grantExpAndLevel(person, expAmount) {
+  normalizePersonState(person);
+  person.exp += Math.max(0, Number(expAmount) || 0);
+  const notices = [];
+  while (person.exp >= requiredExpForLevel(person.level)) {
+    const fromLevel = person.level;
+    person.exp -= requiredExpForLevel(person.level);
+    person.level += 1;
+    person.points += LEVEL_UP_POINT_REWARD;
+    notices.push([
+      `${person.currentName}님 레벨업!`,
+      "",
+      `LV.${fromLevel} ➜ LV.${person.level}`,
+      "",
+      `${formatPoint(LEVEL_UP_POINT_REWARD)} 획득`
+    ].join("\n"));
+  }
+  return notices;
+}
+
+function recordActivity(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  if (!person) return null;
+  const dateKey = kstDateKey();
+  const weekKey = kstWeekKey();
+  person.lastSeenAt = nowIso();
+  person.points += CHAT_POINT_REWARD;
+  person.chats.total += 1;
+  person.chats.byDate[dateKey] = (person.chats.byDate[dateKey] || 0) + 1;
+  person.chats.byWeek[weekKey] = (person.chats.byWeek[weekKey] || 0) + 1;
+  const notices = grantExpAndLevel(person, CHAT_EXP_REWARD);
+  return notices[0] || null;
+}
+
+function pointViewCommand(roomState, text, sender) {
+  const target = stripKakaoSuffix(text.replace(/^\/(?:내포인트|포인트)\s*/i, "")) || sender;
+  const key = existingPersonKey(roomState, target) || personKey(target);
+  const person = roomState.people[key] || ensurePerson(roomState, target);
+  return `${displayNameForKey(roomState, key, target)}님의 포인트 : ${formatPoint(person.points)}`;
+}
+
+function attendanceCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const today = kstDateKey();
+  if (person.attendance.dates.includes(today)) return `${person.currentName}님 이미 출첵 하셨습니다.`;
+
+  const lastDate = person.attendance.dates.at(-1);
+  person.attendance.currentStreak = lastDate === previousDateKey(today) ? person.attendance.currentStreak + 1 : 1;
+  person.attendance.dates.push(today);
+  person.points += ATTENDANCE_POINT_REWARD;
+  const notices = grantExpAndLevel(person, ATTENDANCE_EXP_REWARD);
+  const firstLine = person.attendance.currentStreak > 1
+    ? `${person.currentName}님 ${person.attendance.currentStreak}일 연속 출석!`
+    : `${person.currentName}님 출석!`;
+  return [
+    firstLine,
+    "",
+    `${formatPoint(ATTENDANCE_POINT_REWARD)} 획득`,
+    ...notices.flatMap((notice) => ["", notice])
+  ].join("\n");
+}
+
+function likeCommand(roomState, sender, text) {
+  const parsed = parseTargetAndAmount(text, /^\/좋아요\s*/i);
+  if (!parsed?.target || !parsed.amount) return "형식: /좋아요 닉네임 1~999";
+  if (parsed.amount < 1 || parsed.amount > MAX_LIKE_AMOUNT) return `1 ~ ${MAX_LIKE_AMOUNT} 범위 안의 숫자를 입력하세요.`;
+
+  const giver = ensurePerson(roomState, sender);
+  const targetKey = existingPersonKey(roomState, parsed.target);
+  if (!targetKey) return `"${parsed.target}" 사용자를 찾을 수 없습니다.`;
+  if (targetKey === personKey(sender)) return "님 말고 다른 사람";
+
+  const receiver = roomState.people[targetKey];
+  const cost = parsed.amount * LIKE_POINT_COST;
+  if (giver.points < cost) {
+    return [
+      "포인트가 부족합니다.",
+      "",
+      `• 보유 포인트 : ${formatPoint(giver.points)}`
+    ].join("\n");
+  }
+
+  giver.points -= cost;
+  giver.spentPoints += cost;
+  receiver.hearts += parsed.amount;
+  recordRoomEvent(roomState, { type: "liked", from: giver.currentName, to: receiver.currentName, amount: parsed.amount, cost });
+  return "💕".repeat(parsed.amount);
+}
+
+function transferCommand(roomState, sender, text) {
+  const parsed = parseTargetAndAmount(text, /^\/이체\s*/i);
+  if (!parsed?.target || !parsed.amount) return "형식: /이체 닉네임 포인트";
+
+  const senderPerson = ensurePerson(roomState, sender);
+  const targetKey = existingPersonKey(roomState, parsed.target);
+  if (!targetKey) return `"${parsed.target}" 사용자를 찾을 수 없습니다.`;
+  if (targetKey === personKey(sender)) return "본인에게는 이체할 수 없습니다.";
+
+  const receiver = roomState.people[targetKey];
+  const fee = Math.max(1, Math.ceil(parsed.amount * TRANSFER_FEE_RATE));
+  const totalCost = parsed.amount + fee;
+  if (senderPerson.points < totalCost) {
+    return [
+      "포인트가 부족합니다.",
+      "",
+      `• 보유 포인트 : ${formatPoint(senderPerson.points)}`,
+      `• 수수료 : ${formatPoint(fee)}`
+    ].join("\n");
+  }
+
+  senderPerson.points -= totalCost;
+  senderPerson.spentPoints += fee;
+  receiver.points += parsed.amount;
+  recordRoomEvent(roomState, { type: "point_transferred", from: senderPerson.currentName, to: receiver.currentName, amount: parsed.amount, fee });
+  const alias = roomState.profiles[targetKey]?.alias ? ` (별명 : ${roomState.profiles[targetKey].alias})` : "";
+  return [
+    "✅ 이체 완료",
+    "",
+    `• 송금인 : ${senderPerson.currentName}`,
+    `• 수취인 : ${receiver.currentName}${alias}`,
+    `• 포인트 : ${formatPoint(parsed.amount)}`,
+    `• 수수료 : ${formatPoint(fee)}`
+  ].join("\n");
+}
+
+function adminPointAdjustCommand(roomState, sender, text, mode) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+
+  const commandPattern = mode === "grant" ? /^\/포인트지급\s*/i : mode === "debit" ? /^\/포인트차감\s*/i : /^\/포인트설정\s*/i;
+  const parsed = parseTargetAndAmount(text, commandPattern);
+  if (!parsed?.target || !parsed.amount) {
+    const name = mode === "grant" ? "포인트지급" : mode === "debit" ? "포인트차감" : "포인트설정";
+    return `형식: /${name} 닉네임 포인트`;
+  }
+
+  const targetKey = existingPersonKey(roomState, parsed.target) || personKey(parsed.target);
+  const person = roomState.people[targetKey] || ensurePerson(roomState, parsed.target);
+  if (mode === "grant") person.points += parsed.amount;
+  if (mode === "debit") person.points = Math.max(0, person.points - parsed.amount);
+  if (mode === "set") person.points = parsed.amount;
+  const label = mode === "grant" ? "지급" : mode === "debit" ? "차감" : "설정";
+  recordRoomEvent(roomState, { type: `point_${mode}`, name: person.currentName, amount: parsed.amount, by: sender });
+  return [
+    `포인트 ${label} 완료`,
+    "",
+    `• 대상 : ${person.currentName}`,
+    `• 금액 : ${formatPoint(parsed.amount)}`,
+    `• 보유 포인트 : ${formatPoint(person.points)}`
+  ].join("\n");
+}
+
+function memberInfoCommand(roomState, text, sender) {
+  const query = stripKakaoSuffix(text.replace(/^\/(?:내정보|레벨)\s*/i, "").replace(/^\/정보\s*/i, "")) || sender;
+  const key = existingPersonKey(roomState, query) || personKey(query);
+  const person = roomState.people[key] || ensurePerson(roomState, query);
+  const profile = roomState.profiles[key];
+  const today = kstDateKey();
+  const month = kstMonthKey();
+  const nextExp = requiredExpForLevel(person.level);
+  const expPercent = nextExp ? ((person.exp / nextExp) * 100).toFixed(2) : "0.00";
+  const nameLine = `${profile?.alias ? "🌿" : "🥚"}${person.currentName}${profile?.alias ? ` (${profile.alias})` : ""}`;
+  const monthAttendance = person.attendance.dates.filter((date) => date.startsWith(month)).length;
+  return [
+    nameLine,
+    "",
+    `• 레벨 : ${person.level}`,
+    `• 가입일 : ${kstLongDate(new Date(person.joinedAt))}`,
+    `• 총 출석일 : ${person.attendance.dates.length}일`,
+    `• 당월 출석일 : ${monthAttendance}일`,
+    `• 연속 출석일 : ${person.attendance.currentStreak}일`,
+    `• 전체 채팅 : ${formatNumber(person.chats.total)}회`,
+    `• 오늘 채팅 : ${formatNumber(person.chats.byDate[today] || 0)}회`,
+    `• 보유 포인트 : ${formatPoint(person.points)}`,
+    `• 소비한 포인트 : ${formatPoint(person.spentPoints)}`,
+    "• 타이틀 개수 : 0개",
+    `• 경험치 : ${formatNumber(person.exp)} / ${formatNumber(nextExp)} (${expPercent}%)`,
+    "",
+    `♥ x ${formatNumber(person.hearts)}`
+  ].join("\n");
+}
+
+function rankedPeople(roomState, scoreFn) {
+  return Object.entries(roomState.people || {})
+    .map(([key, person]) => {
+      normalizePersonState(person);
+      return { key, person, score: scoreFn(person) };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || keyFor(a.person.currentName).localeCompare(keyFor(b.person.currentName)));
+}
+
+function medal(rank) {
+  if (rank === 1) return "🥇";
+  if (rank === 2) return "🥈";
+  if (rank === 3) return "🥉";
+  return `${rank}위 -`;
+}
+
+function rankingText(roomState, sender, type) {
+  const today = kstDateKey();
+  const week = kstWeekKey();
+  const configs = {
+    points: {
+      title: "채팅방 포인트 순위",
+      score: (person) => person.points,
+      value: (item) => formatPoint(item.score)
+    },
+    likes: {
+      title: "채팅방 좋아요순위",
+      score: (person) => person.hearts,
+      value: (item) => `♥${formatNumber(item.score)}`
+    },
+    levels: {
+      title: "채팅방 레벨 순위",
+      score: (person) => person.level * 100000 + person.exp,
+      value: (item) => `LV.${item.person.level} (${formatNumber(item.person.exp)} / ${formatNumber(requiredExpForLevel(item.person.level))})`
+    },
+    todayChats: {
+      title: "오늘 채팅 순위",
+      score: (person) => person.chats.byDate[today] || 0,
+      value: (item, total) => `(${formatNumber(item.score)}회, ${total ? ((item.score / total) * 100).toFixed(1) : "0.0"}%)`
+    },
+    weekChats: {
+      title: "이번 주 채팅 순위",
+      score: (person) => person.chats.byWeek[week] || 0,
+      value: (item, total) => `(${formatNumber(item.score)}회, ${total ? ((item.score / total) * 100).toFixed(1) : "0.0"}%)`
+    }
+  };
+  const config = configs[type];
+  const rows = rankedPeople(roomState, config.score);
+  const total = rows.reduce((sum, item) => sum + item.score, 0);
+  const senderKey = existingPersonKey(roomState, sender) || personKey(sender);
+  const ownRank = rows.findIndex((item) => item.key === senderKey) + 1;
+  const lines = [config.title, ""];
+  if (type === "todayChats" || type === "weekChats") lines.push(`• 그룹방 전체 : ${formatNumber(total)}회`);
+  lines.push(`• ${displayNameForKey(roomState, senderKey, sender)}님 : ${ownRank ? `${ownRank}위` : "순위 없음"}`, "");
+  rows.slice(0, 15).forEach((item, index) => {
+    const rank = index + 1;
+    lines.push(`${medal(rank)} ${item.person.currentName} ${config.value(item, total)}`);
+  });
+  if (!rows.length) lines.push("기록 없음");
   return lines.join("\n");
 }
 
@@ -824,6 +1237,15 @@ function helpText() {
     "/링크등록 이름 URL - 방 링크 저장",
     "/메시지 - 내 메시지함 확인",
     "",
+    "포인트",
+    "/출석, /출석체크 - 일일 출석 보상",
+    "/포인트, /내포인트 - 내 포인트 확인",
+    "/내정보, /레벨 - 레벨/포인트/채팅 정보",
+    "/좋아요 닉네임 1~999 - 포인트로 하트 보내기",
+    "/이체 닉네임 포인트 - 포인트 이체",
+    "/포인트순위, /좋아요순위, /레벨순위",
+    "/채팅오늘, /채팅금주",
+    "",
     "프로필",
     "/프로필등록 닉네임 && 공질내용",
     "/프로필 닉네임",
@@ -839,9 +1261,14 @@ function helpText() {
     "관리자",
     "/관리자등록 닉네임",
     "/관리자삭제 닉네임",
+    "/관리자재설정 닉네임1,닉네임2",
+    "/관리자초기화 - 방 관리자 목록 초기화",
     "/관리자목록",
+    "/포인트지급 닉네임 포인트",
+    "/포인트차감 닉네임 포인트",
+    "/포인트설정 닉네임 포인트",
     "",
-    "게임, 포인트, 상점 기능은 사용하지 않습니다."
+    "게임, 상점 기능은 사용하지 않습니다."
   ].join("\n");
 }
 
@@ -856,11 +1283,12 @@ function benchmarkText() {
     "- 닉네임 변경 기록",
     "- 메시지함",
     "- 관리자 전용 운영 명령어",
+    "- 포인트/좋아요/출석/순위",
     "- 공질/방 링크 운영 명령어",
     "",
     "제외 범위",
     "- 게임",
-    "- 포인트/아이템/상점",
+    "- 아이템/상점",
     "- RPG/레벨 경쟁"
   ].join("\n");
 }
@@ -886,8 +1314,22 @@ async function handleCommand(state, room, sender, message) {
   if (command === "/공질") return PROFILE_FORM;
   if (["/건의방", "/얼공방", "/무한성"].includes(command)) return linkCommand(roomState, command);
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
+  if (/^\/(?:출석|출석체크|출첵)$/.test(command)) return attendanceCommand(roomState, sender);
+  if (/^\/포인트\s*순위$|^\/포인트순위$/.test(command)) return rankingText(roomState, sender, "points");
+  if (/^\/좋아요\s*순위$|^\/좋아요순위$/.test(command)) return rankingText(roomState, sender, "likes");
+  if (/^\/레벨\s*순위$|^\/레벨순위$/.test(command)) return rankingText(roomState, sender, "levels");
+  if (command === "/채팅오늘") return rankingText(roomState, sender, "todayChats");
+  if (command === "/채팅금주") return rankingText(roomState, sender, "weekChats");
+  if (command.startsWith("/포인트지급 ")) return adminPointAdjustCommand(roomState, sender, text, "grant");
+  if (command.startsWith("/포인트차감 ")) return adminPointAdjustCommand(roomState, sender, text, "debit");
+  if (command.startsWith("/포인트설정 ")) return adminPointAdjustCommand(roomState, sender, text, "set");
+  if (/^\/(?:포인트|내포인트)(?:\s|$)/.test(command)) return pointViewCommand(roomState, text, sender);
+  if (command.startsWith("/좋아요 ")) return likeCommand(roomState, sender, text);
+  if (command.startsWith("/이체 ")) return transferCommand(roomState, sender, text);
+  if (/^\/(?:내정보|레벨)(?:\s|$)/.test(command) || command.startsWith("/정보 ")) return memberInfoCommand(roomState, text, sender);
   if (command.startsWith("/관리자등록 ")) return adminRegisterCommand(roomState, sender, text);
   if (command.startsWith("/관리자삭제 ")) return adminDeleteCommand(roomState, sender, text);
+  if (/^\/(?:관리자재설정|관리자초기화)(?:\s|$)/.test(command)) return adminResetCommand(roomState, sender, text);
   if (command === "/관리자목록") return adminListCommand(roomState);
   if (command.startsWith("/링크등록 ")) return requireAdmin(roomState, sender) || linkRegisterCommand(roomState, text);
   if (command.startsWith("/프로필등록 ") || command.startsWith("/프로필 등록 ")) {
@@ -927,12 +1369,11 @@ async function handleMessage(state, room, sender, message) {
   if (event?.type === "kicked") return recordExit(roomState, event.name, "kicked");
   if (event?.type === "nickname_changed") return recordNickChange(roomState, event.from, event.to);
 
-  const person = ensurePerson(roomState, sender);
-  if (person) person.lastSeenAt = nowIso();
+  const activityReply = recordActivity(roomState, sender);
   if (text.startsWith("/")) return handleCommand(state, room, sender, message);
 
   recordMentionMessages(roomState, sender, text);
-  return unreadNoticeText(roomState, sender);
+  return unreadNoticeText(roomState, sender) || activityReply;
 }
 
 export async function handleSkill(payload) {

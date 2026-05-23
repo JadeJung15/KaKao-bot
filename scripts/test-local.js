@@ -58,6 +58,10 @@ try {
   assert.match(health.json.features.join(","), /message-inbox/);
   assert.match(health.json.features.join(","), /detailed-member-history/);
   assert.match(health.json.features.join(","), /admin-commands/);
+  assert.match(health.json.features.join(","), /point-ledger/);
+  assert.match(health.json.features.join(","), /like-points/);
+  assert.match(health.json.features.join(","), /attendance-rewards/);
+  assert.match(health.json.features.join(","), /member-rankings/);
 
   const help = await request("/skill", {
     method: "POST",
@@ -79,6 +83,11 @@ try {
   assert.match(help.json.template.outputs[0].simpleText.text, /메시지/);
   assert.match(help.json.template.outputs[0].simpleText.text, /입퇴장상세/);
   assert.match(help.json.template.outputs[0].simpleText.text, /관리자등록/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /관리자재설정/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /포인트/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /좋아요/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /이체/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /출석/);
   assert.match(help.json.template.outputs[0].simpleText.text, /게임.*사용하지 않습니다/);
 
   const form = await chat("/공질", "관리자");
@@ -95,6 +104,21 @@ try {
 
   const adminList = await chat("/관리자목록", "관리자");
   assert.match(adminList.json.reply, /관리자/);
+
+  const tempAdminRegister = await chat("/관리자등록 임시관리자", "관리자");
+  assert.match(tempAdminRegister.json.reply, /관리자로 등록/);
+
+  const adminResetDenied = await chat("/관리자재설정 관리자,부관리자", "사용자");
+  assert.match(adminResetDenied.json.reply, /관리자 전용/);
+
+  const adminReset = await chat("/관리자재설정 관리자,부관리자", "관리자");
+  assert.match(adminReset.json.reply, /관리자 목록이 재설정/);
+  assert.match(adminReset.json.reply, /관리자/);
+  assert.match(adminReset.json.reply, /부관리자/);
+
+  const adminListAfterReset = await chat("/관리자목록", "관리자");
+  assert.match(adminListAfterReset.json.reply, /부관리자/);
+  assert.doesNotMatch(adminListAfterReset.json.reply, /임시관리자/);
 
   const linkDenied = await chat("/링크등록 얼공방 https://open.kakao.com/o/denied", "사용자");
   assert.match(linkDenied.json.reply, /관리자 전용/);
@@ -121,6 +145,64 @@ try {
 
   const linkView = await chat("/건의방", "사용자");
   assert.match(linkView.json.reply, /https:\/\/open\.kakao\.com\/o\/test/);
+
+  await chat("포인트 기능 테스트 시작", "포순이 여");
+
+  const attendance = await chat("/출석", "포순이 여");
+  assert.match(attendance.json.reply, /포순이 여님 출석/);
+  assert.match(attendance.json.reply, /🅟100 획득/);
+
+  const attendanceDuplicate = await chat("/출석체크", "포순이 여");
+  assert.match(attendanceDuplicate.json.reply, /이미 출첵/);
+
+  const pointGrant = await chat("/포인트지급 포순이 여 1000", "관리자");
+  assert.match(pointGrant.json.reply, /포인트 지급 완료/);
+  assert.match(pointGrant.json.reply, /포순이 여/);
+
+  const pointView = await chat("/포인트", "포순이 여");
+  assert.match(pointView.json.reply, /포순이 여님의 포인트 : 🅟/);
+
+  const invalidLikeAmount = await chat("/좋아요 미미 10000", "포순이 여");
+  assert.match(invalidLikeAmount.json.reply, /1 ~ 999 범위/);
+
+  const likeReply = await chat("/좋아요 미미 10", "포순이 여");
+  assert.match(likeReply.json.reply, /💕/);
+
+  const selfLike = await chat("/좋아요 포순이 1", "포순이 여");
+  assert.match(selfLike.json.reply, /님 말고 다른 사람/);
+
+  const transfer = await chat("/이체 미미 100", "포순이 여");
+  assert.match(transfer.json.reply, /이체 완료/);
+  assert.match(transfer.json.reply, /수수료 : 🅟10/);
+
+  const memberInfo = await chat("/내정보", "포순이 여");
+  assert.match(memberInfo.json.reply, /레벨/);
+  assert.match(memberInfo.json.reply, /보유 포인트/);
+  assert.match(memberInfo.json.reply, /소비한 포인트/);
+  assert.match(memberInfo.json.reply, /경험치/);
+
+  const receiverInfo = await chat("/내정보", "미미 여");
+  assert.match(receiverInfo.json.reply, /♥ x 10/);
+
+  const pointRank = await chat("/포인트순위", "포순이 여");
+  assert.match(pointRank.json.reply, /채팅방 포인트 순위/);
+  assert.match(pointRank.json.reply, /포순이 여/);
+
+  const likeRank = await chat("/좋아요순위", "포순이 여");
+  assert.match(likeRank.json.reply, /채팅방 좋아요순위/);
+  assert.match(likeRank.json.reply, /미미 여 ♥10/);
+
+  const levelRank = await chat("/레벨순위", "포순이 여");
+  assert.match(levelRank.json.reply, /채팅방 레벨 순위/);
+
+  const todayChatRank = await chat("/채팅오늘", "포순이 여");
+  assert.match(todayChatRank.json.reply, /오늘 채팅 순위/);
+
+  const weekChatRank = await chat("/채팅금주", "포순이 여");
+  assert.match(weekChatRank.json.reply, /이번 주 채팅 순위/);
+
+  const adminDebit = await chat("/포인트차감 포순이 여 10", "관리자");
+  assert.match(adminDebit.json.reply, /포인트 차감 완료/);
 
   const mentionMessage = await chat("미미야 확인해줘 @미미 여", "관리자");
   assert.equal(mentionMessage.json.reply, null);
