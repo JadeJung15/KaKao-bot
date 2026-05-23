@@ -220,7 +220,10 @@ try {
   assert.match(emptyInbox.json.reply, /메시지가 없습니다/);
 
   const firstEntry = await chat("새친구 남님이 들어왔습니다.타인, 기관 등의 사칭에 유의해 주세요.", "오픈채팅봇");
-  assert.match(firstEntry.json.reply, /첫 입장을 환영/);
+  assert.match(firstEntry.json.reply, /무잔썸에 와줘서 고마워/);
+  assert.match(firstEntry.json.reply, /친구들과 함께 즐겁게 소통/);
+  assert.match(firstEntry.json.reply, /두글자로 해주고 뒤에 성별/);
+  assert.match(firstEntry.json.reply, /공식질문작성/);
 
   const exitReply = await chat("새친구 남님이 나갔습니다.", "오픈채팅봇");
   assert.match(exitReply.json.reply, /새친구 남님 안녕히 가세요/);
@@ -230,13 +233,25 @@ try {
 
   const secondEntry = await chat("새친구 남님이 들어왔습니다.", "오픈채팅봇");
   assert.match(secondEntry.json.reply, /2회 재입장/);
+  assert.match(secondEntry.json.reply, /강퇴이력 : 0회/);
   assert.match(secondEntry.json.reply, /입장 히스토리/);
   assert.match(secondEntry.json.reply, /퇴장 히스토리/);
 
   const nickChange = await chat("새친구 남 ➙ 새이름 남", "오픈채팅봇");
   assert.match(nickChange.json.reply, /닉네임 변경/);
-  assert.match(nickChange.json.reply, /새친구 남 ➙ 새이름 남/);
+  assert.match(nickChange.json.reply, /새친구 남 -> 새이름 남/);
   assert.match(nickChange.json.reply, /최초닉/);
+  assert.match(nickChange.json.reply, /• 새이름 남/);
+
+  const kickedFirstEntry = await chat("재입장 남님이 들어왔습니다.", "오픈채팅봇");
+  assert.match(kickedFirstEntry.json.reply, /무잔썸에 와줘서 고마워/);
+
+  await chat("재입장 남님을 내보냈습니다.", "오픈채팅봇");
+
+  const kickedReentry = await chat("재입장 남님이 들어왔습니다.", "오픈채팅봇");
+  assert.match(kickedReentry.json.reply, /2회 재입장/);
+  assert.match(kickedReentry.json.reply, /강퇴이력 : 1회/);
+  assert.match(kickedReentry.json.reply, /강퇴사유 : 미등록/);
 
   await chat("새이름 남님을 내보냈습니다.", "오픈채팅봇");
 

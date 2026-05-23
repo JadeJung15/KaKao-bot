@@ -7,11 +7,12 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
 const DEFAULT_BOT_NAME = process.env.BOT_DISPLAY_NAME || "운영봇";
+const ROOM_BRAND_NAME = process.env.ROOM_BRAND_NAME || "무잔썸";
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.0";
+export const APP_VERSION = "0.4.1";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -1107,11 +1108,48 @@ function personDetailedHistoryText(roomState, query, sender) {
 function nicknameHistoryText(person) {
   const names = person.names || [];
   if (!names.length) return "기록 없음";
-  const currentKey = keyFor(person.currentName);
   const firstName = names[0];
-  const previousNames = names.filter((name) => keyFor(name) !== currentKey);
   const lines = [`최초닉 : ${firstName}`];
-  for (const name of previousNames.slice(1)) lines.push(`• ${name}`);
+  for (const name of names.slice(1)) lines.push(`• ${name}`);
+  return lines.join("\n");
+}
+
+function welcomeText(person) {
+  return [
+    `♟ ${ROOM_BRAND_NAME}에 와줘서 고마워♡☃`,
+    "친구들과 함께 즐겁게 소통하는 공간이야 ♡",
+    "",
+    "☻그냥 나가게되면 1년간 썸못탄다ㅋ",
+    "☻지금 나가면 뱃살 다머리~ ☻",
+    "",
+    "♡ 반말로 인사먼저 나눠보자!!",
+    "",
+    "♡ ①좋아요 누르기!!",
+    "♡ 하트는 우리 방에 큰 힘♧",
+    "",
+    "♛ ②대화의 규칙!!",
+    "☞ 두글자로 해주고 뒤에 성별 붙여줘",
+    "",
+    "♚ ③공식질문작성!!",
+    "☞ 너의 썸상과 매력을 어필해줘",
+    "☞ 다른친구들의 공질은 건의방에서 볼수있어",
+    "",
+    "☻ 자삭은 안돼, 가려야할게 있음 이야기해줘",
+    "빠르게 처리해줄게!",
+    "",
+    `♡ 즐겁게 소통하며, 썸상의 친구들을 알아보고 ${ROOM_BRAND_NAME}에서 썸타보자!!`
+  ].join("\n");
+}
+
+function reentryText(roomState, person) {
+  const kickCount = person.kicks?.length || 0;
+  const lines = [
+    `⚠ ${person.currentName}님 ${person.entries.length}회 재입장 ⚠`,
+    "",
+    `- 강퇴이력 : ${kickCount}회`
+  ];
+  if (kickCount > 0) lines.push("- 강퇴사유 : 미등록");
+  lines.push("", personHistoryText(roomState, person.currentName, person.currentName));
   return lines.join("\n");
 }
 
@@ -1122,12 +1160,8 @@ function recordEntry(roomState, name) {
   person.entries.push({ at });
   recordRoomEvent(roomState, { type: "entered", name: person.currentName });
   const count = person.entries.length;
-  if (count <= 1) return `${person.currentName}님 첫 입장을 환영합니다.`;
-  return [
-    `🎉 ${person.currentName}님 ${count}회 재입장 🎉`,
-    "",
-    personHistoryText(roomState, person.currentName, person.currentName)
-  ].join("\n");
+  if (count <= 1) return welcomeText(person);
+  return reentryText(roomState, person);
 }
 
 function recordExit(roomState, name, type = "left") {
@@ -1174,13 +1208,11 @@ function recordNickChange(roomState, from, to) {
   return [
     "【 닉네임 변경 】",
     "",
-    `${stripKakaoSuffix(from)} ➙ ${stripKakaoSuffix(to)}`,
+    `${stripKakaoSuffix(from)} -> ${stripKakaoSuffix(to)}`,
     "",
     "【 닉네임 히스토리 】",
     "",
-    nicknameHistoryText(person),
-    "",
-    `변경 횟수 : ${person.nickChanges.length}회`
+    nicknameHistoryText(person)
   ].join("\n");
 }
 
