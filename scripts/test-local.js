@@ -94,6 +94,8 @@ try {
   assert.match(health.json.features.join(","), /registered-room-guard/);
   assert.match(health.json.features.join(","), /system-event-dedupe/);
   assert.match(health.json.features.join(","), /compact-welcome-text/);
+  assert.match(health.json.features.join(","), /bridge-reply-echo-guard/);
+  assert.match(health.json.features.join(","), /passive-notification-guard/);
 
   const home = await fetch(`${baseUrl}/`);
   assert.equal(home.status, 200);
@@ -305,6 +307,22 @@ try {
     profileHash: "bridge-bot-hash"
   });
   assert.match(explicitReentry.json.reply, /2회 재입장/);
+
+  const bridgeReplyEcho = await chatPayload({
+    room: "자동추출방",
+    msg: "휴가 즐기는 어피치님 히스토리\n\n❰ 닉네임 히스토리 ❱\n• 휴가 즐기는 어피치\n\n❰ 입장 히스토리 ❱\n· 26.05.23",
+    sender: "⚠ 휴가 즐기는 어피치님 4회 재입장 ⚠",
+    profileHash: "bridge-echo-hash"
+  });
+  assert.equal(bridgeReplyEcho.json.reply, null);
+
+  const passiveAttachment = await chatPayload({
+    room: "자동추출방",
+    msg: "사진을 보냈습니다",
+    sender: "미정",
+    profileHash: "unknown-media-hash"
+  });
+  assert.equal(passiveAttachment.json.reply, null);
 
   const explicitNickChange = await chatPayload({
     room: "자동추출방",

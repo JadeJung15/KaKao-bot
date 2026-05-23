@@ -12,7 +12,8 @@ import java.util.Locale;
 
 final class BridgeConfig {
     static final String KAKAO_PACKAGE = "com.kakao.talk";
-    static final String DEFAULT_SERVER_URL = "https://ka-kao-bot.vercel.app/chat-event";
+    static final String DEFAULT_SERVER_URL = "https://pixgom.com/chat-event";
+    private static final String OLD_SERVER_URL = "https://ka-kao-bot.vercel.app/chat-event";
     static final String DEFAULT_ROOM_NAME = "픽셀곰";
     static final String DEFAULT_ROOM_ID = "gu25P5vi";
     static final String DEFAULT_ROOM_LINK = "https://open.kakao.com/o/gu25P5vi";
@@ -27,6 +28,7 @@ final class BridgeConfig {
     private static final String KEY_SCRIPT_SOURCE = "script_source";
     private static final String KEY_ACCESSIBILITY_SYSTEM_EVENTS = "accessibility_system_events";
     private static final String KEY_ACCESSIBILITY_AUTO_REPLY = "accessibility_auto_reply";
+    private static final String KEY_RECORD_ONLY_MIGRATION = "record_only_migration_v8";
     private static final String KEY_LOGS = "logs";
     private static final int MAX_LOG_LINES = 80;
 
@@ -34,6 +36,19 @@ final class BridgeConfig {
 
     static SharedPreferences prefs(Context context) {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    static void applyMigrations(Context context) {
+        SharedPreferences prefs = prefs(context);
+        if (prefs.getBoolean(KEY_RECORD_ONLY_MIGRATION, false)) return;
+        String currentServerUrl = prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL);
+        SharedPreferences.Editor editor = prefs.edit()
+                .putBoolean(KEY_ACCESSIBILITY_SYSTEM_EVENTS, false)
+                .putBoolean(KEY_ACCESSIBILITY_AUTO_REPLY, false)
+                .putBoolean(KEY_RECORD_ONLY_MIGRATION, true);
+        if (OLD_SERVER_URL.equals(currentServerUrl)) editor.putString(KEY_SERVER_URL, DEFAULT_SERVER_URL);
+        editor.apply();
+        appendLog(context, "업데이트 적용: 화면 감지/자동답장을 끄고 알림 브릿지 전용으로 전환");
     }
 
     static boolean isEnabled(Context context) {
@@ -93,7 +108,7 @@ final class BridgeConfig {
     }
 
     static boolean accessibilitySystemEventsEnabled(Context context) {
-        return prefs(context).getBoolean(KEY_ACCESSIBILITY_SYSTEM_EVENTS, true);
+        return prefs(context).getBoolean(KEY_ACCESSIBILITY_SYSTEM_EVENTS, false);
     }
 
     static void setAccessibilitySystemEventsEnabled(Context context, boolean enabled) {
@@ -101,7 +116,7 @@ final class BridgeConfig {
     }
 
     static boolean accessibilityAutoReplyEnabled(Context context) {
-        return prefs(context).getBoolean(KEY_ACCESSIBILITY_AUTO_REPLY, true);
+        return prefs(context).getBoolean(KEY_ACCESSIBILITY_AUTO_REPLY, false);
     }
 
     static void setAccessibilityAutoReplyEnabled(Context context, boolean enabled) {

@@ -34,6 +34,7 @@ public class PixelgomAccessibilityService extends AccessibilityService {
 
     @Override
     protected void onServiceConnected() {
+        BridgeConfig.applyMigrations(this);
         BridgeConfig.appendLog(this, "화면 브릿지 연결됨");
     }
 
@@ -41,6 +42,7 @@ public class PixelgomAccessibilityService extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
         if (!BridgeConfig.KAKAO_PACKAGE.contentEquals(event.getPackageName())) return;
+        BridgeConfig.applyMigrations(this);
         if (!BridgeConfig.isEnabled(this) || !BridgeConfig.accessibilitySystemEventsEnabled(this)) return;
 
         long now = System.currentTimeMillis();

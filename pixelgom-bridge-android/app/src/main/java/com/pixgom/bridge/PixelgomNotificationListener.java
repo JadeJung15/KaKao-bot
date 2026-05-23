@@ -22,12 +22,14 @@ public class PixelgomNotificationListener extends NotificationListenerService {
 
     @Override
     public void onListenerConnected() {
+        BridgeConfig.applyMigrations(this);
         BridgeConfig.appendLog(this, "알림 브릿지 연결됨");
     }
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         if (sbn == null || !BridgeConfig.KAKAO_PACKAGE.equals(sbn.getPackageName())) return;
+        BridgeConfig.applyMigrations(this);
         if (!BridgeConfig.isEnabled(this)) return;
 
         String configuredRoom = BridgeConfig.roomName(this);
@@ -47,6 +49,10 @@ public class PixelgomNotificationListener extends NotificationListenerService {
         }
         if (!event.hasRequiredFields()) {
             BridgeConfig.appendLog(this, "무시: 필수값 부족 sender=" + event.sender + " msg=" + event.message);
+            return;
+        }
+        if (shouldIgnoreEchoOrPassiveNotice(event)) {
+            BridgeConfig.appendLog(this, "무시: 픽셀곰 답장/수동 알림 에코 " + preview(event.message));
             return;
         }
         if (isDuplicate(event)) {
@@ -104,6 +110,42 @@ public class PixelgomNotificationListener extends NotificationListenerService {
     private boolean isServerUnknownCommand(String reply) {
         if (reply == null) return false;
         return reply.contains("아직 등록되지 않은 명령어입니다");
+    }
+
+    private boolean shouldIgnoreEchoOrPassiveNotice(BridgeEvent event) {
+        String message = normalize(event.message);
+        String combined = normalize(event.sender + " " + event.message);
+        if (message.isEmpty() || message.startsWith("/")) return false;
+        if ("미정".equals(normalize(event.sender)) && isPassiveAttachmentNotice(message)) return true;
+        String[] echoMarkers = {
+                "운영봇 서버 정상 연결",
+                "픽셀곰 브릿지 앱 단독 응답 정상",
+                "픽셀곰 브릿지 로컬 상태 정상",
+                "픽셀곰 브릿지 JS",
+                "닉네임 히스토리",
+                "입장 히스토리",
+                "퇴장 히스토리",
+                "강퇴이력",
+                "회 재입장",
+                "님 어서오세요",
+                "님 안녕히 가세요",
+                "【 닉네임 변경 】",
+                "님의 포인트 :",
+                "이미 출석 하셨습니다",
+                "획득"
+        };
+        for (String marker : echoMarkers) {
+            if (combined.contains(marker)) return true;
+        }
+        return false;
+    }
+
+    private boolean isPassiveAttachmentNotice(String message) {
+        return message.matches("^(사진|동영상|영상|파일|이모티콘|스티커|음성메시지).{0,12}보냈습니다\\.?$");
+    }
+
+    private String normalize(String text) {
+        return text == null ? "" : text.replace('\u00a0', ' ').replaceAll("\\s+", " ").trim();
     }
 
     private boolean isDuplicate(BridgeEvent event) {

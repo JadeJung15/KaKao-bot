@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        BridgeConfig.applyMigrations(this);
         showHome();
     }
 
@@ -150,7 +151,7 @@ public class MainActivity extends Activity {
         accessibilityStatus.setPadding(0, dp(14), 0, dp(8));
         root.addView(accessibilityStatus);
 
-        Button accessibilityButton = primaryButton("화면 브릿지 권한 열기");
+        Button accessibilityButton = secondaryButton("화면 브릿지 권한 열기(선택)");
         accessibilityButton.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         root.addView(accessibilityButton);
 
@@ -167,7 +168,7 @@ public class MainActivity extends Activity {
         panel.addView(enabledSwitch);
 
         accessibilitySystemSwitch = new Switch(this);
-        accessibilitySystemSwitch.setText("화면 시스템 메시지 감지");
+        accessibilitySystemSwitch.setText("화면 시스템 메시지 감지(비권장)");
         accessibilitySystemSwitch.setTextSize(16);
         accessibilitySystemSwitch.setTextColor(Color.rgb(58, 37, 24));
         accessibilitySystemSwitch.setChecked(BridgeConfig.accessibilitySystemEventsEnabled(this));
@@ -175,7 +176,7 @@ public class MainActivity extends Activity {
         panel.addView(accessibilitySystemSwitch);
 
         accessibilityReplySwitch = new Switch(this);
-        accessibilityReplySwitch.setText("화면 감지 후 자동 답장");
+        accessibilityReplySwitch.setText("화면 감지 후 자동 답장(봇카톡 전용)");
         accessibilityReplySwitch.setTextSize(16);
         accessibilityReplySwitch.setTextColor(Color.rgb(58, 37, 24));
         accessibilityReplySwitch.setChecked(BridgeConfig.accessibilityAutoReplyEnabled(this));

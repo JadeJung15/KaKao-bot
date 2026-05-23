@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.35";
+export const APP_VERSION = "0.4.36";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -67,7 +67,9 @@ export const FEATURES = [
   "reserved-name-nickname-guard",
   "reserved-history-cleanup",
   "system-event-dedupe",
-  "compact-welcome-text"
+  "compact-welcome-text",
+  "bridge-reply-echo-guard",
+  "passive-notification-guard"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -2162,6 +2164,34 @@ function isDuplicateSystemEvent(roomState, event) {
   return false;
 }
 
+function isBridgeReplyEchoMessage(sender, message) {
+  const text = compactSpaces(`${sender || ""} ${message || ""}`);
+  if (!text || normalizeText(message).startsWith("/")) return false;
+  return [
+    "운영봇 서버 정상 연결",
+    "픽셀곰 브릿지 앱 단독 응답 정상",
+    "픽셀곰 브릿지 로컬 상태 정상",
+    "픽셀곰 브릿지 JS",
+    "닉네임 히스토리",
+    "입장 히스토리",
+    "퇴장 히스토리",
+    "강퇴이력",
+    "회 재입장",
+    "님 어서오세요",
+    "님 안녕히 가세요",
+    "【 닉네임 변경 】",
+    "님의 포인트 :",
+    "이미 출석 하셨습니다",
+    "획득"
+  ].some((marker) => text.includes(marker));
+}
+
+function isPassiveAttachmentNotice(sender, message) {
+  if (!isReservedPersonName(sender)) return false;
+  const text = compactSpaces(message);
+  return /^(사진|동영상|영상|파일|이모티콘|스티커|음성메시지).{0,12}보냈습니다\.?$/.test(text);
+}
+
 function statusText(room = "") {
   return [
     `${DEFAULT_BOT_NAME} 서버 정상 연결`,
@@ -2345,6 +2375,7 @@ async function handleMessage(state, room, sender, message, identity = {}, detect
   if (event?.type === "left") return recordExit(roomState, event.name, "left", targetIdentity);
   if (event?.type === "kicked") return recordExit(roomState, event.name, "kicked", targetIdentity);
   if (event?.type === "nickname_changed") return recordNickChange(roomState, event.from, event.to, targetIdentity);
+  if (isBridgeReplyEchoMessage(sender, message) || isPassiveAttachmentNotice(sender, message)) return null;
 
   const isCommand = text.startsWith("/");
   const activityReply = recordActivity(roomState, sender, identity.senderId, { firstChatNotice: !isCommand });
