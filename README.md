@@ -32,6 +32,7 @@
 - 20차 방 링크 기능 제거: `/건의방`, `/얼공방`, `/무한성`, `/링크등록` 명령어 제거
 - 21차 `/공질` 기능 제거: 공식질문 양식 명령어와 사이트/도움말 노출 제거
 - 22차 개인톡 기록 차단: 브릿지와 서버에서 비그룹 메시지를 저장 전에 무시하고, `미정/익명` 같은 예약 이름은 순위에서 제외
+- 23차 등록방 보호: `https://open.kakao.com/o/gu25P5vi` roomId가 있는 메시지만 처리
 
 ## 명령어
 
@@ -215,13 +216,18 @@ const BOT_SERVER = "https://ka-kao-bot.vercel.app/chat-event";
 
 ```js
 const ROOM_NAME_OVERRIDE = "";
+const ROOM_LINK = "https://open.kakao.com/o/gu25P5vi";
+const ROOM_ID = "gu25P5vi";
 const ALLOWED_ROOMS = [];
+const ALLOWED_ROOM_IDS = ["gu25P5vi"];
 ```
 
 `ROOM_NAME_OVERRIDE`는 기본값을 비워둡니다. 이렇게 해야 카카오톡이 전달한 실제 방 이름으로 `state.rooms[roomKey]`가 나뉘어 서로 다른 채팅방 기록이 분리됩니다.
 메신저봇 환경에서 방 이름이 내 닉네임처럼 잘못 들어오는 경우에만, 해당 방 스크립트에 방별 고정값을 넣습니다.
 `ALLOWED_ROOMS`는 빈 배열이면 모든 방 허용이고, 운영 방만 제한하려면 전송될 방 이름을 배열에 넣습니다.
-개인톡이나 1:1 대화처럼 `isGroupChat/rawIsGroupChat`이 false인 메시지는 서버로 전송하지 않으며, 서버에서도 저장 전에 무시합니다.
+`ROOM_ID`는 오픈채팅 링크의 `/o/` 뒤 ID를 넣습니다. 서버는 등록된 `ROOM_ID`가 없거나 다른 메시지를 저장 전에 무시합니다.
+등록된 `ROOM_ID`가 있으면 일부 메신저봇 환경에서 `isGroupChat/rawIsGroupChat`이 false로 잡혀도 운영방 메시지로 처리합니다.
+개인톡이나 1:1 대화처럼 등록된 `ROOM_ID`가 없는 메시지는 서버에서도 저장 전에 무시합니다.
 
 브릿지는 자동으로 시스템 메시지에서 `entered`, `left`, `kicked`, `nickname_changed` 이벤트를 추출하고, 가능하면 프로필 해시를 `senderId/profileHash`로 서버에 전달합니다.
 

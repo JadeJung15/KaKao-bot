@@ -10,6 +10,8 @@ const repoRoot = path.resolve(__dirname, "..");
 let server;
 let testDbPath;
 let baseUrl = process.env.TEST_BASE_URL || "";
+const registeredRoomId = "gu25P5vi";
+const registeredRoomLink = "https://open.kakao.com/o/gu25P5vi";
 
 if (!baseUrl) {
   testDbPath = path.join(repoRoot, "data", `test-room-ops-db-${process.pid}.json`);
@@ -42,6 +44,8 @@ async function chat(msg, sender = "사용자", room = "테스트방") {
       room,
       msg,
       sender,
+      roomId: registeredRoomId,
+      roomLink: registeredRoomLink,
       isGroupChat: true,
       packageName: "com.kakao.talk"
     })
@@ -49,14 +53,16 @@ async function chat(msg, sender = "사용자", room = "테스트방") {
 }
 
 async function chatPayload(payload) {
+  const { registeredRoom = true, ...body } = payload;
   return request("/chat-event", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
+      ...(registeredRoom ? { roomId: registeredRoomId, roomLink: registeredRoomLink } : {}),
       isGroupChat: true,
       rawIsGroupChat: true,
       packageName: "com.kakao.talk",
-      ...payload
+      ...body
     })
   });
 }
@@ -85,6 +91,7 @@ try {
   assert.match(health.json.features.join(","), /raw-identity-nickname-recovery/);
   assert.match(health.json.features.join(","), /cross-room-identity-nickname-recovery/);
   assert.match(health.json.features.join(","), /identity-scoped-recent-events/);
+  assert.match(health.json.features.join(","), /registered-room-guard/);
 
   const home = await fetch(`${baseUrl}/`);
   assert.equal(home.status, 200);
@@ -140,6 +147,7 @@ try {
   assert.match(removedProfileForm.json.reply, /등록되지 않은 명령어/);
 
   const privateChat = await chatPayload({
+    registeredRoom: false,
     room: "개인차단방",
     msg: "개인 대화는 기록되면 안 됨",
     sender: "미정",
@@ -152,6 +160,26 @@ try {
 
   const privateRank = await chat("/채팅오늘", "관리자", "개인차단방");
   assert.doesNotMatch(privateRank.json.reply, /미정/);
+
+  const registeredRoomWithoutGroupFlag = await chatPayload({
+    room: "등록방",
+    msg: "/상태",
+    sender: "관리자",
+    isGroupChat: false,
+    rawIsGroupChat: false,
+    isMultiChat: false
+  });
+  assert.equal(registeredRoomWithoutGroupFlag.json.ignored, false);
+  assert.match(registeredRoomWithoutGroupFlag.json.reply, /운영봇 서버 정상 연결/);
+
+  const unregisteredGroupRoom = await chatPayload({
+    registeredRoom: false,
+    room: "미등록방",
+    msg: "/상태",
+    sender: "관리자"
+  });
+  assert.equal(unregisteredGroupRoom.json.ignored, true);
+  assert.equal(unregisteredGroupRoom.json.reason, "unregistered_room");
 
   await chatPayload({
     room: "예약이름차단방",

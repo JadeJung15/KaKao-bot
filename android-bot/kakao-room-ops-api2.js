@@ -9,11 +9,16 @@ const BOT_NAMES = ["픽셀곰", "운영봇", "봇"];
 // 비워두면 카카오톡이 전달한 실제 방 이름을 사용합니다.
 // 방 이름이 내 닉네임처럼 잘못 잡히는 환경에서만 방별로 고정값을 넣으세요.
 const ROOM_NAME_OVERRIDE = "";
+const ROOM_LINK = "https://open.kakao.com/o/gu25P5vi";
+const ROOM_ID = "gu25P5vi";
 
 const ALLOWED_ROOMS = [];
+const ALLOWED_ROOM_IDS = ["gu25P5vi"];
 
-function isAllowedRoom(room) {
-  return ALLOWED_ROOMS.length === 0 || ALLOWED_ROOMS.indexOf(room) >= 0;
+function isAllowedRoom(room, roomId) {
+  const roomAllowed = ALLOWED_ROOMS.length === 0 || ALLOWED_ROOMS.indexOf(room) >= 0;
+  const idAllowed = ALLOWED_ROOM_IDS.length === 0 || ALLOWED_ROOM_IDS.indexOf(roomId) >= 0;
+  return roomAllowed && idAllowed;
 }
 
 function isBotSender(sender) {
@@ -28,6 +33,10 @@ function effectiveRoom(room) {
 
 function effectiveGroupFlag(message) {
   return Boolean(message.isGroupChat);
+}
+
+function effectiveRoomId() {
+  return String(ROOM_ID || "").trim();
 }
 
 function postJson(url, payload) {
@@ -85,8 +94,9 @@ function onMessage(message) {
   const content = String(message.content || "");
   const sender = String((message.author && message.author.name) || "");
   const isGroupChat = effectiveGroupFlag(message);
+  const roomId = effectiveRoomId();
 
-  if (!isAllowedRoom(room)) return;
+  if (!isAllowedRoom(room, roomId)) return;
   if (!content || !sender || isBotSender(sender)) return;
 
   try {
@@ -101,6 +111,7 @@ function onMessage(message) {
         "보낸사람: " + sender,
         "프로필해시: " + (hash || "없음"),
         "이벤트: " + (event.eventType || "없음"),
+        "방ID: " + (roomId || "없음"),
         "단톡(raw): " + Boolean(message.isGroupChat),
         "단톡(전송): " + isGroupChat,
         "이제 /상태 를 보내 서버 연결을 확인하세요."
@@ -108,11 +119,11 @@ function onMessage(message) {
       return;
     }
 
-    if (!isGroupChat) return;
-
     const raw = postJson(BOT_SERVER, {
       room: room,
       rawRoom: rawRoom,
+      roomId: roomId,
+      roomLink: ROOM_LINK,
       msg: content,
       sender: sender,
       senderId: hash,

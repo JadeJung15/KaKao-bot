@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.29";
+export const APP_VERSION = "0.4.30";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -60,8 +60,11 @@ export const FEATURES = [
   "first-chat-reentry-notice",
   "room-safe-bridge-defaults",
   "private-chat-guard",
+  "registered-room-guard",
   "no-games"
 ];
+
+const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
 
 const CHAT_POINT_REWARD = 2;
 const CHAT_EXP_REWARD = 1;
@@ -622,6 +625,52 @@ function payloadValue(payload, paths) {
   return "";
 }
 
+function listValues(...values) {
+  return values
+    .flatMap((value) => String(value || "").split(/[\s,]+/))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function openChatRoomId(value) {
+  const text = normalizeText(value);
+  if (!text) return "";
+  const urlMatch = text.match(/open\.kakao\.com\/o\/([A-Za-z0-9_-]+)/i);
+  if (urlMatch) return urlMatch[1];
+  const bare = text.match(/^[A-Za-z0-9_-]{4,80}$/);
+  return bare ? bare[0] : "";
+}
+
+function registeredRoomIds() {
+  const ids = listValues(
+    process.env.REGISTERED_ROOM_IDS,
+    process.env.REGISTERED_OPENCHAT_IDS,
+    ...DEFAULT_REGISTERED_ROOM_LINKS
+  );
+  const links = listValues(process.env.REGISTERED_ROOM_LINKS, process.env.REGISTERED_OPENCHAT_LINKS);
+  return new Set([...ids, ...links].map(openChatRoomId).filter(Boolean));
+}
+
+function payloadRoomId(payload = {}) {
+  return openChatRoomId(
+    payload.roomId ||
+      payload.roomID ||
+      payload.openChatId ||
+      payload.openchatId ||
+      payload.kakaoOpenChatId ||
+      payload.roomLink ||
+      payload.openChatLink ||
+      payload.link
+  );
+}
+
+function isRegisteredRoomPayload(payload = {}) {
+  const ids = registeredRoomIds();
+  if (!ids.size) return true;
+  const roomId = payloadRoomId(payload);
+  return Boolean(roomId && ids.has(roomId));
+}
+
 function booleanPayloadValue(value) {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
@@ -653,6 +702,7 @@ function collectPayloadIds(value, basePath = "", depth = 0, results = []) {
   for (const [key, nested] of Object.entries(value)) {
     const pathName = basePath ? `${basePath}.${key}` : key;
     const keyName = key.toLowerCase();
+    if (/^(roomid|room_id|openchatid|openchat_id|openchatroomid|open_chat_room_id|kakaoopenchatid)$/.test(keyName)) continue;
     if (nested && typeof nested === "object") {
       collectPayloadIds(nested, pathName, depth + 1, results);
       continue;
@@ -2206,8 +2256,12 @@ export async function handleChatEvent(payload) {
   const sender = normalizeText(payload?.sender) || "익명";
   const event = payloadSystemEvent(payload, message);
   const identity = payloadIdentity(payload);
-  if (!isGroupChatPayload(payload)) {
+  const registeredRoom = isRegisteredRoomPayload(payload);
+  if (!registeredRoom && !isGroupChatPayload(payload)) {
     return { ok: true, reply: null, ignored: true, reason: "non_group_chat" };
+  }
+  if (!registeredRoom) {
+    return { ok: true, reply: null, ignored: true, reason: "unregistered_room" };
   }
   const state = await loadState();
   const roomState = ensureRoom(state, room);
