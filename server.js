@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.6";
+export const APP_VERSION = "0.4.7";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -35,6 +35,7 @@ export const FEATURES = [
   "bridge-auto-extract",
   "identity-nickname-summary",
   "raw-identity-nickname-recovery",
+  "cross-room-identity-nickname-recovery",
   "room-links",
   "profile-form",
   "no-games"
@@ -825,7 +826,7 @@ function adminListCommand(roomState) {
   return ["관리자 목록", ...names.map((name) => `• ${name}`)].join("\n");
 }
 
-function recentEventsCommand(roomState, sender, text) {
+function recentEventsCommand(state, roomState, sender, text) {
   const count = Math.min(20, Math.max(1, Number(text.match(/\d+/)?.[0] || 10)));
   const events = (roomState.rawEvents || []).slice(-count);
   if (!events.length) return "최근 원본 이벤트가 없습니다.";
@@ -843,7 +844,7 @@ function recentEventsCommand(roomState, sender, text) {
     lines.push(`• event : ${event.eventType || "-"}`);
     lines.push(`• senderId : ${identity.senderId || "없음"}`);
     lines.push(`• targetUserId : ${identity.targetUserId || "없음"}`);
-    const memberText = identityMemberSummary(roomState, identity);
+    const memberText = identityMemberSummary(state, roomState, identity, event);
     if (memberText) lines.push(`• 회원이력 : ${memberText}`);
     if (candidateText) lines.push(`• id 후보 : ${candidateText}`);
     lines.push("");
@@ -852,18 +853,57 @@ function recentEventsCommand(roomState, sender, text) {
   return lines.join("\n").trim();
 }
 
-function identityMemberSummary(roomState, identity = {}) {
-  const ids = [identity.senderId, identity.targetUserId, ...(identity.candidates || []).map((item) => item.value)]
+function identityIds(identity = {}) {
+  return [identity.senderId, identity.targetUserId, ...(identity.candidates || []).map((item) => item.value)]
     .map(normalizeIdentityId)
-    .filter(Boolean);
-  for (const id of ids) {
+    .filter(Boolean)
+    .filter((id, index, list) => list.indexOf(id) === index);
+}
+
+function allRoomStates(state, currentRoomState) {
+  const rooms = Object.values(state?.rooms || {}).filter(Boolean);
+  if (!currentRoomState || rooms.includes(currentRoomState)) return rooms;
+  return [currentRoomState, ...rooms];
+}
+
+function identityPeopleFromRooms(state, currentRoomState, identityId) {
+  const id = normalizeIdentityId(identityId);
+  if (!id) return [];
+  const people = [];
+  const seen = new Set();
+  for (const roomState of allRoomStates(state, currentRoomState)) {
     const key = identityPersonKey(roomState, id);
-    const person = key ? roomState.people[key] : null;
-    const rawNames = identityNamesFromRawEvents(roomState, id);
-    if (!person && !rawNames.length) continue;
-    const names = [...(person?.names || []), ...rawNames].filter(Boolean)
-      .filter((name, index, list) => list.findIndex((value) => keyFor(value) === keyFor(name)) === index);
-    const current = person?.currentName || rawNames.at(-1) || names.at(-1) || "";
+    const person = key ? roomState.people?.[key] : null;
+    if (!person || seen.has(person)) continue;
+    seen.add(person);
+    people.push(person);
+  }
+  return people;
+}
+
+function uniqueNames(names) {
+  return names
+    .map(stripKakaoSuffix)
+    .filter(Boolean)
+    .filter((name, index, list) => list.findIndex((value) => keyFor(value) === keyFor(name)) === index);
+}
+
+function currentIdentityName(identity, event, identityId) {
+  const id = normalizeIdentityId(identityId);
+  if (!id) return "";
+  if (normalizeIdentityId(identity.senderId) === id && event?.sender) return stripKakaoSuffix(event.sender);
+  if (normalizeIdentityId(identity.targetUserId) === id && event?.eventName) return stripKakaoSuffix(event.eventName);
+  return "";
+}
+
+function identityMemberSummary(state, roomState, identity = {}, event = {}) {
+  const ids = identityIds(identity);
+  for (const id of ids) {
+    const people = identityPeopleFromRooms(state, roomState, id);
+    const rawNames = identityNamesFromRawEvents(state, roomState, id);
+    if (!people.length && !rawNames.length) continue;
+    const names = uniqueNames([...people.flatMap((person) => person.names || []), ...people.map((person) => person.currentName), ...rawNames]);
+    const current = currentIdentityName(identity, event, id) || people[0]?.currentName || rawNames.at(-1) || names.at(-1) || "";
     const previous = names.filter((name) => keyFor(name) !== keyFor(current));
     if (previous.length) return `${current} (이전닉: ${previous.join(", ")})`;
     return current;
@@ -871,20 +911,20 @@ function identityMemberSummary(roomState, identity = {}) {
   return "";
 }
 
-function identityNamesFromRawEvents(roomState, identityId) {
+function identityNamesFromRawEvents(state, currentRoomState, identityId) {
   const targetId = normalizeIdentityId(identityId);
   if (!targetId) return [];
   const names = [];
-  for (const event of roomState.rawEvents || []) {
-    const identity = event.identity || {};
-    const candidateIds = [identity.senderId, identity.targetUserId, ...(identity.candidates || []).map((item) => item.value)]
-      .map(normalizeIdentityId)
-      .filter(Boolean);
-    if (!candidateIds.includes(targetId)) continue;
-    if (identity.senderId === targetId && event.sender) names.push(stripKakaoSuffix(event.sender));
-    if (identity.targetUserId === targetId && event.eventName) names.push(stripKakaoSuffix(event.eventName));
+  for (const roomState of allRoomStates(state, currentRoomState)) {
+    for (const event of roomState.rawEvents || []) {
+      const identity = event.identity || {};
+      const candidateIds = identityIds(identity);
+      if (!candidateIds.includes(targetId)) continue;
+      if (normalizeIdentityId(identity.senderId) === targetId && event.sender) names.push(stripKakaoSuffix(event.sender));
+      if (normalizeIdentityId(identity.targetUserId) === targetId && event.eventName) names.push(stripKakaoSuffix(event.eventName));
+    }
   }
-  return names.filter((name, index, list) => name && list.findIndex((value) => keyFor(value) === keyFor(name)) === index);
+  return uniqueNames(names);
 }
 
 function rawLogCommand(roomState, sender, text) {
@@ -1626,7 +1666,7 @@ async function handleCommand(state, room, sender, message) {
   if (command === "/공질") return PROFILE_FORM;
   if (["/건의방", "/얼공방", "/무한성"].includes(command)) return linkCommand(roomState, command);
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
-  if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return recentEventsCommand(roomState, sender, text);
+  if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return recentEventsCommand(state, roomState, sender, text);
   if (/^\/(?:원본로그|원본이벤트)(?:\s|$)/.test(command)) return rawLogCommand(roomState, sender, text);
   if (/^\/(?:출석|출석체크|출첵)$/.test(command)) return attendanceCommand(roomState, sender);
   if (/^\/포인트\s*순위$|^\/포인트순위$/.test(command)) return rankingText(roomState, sender, "points");

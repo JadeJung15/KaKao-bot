@@ -75,6 +75,7 @@ try {
   assert.match(health.json.features.join(","), /bridge-auto-extract/);
   assert.match(health.json.features.join(","), /identity-nickname-summary/);
   assert.match(health.json.features.join(","), /raw-identity-nickname-recovery/);
+  assert.match(health.json.features.join(","), /cross-room-identity-nickname-recovery/);
 
   const help = await request("/skill", {
     method: "POST",
@@ -238,6 +239,23 @@ try {
     profileHash: "raw-recover-id-1"
   });
   assert.match(recoverEventsBeforePersonRename.json.reply, /회원이력 : 복구후닉 남 \(이전닉: 복구전닉 남\)/);
+
+  await chatPayload({
+    room: "원본복구이전방",
+    msg: "다른 방에 남은 예전 채팅",
+    sender: "이전방닉 남",
+    senderId: "cross-room-recover-id-1",
+    profileHash: "cross-room-recover-id-1"
+  });
+
+  const crossRoomRecoverEvents = await chatPayload({
+    room: "원본복구현재방",
+    msg: "/최근이벤트 10",
+    sender: "현재방닉 남",
+    senderId: "cross-room-recover-id-1",
+    profileHash: "cross-room-recover-id-1"
+  });
+  assert.match(crossRoomRecoverEvents.json.reply, /회원이력 : 현재방닉 남 \(이전닉: 이전방닉 남\)/);
 
   const linkDenied = await chat("/링크등록 얼공방 https://open.kakao.com/o/denied", "사용자");
   assert.match(linkDenied.json.reply, /관리자 전용/);
