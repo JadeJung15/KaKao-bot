@@ -108,7 +108,7 @@ final class BridgeConfig {
     }
 
     static boolean accessibilitySystemEventsEnabled(Context context) {
-        return prefs(context).getBoolean(KEY_ACCESSIBILITY_SYSTEM_EVENTS, false);
+        return false;
     }
 
     static void setAccessibilitySystemEventsEnabled(Context context, boolean enabled) {
@@ -116,7 +116,7 @@ final class BridgeConfig {
     }
 
     static boolean accessibilityAutoReplyEnabled(Context context) {
-        return prefs(context).getBoolean(KEY_ACCESSIBILITY_AUTO_REPLY, false);
+        return false;
     }
 
     static void setAccessibilityAutoReplyEnabled(Context context, boolean enabled) {
@@ -129,11 +129,33 @@ final class BridgeConfig {
     }
 
     static boolean roomMatches(Context context, String rawRoom) {
-        String configured = normalizedRoomName(roomName(context));
+        return !matchingRoomName(roomName(context), rawRoom).isEmpty();
+    }
+
+    static String matchingRoomName(String configuredRooms, String rawRoom) {
         String raw = normalizedRoomName(rawRoom);
-        if (configured.isEmpty() || raw.isEmpty()) return false;
-        if (configured.equals(raw)) return true;
-        return raw.startsWith(configured + " ") || raw.startsWith(configured + "(");
+        if (raw.isEmpty()) return "";
+        List<String> configuredRoomNames = roomNameList(configuredRooms);
+        configuredRoomNames.sort((left, right) -> Integer.compare(normalizedRoomName(right).length(), normalizedRoomName(left).length()));
+        for (String configuredRoom : configuredRoomNames) {
+            String configured = normalizedRoomName(configuredRoom);
+            if (configured.isEmpty()) continue;
+            if (configured.equals(raw) || raw.startsWith(configured + " ") || raw.startsWith(configured + "(")) {
+                return configuredRoom.trim();
+            }
+        }
+        return "";
+    }
+
+    static List<String> roomNameList(String value) {
+        List<String> names = new ArrayList<>();
+        String source = textOrDefault(value, DEFAULT_ROOM_NAME);
+        for (String item : source.split("[,\\n]")) {
+            String name = item.trim();
+            if (!name.isEmpty()) names.add(name);
+        }
+        if (names.isEmpty()) names.add(DEFAULT_ROOM_NAME);
+        return names;
     }
 
     static void appendLog(Context context, String line) {

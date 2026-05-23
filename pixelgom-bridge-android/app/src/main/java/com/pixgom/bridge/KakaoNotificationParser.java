@@ -24,7 +24,7 @@ final class KakaoNotificationParser {
         boolean androidGroup = extras.getBoolean("android.isGroupConversation", false);
 
         if (TextUtils.isEmpty(room) && roomTitleMatches(title, configuredRoom)) {
-            room = configuredRoom;
+            room = BridgeConfig.matchingRoomName(configuredRoom, title);
         }
         if (TextUtils.isEmpty(room)) return null;
 
@@ -40,9 +40,10 @@ final class KakaoNotificationParser {
         if (TextUtils.isEmpty(sender) || BridgeConfig.normalized(sender).equals(BridgeConfig.normalized(room))) sender = "미정";
         if (TextUtils.isEmpty(text)) return null;
         boolean group = androidGroup || !TextUtils.isEmpty(room);
+        String matchedConfiguredRoom = BridgeConfig.matchingRoomName(configuredRoom, room);
 
         BridgeEvent event = new BridgeEvent();
-        event.room = configuredRoom;
+        event.room = TextUtils.isEmpty(matchedConfiguredRoom) ? room : matchedConfiguredRoom;
         event.rawRoom = room;
         event.roomId = roomId;
         event.roomLink = roomLink;
@@ -145,16 +146,13 @@ final class KakaoNotificationParser {
     }
 
     private static boolean roomTitleMatches(String value, String configuredRoom) {
-        String candidate = BridgeConfig.normalized(value);
-        String configured = BridgeConfig.normalized(configuredRoom);
-        if (candidate.isEmpty() || configured.isEmpty()) return false;
-        if (candidate.equals(configured)) return true;
-        return candidate.startsWith(configured + " ") || candidate.startsWith(configured + "(");
+        return !TextUtils.isEmpty(BridgeConfig.matchingRoomName(configuredRoom, value));
     }
 
     private static String firstMatchingRoom(String configuredRoom, String... values) {
         for (String value : values) {
-            if (roomTitleMatches(value, configuredRoom)) return configuredRoom;
+            String matched = BridgeConfig.matchingRoomName(configuredRoom, value);
+            if (!TextUtils.isEmpty(matched)) return matched;
         }
         return "";
     }

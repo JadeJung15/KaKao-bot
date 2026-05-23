@@ -96,6 +96,8 @@ try {
   assert.match(health.json.features.join(","), /compact-welcome-text/);
   assert.match(health.json.features.join(","), /bridge-reply-echo-guard/);
   assert.match(health.json.features.join(","), /passive-notification-guard/);
+  assert.match(health.json.features.join(","), /multi-room-registry/);
+  assert.match(health.json.features.join(","), /room-join-phrase/);
 
   const home = await fetch(`${baseUrl}/`);
   assert.equal(home.status, 200);
@@ -188,6 +190,74 @@ try {
   });
   assert.equal(unregisteredGroupRoom.json.ignored, true);
   assert.equal(unregisteredGroupRoom.json.reason, "unregistered_room");
+
+  const privateRoomRegister = await chatPayload({
+    registeredRoom: false,
+    room: "개인등록차단방",
+    msg: "/방등록 입장확인",
+    sender: "개인사용자",
+    isGroupChat: false,
+    rawIsGroupChat: false,
+    isMultiChat: false,
+    roomId: "privateRoom1",
+    roomLink: "https://open.kakao.com/o/privateRoom1"
+  });
+  assert.equal(privateRoomRegister.json.ignored, true);
+  assert.equal(privateRoomRegister.json.reason, "non_group_chat");
+
+  const roomRegister = await chatPayload({
+    registeredRoom: false,
+    room: "판매테스트방",
+    msg: "/방등록 픽셀곰 입장확인",
+    sender: "판매관리자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1"
+  });
+  assert.equal(roomRegister.json.ignored, false);
+  assert.match(roomRegister.json.reply, /방 등록 완료/);
+  assert.match(roomRegister.json.reply, /픽셀곰 입장확인/);
+
+  const roomInfo = await chatPayload({
+    registeredRoom: false,
+    room: "판매테스트방",
+    msg: "/방정보",
+    sender: "판매관리자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1"
+  });
+  assert.match(roomInfo.json.reply, /판매테스트방 방 설정/);
+  assert.match(roomInfo.json.reply, /입장확인 문구: 픽셀곰 입장확인/);
+
+  const joinSignal = await chatPayload({
+    registeredRoom: false,
+    room: "판매테스트방",
+    msg: "픽셀곰 입장확인",
+    sender: "오픈채팅봇",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1"
+  });
+  assert.equal(joinSignal.json.reply, null);
+
+  const joinedFirstChat = await chatPayload({
+    registeredRoom: false,
+    room: "판매테스트방",
+    msg: "안녕",
+    sender: "새고객 남",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1"
+  });
+  assert.equal(joinedFirstChat.json.reply, null);
+
+  const joinedHistory = await chatPayload({
+    registeredRoom: false,
+    room: "판매테스트방",
+    msg: "/닉이력 새고객 남",
+    sender: "판매관리자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1"
+  });
+  assert.match(joinedHistory.json.reply, /새고객 남님 히스토리/);
+  assert.doesNotMatch(joinedHistory.json.reply, /입장 히스토리\s+기록 없음/);
 
   await chatPayload({
     room: "예약이름차단방",

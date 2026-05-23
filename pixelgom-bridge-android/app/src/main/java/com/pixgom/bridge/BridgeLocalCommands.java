@@ -27,8 +27,7 @@ final class BridgeLocalCommands {
                 "보낸사람: " + safe(event.sender) + "\n" +
                 "roomId: " + safe(event.roomId) + "\n" +
                 "알림 감지: 켜짐(카카오 알림이 있을 때)\n" +
-                "화면 감지: " + (BridgeConfig.accessibilitySystemEventsEnabled(context) ? "켜짐(비권장)" : "꺼짐(권장)") + "\n" +
-                "화면 자동답장: " + (BridgeConfig.accessibilityAutoReplyEnabled(context) ? "켜짐" : "꺼짐(권장)") + "\n" +
+                "화면 감지: 사용 안 함\n" +
                 "JS 자동응답: " + (BridgeConfig.scriptEnabled(context) ? "켜짐" : "꺼짐") + "\n" +
                 "MessengerBot 없이 이 응답이 보이면 삭제 테스트 통과입니다.";
     }
@@ -60,8 +59,7 @@ final class BridgeLocalCommands {
                 "등록방: " + BridgeConfig.roomName(context) + "\n" +
                 "roomId: " + BridgeConfig.roomId(context) + "\n" +
                 "알림 감지: 켜짐(카카오 알림이 있을 때)\n" +
-                "화면 감지: " + (BridgeConfig.accessibilitySystemEventsEnabled(context) ? "켜짐(비권장)" : "꺼짐(권장)") + "\n" +
-                "화면 자동답장: " + (BridgeConfig.accessibilityAutoReplyEnabled(context) ? "켜짐" : "꺼짐(권장)") + "\n" +
+                "화면 감지: 사용 안 함\n" +
                 "JS 자동응답: " + (BridgeConfig.scriptEnabled(context) ? "켜짐" : "꺼짐");
     }
 

@@ -12,7 +12,6 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
-import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -28,7 +27,6 @@ public class MainActivity extends Activity {
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private TextView permissionStatus;
-    private TextView accessibilityStatus;
     private TextView logView;
     private EditText serverUrlInput;
     private EditText roomNameInput;
@@ -36,8 +34,6 @@ public class MainActivity extends Activity {
     private EditText scriptSourceInput;
     private Switch enabledSwitch;
     private Switch scriptEnabledSwitch;
-    private Switch accessibilitySystemSwitch;
-    private Switch accessibilityReplySwitch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -147,14 +143,6 @@ public class MainActivity extends Activity {
         permissionButton.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
         root.addView(permissionButton);
 
-        accessibilityStatus = text("", 14, Color.rgb(58, 37, 24), false);
-        accessibilityStatus.setPadding(0, dp(14), 0, dp(8));
-        root.addView(accessibilityStatus);
-
-        Button accessibilityButton = secondaryButton("화면 브릿지 권한 열기(선택)");
-        accessibilityButton.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        root.addView(accessibilityButton);
-
         LinearLayout panel = panel();
         panel.setPadding(dp(14), dp(14), dp(14), dp(14));
         root.addView(panel);
@@ -164,29 +152,13 @@ public class MainActivity extends Activity {
         enabledSwitch.setTextSize(16);
         enabledSwitch.setTextColor(Color.rgb(58, 37, 24));
         enabledSwitch.setChecked(BridgeConfig.isEnabled(this));
-        enabledSwitch.setOnCheckedChangeListener((CompoundButton button, boolean checked) -> BridgeConfig.setEnabled(this, checked));
+        enabledSwitch.setOnCheckedChangeListener((button, checked) -> BridgeConfig.setEnabled(this, checked));
         panel.addView(enabledSwitch);
-
-        accessibilitySystemSwitch = new Switch(this);
-        accessibilitySystemSwitch.setText("화면 시스템 메시지 감지(비권장)");
-        accessibilitySystemSwitch.setTextSize(16);
-        accessibilitySystemSwitch.setTextColor(Color.rgb(58, 37, 24));
-        accessibilitySystemSwitch.setChecked(BridgeConfig.accessibilitySystemEventsEnabled(this));
-        accessibilitySystemSwitch.setOnCheckedChangeListener((CompoundButton button, boolean checked) -> BridgeConfig.setAccessibilitySystemEventsEnabled(this, checked));
-        panel.addView(accessibilitySystemSwitch);
-
-        accessibilityReplySwitch = new Switch(this);
-        accessibilityReplySwitch.setText("화면 감지 후 자동 답장(봇카톡 전용)");
-        accessibilityReplySwitch.setTextSize(16);
-        accessibilityReplySwitch.setTextColor(Color.rgb(58, 37, 24));
-        accessibilityReplySwitch.setChecked(BridgeConfig.accessibilityAutoReplyEnabled(this));
-        accessibilityReplySwitch.setOnCheckedChangeListener((CompoundButton button, boolean checked) -> BridgeConfig.setAccessibilityAutoReplyEnabled(this, checked));
-        panel.addView(accessibilityReplySwitch);
 
         serverUrlInput = input("서버 URL", BridgeConfig.serverUrl(this));
         panel.addView(serverUrlInput);
 
-        roomNameInput = input("카카오 방 이름", BridgeConfig.roomName(this));
+        roomNameInput = input("카카오 방 이름(쉼표로 여러 방)", BridgeConfig.roomName(this));
         panel.addView(roomNameInput);
 
         roomIdInput = input("오픈채팅 roomId", BridgeConfig.roomId(this));
@@ -217,7 +189,7 @@ public class MainActivity extends Activity {
         scriptEnabledSwitch.setTextSize(16);
         scriptEnabledSwitch.setTextColor(Color.rgb(58, 37, 24));
         scriptEnabledSwitch.setChecked(BridgeConfig.scriptEnabled(this));
-        scriptEnabledSwitch.setOnCheckedChangeListener((CompoundButton button, boolean checked) -> BridgeConfig.setScriptEnabled(this, checked));
+        scriptEnabledSwitch.setOnCheckedChangeListener((button, checked) -> BridgeConfig.setScriptEnabled(this, checked));
         scriptPanel.addView(scriptEnabledSwitch);
 
         scriptSourceInput = scriptInput(BridgeConfig.scriptSource(this));
@@ -267,7 +239,6 @@ public class MainActivity extends Activity {
 
     private void clearMainRefs() {
         permissionStatus = null;
-        accessibilityStatus = null;
         logView = null;
         serverUrlInput = null;
         roomNameInput = null;
@@ -275,8 +246,6 @@ public class MainActivity extends Activity {
         scriptSourceInput = null;
         enabledSwitch = null;
         scriptEnabledSwitch = null;
-        accessibilitySystemSwitch = null;
-        accessibilityReplySwitch = null;
     }
 
     private void saveSettings() {
@@ -284,11 +253,11 @@ public class MainActivity extends Activity {
         BridgeConfig.setServerUrl(this, serverUrlInput.getText().toString());
         BridgeConfig.setRoomName(this, roomNameInput.getText().toString());
         BridgeConfig.setRoomId(this, roomIdInput.getText().toString());
-        BridgeConfig.setAccessibilitySystemEventsEnabled(this, accessibilitySystemSwitch.isChecked());
-        BridgeConfig.setAccessibilityAutoReplyEnabled(this, accessibilityReplySwitch.isChecked());
+        BridgeConfig.setAccessibilitySystemEventsEnabled(this, false);
+        BridgeConfig.setAccessibilityAutoReplyEnabled(this, false);
         BridgeConfig.setScriptEnabled(this, scriptEnabledSwitch.isChecked());
         BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
-        BridgeConfig.appendLog(this, "설정 저장됨 room=" + BridgeConfig.roomName(this) + " id=" + BridgeConfig.roomId(this) + " 화면=" + BridgeConfig.accessibilitySystemEventsEnabled(this) + " js=" + BridgeConfig.scriptEnabled(this));
+        BridgeConfig.appendLog(this, "설정 저장됨 room=" + BridgeConfig.roomName(this) + " id=" + BridgeConfig.roomId(this) + " js=" + BridgeConfig.scriptEnabled(this));
         refreshStatus();
         refreshLogs();
     }
@@ -352,9 +321,6 @@ public class MainActivity extends Activity {
         boolean permission = notificationPermissionEnabled();
         permissionStatus.setText(permission ? "알림 접근 권한: 허용됨" : "알림 접근 권한: 필요");
         permissionStatus.setTextColor(permission ? Color.rgb(30, 104, 58) : Color.rgb(184, 74, 43));
-        boolean accessibility = accessibilityPermissionEnabled();
-        accessibilityStatus.setText(accessibility ? "화면 브릿지 권한: 허용됨" : "화면 브릿지 권한: 필요");
-        accessibilityStatus.setTextColor(accessibility ? Color.rgb(30, 104, 58) : Color.rgb(184, 74, 43));
     }
 
     private void refreshLogs() {
@@ -365,11 +331,6 @@ public class MainActivity extends Activity {
     private boolean notificationPermissionEnabled() {
         String listeners = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
         return listeners != null && listeners.toLowerCase().contains(getPackageName().toLowerCase());
-    }
-
-    private boolean accessibilityPermissionEnabled() {
-        String services = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        return services != null && services.toLowerCase().contains((getPackageName() + "/").toLowerCase());
     }
 
     private LinearLayout panel() {

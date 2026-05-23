@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.36";
+export const APP_VERSION = "0.4.37";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -69,7 +69,10 @@ export const FEATURES = [
   "system-event-dedupe",
   "compact-welcome-text",
   "bridge-reply-echo-guard",
-  "passive-notification-guard"
+  "passive-notification-guard",
+  "multi-room-registry",
+  "room-join-phrase",
+  "commercial-bridge-mode"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -86,6 +89,8 @@ const LUCKY_DRAW_POINT_COST = 100;
 const TRANSFER_FEE_RATE = 0.1;
 const REENTRY_CANDIDATE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const SYSTEM_EVENT_DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
+const JOIN_SIGNAL_WINDOW_MS = 30 * 60 * 1000;
+const DEFAULT_JOIN_PHRASE = process.env.DEFAULT_JOIN_PHRASE || "입장확인";
 const LUCKY_DRAW_OUTCOMES = [
   { threshold: 0.05, label: "대박", reward: 500, chance: "5%" },
   { threshold: 0.20, label: "성공", reward: 200, chance: "15%" },
@@ -362,7 +367,9 @@ function ensureRoom(state, room) {
     events: [],
     rawEvents: [],
     peopleByIdentity: {},
-    ambiguousIdentities: []
+    ambiguousIdentities: [],
+    settings: {},
+    pendingEntries: []
   };
   const roomState = state.rooms[key];
   roomState.name ||= roomTitle(room);
@@ -375,6 +382,13 @@ function ensureRoom(state, room) {
   roomState.rawEvents ||= [];
   roomState.peopleByIdentity ||= {};
   roomState.ambiguousIdentities ||= [];
+  roomState.settings ||= {};
+  roomState.settings.enabled = roomState.settings.enabled !== false;
+  roomState.settings.registered ||= false;
+  roomState.settings.roomIds ||= [];
+  roomState.settings.roomLinks ||= [];
+  roomState.settings.joinPhrase ||= DEFAULT_JOIN_PHRASE;
+  roomState.pendingEntries ||= [];
   for (const person of Object.values(roomState.people)) normalizePersonState(person);
   return roomState;
 }
@@ -682,7 +696,7 @@ function openChatRoomId(value) {
   return bare ? bare[0] : "";
 }
 
-function registeredRoomIds() {
+function envRegisteredRoomIds() {
   const ids = listValues(
     process.env.REGISTERED_ROOM_IDS,
     process.env.REGISTERED_OPENCHAT_IDS,
@@ -690,6 +704,20 @@ function registeredRoomIds() {
   );
   const links = listValues(process.env.REGISTERED_ROOM_LINKS, process.env.REGISTERED_OPENCHAT_LINKS);
   return new Set([...ids, ...links].map(openChatRoomId).filter(Boolean));
+}
+
+function stateRegisteredRoomIds(state = {}) {
+  const ids = [];
+  for (const roomState of Object.values(state.rooms || {})) {
+    const settings = roomState?.settings || {};
+    if (!settings.registered || settings.enabled === false) continue;
+    ids.push(...(settings.roomIds || []), ...(settings.roomLinks || []));
+  }
+  return new Set(ids.map(openChatRoomId).filter(Boolean));
+}
+
+function registeredRoomIds(state = {}) {
+  return new Set([...envRegisteredRoomIds(), ...stateRegisteredRoomIds(state)]);
 }
 
 function payloadRoomId(payload = {}) {
@@ -705,11 +733,14 @@ function payloadRoomId(payload = {}) {
   );
 }
 
-function isRegisteredRoomPayload(payload = {}) {
-  const ids = registeredRoomIds();
-  if (!ids.size) return true;
+function isRegisteredRoomPayload(payload = {}, state = null, room = "") {
+  const ids = registeredRoomIds(state || {});
+  if (!ids.size && !state) return true;
   const roomId = payloadRoomId(payload);
-  return Boolean(roomId && ids.has(roomId));
+  if (roomId && ids.has(roomId)) return true;
+  const roomNameKey = roomKey(room || payload.room || payload.rawRoom);
+  const roomState = state?.rooms?.[roomNameKey];
+  return Boolean(roomState?.settings?.registered && roomState.settings.enabled !== false);
 }
 
 function booleanPayloadValue(value) {
@@ -1047,6 +1078,102 @@ function adminListCommand(roomState) {
     .filter((name, index, list) => list.findIndex((value) => personKey(value) === personKey(name)) === index);
   if (!names.length) return "등록된 관리자가 없습니다.\n/관리자등록 닉네임 으로 초기 관리자를 등록해주세요.";
   return ["관리자 목록", ...names.map((name) => `• ${name}`)].join("\n");
+}
+
+function roomRegistrationCommand(text) {
+  return /^\/(?:방등록|방설정|입장문구|방정보|방목록|방삭제)(?:\s|$)/i.test(normalizeText(text));
+}
+
+function roomSettingsLines(roomState) {
+  const settings = roomState.settings || {};
+  const ids = (settings.roomIds || []).filter(Boolean);
+  const links = (settings.roomLinks || []).filter(Boolean);
+  return [
+    `${roomState.name || "현재방"} 방 설정`,
+    "",
+    `등록: ${settings.registered ? "켜짐" : "꺼짐"}`,
+    `입장확인 문구: ${settings.joinPhrase || DEFAULT_JOIN_PHRASE}`,
+    `roomId: ${ids.length ? ids.join(", ") : "미등록"}`,
+    `링크: ${links.length ? links.join(", ") : "미등록"}`,
+    `관리자: ${(roomState.admins || []).length ? roomState.admins.join(", ") : "미등록"}`
+  ];
+}
+
+function roomInfoCommand(roomState) {
+  return roomSettingsLines(roomState).join("\n");
+}
+
+function roomListCommand(state) {
+  const rooms = Object.values(state.rooms || {})
+    .filter((roomState) => roomState?.settings?.registered && roomState.settings.enabled !== false)
+    .sort((left, right) => keyFor(left.name).localeCompare(keyFor(right.name)));
+  if (!rooms.length) return "등록된 방이 없습니다.\n현재 방에서 /방등록 입장확인문구 를 실행하세요.";
+  const lines = ["등록 방 목록"];
+  rooms.forEach((roomState, index) => {
+    const ids = roomState.settings?.roomIds || [];
+    lines.push(
+      `${index + 1}. ${roomState.name || "이름없음"}`,
+      `   입장문구: ${roomState.settings?.joinPhrase || DEFAULT_JOIN_PHRASE}`,
+      `   roomId: ${ids.length ? ids.join(", ") : "미등록"}`
+    );
+  });
+  return lines.join("\n");
+}
+
+function roomRegisterCommand(roomState, sender, text, payload = {}) {
+  const denied = hasAnyAdmin(roomState) ? requireAdmin(roomState, sender) : null;
+  if (denied) return denied;
+
+  const body = normalizeText(text.replace(/^\/방등록\s*/i, ""));
+  const linkMatch = body.match(/https?:\/\/open\.kakao\.com\/o\/[A-Za-z0-9_-]+/i);
+  const phrase = normalizeText(body.replace(/https?:\/\/open\.kakao\.com\/o\/[A-Za-z0-9_-]+/ig, "")) || roomState.settings.joinPhrase || DEFAULT_JOIN_PHRASE;
+  const ids = [
+    payloadRoomId(payload),
+    openChatRoomId(linkMatch?.[0] || ""),
+    openChatRoomId(payload.roomLink || payload.openChatLink || payload.link || "")
+  ].filter(Boolean);
+  const links = [
+    normalizeText(linkMatch?.[0] || ""),
+    normalizeText(payload.roomLink || payload.openChatLink || payload.link || "")
+  ].filter(Boolean);
+
+  roomState.settings.registered = true;
+  roomState.settings.enabled = true;
+  roomState.settings.joinPhrase = phrase;
+  roomState.settings.registeredAt ||= nowIso();
+  roomState.settings.registeredBy ||= sender;
+  for (const id of ids) addUnique(roomState.settings.roomIds, id);
+  for (const link of links) addUnique(roomState.settings.roomLinks, link);
+  if (!hasAnyAdmin(roomState)) addUnique(roomState.admins, sender);
+  recordRoomEvent(roomState, { type: "room_registered", by: sender, joinPhrase: phrase });
+
+  return [
+    "방 등록 완료",
+    "",
+    ...roomSettingsLines(roomState),
+    "",
+    "방장봇 환영문구를 위 입장확인 문구와 같게 설정하세요."
+  ].join("\n");
+}
+
+function roomJoinPhraseCommand(roomState, sender, text) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const phrase = normalizeText(text.replace(/^\/(?:방설정|입장문구)\s*/i, ""));
+  if (!phrase) return "형식: /입장문구 픽셀곰 입장확인";
+  roomState.settings.joinPhrase = phrase;
+  roomState.settings.registered = true;
+  recordRoomEvent(roomState, { type: "room_join_phrase_updated", by: sender, joinPhrase: phrase });
+  return [`입장확인 문구가 변경되었습니다.`, `문구: ${phrase}`].join("\n");
+}
+
+function roomDeleteCommand(roomState, sender) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  roomState.settings.registered = false;
+  roomState.settings.enabled = false;
+  recordRoomEvent(roomState, { type: "room_unregistered", by: sender });
+  return `${roomState.name || "현재방"} 등록을 해제했습니다.`;
 }
 
 function collectIdentityIdsForName(roomState, key, target, requestIdentity = {}) {
@@ -1488,10 +1615,58 @@ function firstChatReentryNotice(roomState, person, sender, identityId = "") {
   ].join("\n");
 }
 
+function isSystemOrOpenChatBotSender(sender) {
+  const key = keyFor(sender);
+  return key.includes("오픈채팅봇") || key.includes("방장봇") || key.includes("카카오시스템") || key.includes("openchatbot");
+}
+
+function roomJoinPhraseMessage(roomState, sender, message) {
+  if (!isSystemOrOpenChatBotSender(sender)) return false;
+  const phrase = compactSpaces(roomState.settings?.joinPhrase || DEFAULT_JOIN_PHRASE);
+  const text = compactSpaces(message);
+  return Boolean(phrase && text && text.includes(phrase));
+}
+
+function recordJoinPhraseSignal(roomState, sender, message) {
+  roomState.pendingEntries ||= [];
+  const at = nowIso();
+  const phrase = roomState.settings?.joinPhrase || DEFAULT_JOIN_PHRASE;
+  roomState.pendingEntries.push({ at, phrase, sender, message, claimedBy: "" });
+  if (roomState.pendingEntries.length > 100) roomState.pendingEntries = roomState.pendingEntries.slice(-100);
+  recordRoomEvent(roomState, { type: "join_phrase_signal", phrase, sender });
+  return null;
+}
+
+function claimPendingEntry(roomState, person, sender) {
+  if (!person || isReservedPersonName(sender)) return null;
+  const now = Date.now();
+  const pending = (roomState.pendingEntries || []).find((entry) => {
+    if (entry.claimedBy) return false;
+    const at = new Date(entry.at).getTime();
+    return Number.isFinite(at) && now - at <= JOIN_SIGNAL_WINDOW_MS;
+  });
+  if (!pending) return null;
+
+  const alreadyHasRecentEntry = (person.entries || []).some((entry) => {
+    const at = new Date(entry.at).getTime();
+    return Number.isFinite(at) && Math.abs(at - new Date(pending.at).getTime()) <= JOIN_SIGNAL_WINDOW_MS;
+  });
+  if (alreadyHasRecentEntry) {
+    pending.claimedBy = person.currentName || sender;
+    return null;
+  }
+
+  person.entries.push({ at: pending.at, source: "join_phrase" });
+  pending.claimedBy = person.currentName || sender;
+  recordRoomEvent(roomState, { type: "entered_by_join_phrase", name: person.currentName || sender, phrase: pending.phrase });
+  return person.entries.length > 1 ? reentryText(roomState, person) : null;
+}
+
 function recordActivity(roomState, sender, identityId = "", options = {}) {
   const person = ensurePerson(roomState, sender, identityId);
   if (!person) return null;
-  const reentryNotice = options.firstChatNotice ? firstChatReentryNotice(roomState, person, sender, identityId) : null;
+  const entryNotice = options.firstChatNotice ? claimPendingEntry(roomState, person, sender) : null;
+  const reentryNotice = !entryNotice && options.firstChatNotice ? firstChatReentryNotice(roomState, person, sender, identityId) : null;
   const dateKey = kstDateKey();
   const weekKey = kstWeekKey();
   person.lastSeenAt = nowIso();
@@ -1500,7 +1675,7 @@ function recordActivity(roomState, sender, identityId = "", options = {}) {
   person.chats.byDate[dateKey] = (person.chats.byDate[dateKey] || 0) + 1;
   person.chats.byWeek[weekKey] = (person.chats.byWeek[weekKey] || 0) + 1;
   const notices = grantExpAndLevel(person, CHAT_EXP_REWARD);
-  return reentryNotice || notices[0] || null;
+  return entryNotice || reentryNotice || notices[0] || null;
 }
 
 function pointViewCommand(roomState, text, sender) {
@@ -2281,6 +2456,9 @@ function helpText(isAdminUser = false) {
       "/관리자재설정 닉네임1,닉네임2",
       "/관리자초기화 - 방 관리자 목록 초기화",
       "/관리자목록",
+      "/방등록 입장확인문구",
+      "/입장문구 입장확인문구",
+      "/방정보, /방목록, /방삭제",
       "/고유값초기화 닉네임 - 이름 섞임 방지",
       "/포인트지급 닉네임 포인트",
       "/포인트차감 닉네임 포인트",
@@ -2311,6 +2489,11 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/브릿지" || command === "/bridge") return bridgeServerText(room);
   if (command === "/js상태" || command === "/jsstatus") return bridgeJsServerText();
   if (command === "/로컬상태") return `${DEFAULT_BOT_NAME} 자동응답 스크립트가 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.`;
+  if (command.startsWith("/방등록")) return roomRegisterCommand(roomState, sender, text, identity.payload || {});
+  if (/^\/(?:방설정|입장문구)(?:\s|$)/.test(command)) return roomJoinPhraseCommand(roomState, sender, text);
+  if (command === "/방정보") return roomInfoCommand(roomState);
+  if (command === "/방목록") return roomListCommand(state);
+  if (command === "/방삭제") return roomDeleteCommand(roomState, sender);
   if (command === "/" || command === "/도움말" || command === "/help" || command === "/?") return helpText(isAdmin(roomState, sender));
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
   if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return recentEventsCommand(state, roomState, sender, text);
@@ -2376,6 +2559,7 @@ async function handleMessage(state, room, sender, message, identity = {}, detect
   if (event?.type === "kicked") return recordExit(roomState, event.name, "kicked", targetIdentity);
   if (event?.type === "nickname_changed") return recordNickChange(roomState, event.from, event.to, targetIdentity);
   if (isBridgeReplyEchoMessage(sender, message) || isPassiveAttachmentNotice(sender, message)) return null;
+  if (roomJoinPhraseMessage(roomState, sender, message)) return recordJoinPhraseSignal(roomState, sender, message);
 
   const isCommand = text.startsWith("/");
   const activityReply = recordActivity(roomState, sender, identity.senderId, { firstChatNotice: !isCommand });
@@ -2402,15 +2586,19 @@ export async function handleChatEvent(payload) {
   const sender = normalizeText(payload?.sender) || "익명";
   const event = payloadSystemEvent(payload, message);
   const identity = payloadIdentity(payload);
-  const registeredRoom = isRegisteredRoomPayload(payload);
-  if (!registeredRoom && !isGroupChatPayload(payload)) {
-    return { ok: true, reply: null, ignored: true, reason: "non_group_chat" };
-  }
-  if (!registeredRoom) {
-    return { ok: true, reply: null, ignored: true, reason: "unregistered_room" };
-  }
   const state = await loadState();
   const roomState = ensureRoom(state, room);
+  const registeredRoom = isRegisteredRoomPayload(payload, state, room);
+  const registrationCommand = roomRegistrationCommand(message);
+  if (!registeredRoom && registrationCommand && !isGroupChatPayload(payload)) {
+    return { ok: true, reply: null, ignored: true, reason: "non_group_chat" };
+  }
+  if (!registeredRoom && !registrationCommand && !isGroupChatPayload(payload)) {
+    return { ok: true, reply: null, ignored: true, reason: "non_group_chat" };
+  }
+  if (!registeredRoom && !registrationCommand) {
+    return { ok: true, reply: null, ignored: true, reason: "unregistered_room" };
+  }
   recordRawEvent(roomState, payload, { room, sender, message, event });
 
   if (!message || isBotSender(sender)) {
@@ -2418,7 +2606,7 @@ export async function handleChatEvent(payload) {
     return { ok: true, reply: null, ignored: true };
   }
 
-  const reply = await handleMessage(state, room, sender, message, identity, event);
+  const reply = await handleMessage(state, room, sender, message, { ...identity, payload }, event);
   await saveState(state);
   return {
     ok: true,
