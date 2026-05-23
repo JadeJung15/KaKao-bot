@@ -24,8 +24,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
+    private static final String WEBSITE_URL = "https://pixgom.com";
+
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private TextView permissionStatus;
+    private TextView accessibilityStatus;
     private TextView logView;
     private EditText serverUrlInput;
     private EditText roomNameInput;
@@ -33,29 +36,95 @@ public class MainActivity extends Activity {
     private EditText scriptSourceInput;
     private Switch enabledSwitch;
     private Switch scriptEnabledSwitch;
+    private Switch accessibilitySystemSwitch;
+    private Switch accessibilityReplySwitch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(buildContent());
+        showHome();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        if (permissionStatus != null) refreshStatus();
+        if (logView != null) refreshLogs();
+    }
+
+    private void showHome() {
+        clearMainRefs();
+        setContentView(buildHomeContent());
+    }
+
+    private void showMain() {
+        setContentView(buildMainContent());
         refreshStatus();
         refreshLogs();
     }
 
-    private View buildContent() {
-        ScrollView scrollView = new ScrollView(this);
-        scrollView.setFillViewport(true);
-        scrollView.setBackgroundColor(Color.rgb(255, 246, 231));
+    private View buildHomeContent() {
+        ScrollView scrollView = baseScrollView();
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(18), dp(18), dp(18), dp(28));
         scrollView.addView(root);
+
+        ImageView hero = new ImageView(this);
+        hero.setImageResource(getResources().getIdentifier("pixelgom_home", "drawable", getPackageName()));
+        hero.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        root.addView(hero, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220)));
+
+        TextView title = text("픽셀곰 브릿지", 30, Color.rgb(58, 37, 24), true);
+        title.setPadding(0, dp(18), 0, dp(4));
+        root.addView(title);
+
+        TextView version = text("버전 " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")", 14, Color.rgb(111, 78, 49), true);
+        version.setPadding(0, 0, 0, dp(12));
+        root.addView(version);
+
+        TextView subtitle = text("픽셀곰 오픈채팅 운영봇을 카카오 알림, 서버, 로컬 JS 자동응답과 연결합니다.", 15, Color.rgb(87, 64, 47), false);
+        root.addView(subtitle);
+
+        LinearLayout infoPanel = panel();
+        infoPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        root.addView(infoPanel);
+
+        infoPanel.addView(labelValue("오픈채팅방 주소", BridgeConfig.roomLink(this)));
+        infoPanel.addView(labelValue("홈페이지 주소", WEBSITE_URL));
+        infoPanel.addView(labelValue("등록 방", BridgeConfig.roomName(this) + " / " + BridgeConfig.roomId(this)));
+
+        Button startButton = primaryButton("시작하기");
+        startButton.setOnClickListener(v -> showMain());
+        root.addView(startButton);
+
+        Button openChatButton = secondaryButton("오픈채팅방 열기");
+        openChatButton.setOnClickListener(v -> openUrl(BridgeConfig.roomLink(this)));
+        root.addView(openChatButton);
+
+        Button websiteButton = secondaryButton("홈페이지 열기");
+        websiteButton.setOnClickListener(v -> openUrl(WEBSITE_URL));
+        root.addView(websiteButton);
+
+        return scrollView;
+    }
+
+    private View buildMainContent() {
+        ScrollView scrollView = baseScrollView();
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(18), dp(18), dp(18), dp(28));
+        scrollView.addView(root);
+
+        Button homeButton = secondaryButton("홈으로");
+        homeButton.setOnClickListener(v -> showHome());
+        root.addView(homeButton);
+
+        TextView version = text("버전 " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")", 13, Color.rgb(111, 78, 49), true);
+        version.setPadding(0, dp(12), 0, 0);
+        root.addView(version);
 
         ImageView hero = new ImageView(this);
         hero.setImageResource(getResources().getIdentifier("pixelgom_hero", "drawable", getPackageName()));
@@ -77,6 +146,14 @@ public class MainActivity extends Activity {
         permissionButton.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
         root.addView(permissionButton);
 
+        accessibilityStatus = text("", 14, Color.rgb(58, 37, 24), false);
+        accessibilityStatus.setPadding(0, dp(14), 0, dp(8));
+        root.addView(accessibilityStatus);
+
+        Button accessibilityButton = primaryButton("화면 브릿지 권한 열기");
+        accessibilityButton.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        root.addView(accessibilityButton);
+
         LinearLayout panel = panel();
         panel.setPadding(dp(14), dp(14), dp(14), dp(14));
         root.addView(panel);
@@ -88,6 +165,22 @@ public class MainActivity extends Activity {
         enabledSwitch.setChecked(BridgeConfig.isEnabled(this));
         enabledSwitch.setOnCheckedChangeListener((CompoundButton button, boolean checked) -> BridgeConfig.setEnabled(this, checked));
         panel.addView(enabledSwitch);
+
+        accessibilitySystemSwitch = new Switch(this);
+        accessibilitySystemSwitch.setText("화면 시스템 메시지 감지");
+        accessibilitySystemSwitch.setTextSize(16);
+        accessibilitySystemSwitch.setTextColor(Color.rgb(58, 37, 24));
+        accessibilitySystemSwitch.setChecked(BridgeConfig.accessibilitySystemEventsEnabled(this));
+        accessibilitySystemSwitch.setOnCheckedChangeListener((CompoundButton button, boolean checked) -> BridgeConfig.setAccessibilitySystemEventsEnabled(this, checked));
+        panel.addView(accessibilitySystemSwitch);
+
+        accessibilityReplySwitch = new Switch(this);
+        accessibilityReplySwitch.setText("화면 감지 후 자동 답장");
+        accessibilityReplySwitch.setTextSize(16);
+        accessibilityReplySwitch.setTextColor(Color.rgb(58, 37, 24));
+        accessibilityReplySwitch.setChecked(BridgeConfig.accessibilityAutoReplyEnabled(this));
+        accessibilityReplySwitch.setOnCheckedChangeListener((CompoundButton button, boolean checked) -> BridgeConfig.setAccessibilityAutoReplyEnabled(this, checked));
+        panel.addView(accessibilityReplySwitch);
 
         serverUrlInput = input("서버 URL", BridgeConfig.serverUrl(this));
         panel.addView(serverUrlInput);
@@ -107,7 +200,7 @@ public class MainActivity extends Activity {
         panel.addView(testButton);
 
         Button privacyButton = secondaryButton("개인정보처리방침 열기");
-        privacyButton.setOnClickListener(v -> openUrl("https://pixgom.com/privacy"));
+        privacyButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/privacy"));
         panel.addView(privacyButton);
 
         TextView scriptTitle = text("로컬 JS 자동응답", 20, Color.rgb(58, 37, 24), true);
@@ -164,14 +257,37 @@ public class MainActivity extends Activity {
         return scrollView;
     }
 
+    private ScrollView baseScrollView() {
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.setFillViewport(true);
+        scrollView.setBackgroundColor(Color.rgb(255, 246, 231));
+        return scrollView;
+    }
+
+    private void clearMainRefs() {
+        permissionStatus = null;
+        accessibilityStatus = null;
+        logView = null;
+        serverUrlInput = null;
+        roomNameInput = null;
+        roomIdInput = null;
+        scriptSourceInput = null;
+        enabledSwitch = null;
+        scriptEnabledSwitch = null;
+        accessibilitySystemSwitch = null;
+        accessibilityReplySwitch = null;
+    }
+
     private void saveSettings() {
         BridgeConfig.setEnabled(this, enabledSwitch.isChecked());
         BridgeConfig.setServerUrl(this, serverUrlInput.getText().toString());
         BridgeConfig.setRoomName(this, roomNameInput.getText().toString());
         BridgeConfig.setRoomId(this, roomIdInput.getText().toString());
+        BridgeConfig.setAccessibilitySystemEventsEnabled(this, accessibilitySystemSwitch.isChecked());
+        BridgeConfig.setAccessibilityAutoReplyEnabled(this, accessibilityReplySwitch.isChecked());
         BridgeConfig.setScriptEnabled(this, scriptEnabledSwitch.isChecked());
         BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
-        BridgeConfig.appendLog(this, "설정 저장됨 room=" + BridgeConfig.roomName(this) + " id=" + BridgeConfig.roomId(this) + " js=" + BridgeConfig.scriptEnabled(this));
+        BridgeConfig.appendLog(this, "설정 저장됨 room=" + BridgeConfig.roomName(this) + " id=" + BridgeConfig.roomId(this) + " 화면=" + BridgeConfig.accessibilitySystemEventsEnabled(this) + " js=" + BridgeConfig.scriptEnabled(this));
         refreshStatus();
         refreshLogs();
     }
@@ -235,6 +351,9 @@ public class MainActivity extends Activity {
         boolean permission = notificationPermissionEnabled();
         permissionStatus.setText(permission ? "알림 접근 권한: 허용됨" : "알림 접근 권한: 필요");
         permissionStatus.setTextColor(permission ? Color.rgb(30, 104, 58) : Color.rgb(184, 74, 43));
+        boolean accessibility = accessibilityPermissionEnabled();
+        accessibilityStatus.setText(accessibility ? "화면 브릿지 권한: 허용됨" : "화면 브릿지 권한: 필요");
+        accessibilityStatus.setTextColor(accessibility ? Color.rgb(30, 104, 58) : Color.rgb(184, 74, 43));
     }
 
     private void refreshLogs() {
@@ -245,6 +364,11 @@ public class MainActivity extends Activity {
     private boolean notificationPermissionEnabled() {
         String listeners = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
         return listeners != null && listeners.toLowerCase().contains(getPackageName().toLowerCase());
+    }
+
+    private boolean accessibilityPermissionEnabled() {
+        String services = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        return services != null && services.toLowerCase().contains((getPackageName() + "/").toLowerCase());
     }
 
     private LinearLayout panel() {
@@ -268,6 +392,21 @@ public class MainActivity extends Activity {
         params.setMargins(0, dp(10), 0, 0);
         editText.setLayoutParams(params);
         return editText;
+    }
+
+    private LinearLayout labelValue(String label, String value) {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, 0, 0, dp(10));
+        layout.setLayoutParams(params);
+
+        TextView labelView = text(label, 12, Color.rgb(111, 78, 49), true);
+        TextView valueView = text(value, 15, Color.rgb(58, 37, 24), false);
+        valueView.setPadding(0, dp(2), 0, 0);
+        layout.addView(labelView);
+        layout.addView(valueView);
+        return layout;
     }
 
     private EditText scriptInput(String value) {

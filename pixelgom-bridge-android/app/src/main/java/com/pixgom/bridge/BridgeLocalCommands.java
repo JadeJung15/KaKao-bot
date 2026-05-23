@@ -26,6 +26,8 @@ final class BridgeLocalCommands {
                 "방(raw): " + safe(event.rawRoom) + "\n" +
                 "보낸사람: " + safe(event.sender) + "\n" +
                 "roomId: " + safe(event.roomId) + "\n" +
+                "화면 감지: " + (BridgeConfig.accessibilitySystemEventsEnabled(context) ? "켜짐" : "꺼짐") + "\n" +
+                "화면 자동답장: " + (BridgeConfig.accessibilityAutoReplyEnabled(context) ? "켜짐" : "꺼짐") + "\n" +
                 "JS 자동응답: " + (BridgeConfig.scriptEnabled(context) ? "켜짐" : "꺼짐") + "\n" +
                 "MessengerBot 없이 이 응답이 보이면 삭제 테스트 통과입니다.";
     }
@@ -56,6 +58,8 @@ final class BridgeLocalCommands {
                 "대상 앱: 카카오톡(" + BridgeConfig.KAKAO_PACKAGE + ")\n" +
                 "등록방: " + BridgeConfig.roomName(context) + "\n" +
                 "roomId: " + BridgeConfig.roomId(context) + "\n" +
+                "화면 감지: " + (BridgeConfig.accessibilitySystemEventsEnabled(context) ? "켜짐" : "꺼짐") + "\n" +
+                "화면 자동답장: " + (BridgeConfig.accessibilityAutoReplyEnabled(context) ? "켜짐" : "꺼짐") + "\n" +
                 "JS 자동응답: " + (BridgeConfig.scriptEnabled(context) ? "켜짐" : "꺼짐");
     }
 

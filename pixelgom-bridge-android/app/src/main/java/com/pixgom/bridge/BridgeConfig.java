@@ -25,6 +25,8 @@ final class BridgeConfig {
     private static final String KEY_ROOM_LINK = "room_link";
     private static final String KEY_SCRIPT_ENABLED = "script_enabled";
     private static final String KEY_SCRIPT_SOURCE = "script_source";
+    private static final String KEY_ACCESSIBILITY_SYSTEM_EVENTS = "accessibility_system_events";
+    private static final String KEY_ACCESSIBILITY_AUTO_REPLY = "accessibility_auto_reply";
     private static final String KEY_LOGS = "logs";
     private static final int MAX_LOG_LINES = 80;
 
@@ -88,6 +90,22 @@ final class BridgeConfig {
 
     static String defaultScriptSource() {
         return DEFAULT_SCRIPT_SOURCE;
+    }
+
+    static boolean accessibilitySystemEventsEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_ACCESSIBILITY_SYSTEM_EVENTS, true);
+    }
+
+    static void setAccessibilitySystemEventsEnabled(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_ACCESSIBILITY_SYSTEM_EVENTS, enabled).apply();
+    }
+
+    static boolean accessibilityAutoReplyEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_ACCESSIBILITY_AUTO_REPLY, true);
+    }
+
+    static void setAccessibilityAutoReplyEnabled(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_ACCESSIBILITY_AUTO_REPLY, enabled).apply();
     }
 
     static String normalized(String value) {

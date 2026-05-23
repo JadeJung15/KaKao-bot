@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.32";
+export const APP_VERSION = "0.4.33";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -63,7 +63,8 @@ export const FEATURES = [
   "registered-room-guard",
   "no-games",
   "bridge-self-test-commands",
-  "entry-reentry-candidate-history"
+  "entry-reentry-candidate-history",
+  "reserved-name-nickname-guard"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -408,7 +409,9 @@ function identityPersonKey(roomState, identityId) {
   const id = normalizeIdentityId(identityId);
   if (isAmbiguousIdentity(roomState, id)) return "";
   const key = id ? roomState.peopleByIdentity?.[id] : "";
-  return key && roomState.people?.[key] ? key : "";
+  const person = key ? roomState.people?.[key] : null;
+  if (!person || isReservedPersonName(person.currentName)) return "";
+  return key;
 }
 
 function isAmbiguousIdentity(roomState, identityId) {
@@ -434,7 +437,7 @@ function identityNamesForEvent(event, identityId) {
   return uniqueNames([
     normalizeIdentityId(identity.senderId) === id ? event.sender : "",
     normalizeIdentityId(identity.targetUserId) === id ? event.eventName : ""
-  ]);
+  ]).filter((name) => !isReservedPersonName(name));
 }
 
 function identityLooksShared(roomState, identityId, currentName) {
@@ -484,6 +487,7 @@ function remapPersonKey(roomState, oldKey, newKey, person) {
 function attachPersonIdentity(roomState, key, person, identityId) {
   const id = normalizeIdentityId(identityId);
   if (!id) return;
+  if (isReservedPersonName(person?.currentName)) return;
   person.identities ||= [];
   if (!person.identities.includes(id)) person.identities.push(id);
   roomState.peopleByIdentity ||= {};
@@ -522,7 +526,13 @@ function ensurePerson(roomState, name, identityId = "") {
   const person = roomState.people[key];
   normalizePersonState(person);
   const previousName = person.currentName;
-  if (displayName && previousName && keyFor(previousName) !== keyFor(displayName)) {
+  if (
+    displayName
+    && previousName
+    && keyFor(previousName) !== keyFor(displayName)
+    && !isReservedPersonName(previousName)
+    && !isReservedPersonName(displayName)
+  ) {
     addUnique(person.names, previousName);
     person.nickChanges.push({ from: previousName, to: displayName, at: nowIso(), source: "identity" });
   }
@@ -1408,7 +1418,7 @@ function recentPreviousIdentityName(roomState, identityId, currentName) {
     const names = uniqueNames([
       normalizeIdentityId(identity.senderId) === targetId ? event.sender : "",
       normalizeIdentityId(identity.targetUserId) === targetId ? event.eventName : ""
-    ]).filter((name) => keyFor(name) !== currentKey);
+    ]).filter((name) => keyFor(name) !== currentKey && !isReservedPersonName(name));
 
     if (names.length) return names[0];
   }
@@ -1418,13 +1428,14 @@ function recentPreviousIdentityName(roomState, identityId, currentName) {
 function firstChatReentryNotice(roomState, person, sender, identityId = "") {
   const currentName = stripKakaoSuffix(sender);
   const currentKey = keyFor(currentName);
+  if (isReservedPersonName(currentName)) return null;
   if (identityLooksShared(roomState, identityId, currentName)) {
     markAmbiguousIdentity(roomState, identityId);
     return null;
   }
   const recentPreviousName = recentPreviousIdentityName(roomState, identityId, currentName);
   const previousNames = uniqueNames([...(person.names || []), person.currentName])
-    .filter((name) => keyFor(name) !== currentKey);
+    .filter((name) => keyFor(name) !== currentKey && !isReservedPersonName(name));
   const orderedPreviousNames = uniqueNames([recentPreviousName, ...previousNames]);
   if (!currentName || !orderedPreviousNames.length) return null;
 
@@ -2071,6 +2082,7 @@ function eventTypeAlias(value) {
 function nicknameChangeName(value) {
   const name = stripKakaoSuffix(value);
   if (!name || name.length > 30) return "";
+  if (isReservedPersonName(name)) return "";
   if (/https?:|www\.|[{};]/i.test(name)) return "";
   if (/[:：]/.test(name)) return "";
   return name;

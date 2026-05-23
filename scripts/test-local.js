@@ -376,6 +376,23 @@ try {
   assert.doesNotMatch(collisionProneChat.json.reply, /고유값|후보|재입장/);
 
   await chatPayload({
+    room: "미정해시오탐방",
+    msg: "알림 파서가 보낸 미정",
+    sender: "미정",
+    profileHash: "unknown-to-named-hash-1"
+  });
+  const unknownHashFalseRename = await chatPayload({
+    room: "미정해시오탐방",
+    msg: "실제 닉네임 첫 채팅",
+    sender: "두팔",
+    profileHash: "unknown-to-named-hash-1"
+  });
+  assert.equal(unknownHashFalseRename.json.reply, null);
+
+  const unknownHashHistory = await chat("/닉이력 두팔", "일반사용자", "미정해시오탐방");
+  assert.doesNotMatch(unknownHashHistory.json.reply, /미정/);
+
+  await chatPayload({
     room: "공유해시오탐방",
     msg: "미정 첫 활동",
     sender: "미정",
