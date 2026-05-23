@@ -119,7 +119,7 @@ try {
   assert.match(help.json.template.outputs[0].simpleText.text, /이체/);
   assert.match(help.json.template.outputs[0].simpleText.text, /응원/);
   assert.match(help.json.template.outputs[0].simpleText.text, /뽑기/);
-  assert.match(help.json.template.outputs[0].simpleText.text, /홀짝/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /\/홀 금액/);
   assert.match(help.json.template.outputs[0].simpleText.text, /출석/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /프로필등록/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /입퇴장상세/);
@@ -450,7 +450,7 @@ try {
   assert.match(pointGuide.json.reply, /포인트 콘텐츠/);
   assert.match(pointGuide.json.reply, /응원 카드/);
   assert.match(pointGuide.json.reply, /뽑기/);
-  assert.match(pointGuide.json.reply, /홀짝/);
+  assert.match(pointGuide.json.reply, /\/홀 금액/);
 
   const invalidLikeAmount = await chat("/좋아요 미미 10000", "포순이 여");
   assert.match(invalidLikeAmount.json.reply, /1 ~ 999 범위/);
@@ -476,11 +476,13 @@ try {
   assert.match(luckyDraw.json.reply, /사용 포인트 : 🅟100/);
   assert.match(luckyDraw.json.reply, /공개 확률/);
 
-  const oddEven = await chat("/홀짝 홀", "포순이 여");
+  const oddEven = await chat("/홀 100", "포순이 여");
   assert.match(oddEven.json.reply, /홀짝 결과/);
   assert.match(oddEven.json.reply, /선택 : 홀/);
+  assert.match(oddEven.json.reply, /베팅 : 🅟100/);
   assert.match(oddEven.json.reply, /결과 : (홀|짝)/);
-  assert.match(oddEven.json.reply, /사용 포인트 : 🅟100/);
+  assert.match(oddEven.json.reply, /배당 : x2/);
+  assert.match(oddEven.json.reply, /지급 포인트 : 🅟(0|200)/);
 
   const memberInfo = await chat("/내정보", "포순이 여");
   assert.match(memberInfo.json.reply, /레벨/);

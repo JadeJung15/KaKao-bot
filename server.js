@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.22";
+export const APP_VERSION = "0.4.23";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -44,6 +44,7 @@ export const FEATURES = [
   "point-cheer",
   "point-lucky-draw",
   "point-odd-even",
+  "point-odd-even-betting",
   "attendance-rewards",
   "member-levels",
   "member-rankings",
@@ -69,8 +70,6 @@ const LIKE_POINT_COST = 4;
 const CHEER_POINT_COST = 50;
 const MAX_CHEER_MESSAGE_LENGTH = 80;
 const LUCKY_DRAW_POINT_COST = 100;
-const ODD_EVEN_POINT_COST = 100;
-const ODD_EVEN_REWARD = 200;
 const TRANSFER_FEE_RATE = 0.1;
 const LUCKY_DRAW_OUTCOMES = [
   { threshold: 0.05, label: "대박", reward: 500, chance: "5%" },
@@ -1350,7 +1349,7 @@ function pointGuideText() {
     `• /좋아요 닉네임 수량 : 1개당 ${formatPoint(LIKE_POINT_COST)}`,
     `• /응원 닉네임 메시지 : 응원 카드 ${formatPoint(CHEER_POINT_COST)}`,
     `• /뽑기 : 가상 포인트 뽑기 ${formatPoint(LUCKY_DRAW_POINT_COST)}`,
-    `• /홀짝 홀 또는 /홀짝 짝 : 맞히면 ${formatPoint(ODD_EVEN_REWARD)}`,
+    "• /홀 금액 또는 /짝 금액 : 맞히면 x2",
     "• /이체 닉네임 포인트 : 수수료 10%",
     "",
     "순위",
@@ -1502,42 +1501,59 @@ function luckyDrawCommand(roomState, sender) {
   ].join("\n");
 }
 
+function parseOddEvenBet(text) {
+  const body = compactSpaces(text);
+  const direct = body.match(/^\/(홀|짝)\s+([0-9][0-9,]*)$/);
+  const legacy = body.match(/^\/홀짝\s+(홀|짝)\s+([0-9][0-9,]*)$/);
+  const match = direct || legacy;
+  if (!match) return null;
+
+  return {
+    choice: match[1],
+    amount: parseAmount(match[2])
+  };
+}
+
 function oddEvenCommand(roomState, sender, text) {
-  const choice = keyFor(text.replace(/^\/홀짝\s*/i, ""));
-  if (!["홀", "짝"].includes(choice)) return "형식: /홀짝 홀 또는 /홀짝 짝";
+  const bet = parseOddEvenBet(text);
+  if (!bet?.choice || !bet.amount) return "형식: /홀 1000 또는 /짝 1000";
 
   const person = ensurePerson(roomState, sender);
-  if (person.points < ODD_EVEN_POINT_COST) {
+  if (person.points < bet.amount) {
     return [
       "포인트가 부족합니다.",
       "",
-      `• 필요 포인트 : ${formatPoint(ODD_EVEN_POINT_COST)}`,
+      `• 필요 포인트 : ${formatPoint(bet.amount)}`,
       `• 보유 포인트 : ${formatPoint(person.points)}`
     ].join("\n");
   }
 
   const result = Math.random() < 0.5 ? "홀" : "짝";
-  const isWin = choice === result;
-  person.points -= ODD_EVEN_POINT_COST;
-  person.spentPoints += ODD_EVEN_POINT_COST;
-  if (isWin) person.points += ODD_EVEN_REWARD;
+  const isWin = bet.choice === result;
+  const reward = isWin ? bet.amount * 2 : 0;
+  person.points -= bet.amount;
+  person.spentPoints += bet.amount;
+  if (reward > 0) person.points += reward;
 
   recordRoomEvent(roomState, {
     type: "odd_even",
     name: person.currentName,
-    choice,
+    choice: bet.choice,
     result,
-    cost: ODD_EVEN_POINT_COST,
-    reward: isWin ? ODD_EVEN_REWARD : 0
+    cost: bet.amount,
+    reward
   });
 
   return [
     "홀짝 결과",
     "",
-    `선택 : ${choice}`,
+    `참여자 : ${person.currentName}`,
+    `선택 : ${bet.choice}`,
+    `베팅 : ${formatPoint(bet.amount)}`,
     `결과 : ${result}`,
-    `사용 포인트 : ${formatPoint(ODD_EVEN_POINT_COST)}`,
-    `획득 포인트 : ${formatPoint(isWin ? ODD_EVEN_REWARD : 0)}`,
+    `당첨 : ${isWin ? "성공" : "실패"}`,
+    `배당 : x2`,
+    `지급 포인트 : ${formatPoint(reward)}`,
     `보유 포인트 : ${formatPoint(person.points)}`
   ].join("\n");
 }
@@ -1969,7 +1985,7 @@ function helpText(isAdminUser = false) {
     "/좋아요 닉네임 1~999 - 포인트로 하트 보내기",
     "/응원 닉네임 메시지 - 포인트 응원 카드",
     "/뽑기 - 공개 확률 포인트 뽑기",
-    "/홀짝 홀|짝 - 포인트 홀짝",
+    "/홀 금액, /짝 금액 - 맞히면 x2",
     "/이체 닉네임 포인트 - 포인트 이체",
     "/포인트순위, /좋아요순위, /레벨순위",
     "/채팅오늘, /채팅금주",
@@ -2045,7 +2061,7 @@ async function handleCommand(state, room, sender, message) {
   if (command.startsWith("/좋아요 ")) return likeCommand(roomState, sender, text);
   if (command.startsWith("/응원 ")) return cheerCommand(roomState, sender, text);
   if (command === "/확률뽑기" || command === "/뽑기") return luckyDrawCommand(roomState, sender);
-  if (command.startsWith("/홀짝")) return oddEvenCommand(roomState, sender, text);
+  if (command.startsWith("/홀짝") || /^\/(?:홀|짝)(?:\s|$)/.test(command)) return oddEvenCommand(roomState, sender, text);
   if (command.startsWith("/이체 ")) return transferCommand(roomState, sender, text);
   if (/^\/(?:내정보|레벨)(?:\s|$)/.test(command) || command.startsWith("/정보 ")) return memberInfoCommand(roomState, text, sender);
   if (command.startsWith("/관리자등록 ")) return adminRegisterCommand(roomState, sender, text);
