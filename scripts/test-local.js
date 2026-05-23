@@ -82,7 +82,11 @@ try {
   const home = await fetch(`${baseUrl}/`);
   assert.equal(home.status, 200);
   assert.match(home.headers.get("content-type") || "", /text\/html/);
-  assert.match(await home.text(), /픽셀곰/);
+  const homeText = await home.text();
+  assert.match(homeText, /픽셀곰/);
+  assert.match(homeText, /KAKAOTALK/);
+  assert.match(homeText, /kakaotalk:\/\/web\/openExternal/);
+  assert.match(homeText, /intent:\/\//);
 
   const help = await request("/skill", {
     method: "POST",

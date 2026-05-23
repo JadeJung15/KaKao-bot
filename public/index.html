@@ -9,9 +9,70 @@
       content="픽셀곰은 카카오 오픈채팅방 운영을 위한 프로필, 입퇴장 이력, 닉네임 변경, 포인트, 관리자 명령어를 한곳에서 지원하는 운영봇입니다."
     >
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260523-pixgom">
+    <link rel="stylesheet" href="/styles.css?v=20260523-kakao-external">
+    <script>
+      (() => {
+        const userAgent = navigator.userAgent || "";
+        if (!/KAKAOTALK/i.test(userAgent)) return;
+
+        const targetUrl = new URL(window.location.href);
+        const fallbackUrl = targetUrl.toString();
+        const canUseStorage = (() => {
+          try {
+            sessionStorage.setItem("pixgom-storage-check", "1");
+            sessionStorage.removeItem("pixgom-storage-check");
+            return true;
+          } catch {
+            return false;
+          }
+        })();
+
+        const alreadyAttempted = canUseStorage && sessionStorage.getItem("pixgom-external-attempted") === "1";
+        document.documentElement.classList.add("kakao-inapp");
+
+        const externalUrl = (() => {
+          if (/Android/i.test(userAgent)) {
+            return [
+              `intent://${targetUrl.host}${targetUrl.pathname}${targetUrl.search}`,
+              "#Intent",
+              `scheme=${targetUrl.protocol.replace(":", "")}`,
+              "action=android.intent.action.VIEW",
+              "category=android.intent.category.BROWSABLE",
+              "package=com.android.chrome",
+              `S.browser_fallback_url=${encodeURIComponent(fallbackUrl)}`,
+              "end"
+            ].join(";");
+          }
+          return `kakaotalk://web/openExternal?url=${encodeURIComponent(fallbackUrl)}`;
+        })();
+
+        window.pixgomOpenExternalBrowser = () => {
+          window.location.href = externalUrl;
+        };
+
+        document.addEventListener("DOMContentLoaded", () => {
+          const notice = document.querySelector("[data-external-browser-notice]");
+          const button = document.querySelector("[data-open-external-browser]");
+          if (notice) notice.hidden = false;
+          if (button) button.addEventListener("click", window.pixgomOpenExternalBrowser);
+        });
+
+        if (!alreadyAttempted) {
+          if (canUseStorage) sessionStorage.setItem("pixgom-external-attempted", "1");
+          setTimeout(window.pixgomOpenExternalBrowser, 350);
+        }
+      })();
+    </script>
   </head>
   <body>
+    <div class="external-browser-notice" data-external-browser-notice hidden>
+      <div>
+        <strong>외부 브라우저로 여는 중입니다.</strong>
+        <span>카카오톡 안에서 계속 보이면 아래 버튼을 눌러주세요.</span>
+      </div>
+      <button type="button" data-open-external-browser>외부 브라우저 열기</button>
+    </div>
+
     <header class="site-header" aria-label="주요 메뉴">
       <a class="brand" href="#top" aria-label="픽셀곰 홈">
         <span class="brand-mark" aria-hidden="true">PG</span>

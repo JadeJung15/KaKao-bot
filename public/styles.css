@@ -40,6 +40,62 @@ a {
   text-decoration: none;
 }
 
+.external-browser-notice {
+  display: none;
+}
+
+.kakao-inapp .external-browser-notice {
+  position: fixed;
+  z-index: 30;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  color: #fffaf1;
+  background: rgba(47, 36, 27, 0.94);
+  border: 2px solid #ffe0a8;
+  border-radius: 8px;
+  box-shadow: 6px 6px 0 rgba(47, 36, 27, 0.24);
+}
+
+.external-browser-notice[hidden] {
+  display: none;
+}
+
+.external-browser-notice strong,
+.external-browser-notice span {
+  display: block;
+}
+
+.external-browser-notice strong {
+  margin-bottom: 3px;
+  font-size: 15px;
+}
+
+.external-browser-notice span {
+  color: #f7dbc2;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.external-browser-notice button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 9px 13px;
+  color: var(--ink);
+  background: #ffe0a8;
+  border: 2px solid #fffaf1;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
 .site-header {
   position: fixed;
   z-index: 10;
@@ -604,5 +660,17 @@ a {
 
   .final-band img {
     height: 210px;
+  }
+
+  .kakao-inapp .external-browser-notice {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .external-browser-notice button {
+    width: 100%;
   }
 }
