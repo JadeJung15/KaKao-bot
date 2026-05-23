@@ -262,9 +262,9 @@ try {
     profileHash: "first-chat-reentry-hash-1"
   });
   assert.match(firstChatReentry.json.reply, /닉네임 변경/);
-  assert.match(firstChatReentry.json.reply, /첫 채팅 기준 재입장 감지/);
   assert.match(firstChatReentry.json.reply, /현재닉 : 첫채팅현재닉 남/);
   assert.match(firstChatReentry.json.reply, /이전닉 : 첫채팅예전닉 남/);
+  assert.doesNotMatch(firstChatReentry.json.reply, /고유값|후보|재입장/);
 
   const secondChatAfterReentry = await chatPayload({
     room: "첫채팅재입장방",
@@ -292,13 +292,11 @@ try {
     sender: "충돌셋닉 남",
     profileHash: "collision-prone-hash-1"
   });
-  assert.match(collisionProneChat.json.reply, /닉네임 변경 후보/);
-  assert.match(collisionProneChat.json.reply, /첫 채팅 기준 재입장 후보/);
-  assert.match(collisionProneChat.json.reply, /직전닉 후보 : 충돌둘닉 남/);
+  assert.match(collisionProneChat.json.reply, /닉네임 변경/);
+  assert.match(collisionProneChat.json.reply, /이전닉 : 충돌둘닉 남/);
   assert.match(collisionProneChat.json.reply, /현재닉 : 충돌셋닉 남/);
-  assert.match(collisionProneChat.json.reply, /다른 고유값 후보 : 1개/);
-  assert.doesNotMatch(collisionProneChat.json.reply, /이전닉 후보 : 충돌첫닉 남, 충돌둘닉 남/);
-  assert.match(collisionProneChat.json.reply, /브릿지 고유값이 여러 사람에게 겹칠 수 있어 후보로 표시합니다/);
+  assert.doesNotMatch(collisionProneChat.json.reply, /충돌첫닉 남/);
+  assert.doesNotMatch(collisionProneChat.json.reply, /고유값|후보|재입장/);
 
   await chatPayload({
     room: "활성사용자방",
