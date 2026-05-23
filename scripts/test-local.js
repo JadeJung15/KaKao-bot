@@ -130,9 +130,9 @@ try {
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /벤치마크|laggobot|라꼬봇/i);
   assert.match(help.json.template.outputs[0].simpleText.text, /실제 금전.*사용하지 않습니다/);
 
-  const form = await chat("/공질", "관리자");
-  assert.equal(form.response.status, 200);
-  assert.match(form.json.reply, /☑닉 \/성별/);
+  const removedProfileForm = await chat("/공질", "관리자");
+  assert.equal(removedProfileForm.response.status, 200);
+  assert.match(removedProfileForm.json.reply, /등록되지 않은 명령어/);
 
   const unsafeAdminRegister = await chat("/관리자등록 침입자", "침입자", "관리자보안방");
   assert.match(unsafeAdminRegister.json.reply, /초기 관리자는 환경변수/);
@@ -538,7 +538,7 @@ try {
   assert.match(firstEntry.json.reply, /무잔썸에 와줘서 고마워/);
   assert.match(firstEntry.json.reply, /친구들과 함께 즐겁게 소통/);
   assert.match(firstEntry.json.reply, /두글자로 해주고 뒤에 성별/);
-  assert.match(firstEntry.json.reply, /공식질문작성/);
+  assert.match(firstEntry.json.reply, /프로필작성/);
 
   const exitReply = await chat("새친구 남님이 나갔습니다.", "오픈채팅봇");
   assert.match(exitReply.json.reply, /새친구 남님 안녕히 가세요/);

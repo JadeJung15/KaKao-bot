@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.27";
+export const APP_VERSION = "0.4.28";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -59,7 +59,6 @@ export const FEATURES = [
   "identity-scoped-recent-events",
   "first-chat-reentry-notice",
   "room-safe-bridge-defaults",
-  "profile-form",
   "no-games"
 ];
 
@@ -80,15 +79,6 @@ const LUCKY_DRAW_OUTCOMES = [
   { threshold: 1, label: "꽝", reward: 0, chance: "50%" }
 ];
 const MAX_LIKE_AMOUNT = 999;
-
-const PROFILE_FORM = [
-  "☑닉 /성별 :",
-  "☑MBTI / 키 :",
-  "☑지역 / 기미돌 :",
-  "☑매력어필 :",
-  "☑썸상 :",
-  `☑입방날자 :  ${shortKstDate()}`
-].join("\n");
 
 const initialState = {
   rooms: {},
@@ -774,7 +764,7 @@ function profileRegisterCommand(roomState, sender, text) {
   const target = stripKakaoSuffix(targetPart);
   const rawProfile = profileParts.join("&&").trim();
   if (!target || !rawProfile) {
-    return "형식: /프로필등록 닉네임 && 공질내용";
+    return "형식: /프로필등록 닉네임 && 프로필내용";
   }
 
   const key = personKey(target);
@@ -1858,9 +1848,9 @@ function welcomeText(person) {
     "♛ ②대화의 규칙!!",
     "☞ 두글자로 해주고 뒤에 성별 붙여줘",
     "",
-    "♚ ③공식질문작성!!",
+    "♚ ③프로필작성!!",
     "☞ 너의 썸상과 매력을 어필해줘",
-    "☞ 다른친구들의 공질은 운영진 안내를 확인해줘",
+    "☞ 프로필 안내는 운영진 공지를 확인해줘",
     "",
     "☻ 자삭은 안돼, 가려야할게 있음 이야기해줘",
     "빠르게 처리해줄게!",
@@ -2019,7 +2009,6 @@ function helpText(isAdminUser = false) {
     "/도움말 - 현재 명령어 확인",
     "",
     "운영",
-    "/공질 - 공식질문 양식",
     "/메시지 - 내 메시지함 확인",
     "/최근이벤트 - 브릿지 원본 이벤트 확인",
     "",
@@ -2048,7 +2037,7 @@ function helpText(isAdminUser = false) {
     lines.push(
       "관리자",
       "/원본로그 - 최신 원본 JSON 확인",
-      "/프로필등록 닉네임 && 공질내용",
+      "/프로필등록 닉네임 && 프로필내용",
       "/프로필삭제 닉네임",
       "/별명등록 닉네임 별명",
       "/별명삭제 별명",
@@ -2087,7 +2076,6 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/상태" || command === "/status") return statusText(room);
   if (command === "/로컬상태") return `${DEFAULT_BOT_NAME} 자동응답 스크립트가 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.`;
   if (command === "/도움말" || command === "/help" || command === "/?") return helpText(isAdmin(roomState, sender));
-  if (command === "/공질") return PROFILE_FORM;
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
   if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return recentEventsCommand(state, roomState, sender, text);
   if (/^\/(?:원본로그|원본이벤트)(?:\s|$)/.test(command)) return rawLogCommand(roomState, sender, text);
