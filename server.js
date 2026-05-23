@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.31";
+export const APP_VERSION = "0.4.32";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -62,7 +62,8 @@ export const FEATURES = [
   "private-chat-guard",
   "registered-room-guard",
   "no-games",
-  "bridge-self-test-commands"
+  "bridge-self-test-commands",
+  "entry-reentry-candidate-history"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -77,6 +78,7 @@ const CHEER_POINT_COST = 50;
 const MAX_CHEER_MESSAGE_LENGTH = 80;
 const LUCKY_DRAW_POINT_COST = 100;
 const TRANSFER_FEE_RATE = 0.1;
+const REENTRY_CANDIDATE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const LUCKY_DRAW_OUTCOMES = [
   { threshold: 0.05, label: "대박", reward: 500, chance: "5%" },
   { threshold: 0.20, label: "성공", reward: 200, chance: "15%" },
@@ -1879,6 +1881,44 @@ function personHistoryText(roomState, query, sender) {
   return lines.join("\n");
 }
 
+function latestExitLikeAt(person) {
+  const events = [...(person.exits || []), ...(person.kicks || [])];
+  return events
+    .map((event) => new Date(event.at).getTime())
+    .filter(Number.isFinite)
+    .sort((a, b) => b - a)[0] || 0;
+}
+
+function recentExitCandidateText(roomState, currentName) {
+  const currentKey = personKey(currentName);
+  const now = Date.now();
+  const candidates = Object.entries(roomState.people || {})
+    .filter(([key]) => key !== currentKey)
+    .map(([key, person]) => ({ key, person, lastExitAt: latestExitLikeAt(person) }))
+    .filter(({ lastExitAt }) => lastExitAt && now - lastExitAt <= REENTRY_CANDIDATE_WINDOW_MS)
+    .sort((a, b) => b.lastExitAt - a.lastExitAt)
+    .slice(0, 3);
+  if (!candidates.length) return "";
+
+  const lines = [
+    "【 재입장 후보 히스토리 】",
+    "",
+    "고유값이 없어 확정은 아니지만, 최근 퇴장자 후보입니다."
+  ];
+  for (const { person, lastExitAt } of candidates) {
+    const names = uniqueNames([person.currentName, ...(person.names || [])])
+      .filter((name) => personKey(name) !== currentKey)
+      .slice(0, 4);
+    lines.push(
+      "",
+      `• ${person.currentName || "이름없음"} - 마지막 퇴장 ${shortKstDate(new Date(lastExitAt))}`,
+      `  입장 ${person.entries?.length || 0}회 / 퇴장 ${person.exits?.length || 0}회 / 강퇴 ${person.kicks?.length || 0}회`,
+      `  이전닉: ${names.length ? names.join(", ") : "기록 없음"}`
+    );
+  }
+  return lines.join("\n");
+}
+
 function personDetailedHistoryText(roomState, query, sender) {
   const target = stripKakaoSuffix(query) || sender;
   const key = resolveName(roomState, target);
@@ -1925,9 +1965,9 @@ function nicknameHistoryText(person) {
   return lines.join("\n");
 }
 
-function welcomeText(person) {
-  return [
-    `♟ ${ROOM_BRAND_NAME}에 와줘서 고마워♡☃`,
+function welcomeText(person, reentryCandidateText = "") {
+  const lines = [
+    `♟ ${person.currentName}님 ${ROOM_BRAND_NAME}에 와줘서 고마워♡☃`,
     "친구들과 함께 즐겁게 소통하는 공간이야 ♡",
     "",
     "☻그냥 나가게되면 1년간 썸못탄다ㅋ",
@@ -1949,7 +1989,9 @@ function welcomeText(person) {
     "빠르게 처리해줄게!",
     "",
     `♡ 즐겁게 소통하며, 썸상의 친구들을 알아보고 ${ROOM_BRAND_NAME}에서 썸타보자!!`
-  ].join("\n");
+  ];
+  if (reentryCandidateText) lines.push("", reentryCandidateText);
+  return lines.join("\n");
 }
 
 function reentryText(roomState, person) {
@@ -1971,7 +2013,7 @@ function recordEntry(roomState, name, identityId = "") {
   person.entries.push({ at });
   recordRoomEvent(roomState, { type: "entered", name: person.currentName });
   const count = person.entries.length;
-  if (count <= 1) return welcomeText(person);
+  if (count <= 1) return welcomeText(person, identityId ? "" : recentExitCandidateText(roomState, person.currentName));
   return reentryText(roomState, person);
 }
 
@@ -2190,7 +2232,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/브릿지" || command === "/bridge") return bridgeServerText(room);
   if (command === "/js상태" || command === "/jsstatus") return bridgeJsServerText();
   if (command === "/로컬상태") return `${DEFAULT_BOT_NAME} 자동응답 스크립트가 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.`;
-  if (command === "/도움말" || command === "/help" || command === "/?") return helpText(isAdmin(roomState, sender));
+  if (command === "/" || command === "/도움말" || command === "/help" || command === "/?") return helpText(isAdmin(roomState, sender));
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
   if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return recentEventsCommand(state, roomState, sender, text);
   if (/^\/(?:원본로그|원본이벤트)(?:\s|$)/.test(command)) return rawLogCommand(roomState, sender, text);

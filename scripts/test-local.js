@@ -601,6 +601,13 @@ try {
   assert.match(exitReply.json.reply, /입장 히스토리/);
   assert.match(exitReply.json.reply, /퇴장 히스토리/);
 
+  await chat("미정님이 들어왔습니다.", "오픈채팅봇", "후보방");
+  await chat("미정님이 나갔습니다.", "오픈채팅봇", "후보방");
+  const candidateEntry = await chat("어피치님이 들어왔습니다.타인, 기관 등의 사칭에 유의해 주세요.", "오픈채팅봇", "후보방");
+  assert.match(candidateEntry.json.reply, /재입장 후보 히스토리/);
+  assert.match(candidateEntry.json.reply, /미정/);
+  assert.match(candidateEntry.json.reply, /어피치/);
+
   const secondEntry = await chat("새친구 남님이 들어왔습니다.", "오픈채팅봇");
   assert.match(secondEntry.json.reply, /2회 재입장/);
   assert.match(secondEntry.json.reply, /강퇴이력 : 0회/);
@@ -639,6 +646,10 @@ try {
   const normalChat = await chat("일반 대화", "사용자");
   assert.equal(normalChat.json.reply, null);
   assert.equal(normalChat.json.handled, false);
+
+  const slashHelp = await chat("/", "사용자");
+  assert.match(slashHelp.json.reply, /운영봇 참여자 명령어/);
+  assert.doesNotMatch(slashHelp.json.reply, /등록되지 않은 명령어/);
 
   const removedGame = await chat("/낚시", "사용자");
   assert.match(removedGame.json.reply, /아직 등록되지 않은 명령어/);

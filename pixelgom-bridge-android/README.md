@@ -21,7 +21,7 @@
 | 등록 링크 | `https://open.kakao.com/o/gu25P5vi` |
 | targetSdk | 35 |
 | 배포 형식 | Android App Bundle `.aab` |
-| 현재 버전 | `1.0.4` / versionCode `5` |
+| 현재 버전 | `1.0.5` / versionCode `6` |
 
 ## 로컬 빌드
 

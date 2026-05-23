@@ -15,12 +15,7 @@ final class KakaoNotificationParser {
 
         Bundle extras = notification.extras;
         String title = text(extras, Notification.EXTRA_TITLE);
-        String rawText = firstText(
-                lastMessageText(extras),
-                lastTextLine(extras),
-                text(extras, Notification.EXTRA_BIG_TEXT),
-                text(extras, Notification.EXTRA_TEXT)
-        );
+        String rawText = bestMessageText(extras);
         String conversationTitle = text(extras, Notification.EXTRA_CONVERSATION_TITLE);
         String subText = text(extras, Notification.EXTRA_SUB_TEXT);
         String summaryText = text(extras, Notification.EXTRA_SUMMARY_TEXT);
@@ -62,6 +57,49 @@ final class KakaoNotificationParser {
     private static String text(Bundle extras, String key) {
         CharSequence value = extras.getCharSequence(key);
         return value == null ? "" : value.toString().trim();
+    }
+
+    private static String bestMessageText(Bundle extras) {
+        String systemText = firstSystemEventText(extras);
+        if (!TextUtils.isEmpty(systemText)) return systemText;
+        return firstText(
+                lastMessageText(extras),
+                lastTextLine(extras),
+                text(extras, Notification.EXTRA_BIG_TEXT),
+                text(extras, Notification.EXTRA_TEXT)
+        );
+    }
+
+    private static String firstSystemEventText(Bundle extras) {
+        String fromMessages = firstSystemEventTextFromMessages(extras);
+        if (!TextUtils.isEmpty(fromMessages)) return fromMessages;
+
+        CharSequence[] lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
+        if (lines != null) {
+            for (int i = lines.length - 1; i >= 0; i--) {
+                CharSequence line = lines[i];
+                String candidate = systemEventLine(line == null ? "" : line.toString());
+                if (!TextUtils.isEmpty(candidate)) return candidate;
+            }
+        }
+
+        String candidate = systemEventLine(text(extras, Notification.EXTRA_BIG_TEXT));
+        if (!TextUtils.isEmpty(candidate)) return candidate;
+        return systemEventLine(text(extras, Notification.EXTRA_TEXT));
+    }
+
+    private static String firstSystemEventTextFromMessages(Bundle extras) {
+        Parcelable[] messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES);
+        if (messages == null || messages.length == 0) return "";
+        for (int i = messages.length - 1; i >= 0; i--) {
+            Parcelable parcelable = messages[i];
+            if (parcelable instanceof Bundle) {
+                Bundle message = (Bundle) parcelable;
+                String candidate = systemEventLine(message.getCharSequence("text") == null ? "" : message.getCharSequence("text").toString());
+                if (!TextUtils.isEmpty(candidate)) return candidate;
+            }
+        }
+        return "";
     }
 
     private static String lastTextLine(Bundle extras) {
@@ -158,6 +196,7 @@ final class KakaoNotificationParser {
 
     private static void fillSystemEvent(BridgeEvent event) {
         String message = event.message == null ? "" : event.message.trim();
+        message = systemEventLine(message);
         if (message.endsWith("님이 들어왔습니다")) {
             event.eventType = "entered";
             event.targetName = message.replace("님이 들어왔습니다", "").trim();
@@ -171,6 +210,29 @@ final class KakaoNotificationParser {
             event.eventType = "";
             event.targetName = "";
         }
+    }
+
+    private static String systemEventLine(String value) {
+        String text = value == null ? "" : value.replace('\u00a0', ' ').trim();
+        if (text.isEmpty()) return "";
+        for (String line : text.split("\\r?\\n")) {
+            String cleaned = line.trim();
+            if (isSystemEventLine(cleaned)) return cleaned;
+        }
+        String compact = text.replaceAll("\\s+", " ");
+        String[] endings = { "님이 들어왔습니다", "님이 나갔습니다", "님을 내보냈습니다" };
+        for (String ending : endings) {
+            int index = compact.indexOf(ending);
+            if (index > 0) return compact.substring(0, index + ending.length()).trim();
+        }
+        return isSystemEventLine(compact) ? compact : "";
+    }
+
+    private static boolean isSystemEventLine(String value) {
+        if (TextUtils.isEmpty(value)) return false;
+        return value.endsWith("님이 들어왔습니다")
+                || value.endsWith("님이 나갔습니다")
+                || value.endsWith("님을 내보냈습니다");
     }
 
     private static final class ParsedMessage {
