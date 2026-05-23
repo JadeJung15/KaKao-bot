@@ -414,8 +414,11 @@ try {
   assert.match(crossRoomRecoverEvents.json.reply, /sender : 현재방닉 남/);
   assert.match(crossRoomRecoverEvents.json.reply, /sender : 이전방닉 남[\s\S]+회원이력 : 현재방닉 남 \(이전닉: 이전방닉 남\)/);
 
-  const linkDenied = await chat("/링크등록 얼공방 https://open.kakao.com/o/denied", "사용자");
-  assert.match(linkDenied.json.reply, /관리자 전용/);
+  const removedLinkCommand = await chat("/건의방", "사용자");
+  assert.match(removedLinkCommand.json.reply, /등록되지 않은 명령어/);
+
+  const removedLinkRegister = await chat("/링크등록 건의방 https://open.kakao.com/o/test", "관리자");
+  assert.match(removedLinkRegister.json.reply, /등록되지 않은 명령어/);
 
   const profileRegister = await chat(`/프로필등록 미미 여 && ☑닉 /성별 : 미미 / 여
 ☑MBTI / 키 : 엔프피 / 153
@@ -430,15 +433,6 @@ try {
   const profileView = await chat("/프로필 미미", "사용자");
   assert.match(profileView.json.reply, /미미 여/);
   assert.match(profileView.json.reply, /엔프피/);
-
-  const linkMissing = await chat("/건의방", "사용자");
-  assert.match(linkMissing.json.reply, /링크가 아직 등록되지 않았습니다/);
-
-  const linkRegister = await chat("/링크등록 건의방 https://open.kakao.com/o/test", "관리자");
-  assert.match(linkRegister.json.reply, /링크가 등록/);
-
-  const linkView = await chat("/건의방", "사용자");
-  assert.match(linkView.json.reply, /https:\/\/open\.kakao\.com\/o\/test/);
 
   await chat("포인트 기능 테스트 시작", "포순이 여");
 

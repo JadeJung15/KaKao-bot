@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.26";
+export const APP_VERSION = "0.4.27";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -59,7 +59,6 @@ export const FEATURES = [
   "identity-scoped-recent-events",
   "first-chat-reentry-notice",
   "room-safe-bridge-defaults",
-  "room-links",
   "profile-form",
   "no-games"
 ];
@@ -90,12 +89,6 @@ const PROFILE_FORM = [
   "☑썸상 :",
   `☑입방날자 :  ${shortKstDate()}`
 ].join("\n");
-
-const DEFAULT_LINKS = {
-  "건의방": process.env.SUGGESTION_ROOM_URL || "",
-  "얼공방": process.env.FACE_ROOM_URL || "",
-  "무한성": process.env.INFINITY_ROOM_URL || ""
-};
 
 const initialState = {
   rooms: {},
@@ -360,7 +353,6 @@ function ensureRoom(state, room) {
     profiles: {},
     aliases: {},
     people: {},
-    links: {},
     admins: [],
     inbox: {},
     events: [],
@@ -373,7 +365,6 @@ function ensureRoom(state, room) {
   roomState.profiles ||= {};
   roomState.aliases ||= {};
   roomState.people ||= {};
-  roomState.links ||= {};
   roomState.admins ||= [];
   roomState.inbox ||= {};
   roomState.events ||= [];
@@ -864,22 +855,6 @@ function aliasDeleteCommand(roomState, text) {
   delete roomState.aliases[keyFor(alias)];
   recordRoomEvent(roomState, { type: "alias_deleted", name: profile.name, alias });
   return "별명이 삭제되었습니다.";
-}
-
-function linkCommand(roomState, text) {
-  const command = text.split(/\s+/)[0].replace("/", "");
-  const roomLink = roomState.links[command] || DEFAULT_LINKS[command];
-  if (roomLink) return roomLink;
-  return `${command} 링크가 아직 등록되지 않았습니다.\n/링크등록 ${command} https://...`;
-}
-
-function linkRegisterCommand(roomState, text) {
-  const match = text.match(/^\/링크등록\s+(\S+)\s+(https?:\/\/\S+)/i);
-  if (!match) return "형식: /링크등록 건의방 https://...";
-  const [, name, url] = match;
-  roomState.links[name] = url;
-  recordRoomEvent(roomState, { type: "link_registered", name, url });
-  return `${name} 링크가 등록되었습니다.\n${url}`;
 }
 
 function adminRegisterCommand(roomState, sender, text) {
@@ -1885,7 +1860,7 @@ function welcomeText(person) {
     "",
     "♚ ③공식질문작성!!",
     "☞ 너의 썸상과 매력을 어필해줘",
-    "☞ 다른친구들의 공질은 건의방에서 볼수있어",
+    "☞ 다른친구들의 공질은 운영진 안내를 확인해줘",
     "",
     "☻ 자삭은 안돼, 가려야할게 있음 이야기해줘",
     "빠르게 처리해줄게!",
@@ -2045,7 +2020,6 @@ function helpText(isAdminUser = false) {
     "",
     "운영",
     "/공질 - 공식질문 양식",
-    "/건의방, /얼공방, /무한성 - 방 링크",
     "/메시지 - 내 메시지함 확인",
     "/최근이벤트 - 브릿지 원본 이벤트 확인",
     "",
@@ -2073,7 +2047,6 @@ function helpText(isAdminUser = false) {
   if (isAdminUser) {
     lines.push(
       "관리자",
-      "/링크등록 이름 URL - 방 링크 저장",
       "/원본로그 - 최신 원본 JSON 확인",
       "/프로필등록 닉네임 && 공질내용",
       "/프로필삭제 닉네임",
@@ -2115,7 +2088,6 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/로컬상태") return `${DEFAULT_BOT_NAME} 자동응답 스크립트가 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.`;
   if (command === "/도움말" || command === "/help" || command === "/?") return helpText(isAdmin(roomState, sender));
   if (command === "/공질") return PROFILE_FORM;
-  if (["/건의방", "/얼공방", "/무한성"].includes(command)) return linkCommand(roomState, command);
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
   if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return recentEventsCommand(state, roomState, sender, text);
   if (/^\/(?:원본로그|원본이벤트)(?:\s|$)/.test(command)) return rawLogCommand(roomState, sender, text);
@@ -2141,7 +2113,6 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (/^\/(?:관리자재설정|관리자초기화)(?:\s|$)/.test(command)) return adminResetCommand(roomState, sender, text);
   if (command === "/관리자목록") return adminListCommand(roomState);
   if (/^\/고유값초기화(?:\s|$)/.test(command)) return identityResetCommand(roomState, sender, text, identity);
-  if (command.startsWith("/링크등록 ")) return requireAdmin(roomState, sender) || linkRegisterCommand(roomState, text);
   if (command.startsWith("/프로필등록 ") || command.startsWith("/프로필 등록 ")) {
     return requireAdmin(roomState, sender) || profileRegisterCommand(roomState, sender, text);
   }
