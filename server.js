@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.33";
+export const APP_VERSION = "0.4.34";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -64,7 +64,8 @@ export const FEATURES = [
   "no-games",
   "bridge-self-test-commands",
   "entry-reentry-candidate-history",
-  "reserved-name-nickname-guard"
+  "reserved-name-nickname-guard",
+  "reserved-history-cleanup"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -565,7 +566,29 @@ function normalizePersonState(person) {
   person.chats.byWeek ||= {};
   person.identities ||= [];
   person.firstChatReentryNotices ||= [];
+  cleanupReservedPersonHistory(person);
   return person;
+}
+
+function cleanupReservedPersonHistory(person) {
+  if (!person) return;
+  const currentKey = personKey(person.currentName);
+  const beforeChanges = person.nickChanges || [];
+  person.nickChanges = beforeChanges.filter((event) => (
+    !isReservedPersonName(event.from)
+    && !isReservedPersonName(event.to)
+  ));
+  person.names = uniqueNames([
+    person.currentName,
+    ...(person.names || []),
+    ...person.nickChanges.flatMap((event) => [event.from, event.to])
+  ]).filter((name) => {
+    if (!isReservedPersonName(name)) return true;
+    return currentKey && personKey(name) === currentKey;
+  });
+  if (beforeChanges.length !== person.nickChanges.length) {
+    person.firstChatReentryNotices = [];
+  }
 }
 
 function addUnique(list, value) {

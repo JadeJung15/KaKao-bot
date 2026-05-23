@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import http from "node:http";
-import { unlink } from "node:fs/promises";
+import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -391,6 +391,40 @@ try {
 
   const unknownHashHistory = await chat("/닉이력 두팔", "일반사용자", "미정해시오탐방");
   assert.doesNotMatch(unknownHashHistory.json.reply, /미정/);
+
+  if (testDbPath) {
+    await writeFile(testDbPath, JSON.stringify({
+      rooms: {
+        레거시오염방: {
+          name: "레거시오염방",
+          profiles: {},
+          aliases: {},
+          people: {
+            두팔: {
+              currentName: "두팔",
+              names: ["미정", "두팔"],
+              nickChanges: [{ from: "미정", to: "두팔", at: "2026-05-23T12:00:00.000Z", source: "identity" }],
+              entries: [],
+              exits: [],
+              kicks: [],
+              chats: { total: 0, byDate: {}, byWeek: {} },
+              attendance: { dates: [], currentStreak: 0 }
+            }
+          },
+          admins: [],
+          inbox: {},
+          events: [],
+          rawEvents: [],
+          peopleByIdentity: {},
+          ambiguousIdentities: []
+        }
+      }
+    }));
+
+    const legacyPollutedHistory = await chat("/닉이력 두팔", "일반사용자", "레거시오염방");
+    assert.doesNotMatch(legacyPollutedHistory.json.reply, /미정/);
+    assert.doesNotMatch(legacyPollutedHistory.json.reply, /닉네임 변경/);
+  }
 
   await chatPayload({
     room: "공유해시오탐방",
