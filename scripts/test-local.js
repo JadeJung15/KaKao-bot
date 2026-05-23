@@ -72,6 +72,7 @@ try {
   assert.match(health.json.features.join(","), /member-rankings/);
   assert.match(health.json.features.join(","), /raw-event-log/);
   assert.match(health.json.features.join(","), /stable-user-ids/);
+  assert.match(health.json.features.join(","), /bridge-auto-extract/);
 
   const help = await request("/skill", {
     method: "POST",
@@ -167,6 +168,38 @@ try {
   const rawLog = await chat("/원본로그 3", "관리자", "고유값방");
   assert.match(rawLog.json.reply, /원본 이벤트 로그/);
   assert.match(rawLog.json.reply, /targetUserId/);
+
+  const explicitEntry = await chatPayload({
+    room: "자동추출방",
+    msg: "브릿지 원문",
+    sender: "오픈채팅봇",
+    eventType: "entered",
+    targetName: "자동대상 남",
+    profileHash: "bridge-bot-hash"
+  });
+  assert.match(explicitEntry.json.reply, /무잔썸에 와줘서 고마워/);
+
+  const explicitNickChange = await chatPayload({
+    room: "자동추출방",
+    msg: "닉변 원문",
+    sender: "오픈채팅봇",
+    eventType: "nickname_changed",
+    fromName: "자동대상 남",
+    toName: "자동변경 남"
+  });
+  assert.match(explicitNickChange.json.reply, /자동대상 남 -> 자동변경 남/);
+
+  const profileHashChat = await chatPayload({
+    room: "자동추출방",
+    msg: "프로필 해시 테스트",
+    sender: "해시사용자 남",
+    profileHash: "profile-hash-user-1"
+  });
+  assert.equal(profileHashChat.json.reply, null);
+
+  const autoEvents = await chat("/최근이벤트 5", "관리자", "자동추출방");
+  assert.match(autoEvents.json.reply, /event : nickname_changed/);
+  assert.match(autoEvents.json.reply, /senderId : profile-hash-user-1/);
 
   const linkDenied = await chat("/링크등록 얼공방 https://open.kakao.com/o/denied", "사용자");
   assert.match(linkDenied.json.reply, /관리자 전용/);

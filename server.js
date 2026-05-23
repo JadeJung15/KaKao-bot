@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.2";
+export const APP_VERSION = "0.4.3";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -32,6 +32,7 @@ export const FEATURES = [
   "member-rankings",
   "raw-event-log",
   "stable-user-ids",
+  "bridge-auto-extract",
   "room-links",
   "profile-form",
   "no-games"
@@ -520,6 +521,10 @@ function payloadIdentity(payload) {
       ["senderID"],
       ["senderUserId"],
       ["senderProfileId"],
+      ["senderHash"],
+      ["senderProfileHash"],
+      ["profileHash"],
+      ["authorHash"],
       ["userId"],
       ["profileId"],
       ["memberId"],
@@ -539,6 +544,8 @@ function payloadIdentity(payload) {
       ["targetId"],
       ["targetProfileId"],
       ["targetMemberId"],
+      ["targetHash"],
+      ["targetProfileHash"],
       ["target", "id"],
       ["target", "userId"],
       ["target", "profileId"],
@@ -547,6 +554,8 @@ function payloadIdentity(payload) {
       ["targetProfile", "id"],
       ["event", "targetUserId"],
       ["event", "targetId"],
+      ["event", "targetHash"],
+      ["event", "targetProfileHash"],
       ["event", "target", "id"],
       ["event", "target", "userId"]
     ]),
@@ -1423,6 +1432,32 @@ function recordNickChange(roomState, from, to, identityId = "") {
   ].join("\n");
 }
 
+function eventTypeAlias(value) {
+  const type = keyFor(value);
+  if (["entered", "enter", "join", "joined", "입장"].includes(type)) return "entered";
+  if (["left", "leave", "exit", "exited", "나감", "퇴장"].includes(type)) return "left";
+  if (["kicked", "kick", "ban", "banned", "내보냄", "강퇴"].includes(type)) return "kicked";
+  if (["nickname_changed", "nicknamechanged", "nick_changed", "nickchanged", "rename", "renamed", "닉변", "닉네임변경"].includes(type)) {
+    return "nickname_changed";
+  }
+  return "";
+}
+
+function payloadSystemEvent(payload, message) {
+  const explicitType = eventTypeAlias(payload?.eventType || payload?.type || payload?.event?.type || payload?.systemEvent?.type);
+  if (explicitType) {
+    if (explicitType === "nickname_changed") {
+      const from = stripKakaoSuffix(payload?.fromName || payload?.from || payload?.oldName || payload?.beforeName || payload?.event?.fromName || "");
+      const to = stripKakaoSuffix(payload?.toName || payload?.to || payload?.newName || payload?.afterName || payload?.event?.toName || "");
+      if (from && to) return { type: explicitType, from, to };
+    } else {
+      const name = stripKakaoSuffix(payload?.targetName || payload?.target || payload?.name || payload?.event?.targetName || payload?.event?.name || "");
+      if (name) return { type: explicitType, name };
+    }
+  }
+  return detectSystemEvent(message);
+}
+
 function detectSystemEvent(message) {
   const text = normalizeText(message).replace(/\s+/g, " ");
   let match = text.match(/^(.+?)님이 들어왔습니다/);
@@ -1603,10 +1638,10 @@ async function handleCommand(state, room, sender, message) {
   return null;
 }
 
-async function handleMessage(state, room, sender, message, identity = {}) {
+async function handleMessage(state, room, sender, message, identity = {}, detectedEvent = null) {
   const roomState = ensureRoom(state, room);
   const text = normalizeText(message);
-  const event = detectSystemEvent(message);
+  const event = detectedEvent || detectSystemEvent(message);
   const targetIdentity = identity.targetUserId || "";
   if (event?.type === "entered") return recordEntry(roomState, event.name, targetIdentity);
   if (event?.type === "left") return recordExit(roomState, event.name, "left", targetIdentity);
@@ -1634,7 +1669,7 @@ export async function handleChatEvent(payload) {
   const room = normalizeText(payload?.room);
   const message = normalizeText(payload?.msg || payload?.message);
   const sender = normalizeText(payload?.sender) || "익명";
-  const event = detectSystemEvent(message);
+  const event = payloadSystemEvent(payload, message);
   const identity = payloadIdentity(payload);
   const state = await loadState();
   const roomState = ensureRoom(state, room);
@@ -1645,7 +1680,7 @@ export async function handleChatEvent(payload) {
     return { ok: true, reply: null, ignored: true };
   }
 
-  const reply = await handleMessage(state, room, sender, message, identity);
+  const reply = await handleMessage(state, room, sender, message, identity, event);
   await saveState(state);
   return {
     ok: true,

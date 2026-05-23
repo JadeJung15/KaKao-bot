@@ -18,6 +18,7 @@
 - 3차 포인트 기능: 포인트, 좋아요, 이체, 출석, 레벨, 순위
 - 4차 입장 안내: 신규 입장 환영문, 재입장 경고/이력, 닉네임 변경 카드
 - 5차 브릿지 진단: 원본 이벤트 로그, 고유값 후보 확인, 고유값 기반 회원 연결 준비
+- 6차 자동추출: 브릿지 `eventType`, `targetName`, `fromName`, `toName`, `profileHash` 자동 인식
 
 ## 명령어
 
@@ -174,12 +175,15 @@ Vercel 배포 기준입니다.
 3. API2가 반응하지 않으면 `android-bot/kakao-room-ops-legacy.js` 내용을 붙여넣습니다.
 4. 앱에서 `/로컬상태`를 보내 스크립트 실행을 확인합니다.
 5. `/상태`를 보내 서버 연결을 확인합니다.
+6. 실제 방에서 입장/퇴장/닉변 후 `/최근이벤트 10`으로 `eventType`, `targetName`, `profileHash` 수신 여부를 확인합니다.
 
 현재 운영 URL:
 
 ```js
 const BOT_SERVER = "https://ka-kao-bot.vercel.app/chat-event";
 ```
+
+브릿지는 자동으로 시스템 메시지에서 `entered`, `left`, `kicked`, `nickname_changed` 이벤트를 추출하고, 가능하면 프로필 해시를 `senderId/profileHash`로 서버에 전달합니다.
 
 ## 구현 원칙
 
