@@ -74,6 +74,7 @@ try {
   assert.match(health.json.features.join(","), /raw-event-log/);
   assert.match(health.json.features.join(","), /role-based-help/);
   assert.match(health.json.features.join(","), /stable-user-ids/);
+  assert.match(health.json.features.join(","), /admin-identity-reset/);
   assert.match(health.json.features.join(","), /bridge-auto-extract/);
   assert.match(health.json.features.join(","), /identity-nickname-summary/);
   assert.match(health.json.features.join(","), /raw-identity-nickname-recovery/);
@@ -150,6 +151,7 @@ try {
   assert.match(adminHelp.json.reply, /입퇴장상세/);
   assert.match(adminHelp.json.reply, /관리자등록/);
   assert.match(adminHelp.json.reply, /관리자재설정/);
+  assert.match(adminHelp.json.reply, /고유값초기화/);
   assert.match(adminHelp.json.reply, /원본로그/);
   assert.match(adminHelp.json.reply, /포인트지급/);
 
@@ -344,6 +346,14 @@ try {
     profileHash: "shared-profile-hash-1"
   });
   assert.equal(sharedHashFlipFlop.json.reply, null);
+
+  const identityResetDenied = await chat("/고유값초기화 두팔", "사용자", "공유해시오탐방");
+  assert.match(identityResetDenied.json.reply, /관리자 전용/);
+
+  const identityReset = await chat("/고유값초기화 두팔", "관리자", "공유해시오탐방");
+  assert.match(identityReset.json.reply, /고유값 초기화 완료/);
+  assert.match(identityReset.json.reply, /대상 : 두팔/);
+  assert.match(identityReset.json.reply, /차단 고유값 : 1개/);
 
   await chatPayload({
     room: "활성사용자방",

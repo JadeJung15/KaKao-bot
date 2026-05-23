@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.24";
+export const APP_VERSION = "0.4.25";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -51,6 +51,7 @@ export const FEATURES = [
   "member-rankings",
   "raw-event-log",
   "stable-user-ids",
+  "admin-identity-reset",
   "bridge-auto-extract",
   "identity-nickname-summary",
   "raw-identity-nickname-recovery",
@@ -947,6 +948,78 @@ function adminListCommand(roomState) {
     .filter((name, index, list) => list.findIndex((value) => personKey(value) === personKey(name)) === index);
   if (!names.length) return "등록된 관리자가 없습니다.\n/관리자등록 닉네임 으로 초기 관리자를 등록해주세요.";
   return ["관리자 목록", ...names.map((name) => `• ${name}`)].join("\n");
+}
+
+function collectIdentityIdsForName(roomState, key, target, requestIdentity = {}) {
+  const person = roomState.people?.[key] || null;
+  const nameKeys = new Set(uniqueNames([target, person?.currentName, ...(person?.names || [])]).map(keyFor));
+  const ids = new Set([
+    ...(person?.identities || []),
+    ...Object.entries(roomState.peopleByIdentity || {})
+      .filter(([, mappedKey]) => mappedKey === key)
+      .map(([id]) => id),
+    ...identityIds(requestIdentity)
+  ].map(normalizeIdentityId).filter(Boolean));
+
+  for (const event of roomState.rawEvents || []) {
+    const eventNameKeys = uniqueNames([event.sender, event.eventName]).map(keyFor);
+    if (eventNameKeys.some((nameKey) => nameKeys.has(nameKey))) {
+      for (const id of identityIds(event.identity || {})) ids.add(id);
+    }
+  }
+
+  return [...ids].filter(Boolean);
+}
+
+function resetIdentityNickHistory(person) {
+  if (!person) return { removedNames: 0, removedNickChanges: 0 };
+  const previousNameCount = person.names?.length || 0;
+  const previousChangeCount = person.nickChanges?.length || 0;
+  person.nickChanges = (person.nickChanges || []).filter((event) => event.source !== "identity");
+  person.names = uniqueNames([
+    person.currentName,
+    ...person.nickChanges.flatMap((event) => [event.from, event.to])
+  ]);
+  person.firstChatReentryNotices = [];
+  return {
+    removedNames: Math.max(0, previousNameCount - person.names.length),
+    removedNickChanges: Math.max(0, previousChangeCount - person.nickChanges.length)
+  };
+}
+
+function identityResetCommand(roomState, sender, text, identity = {}) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+
+  const target = stripKakaoSuffix(text.replace(/^\/고유값초기화\s*/i, "")) || stripKakaoSuffix(sender);
+  if (!target) return "형식: /고유값초기화 닉네임";
+
+  const key = existingPersonKey(roomState, target) || personKey(target);
+  const person = roomState.people?.[key] || null;
+  const targetIsSender = personKey(target) === personKey(sender) || key === personKey(sender);
+  const ids = collectIdentityIdsForName(roomState, key, target, targetIsSender ? identity : {});
+  const history = resetIdentityNickHistory(person);
+
+  for (const id of ids) markAmbiguousIdentity(roomState, id);
+
+  recordRoomEvent(roomState, {
+    type: "identity_reset",
+    name: person?.currentName || target,
+    ids: ids.length,
+    by: sender
+  });
+
+  if (!person && !ids.length) return `"${target}" 고유값 기록을 찾을 수 없습니다.`;
+
+  return [
+    "고유값 초기화 완료",
+    "",
+    `대상 : ${person?.currentName || target}`,
+    `차단 고유값 : ${ids.length}개`,
+    `자동 닉변 기록 정리 : ${history.removedNickChanges}건`,
+    "",
+    "이후 해당 고유값은 닉네임 변경 안내에 사용하지 않습니다."
+  ].join("\n");
 }
 
 function recentEventsCommand(state, roomState, sender, text) {
@@ -2011,6 +2084,7 @@ function helpText(isAdminUser = false) {
       "/관리자재설정 닉네임1,닉네임2",
       "/관리자초기화 - 방 관리자 목록 초기화",
       "/관리자목록",
+      "/고유값초기화 닉네임 - 이름 섞임 방지",
       "/포인트지급 닉네임 포인트",
       "/포인트차감 닉네임 포인트",
       "/포인트설정 닉네임 포인트",
@@ -2031,7 +2105,7 @@ function kakaoText(text) {
   };
 }
 
-async function handleCommand(state, room, sender, message) {
+async function handleCommand(state, room, sender, message, identity = {}) {
   const roomState = ensureRoom(state, room);
   const text = normalizeText(message);
   const command = compactSpaces(text);
@@ -2065,6 +2139,7 @@ async function handleCommand(state, room, sender, message) {
   if (command.startsWith("/관리자삭제 ")) return adminDeleteCommand(roomState, sender, text);
   if (/^\/(?:관리자재설정|관리자초기화)(?:\s|$)/.test(command)) return adminResetCommand(roomState, sender, text);
   if (command === "/관리자목록") return adminListCommand(roomState);
+  if (/^\/고유값초기화(?:\s|$)/.test(command)) return identityResetCommand(roomState, sender, text, identity);
   if (command.startsWith("/링크등록 ")) return requireAdmin(roomState, sender) || linkRegisterCommand(roomState, text);
   if (command.startsWith("/프로필등록 ") || command.startsWith("/프로필 등록 ")) {
     return requireAdmin(roomState, sender) || profileRegisterCommand(roomState, sender, text);
@@ -2106,7 +2181,7 @@ async function handleMessage(state, room, sender, message, identity = {}, detect
 
   const isCommand = text.startsWith("/");
   const activityReply = recordActivity(roomState, sender, identity.senderId, { firstChatNotice: !isCommand });
-  if (isCommand) return handleCommand(state, room, sender, message);
+  if (isCommand) return handleCommand(state, room, sender, message, identity);
 
   recordMentionMessages(roomState, sender, text);
   return unreadNoticeText(roomState, sender) || activityReply;
