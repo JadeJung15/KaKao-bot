@@ -48,6 +48,14 @@ async function chat(msg, sender = "사용자", room = "테스트방") {
   });
 }
 
+async function chatPayload(payload) {
+  return request("/chat-event", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
 try {
   const health = await request("/health");
   assert.equal(health.response.status, 200);
@@ -62,6 +70,8 @@ try {
   assert.match(health.json.features.join(","), /like-points/);
   assert.match(health.json.features.join(","), /attendance-rewards/);
   assert.match(health.json.features.join(","), /member-rankings/);
+  assert.match(health.json.features.join(","), /raw-event-log/);
+  assert.match(health.json.features.join(","), /stable-user-ids/);
 
   const help = await request("/skill", {
     method: "POST",
@@ -84,6 +94,8 @@ try {
   assert.match(help.json.template.outputs[0].simpleText.text, /입퇴장상세/);
   assert.match(help.json.template.outputs[0].simpleText.text, /관리자등록/);
   assert.match(help.json.template.outputs[0].simpleText.text, /관리자재설정/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /최근이벤트/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /원본로그/);
   assert.match(help.json.template.outputs[0].simpleText.text, /포인트/);
   assert.match(help.json.template.outputs[0].simpleText.text, /좋아요/);
   assert.match(help.json.template.outputs[0].simpleText.text, /이체/);
@@ -119,6 +131,42 @@ try {
   const adminListAfterReset = await chat("/관리자목록", "관리자");
   assert.match(adminListAfterReset.json.reply, /부관리자/);
   assert.doesNotMatch(adminListAfterReset.json.reply, /임시관리자/);
+
+  const uniqueEntry = await chatPayload({
+    room: "고유값방",
+    msg: "고유대상 남님이 들어왔습니다.",
+    sender: "오픈채팅봇",
+    targetUserId: "openchat-user-1",
+    senderId: "openchat-bot"
+  });
+  assert.match(uniqueEntry.json.reply, /무잔썸에 와줘서 고마워/);
+
+  await chatPayload({
+    room: "고유값방",
+    msg: "고유대상 남님이 나갔습니다.",
+    sender: "오픈채팅봇",
+    targetUserId: "openchat-user-1",
+    senderId: "openchat-bot"
+  });
+
+  const uniqueReentry = await chatPayload({
+    room: "고유값방",
+    msg: "바뀐대상 남님이 들어왔습니다.",
+    sender: "오픈채팅봇",
+    targetUserId: "openchat-user-1",
+    senderId: "openchat-bot"
+  });
+  assert.match(uniqueReentry.json.reply, /2회 재입장/);
+  assert.match(uniqueReentry.json.reply, /고유대상 남/);
+  assert.match(uniqueReentry.json.reply, /바뀐대상 남/);
+
+  const recentEvents = await chat("/최근이벤트 5", "관리자", "고유값방");
+  assert.match(recentEvents.json.reply, /targetUserId : openchat-user-1/);
+  assert.match(recentEvents.json.reply, /id 후보/);
+
+  const rawLog = await chat("/원본로그 3", "관리자", "고유값방");
+  assert.match(rawLog.json.reply, /원본 이벤트 로그/);
+  assert.match(rawLog.json.reply, /targetUserId/);
 
   const linkDenied = await chat("/링크등록 얼공방 https://open.kakao.com/o/denied", "사용자");
   assert.match(linkDenied.json.reply, /관리자 전용/);

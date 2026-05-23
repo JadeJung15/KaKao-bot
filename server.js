@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.1";
+export const APP_VERSION = "0.4.2";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -30,6 +30,8 @@ export const FEATURES = [
   "attendance-rewards",
   "member-levels",
   "member-rankings",
+  "raw-event-log",
+  "stable-user-ids",
   "room-links",
   "profile-form",
   "no-games"
@@ -291,7 +293,9 @@ function ensureRoom(state, room) {
     links: {},
     admins: [],
     inbox: {},
-    events: []
+    events: [],
+    rawEvents: [],
+    peopleByIdentity: {}
   };
   const roomState = state.rooms[key];
   roomState.name ||= roomTitle(room);
@@ -302,6 +306,8 @@ function ensureRoom(state, room) {
   roomState.admins ||= [];
   roomState.inbox ||= {};
   roomState.events ||= [];
+  roomState.rawEvents ||= [];
+  roomState.peopleByIdentity ||= {};
   for (const person of Object.values(roomState.people)) normalizePersonState(person);
   return roomState;
 }
@@ -317,9 +323,52 @@ function stripKakaoSuffix(name) {
     .trim();
 }
 
-function ensurePerson(roomState, name) {
+function normalizeIdentityId(value) {
+  const id = normalizeText(value);
+  if (!id || id === "[object Object]") return "";
+  return id.slice(0, 200);
+}
+
+function identityPersonKey(roomState, identityId) {
+  const id = normalizeIdentityId(identityId);
+  const key = id ? roomState.peopleByIdentity?.[id] : "";
+  return key && roomState.people?.[key] ? key : "";
+}
+
+function remapPersonKey(roomState, oldKey, newKey, person) {
+  if (!oldKey || !newKey || oldKey === newKey) return;
+  roomState.people[newKey] = person;
+  delete roomState.people[oldKey];
+  if (roomState.inbox?.[oldKey]) {
+    roomState.inbox[newKey] = [...(roomState.inbox[newKey] || []), ...roomState.inbox[oldKey]];
+    delete roomState.inbox[oldKey];
+  }
+  roomState.admins = (roomState.admins || []).map((name) => (personKey(name) === oldKey ? person.currentName : name));
+  if (roomState.profiles[oldKey] && !roomState.profiles[newKey]) {
+    roomState.profiles[newKey] = { ...roomState.profiles[oldKey], name: person.currentName };
+    delete roomState.profiles[oldKey];
+  }
+  for (const [alias, key] of Object.entries(roomState.aliases || {})) {
+    if (key === oldKey) roomState.aliases[alias] = newKey;
+  }
+  for (const [id, key] of Object.entries(roomState.peopleByIdentity || {})) {
+    if (key === oldKey) roomState.peopleByIdentity[id] = newKey;
+  }
+}
+
+function attachPersonIdentity(roomState, key, person, identityId) {
+  const id = normalizeIdentityId(identityId);
+  if (!id) return;
+  person.identities ||= [];
+  if (!person.identities.includes(id)) person.identities.push(id);
+  roomState.peopleByIdentity ||= {};
+  roomState.peopleByIdentity[id] = key;
+}
+
+function ensurePerson(roomState, name, identityId = "") {
   const displayName = stripKakaoSuffix(name);
-  const key = personKey(displayName);
+  const existingKey = identityPersonKey(roomState, identityId);
+  const key = existingKey || personKey(displayName);
   if (!key) return null;
   roomState.people[key] ||= {
     currentName: displayName,
@@ -335,12 +384,22 @@ function ensurePerson(roomState, name) {
     level: 1,
     hearts: 0,
     attendance: { dates: [], currentStreak: 0 },
-    chats: { total: 0, byDate: {}, byWeek: {} }
+    chats: { total: 0, byDate: {}, byWeek: {} },
+    identities: []
   };
   const person = roomState.people[key];
   normalizePersonState(person);
+  const previousName = person.currentName;
+  if (displayName && previousName && keyFor(previousName) !== keyFor(displayName)) {
+    addUnique(person.names, previousName);
+    person.nickChanges.push({ from: previousName, to: displayName, at: nowIso(), source: "identity" });
+  }
   person.currentName ||= displayName;
+  if (displayName) person.currentName = displayName;
   addUnique(person.names, displayName);
+  const displayKey = personKey(displayName);
+  if (existingKey && displayKey && existingKey !== displayKey) remapPersonKey(roomState, existingKey, displayKey, person);
+  attachPersonIdentity(roomState, displayKey || key, person, identityId);
   return person;
 }
 
@@ -363,6 +422,7 @@ function normalizePersonState(person) {
   person.chats.total = Math.max(0, Number(person.chats.total || 0));
   person.chats.byDate ||= {};
   person.chats.byWeek ||= {};
+  person.identities ||= [];
   return person;
 }
 
@@ -421,6 +481,116 @@ function requireAdmin(roomState, sender) {
 function recordRoomEvent(roomState, event) {
   roomState.events.push({ ...event, at: nowIso() });
   if (roomState.events.length > 500) roomState.events = roomState.events.slice(-500);
+}
+
+function payloadValue(payload, paths) {
+  for (const pathParts of paths) {
+    let value = payload;
+    for (const part of pathParts) {
+      value = value?.[part];
+      if (value == null) break;
+    }
+    const normalized = normalizeIdentityId(value);
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function collectPayloadIds(value, basePath = "", depth = 0, results = []) {
+  if (!value || typeof value !== "object" || depth > 6 || results.length >= 20) return results;
+  for (const [key, nested] of Object.entries(value)) {
+    const pathName = basePath ? `${basePath}.${key}` : key;
+    const keyName = key.toLowerCase();
+    if (nested && typeof nested === "object") {
+      collectPayloadIds(nested, pathName, depth + 1, results);
+      continue;
+    }
+    if (/(^id$|id$|userid|user_id|profileid|profile_id|memberid|member_id|accountid|account_id|hash$)/i.test(keyName)) {
+      const id = normalizeIdentityId(nested);
+      if (id) results.push({ path: pathName, value: id });
+    }
+  }
+  return results.filter((item, index, list) => list.findIndex((value) => value.path === item.path && value.value === item.value) === index);
+}
+
+function payloadIdentity(payload) {
+  return {
+    senderId: payloadValue(payload, [
+      ["senderId"],
+      ["senderID"],
+      ["senderUserId"],
+      ["senderProfileId"],
+      ["userId"],
+      ["profileId"],
+      ["memberId"],
+      ["accountId"],
+      ["sender", "id"],
+      ["sender", "userId"],
+      ["sender", "profileId"],
+      ["user", "id"],
+      ["user", "userId"],
+      ["user", "profileId"],
+      ["profile", "id"],
+      ["member", "id"],
+      ["author", "id"]
+    ]),
+    targetUserId: payloadValue(payload, [
+      ["targetUserId"],
+      ["targetId"],
+      ["targetProfileId"],
+      ["targetMemberId"],
+      ["target", "id"],
+      ["target", "userId"],
+      ["target", "profileId"],
+      ["targetUser", "id"],
+      ["targetUser", "userId"],
+      ["targetProfile", "id"],
+      ["event", "targetUserId"],
+      ["event", "targetId"],
+      ["event", "target", "id"],
+      ["event", "target", "userId"]
+    ]),
+    candidates: collectPayloadIds(payload)
+  };
+}
+
+function sanitizePayload(value, depth = 0) {
+  if (depth > 7) return "[depth-limit]";
+  if (Array.isArray(value)) return value.slice(0, 30).map((item) => sanitizePayload(item, depth + 1));
+  if (!value || typeof value !== "object") return value;
+  const result = {};
+  for (const [key, nested] of Object.entries(value).slice(0, 80)) {
+    if (/(token|secret|password|authorization|cookie|apikey|api_key)/i.test(key)) {
+      result[key] = "[redacted]";
+    } else {
+      result[key] = sanitizePayload(nested, depth + 1);
+    }
+  }
+  return result;
+}
+
+function previewText(value, maxLength = 120) {
+  const text = normalizeText(value).replace(/\s+/g, " ");
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function recordRawEvent(roomState, payload, meta = {}) {
+  roomState.rawEvents ||= [];
+  const identity = payloadIdentity(payload);
+  const event = {
+    at: nowIso(),
+    route: "chat-event",
+    room: meta.room || "",
+    sender: meta.sender || "",
+    message: meta.message || "",
+    eventType: meta.event?.type || "",
+    eventName: meta.event?.name || meta.event?.to || "",
+    identity,
+    payload: sanitizePayload(payload)
+  };
+  roomState.rawEvents.push(event);
+  if (roomState.rawEvents.length > 50) roomState.rawEvents = roomState.rawEvents.slice(-50);
+  return event;
 }
 
 function resolveName(roomState, query) {
@@ -644,6 +814,55 @@ function adminListCommand(roomState) {
   return ["관리자 목록", ...names.map((name) => `• ${name}`)].join("\n");
 }
 
+function recentEventsCommand(roomState, sender, text) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+
+  const count = Math.min(20, Math.max(1, Number(text.match(/\d+/)?.[0] || 10)));
+  const events = (roomState.rawEvents || []).slice(-count);
+  if (!events.length) return "최근 원본 이벤트가 없습니다.";
+
+  const lines = [`최근 원본 이벤트 ${events.length}건`, ""];
+  events.forEach((event, index) => {
+    const identity = event.identity || {};
+    const candidateText = (identity.candidates || [])
+      .slice(0, 3)
+      .map((item) => `${item.path}=${item.value}`)
+      .join(" / ");
+    lines.push(`${index + 1}. ${kstDateTime(new Date(event.at))}`);
+    lines.push(`• sender : ${event.sender || "-"}`);
+    lines.push(`• msg : ${previewText(event.message) || "-"}`);
+    lines.push(`• event : ${event.eventType || "-"}`);
+    lines.push(`• senderId : ${identity.senderId || "없음"}`);
+    lines.push(`• targetUserId : ${identity.targetUserId || "없음"}`);
+    if (candidateText) lines.push(`• id 후보 : ${candidateText}`);
+    lines.push("");
+  });
+  lines.push("원본 JSON은 /원본로그 로 확인하세요.");
+  return lines.join("\n").trim();
+}
+
+function rawLogCommand(roomState, sender, text) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+
+  const events = roomState.rawEvents || [];
+  if (!events.length) return "최근 원본 이벤트가 없습니다.";
+  const indexFromLatest = Math.min(events.length, Math.max(1, Number(text.match(/\d+/)?.[0] || 1)));
+  const event = events.at(-indexFromLatest);
+  const json = JSON.stringify(event.payload, null, 2);
+  const clipped = json.length > 1700 ? `${json.slice(0, 1700)}\n...생략` : json;
+  return [
+    `원본 이벤트 로그 (${indexFromLatest}번째 최신)`,
+    "",
+    `수신시각 : ${kstDateTime(new Date(event.at))}`,
+    `sender : ${event.sender || "-"}`,
+    `msg : ${previewText(event.message) || "-"}`,
+    "",
+    clipped
+  ].join("\n");
+}
+
 function messageId(roomState, targetKey) {
   const count = (roomState.inbox?.[targetKey]?.length || 0) + 1;
   return `${targetKey}-${Date.now().toString(36)}-${count}`;
@@ -807,8 +1026,8 @@ function grantExpAndLevel(person, expAmount) {
   return notices;
 }
 
-function recordActivity(roomState, sender) {
-  const person = ensurePerson(roomState, sender);
+function recordActivity(roomState, sender, identityId = "") {
+  const person = ensurePerson(roomState, sender, identityId);
   if (!person) return null;
   const dateKey = kstDateKey();
   const weekKey = kstWeekKey();
@@ -1153,8 +1372,8 @@ function reentryText(roomState, person) {
   return lines.join("\n");
 }
 
-function recordEntry(roomState, name) {
-  const person = ensurePerson(roomState, name);
+function recordEntry(roomState, name, identityId = "") {
+  const person = ensurePerson(roomState, name, identityId);
   if (!person) return null;
   const at = nowIso();
   person.entries.push({ at });
@@ -1164,8 +1383,8 @@ function recordEntry(roomState, name) {
   return reentryText(roomState, person);
 }
 
-function recordExit(roomState, name, type = "left") {
-  const person = ensurePerson(roomState, name);
+function recordExit(roomState, name, type = "left", identityId = "") {
+  const person = ensurePerson(roomState, name, identityId);
   if (!person) return null;
   const event = { at: nowIso() };
   if (type === "kicked") person.kicks.push(event);
@@ -1179,31 +1398,19 @@ function recordExit(roomState, name, type = "left") {
   ].join("\n");
 }
 
-function recordNickChange(roomState, from, to) {
-  const oldKey = personKey(from);
+function recordNickChange(roomState, from, to, identityId = "") {
+  const oldKey = identityPersonKey(roomState, identityId) || personKey(from);
   const newKey = personKey(to);
   const oldPerson = roomState.people[oldKey];
-  const person = oldPerson || ensurePerson(roomState, to);
+  const person = oldPerson || ensurePerson(roomState, to, identityId);
   if (!person) return null;
   const at = nowIso();
   addUnique(person.names, from);
   addUnique(person.names, to);
   person.currentName = stripKakaoSuffix(to);
   person.nickChanges.push({ from: stripKakaoSuffix(from), to: stripKakaoSuffix(to), at });
-  roomState.people[newKey] = person;
-  if (oldKey !== newKey) delete roomState.people[oldKey];
-  if (roomState.inbox?.[oldKey]) {
-    roomState.inbox[newKey] = [...(roomState.inbox[newKey] || []), ...roomState.inbox[oldKey]];
-    delete roomState.inbox[oldKey];
-  }
-  roomState.admins = (roomState.admins || []).map((name) => (personKey(name) === oldKey ? stripKakaoSuffix(to) : name));
-  if (roomState.profiles[oldKey] && !roomState.profiles[newKey]) {
-    roomState.profiles[newKey] = { ...roomState.profiles[oldKey], name: stripKakaoSuffix(to) };
-    delete roomState.profiles[oldKey];
-  }
-  for (const [alias, key] of Object.entries(roomState.aliases)) {
-    if (key === oldKey) roomState.aliases[alias] = newKey;
-  }
+  remapPersonKey(roomState, oldKey, newKey, person);
+  attachPersonIdentity(roomState, newKey, person, identityId);
   recordRoomEvent(roomState, { type: "nickname_changed", from, to });
   return [
     "【 닉네임 변경 】",
@@ -1268,6 +1475,8 @@ function helpText() {
     "/건의방, /얼공방, /무한성 - 방 링크",
     "/링크등록 이름 URL - 방 링크 저장",
     "/메시지 - 내 메시지함 확인",
+    "/최근이벤트 - 브릿지 원본 이벤트 확인",
+    "/원본로그 - 최신 원본 JSON 확인",
     "",
     "포인트",
     "/출석, /출석체크 - 일일 출석 보상",
@@ -1346,6 +1555,8 @@ async function handleCommand(state, room, sender, message) {
   if (command === "/공질") return PROFILE_FORM;
   if (["/건의방", "/얼공방", "/무한성"].includes(command)) return linkCommand(roomState, command);
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
+  if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return recentEventsCommand(roomState, sender, text);
+  if (/^\/(?:원본로그|원본이벤트)(?:\s|$)/.test(command)) return rawLogCommand(roomState, sender, text);
   if (/^\/(?:출석|출석체크|출첵)$/.test(command)) return attendanceCommand(roomState, sender);
   if (/^\/포인트\s*순위$|^\/포인트순위$/.test(command)) return rankingText(roomState, sender, "points");
   if (/^\/좋아요\s*순위$|^\/좋아요순위$/.test(command)) return rankingText(roomState, sender, "likes");
@@ -1392,16 +1603,17 @@ async function handleCommand(state, room, sender, message) {
   return null;
 }
 
-async function handleMessage(state, room, sender, message) {
+async function handleMessage(state, room, sender, message, identity = {}) {
   const roomState = ensureRoom(state, room);
   const text = normalizeText(message);
   const event = detectSystemEvent(message);
-  if (event?.type === "entered") return recordEntry(roomState, event.name);
-  if (event?.type === "left") return recordExit(roomState, event.name, "left");
-  if (event?.type === "kicked") return recordExit(roomState, event.name, "kicked");
-  if (event?.type === "nickname_changed") return recordNickChange(roomState, event.from, event.to);
+  const targetIdentity = identity.targetUserId || "";
+  if (event?.type === "entered") return recordEntry(roomState, event.name, targetIdentity);
+  if (event?.type === "left") return recordExit(roomState, event.name, "left", targetIdentity);
+  if (event?.type === "kicked") return recordExit(roomState, event.name, "kicked", targetIdentity);
+  if (event?.type === "nickname_changed") return recordNickChange(roomState, event.from, event.to, targetIdentity);
 
-  const activityReply = recordActivity(roomState, sender);
+  const activityReply = recordActivity(roomState, sender, identity.senderId);
   if (text.startsWith("/")) return handleCommand(state, room, sender, message);
 
   recordMentionMessages(roomState, sender, text);
@@ -1422,13 +1634,18 @@ export async function handleChatEvent(payload) {
   const room = normalizeText(payload?.room);
   const message = normalizeText(payload?.msg || payload?.message);
   const sender = normalizeText(payload?.sender) || "익명";
+  const event = detectSystemEvent(message);
+  const identity = payloadIdentity(payload);
+  const state = await loadState();
+  const roomState = ensureRoom(state, room);
+  recordRawEvent(roomState, payload, { room, sender, message, event });
 
   if (!message || isBotSender(sender)) {
+    await saveState(state);
     return { ok: true, reply: null, ignored: true };
   }
 
-  const state = await loadState();
-  const reply = await handleMessage(state, room, sender, message);
+  const reply = await handleMessage(state, room, sender, message, identity);
   await saveState(state);
   return {
     ok: true,
