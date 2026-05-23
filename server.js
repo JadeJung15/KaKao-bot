@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.5";
+export const APP_VERSION = "0.4.6";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -34,6 +34,7 @@ export const FEATURES = [
   "stable-user-ids",
   "bridge-auto-extract",
   "identity-nickname-summary",
+  "raw-identity-nickname-recovery",
   "room-links",
   "profile-form",
   "no-games"
@@ -858,14 +859,32 @@ function identityMemberSummary(roomState, identity = {}) {
   for (const id of ids) {
     const key = identityPersonKey(roomState, id);
     const person = key ? roomState.people[key] : null;
-    if (!person) continue;
-    const names = (person.names || []).filter(Boolean);
-    const current = person.currentName || names.at(-1) || "";
+    const rawNames = identityNamesFromRawEvents(roomState, id);
+    if (!person && !rawNames.length) continue;
+    const names = [...(person?.names || []), ...rawNames].filter(Boolean)
+      .filter((name, index, list) => list.findIndex((value) => keyFor(value) === keyFor(name)) === index);
+    const current = person?.currentName || rawNames.at(-1) || names.at(-1) || "";
     const previous = names.filter((name) => keyFor(name) !== keyFor(current));
     if (previous.length) return `${current} (이전닉: ${previous.join(", ")})`;
     return current;
   }
   return "";
+}
+
+function identityNamesFromRawEvents(roomState, identityId) {
+  const targetId = normalizeIdentityId(identityId);
+  if (!targetId) return [];
+  const names = [];
+  for (const event of roomState.rawEvents || []) {
+    const identity = event.identity || {};
+    const candidateIds = [identity.senderId, identity.targetUserId, ...(identity.candidates || []).map((item) => item.value)]
+      .map(normalizeIdentityId)
+      .filter(Boolean);
+    if (!candidateIds.includes(targetId)) continue;
+    if (identity.senderId === targetId && event.sender) names.push(stripKakaoSuffix(event.sender));
+    if (identity.targetUserId === targetId && event.eventName) names.push(stripKakaoSuffix(event.eventName));
+  }
+  return names.filter((name, index, list) => name && list.findIndex((value) => keyFor(value) === keyFor(name)) === index);
 }
 
 function rawLogCommand(roomState, sender, text) {
