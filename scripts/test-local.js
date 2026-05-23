@@ -238,6 +238,31 @@ try {
   assert.match(hashRenameEvents.json.reply, /회원이력 : 새해시닉 남 \(이전닉: 예전해시닉 남\)/);
 
   await chatPayload({
+    room: "첫채팅재입장방",
+    msg: "예전 닉으로 활동",
+    sender: "첫채팅예전닉 남",
+    profileHash: "first-chat-reentry-hash-1"
+  });
+
+  const firstChatReentry = await chatPayload({
+    room: "첫채팅재입장방",
+    msg: "재입장 후 첫 채팅",
+    sender: "첫채팅현재닉 남",
+    profileHash: "first-chat-reentry-hash-1"
+  });
+  assert.match(firstChatReentry.json.reply, /첫 채팅 기준 재입장 감지/);
+  assert.match(firstChatReentry.json.reply, /현재닉 : 첫채팅현재닉 남/);
+  assert.match(firstChatReentry.json.reply, /이전닉 : 첫채팅예전닉 남/);
+
+  const secondChatAfterReentry = await chatPayload({
+    room: "첫채팅재입장방",
+    msg: "두 번째 채팅",
+    sender: "첫채팅현재닉 남",
+    profileHash: "first-chat-reentry-hash-1"
+  });
+  assert.equal(secondChatAfterReentry.json.reply, null);
+
+  await chatPayload({
     room: "원본복구방",
     msg: "구버전 시점 채팅",
     sender: "복구전닉 남",

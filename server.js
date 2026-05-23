@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.10";
+export const APP_VERSION = "0.4.11";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -37,6 +37,7 @@ export const FEATURES = [
   "raw-identity-nickname-recovery",
   "cross-room-identity-nickname-recovery",
   "identity-scoped-recent-events",
+  "first-chat-reentry-notice",
   "room-links",
   "profile-form",
   "no-games"
@@ -390,7 +391,8 @@ function ensurePerson(roomState, name, identityId = "") {
     hearts: 0,
     attendance: { dates: [], currentStreak: 0 },
     chats: { total: 0, byDate: {}, byWeek: {} },
-    identities: []
+    identities: [],
+    firstChatReentryNotices: []
   };
   const person = roomState.people[key];
   normalizePersonState(person);
@@ -428,6 +430,7 @@ function normalizePersonState(person) {
   person.chats.byDate ||= {};
   person.chats.byWeek ||= {};
   person.identities ||= [];
+  person.firstChatReentryNotices ||= [];
   return person;
 }
 
@@ -1137,9 +1140,33 @@ function grantExpAndLevel(person, expAmount) {
   return notices;
 }
 
-function recordActivity(roomState, sender, identityId = "") {
+function firstChatReentryNotice(roomState, person, sender) {
+  const currentName = stripKakaoSuffix(sender);
+  const currentKey = keyFor(currentName);
+  const previousNames = uniqueNames([...(person.names || []), person.currentName])
+    .filter((name) => keyFor(name) !== currentKey);
+  if (!currentName || !previousNames.length) return null;
+
+  person.firstChatReentryNotices ||= [];
+  if (person.firstChatReentryNotices.includes(currentKey)) return null;
+  person.firstChatReentryNotices.push(currentKey);
+  if (person.firstChatReentryNotices.length > 30) person.firstChatReentryNotices = person.firstChatReentryNotices.slice(-30);
+
+  recordRoomEvent(roomState, { type: "first_chat_reentry_notice", name: currentName, previousNames });
+  return [
+    "【 첫 채팅 기준 재입장 감지 】",
+    "",
+    `현재닉 : ${currentName}`,
+    `이전닉 : ${previousNames.join(", ")}`,
+    "",
+    "같은 고유값의 이전 활동 기록을 찾았습니다."
+  ].join("\n");
+}
+
+function recordActivity(roomState, sender, identityId = "", options = {}) {
   const person = ensurePerson(roomState, sender, identityId);
   if (!person) return null;
+  const reentryNotice = options.firstChatNotice ? firstChatReentryNotice(roomState, person, sender) : null;
   const dateKey = kstDateKey();
   const weekKey = kstWeekKey();
   person.lastSeenAt = nowIso();
@@ -1148,7 +1175,7 @@ function recordActivity(roomState, sender, identityId = "") {
   person.chats.byDate[dateKey] = (person.chats.byDate[dateKey] || 0) + 1;
   person.chats.byWeek[weekKey] = (person.chats.byWeek[weekKey] || 0) + 1;
   const notices = grantExpAndLevel(person, CHAT_EXP_REWARD);
-  return notices[0] || null;
+  return reentryNotice || notices[0] || null;
 }
 
 function pointViewCommand(roomState, text, sender) {
@@ -1765,8 +1792,9 @@ async function handleMessage(state, room, sender, message, identity = {}, detect
   if (event?.type === "kicked") return recordExit(roomState, event.name, "kicked", targetIdentity);
   if (event?.type === "nickname_changed") return recordNickChange(roomState, event.from, event.to, targetIdentity);
 
-  const activityReply = recordActivity(roomState, sender, identity.senderId);
-  if (text.startsWith("/")) return handleCommand(state, room, sender, message);
+  const isCommand = text.startsWith("/");
+  const activityReply = recordActivity(roomState, sender, identity.senderId, { firstChatNotice: !isCommand });
+  if (isCommand) return handleCommand(state, room, sender, message);
 
   recordMentionMessages(roomState, sender, text);
   return unreadNoticeText(roomState, sender) || activityReply;
