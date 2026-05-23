@@ -473,8 +473,10 @@ try {
 
   const luckyDraw = await chat("/뽑기", "포순이 여");
   assert.match(luckyDraw.json.reply, /뽑기 결과/);
-  assert.match(luckyDraw.json.reply, /사용 포인트 : 🅟100/);
-  assert.match(luckyDraw.json.reply, /공개 확률/);
+  assert.match(luckyDraw.json.reply, /포순이 여님 (대박|성공|본전|꽝)/);
+  assert.match(luckyDraw.json.reply, /사용 : 🅟100/);
+  assert.match(luckyDraw.json.reply, /획득 : 🅟(0|100|200|500)/);
+  assert.doesNotMatch(luckyDraw.json.reply, /공개 확률/);
 
   const oddEven = await chat("/홀 100", "포순이 여");
   assert.match(oddEven.json.reply, /홀짝 결과/);

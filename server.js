@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.23";
+export const APP_VERSION = "0.4.24";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -43,6 +43,7 @@ export const FEATURES = [
   "point-transfer",
   "point-cheer",
   "point-lucky-draw",
+  "simple-lucky-draw-result",
   "point-odd-even",
   "point-odd-even-betting",
   "attendance-rewards",
@@ -1490,14 +1491,10 @@ function luckyDrawCommand(roomState, sender) {
   return [
     "뽑기 결과",
     "",
-    `참여자 : ${person.currentName}`,
-    `결과 : ${outcome.label}`,
-    `사용 포인트 : ${formatPoint(LUCKY_DRAW_POINT_COST)}`,
-    `획득 포인트 : ${formatPoint(outcome.reward)}`,
-    `보유 포인트 : ${formatPoint(person.points)}`,
-    "",
-    "공개 확률",
-    LUCKY_DRAW_OUTCOMES.map((item) => `• ${item.label} ${item.chance} : ${formatPoint(item.reward)}`).join("\n")
+    `${person.currentName}님 ${outcome.label}`,
+    `사용 : ${formatPoint(LUCKY_DRAW_POINT_COST)}`,
+    `획득 : ${formatPoint(outcome.reward)}`,
+    `보유 : ${formatPoint(person.points)}`
   ].join("\n");
 }
 
