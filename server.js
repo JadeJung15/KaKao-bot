@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.16";
+export const APP_VERSION = "0.4.17";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -1217,8 +1217,9 @@ function firstChatReentryNotice(roomState, person, sender, identityId = "") {
   if (!currentName || !orderedPreviousNames.length) return null;
 
   person.firstChatReentryNotices ||= [];
-  if (person.firstChatReentryNotices.includes(currentKey)) return null;
-  person.firstChatReentryNotices.push(currentKey);
+  const noticeKey = `v2:${currentKey}:${keyFor(orderedPreviousNames[0])}`;
+  if (person.firstChatReentryNotices.includes(noticeKey)) return null;
+  person.firstChatReentryNotices.push(noticeKey);
   if (person.firstChatReentryNotices.length > 30) person.firstChatReentryNotices = person.firstChatReentryNotices.slice(-30);
 
   const isCandidate = orderedPreviousNames.length > 1;
