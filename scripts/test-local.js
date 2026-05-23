@@ -196,6 +196,18 @@ try {
   });
   assert.match(explicitNickChange.json.reply, /자동대상 남 -> 자동변경 남/);
 
+  const arrowText = await chatPayload({
+    room: "오탐방",
+    msg: "현재: 카카오톡 → 메신저봇 앱 → 픽셀곰 서버 → 카카오톡 답장",
+    sender: "오탐사용자",
+    profileHash: "arrow-false-positive-hash"
+  });
+  assert.equal(arrowText.json.reply, null);
+
+  const arrowEvents = await chat("/최근이벤트 1", "오탐사용자", "오탐방");
+  assert.match(arrowEvents.json.reply, /event : -/);
+  assert.doesNotMatch(arrowEvents.json.reply, /nickname_changed/);
+
   const profileHashChat = await chatPayload({
     room: "자동추출방",
     msg: "프로필 해시 테스트",

@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 
-export const APP_VERSION = "0.4.9";
+export const APP_VERSION = "0.4.10";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -1545,13 +1545,28 @@ function eventTypeAlias(value) {
   return "";
 }
 
+function nicknameChangeName(value) {
+  const name = stripKakaoSuffix(value);
+  if (!name || name.length > 30) return "";
+  if (/https?:|www\.|[{};]/i.test(name)) return "";
+  if (/[:：]/.test(name)) return "";
+  return name;
+}
+
+function nicknameChangeEvent(from, to) {
+  const cleanFrom = nicknameChangeName(from);
+  const cleanTo = nicknameChangeName(to);
+  if (!cleanFrom || !cleanTo || keyFor(cleanFrom) === keyFor(cleanTo)) return null;
+  return { type: "nickname_changed", from: cleanFrom, to: cleanTo };
+}
+
 function payloadSystemEvent(payload, message) {
   const explicitType = eventTypeAlias(payload?.eventType || payload?.type || payload?.event?.type || payload?.systemEvent?.type);
   if (explicitType) {
     if (explicitType === "nickname_changed") {
       const from = stripKakaoSuffix(payload?.fromName || payload?.from || payload?.oldName || payload?.beforeName || payload?.event?.fromName || "");
       const to = stripKakaoSuffix(payload?.toName || payload?.to || payload?.newName || payload?.afterName || payload?.event?.toName || "");
-      if (from && to) return { type: explicitType, from, to };
+      return nicknameChangeEvent(from, to);
     } else {
       const name = stripKakaoSuffix(payload?.targetName || payload?.target || payload?.name || payload?.event?.targetName || payload?.event?.name || "");
       if (name) return { type: explicitType, name };
@@ -1569,9 +1584,9 @@ function detectSystemEvent(message) {
   match = text.match(/^(.+?)님을 내보냈습니다/);
   if (match) return { type: "kicked", name: match[1] };
   match = text.match(/^(.+?)\s*(?:➙|->|→)\s*(.+?)$/);
-  if (match) return { type: "nickname_changed", from: match[1], to: match[2] };
+  if (match) return nicknameChangeEvent(match[1], match[2]);
   match = text.match(/^(.+?)님이\s+(.+?)\(으\)로\s+닉네임을\s+변경/);
-  if (match) return { type: "nickname_changed", from: match[1], to: match[2] };
+  if (match) return nicknameChangeEvent(match[1], match[2]);
   return null;
 }
 

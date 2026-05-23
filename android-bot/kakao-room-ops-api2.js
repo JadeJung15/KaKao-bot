@@ -6,6 +6,7 @@ const bot = BotManager.getCurrentBot();
 
 const BOT_SERVER = "https://ka-kao-bot.vercel.app/chat-event";
 const BOT_NAMES = ["픽셀곰", "운영봇", "봇"];
+const ROOM_NAME_OVERRIDE = "픽셀곰 RPG 🎮 놀이터";
 
 const ALLOWED_ROOMS = [];
 
@@ -15,6 +16,17 @@ function isAllowedRoom(room) {
 
 function isBotSender(sender) {
   return BOT_NAMES.indexOf(String(sender)) >= 0;
+}
+
+function effectiveRoom(room) {
+  const override = String(ROOM_NAME_OVERRIDE || "").trim();
+  if (override) return override;
+  return String(room || "");
+}
+
+function effectiveGroupFlag(message) {
+  if (String(ROOM_NAME_OVERRIDE || "").trim()) return true;
+  return Boolean(message.isGroupChat);
 }
 
 function postJson(url, payload) {
@@ -39,6 +51,21 @@ function authorHash(message) {
   return "";
 }
 
+function nicknameChangeName(value) {
+  const name = String(value || "").replace(/님$/, "").replace(/\s+/g, " ").trim();
+  if (!name || name.length > 30) return "";
+  if (/https?:|www\.|[{};]/i.test(name)) return "";
+  if (/[:：]/.test(name)) return "";
+  return name;
+}
+
+function nicknameChangeEvent(from, to) {
+  const cleanFrom = nicknameChangeName(from);
+  const cleanTo = nicknameChangeName(to);
+  if (!cleanFrom || !cleanTo || cleanFrom === cleanTo) return {};
+  return { eventType: "nickname_changed", fromName: cleanFrom, toName: cleanTo };
+}
+
 function systemEvent(text) {
   let match = text.match(/^(.+?)님이 들어왔습니다/);
   if (match) return { eventType: "entered", targetName: match[1] };
@@ -47,14 +74,16 @@ function systemEvent(text) {
   match = text.match(/^(.+?)님을 내보냈습니다/);
   if (match) return { eventType: "kicked", targetName: match[1] };
   match = text.match(/^(.+?)\s*(?:➙|->|→)\s*(.+?)$/);
-  if (match) return { eventType: "nickname_changed", fromName: match[1], toName: match[2] };
+  if (match) return nicknameChangeEvent(match[1], match[2]);
   return {};
 }
 
 function onMessage(message) {
-  const room = String(message.room || "");
+  const rawRoom = String(message.room || "");
+  const room = effectiveRoom(rawRoom);
   const content = String(message.content || "");
   const sender = String((message.author && message.author.name) || "");
+  const isGroupChat = effectiveGroupFlag(message);
 
   if (!isAllowedRoom(room)) return;
   if (!content || !sender || isBotSender(sender)) return;
@@ -66,10 +95,13 @@ function onMessage(message) {
     if (content.trim() === "/로컬상태") {
       message.reply([
         "픽셀곰 API2 스크립트 실행 중입니다.",
-        "방: " + room,
+        "방(raw): " + rawRoom,
+        "방(전송): " + room,
         "보낸사람: " + sender,
         "프로필해시: " + (hash || "없음"),
         "이벤트: " + (event.eventType || "없음"),
+        "단톡(raw): " + Boolean(message.isGroupChat),
+        "단톡(전송): " + isGroupChat,
         "이제 /상태 를 보내 서버 연결을 확인하세요."
       ].join("\n"));
       return;
@@ -77,6 +109,7 @@ function onMessage(message) {
 
     const raw = postJson(BOT_SERVER, {
       room: room,
+      rawRoom: rawRoom,
       msg: content,
       sender: sender,
       senderId: hash,
@@ -86,7 +119,8 @@ function onMessage(message) {
       targetName: event.targetName || "",
       fromName: event.fromName || "",
       toName: event.toName || "",
-      isGroupChat: Boolean(message.isGroupChat),
+      isGroupChat: isGroupChat,
+      rawIsGroupChat: Boolean(message.isGroupChat),
       packageName: String(message.packageName || "com.kakao.talk")
     });
     const result = JSON.parse(raw);
