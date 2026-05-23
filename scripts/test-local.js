@@ -92,6 +92,8 @@ try {
   assert.doesNotMatch(homeText, /"#Intent"/);
   assert.match(homeText, /targetUrl\.search\}#Intent`/);
   assert.match(homeText, /기본 브라우저/);
+  assert.match(homeText, /class="nav-contact" href="https:\/\/open\.kakao\.com\/o\/gu25P5vi"/);
+  assert.match(homeText, />문의<\/a>/);
 
   const help = await request("/skill", {
     method: "POST",

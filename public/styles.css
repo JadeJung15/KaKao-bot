@@ -154,6 +154,15 @@ a {
   border-radius: 8px;
 }
 
+.nav-contact {
+  padding: 10px 15px !important;
+  color: var(--ink);
+  background: #ffe0a8;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  box-shadow: 3px 3px 0 rgba(47, 36, 27, 0.22);
+}
+
 .hero {
   min-height: 84svh;
   display: flex;
@@ -615,6 +624,10 @@ a {
   }
 
   .nav-cta {
+    padding: 8px 11px !important;
+  }
+
+  .nav-contact {
     padding: 8px 11px !important;
   }
 
