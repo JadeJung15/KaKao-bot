@@ -110,6 +110,7 @@ public class MainActivity extends Activity {
         infoPanel.addView(labelValue("월 이용금액", "5,500원 / 방 1개 / 30일"));
         infoPanel.addView(labelValue("사용 기능", BridgeConfig.featureSummary(this)));
         infoPanel.addView(labelValue("관리 콘솔", WEBSITE_URL + "/admin"));
+        infoPanel.addView(labelValue("구매자 가이드", WEBSITE_URL + "/buyer-guide"));
 
         LinearLayout stepsPanel = panel();
         stepsPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
@@ -134,6 +135,10 @@ public class MainActivity extends Activity {
         Button websiteButton = secondaryButton("홈페이지 열기");
         websiteButton.setOnClickListener(v -> openUrl(WEBSITE_URL));
         root.addView(websiteButton);
+
+        Button guideButton = secondaryButton("구매자 가이드 열기");
+        guideButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/buyer-guide"));
+        root.addView(guideButton);
 
         Button consoleButton = secondaryButton("관리 콘솔 열기");
         consoleButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/admin"));
@@ -253,6 +258,10 @@ public class MainActivity extends Activity {
         privacyButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/privacy"));
         panel.addView(privacyButton);
 
+        Button guideButton = secondaryButton("구매자 가이드 열기");
+        guideButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/buyer-guide"));
+        panel.addView(guideButton);
+
         Button consoleButton = secondaryButton("관리 콘솔 열기");
         consoleButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/admin"));
         panel.addView(consoleButton);
@@ -359,8 +368,6 @@ public class MainActivity extends Activity {
                 adminsInput.getText().toString(),
                 licenseKeyInput.getText().toString()
         );
-        BridgeConfig.setAccessibilitySystemEventsEnabled(this, false);
-        BridgeConfig.setAccessibilityAutoReplyEnabled(this, false);
         BridgeConfig.setAttendanceEnabled(this, attendanceFeatureSwitch.isChecked());
         BridgeConfig.setPointsEnabled(this, pointsFeatureSwitch.isChecked());
         BridgeConfig.setRankingsEnabled(this, rankingsFeatureSwitch.isChecked());

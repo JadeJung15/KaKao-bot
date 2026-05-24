@@ -15,8 +15,8 @@
         <h1>로그인</h1>
         <p>신청한 방과 결제 대기/승인 상태를 확인합니다. 아직 결제 자동화 전이라 운영자 승인 기준으로 표시됩니다.</p>
         <form data-login-form>
-          <label>이메일<input name="email" type="email" required placeholder="pixelgom@example.com"></label>
-          <label>비밀번호<input name="password" type="password" required placeholder="비밀번호"></label>
+          <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
+          <label>비밀번호<input name="password" type="password" autocomplete="current-password" required placeholder="비밀번호"></label>
           <button class="button button-primary" type="submit">로그인</button>
         </form>
         <pre class="form-status" data-login-result aria-live="polite">회원가입 후 신청 상태를 확인할 수 있습니다.</pre>
@@ -41,12 +41,15 @@
           const applications = json.applications.length
             ? json.applications.map((item) => `- ${item.roomName}: ${item.statusLabel} / ${item.payment.statusLabel}`).join("\n")
             : "신청 내역이 없습니다.";
+          if (json.guideToken) sessionStorage.setItem("pixgomBuyerToken", json.guideToken);
           result.textContent = [
             "로그인되었습니다.",
             `계정: ${json.account.email}`,
             "",
             "신청 내역",
-            applications
+            applications,
+            "",
+            json.buyerAccess ? "구매자 전용 가이드: /buyer-guide 에서 확인할 수 있습니다." : "구매 승인 후 구매자 전용 가이드가 열립니다."
           ].join("\n");
         } catch (error) {
           result.textContent = `로그인 실패: ${error.message}`;

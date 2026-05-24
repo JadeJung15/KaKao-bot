@@ -1138,6 +1138,97 @@ a {
   overflow-wrap: anywhere;
 }
 
+.buyer-gate,
+.buyer-content {
+  width: min(1120px, 100%);
+  margin: clamp(28px, 5vw, 58px) auto;
+  padding: 0 20px;
+}
+
+.buyer-gate {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(300px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.buyer-gate > div,
+.buyer-gate form,
+.buyer-room-card,
+.buyer-guide-section {
+  padding: 22px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(55, 38, 23, 0.08);
+}
+
+.buyer-gate form {
+  display: grid;
+  gap: 12px;
+}
+
+.buyer-gate label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.buyer-gate input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: var(--ink);
+  border: 1px solid #d8c8b4;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.buyer-room-grid,
+.buyer-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.buyer-room-card h3,
+.buyer-guide-section h3 {
+  margin: 0 0 14px;
+  font-size: 24px;
+}
+
+.buyer-room-card dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.buyer-room-card div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.buyer-room-card dt {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.buyer-room-card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.buyer-guide-section ol {
+  margin: 0;
+  padding-left: 22px;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
 .wide-label {
   display: grid;
   gap: 7px;
@@ -1485,7 +1576,10 @@ a {
   .store-grid,
   .post-grid,
   .listing-grid,
-  .search-results {
+  .search-results,
+  .buyer-gate,
+  .buyer-room-grid,
+  .buyer-guide-grid {
     grid-template-columns: 1fr;
   }
 

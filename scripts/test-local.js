@@ -114,6 +114,9 @@ try {
   assert.match(health.json.features.join(","), /customer-signup-api/);
   assert.match(health.json.features.join(","), /customer-login-api/);
   assert.match(health.json.features.join(","), /manual-payment-approval/);
+  assert.match(health.json.features.join(","), /buyer-guide-api/);
+  assert.match(health.json.features.join(","), /protected-buyer-guide/);
+  assert.match(health.json.features.join(","), /buyer-session-token/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.adminConsoleEnabled, true);
 
@@ -144,14 +147,16 @@ try {
   assert.match(homeText, /커스텀 명령어/);
   assert.match(homeText, /업데이트 기록/);
   assert.match(homeText, /0\.4\.43/);
+  assert.match(homeText, /0\.4\.44/);
   assert.match(homeText, /수동 입금 확인/);
+  assert.match(homeText, /구매자 전용/);
   assert.match(homeText, /개인정보처리방침/);
   assert.match(homeText, /서비스 이용약관/);
   assert.match(homeText, /data-site-search/);
   assert.match(homeText, /href="https:\/\/open\.kakao\.com\/o\/gu25P5vi"/);
   assert.match(homeText, /오픈채팅 문의/);
 
-  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/login", "/signup"]) {
+  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup"]) {
     const page = await fetch(`${baseUrl}${pagePath}`);
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-type") || "", /text\/html/);
@@ -259,6 +264,27 @@ try {
   assert.equal(login.response.status, 200);
   assert.equal(login.json.applications.length, 1);
   assert.equal(login.json.applications[0].payment.status, "awaiting_manual_deposit");
+  assert.equal(login.json.buyerAccess, false);
+  assert.equal(Object.hasOwn(login.json, "guideToken"), false);
+
+  const buyerGuideAnonymous = await request("/api/buyer/guide", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({})
+  });
+  assert.equal(buyerGuideAnonymous.response.status, 401);
+  assert.equal(buyerGuideAnonymous.json.error, "invalid_login");
+
+  const buyerGuidePending = await request("/api/buyer/guide", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `tester-${process.pid}@pixgom.test`,
+      password: "password123"
+    })
+  });
+  assert.equal(buyerGuidePending.response.status, 403);
+  assert.equal(buyerGuidePending.json.error, "buyer_approval_required");
 
   const adminApplications = await request("/api/admin/applications?token=test-admin-token");
   assert.equal(adminApplications.response.status, 200);
@@ -274,6 +300,31 @@ try {
   assert.equal(approvedApplication.json.application.status, "approved");
   assert.equal(approvedApplication.json.payment.status, "paid");
   assert.match(approvedApplication.json.room.licenseKey, /^PXG-/);
+
+  const approvedLogin = await request("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `tester-${process.pid}@pixgom.test`,
+      password: "password123"
+    })
+  });
+  assert.equal(approvedLogin.response.status, 200);
+  assert.equal(approvedLogin.json.buyerAccess, true);
+  assert.match(approvedLogin.json.guideToken, /\./);
+
+  const buyerGuideApproved = await request("/api/buyer/guide", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: approvedLogin.json.guideToken })
+  });
+  assert.equal(buyerGuideApproved.response.status, 200);
+  assert.equal(buyerGuideApproved.json.ok, true);
+  assert.equal(buyerGuideApproved.json.version, "0.4.44");
+  assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
+  assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
+  assert.match(JSON.stringify(buyerGuideApproved.json.sections), /알림 접근 권한/);
+  assert.match(JSON.stringify(buyerGuideApproved.json.sections), /화면 감지\/접근성 권한을 사용하지 않습니다/);
 
   const approvedRoomStatus = await chatPayload({
     registeredRoom: false,

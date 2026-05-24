@@ -1,6 +1,4 @@
 <resources>
     <string name="app_name">픽셀곰 브릿지</string>
     <string name="notification_listener_label">픽셀곰 카카오 알림 브릿지</string>
-    <string name="accessibility_service_label">픽셀곰 카카오 화면 브릿지</string>
-    <string name="accessibility_service_description">카카오 오픈채팅 화면의 입장, 퇴장, 닉네임 변경 안내 문구를 감지해 픽셀곰 운영봇 서버로 전달합니다.</string>
 </resources>

@@ -37,8 +37,6 @@ final class BridgeConfig {
     private static final String KEY_FEATURE_HISTORY = "feature_history";
     private static final String KEY_FEATURE_PROFILES = "feature_profiles";
     private static final String KEY_FEATURE_GAMES = "feature_games";
-    private static final String KEY_ACCESSIBILITY_SYSTEM_EVENTS = "accessibility_system_events";
-    private static final String KEY_ACCESSIBILITY_AUTO_REPLY = "accessibility_auto_reply";
     private static final String KEY_RECORD_ONLY_MIGRATION = "record_only_migration_v8";
     private static final String KEY_LOGS = "logs";
     private static final int MAX_LOG_LINES = 80;
@@ -60,8 +58,6 @@ final class BridgeConfig {
         if (prefs.getBoolean(KEY_RECORD_ONLY_MIGRATION, false)) return;
         String currentServerUrl = prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL);
         SharedPreferences.Editor editor = prefs.edit()
-                .putBoolean(KEY_ACCESSIBILITY_SYSTEM_EVENTS, false)
-                .putBoolean(KEY_ACCESSIBILITY_AUTO_REPLY, false)
                 .putBoolean(KEY_RECORD_ONLY_MIGRATION, true);
         if (OLD_SERVER_URL.equals(currentServerUrl)) editor.putString(KEY_SERVER_URL, DEFAULT_SERVER_URL);
         editor.apply();
@@ -268,22 +264,6 @@ final class BridgeConfig {
 
     static String defaultScriptSource() {
         return DEFAULT_SCRIPT_SOURCE;
-    }
-
-    static boolean accessibilitySystemEventsEnabled(Context context) {
-        return false;
-    }
-
-    static void setAccessibilitySystemEventsEnabled(Context context, boolean enabled) {
-        prefs(context).edit().putBoolean(KEY_ACCESSIBILITY_SYSTEM_EVENTS, enabled).apply();
-    }
-
-    static boolean accessibilityAutoReplyEnabled(Context context) {
-        return false;
-    }
-
-    static void setAccessibilityAutoReplyEnabled(Context context, boolean enabled) {
-        prefs(context).edit().putBoolean(KEY_ACCESSIBILITY_AUTO_REPLY, enabled).apply();
     }
 
     static String normalized(String value) {

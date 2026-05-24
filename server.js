@@ -1,5 +1,5 @@
 import http from "node:http";
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { existsSync } from "node:fs";
@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.43";
+export const APP_VERSION = "0.4.44";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -89,7 +89,10 @@ export const FEATURES = [
   "customer-login-api",
   "manual-payment-approval",
   "admin-application-workflow",
-  "custom-command-console-builder"
+  "custom-command-console-builder",
+  "buyer-guide-api",
+  "protected-buyer-guide",
+  "buyer-session-token"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -137,6 +140,7 @@ const FEATURE_LABELS = Object.freeze({
 const CUSTOM_COMMAND_LIMIT = 30;
 const CUSTOM_COMMAND_RESPONSE_LIMIT = 700;
 const SIGNUP_PASSWORD_MIN_LENGTH = 8;
+const BUYER_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const APPLICATION_STATUS_LABELS = Object.freeze({
   pending_payment: "결제 대기",
   approved: "승인 완료",
@@ -517,6 +521,143 @@ function publicApplicationView(application = {}, state = null) {
     createdAt: application.createdAt || "",
     approvedAt: application.approvedAt || "",
     approvedBy: application.approvedBy || ""
+  };
+}
+
+function base64UrlEncode(value) {
+  return Buffer.from(value).toString("base64url");
+}
+
+function base64UrlJson(value) {
+  return base64UrlEncode(JSON.stringify(value));
+}
+
+function buyerTokenSecret() {
+  return normalizeText(process.env.BUYER_TOKEN_SECRET || ADMIN_CONSOLE_TOKEN || "local-buyer-token-secret");
+}
+
+function signTokenPayload(payload) {
+  const encoded = base64UrlJson(payload);
+  const signature = createHmac("sha256", buyerTokenSecret()).update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+function verifyTokenPayload(token) {
+  const [encoded, signature] = normalizeText(token).split(".");
+  if (!encoded || !signature) return null;
+  const expected = createHmac("sha256", buyerTokenSecret()).update(encoded).digest("base64url");
+  const expectedBuffer = Buffer.from(expected);
+  const signatureBuffer = Buffer.from(signature);
+  if (expectedBuffer.length !== signatureBuffer.length || !timingSafeEqual(expectedBuffer, signatureBuffer)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    if (!payload.exp || Number(payload.exp) <= Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function buyerTokenForAccount(account = {}) {
+  return signTokenPayload({
+    sub: account.id,
+    email: account.email,
+    exp: Date.now() + BUYER_TOKEN_TTL_MS
+  });
+}
+
+function tokenFromRequest(req, body = {}) {
+  return normalizeText(
+    body.token
+      || req.headers["x-buyer-token"]
+      || req.headers.authorization?.replace(/^Bearer\s+/i, "")
+  );
+}
+
+function approvedBuyerApplications(state, account = {}) {
+  return (account.applicationIds || [])
+    .map((id) => state.applications?.[id])
+    .filter(Boolean)
+    .filter((application) => application.status === "approved")
+    .filter((application) => state.payments?.[application.paymentId]?.status === "paid");
+}
+
+function buyerGuidePayload(state, account = {}) {
+  const applications = approvedBuyerApplications(state, account);
+  if (!applications.length) return { ok: false, status: 403, error: "buyer_approval_required" };
+  const rooms = applications.map((application) => {
+    const roomState = state.rooms?.[roomKey(application.roomName)];
+    const roomView = roomState ? roomAdminView(roomState) : null;
+    return {
+      roomName: application.roomName,
+      roomId: application.roomId || roomView?.roomIds?.[0] || "",
+      roomLink: application.roomLink || roomView?.roomLinks?.[0] || "",
+      adminName: application.adminName,
+      licenseKey: application.licenseKey || roomView?.licenseKey || "",
+      subscription: roomView?.subscription || application.plan,
+      features: roomView?.features || DEFAULT_ROOM_FEATURES
+    };
+  });
+  return {
+    ok: true,
+    version: APP_VERSION,
+    account: publicAccountView(account),
+    rooms,
+    sections: [
+      {
+        title: "처음 시작",
+        items: [
+          "픽셀곰 브릿지 앱을 봇폰에 설치합니다.",
+          "앱 첫 화면에서 알림 접근 권한을 허용합니다.",
+          "구매 승인된 방 이름, roomId, 오픈채팅 링크, 라이선스 키를 앱 대표 방 설정에 입력합니다.",
+          "앱에서 서버 테스트 전송 후 카카오방에서 /브릿지, /상태를 확인합니다."
+        ]
+      },
+      {
+        title: "PC에서 접속",
+        items: [
+          "https://pixgom.com/login 으로 로그인해 구매 상태를 확인합니다.",
+          "관리자는 https://pixgom.com/admin 에서 방 등록, 구독, 커스텀 명령어를 관리합니다.",
+          "콘솔은 운영 토큰이 필요하며, 구매자 계정 비밀번호와 운영 토큰은 서로 다릅니다."
+        ]
+      },
+      {
+        title: "모바일에서 접속",
+        items: [
+          "휴대폰 브라우저에서 https://pixgom.com/buyer-guide 를 열고 로그인합니다.",
+          "Android Chrome은 메뉴에서 '홈 화면에 추가'를 선택해 바로가기를 만들 수 있습니다.",
+          "iPhone Safari는 공유 버튼에서 '홈 화면에 추가'를 선택합니다."
+        ]
+      },
+      {
+        title: "휴대폰 앱 권한",
+        items: [
+          "필수 권한은 알림 접근 권한입니다.",
+          "픽셀곰 브릿지는 기본 운영에서 화면 감지/접근성 권한을 사용하지 않습니다.",
+          "카카오톡 알림이 꺼져 있거나 방 알림이 오지 않으면 봇도 반응하지 않습니다.",
+          "배터리 절전이 강하면 알림 수신이 지연될 수 있어 절전 예외를 권장합니다."
+        ]
+      },
+      {
+        title: "기본 테스트 순서",
+        items: [
+          "카카오방에서 /브릿지를 보냅니다.",
+          "카카오방에서 /상태를 보냅니다.",
+          "/명령어목록 으로 커스텀 명령어를 확인합니다.",
+          "/출석, /포인트, /포인트순위 순서로 기본 기능을 확인합니다.",
+          "게임 기능을 켠 방은 /게임, /주사위를 확인합니다."
+        ]
+      },
+      {
+        title: "문제 해결",
+        items: [
+          "응답이 없으면 앱의 알림 권한, 방 이름, roomId, 라이선스 키를 먼저 확인합니다.",
+          "라이선스 오류가 나오면 콘솔의 라이선스 키와 앱 입력값이 같은지 확인합니다.",
+          "개인톡 또는 등록되지 않은 방 메시지는 서버가 무시합니다.",
+          "입장/퇴장 문구는 카카오 알림으로 오지 않으면 기본 알림 방식만으로는 감지되지 않습니다."
+        ]
+      }
+    ]
   };
 }
 
@@ -3536,14 +3677,30 @@ function loginAccount(state, payload = {}) {
   account.lastLoginAt = nowIso();
   account.updatedAt = nowIso();
   const applicationIds = account.applicationIds || [];
+  const buyerAccess = approvedBuyerApplications(state, account).length > 0;
   return {
     ok: true,
     account: publicAccountView(account),
+    buyerAccess,
+    ...(buyerAccess ? { guideToken: buyerTokenForAccount(account) } : {}),
     applications: applicationIds
       .map((id) => state.applications?.[id])
       .filter(Boolean)
       .map((application) => publicApplicationView(application, state))
   };
+}
+
+function buyerGuideFromRequest(state, req, body = {}) {
+  const tokenPayload = verifyTokenPayload(tokenFromRequest(req, body));
+  if (tokenPayload?.sub && state.accounts?.[tokenPayload.sub]) {
+    return buyerGuidePayload(state, state.accounts[tokenPayload.sub]);
+  }
+  const login = loginAccount(state, body);
+  if (!login.ok) return login;
+  const account = state.accounts[login.account.id];
+  const guide = buyerGuidePayload(state, account);
+  if (!guide.ok) return guide;
+  return { ...guide, guideToken: buyerTokenForAccount(account) };
 }
 
 async function handlePublicAccountApi(req, url) {
@@ -3560,6 +3717,15 @@ async function handlePublicAccountApi(req, url) {
     const body = await readBody(req);
     const state = await loadState();
     const result = loginAccount(state, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/guide") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = buyerGuideFromRequest(state, req, body);
     if (!result.ok) return { status: result.status || 401, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -3912,7 +4078,7 @@ export async function requestHandler(req, res) {
     const isSkillPath = pathname === "/skill" || pathname === "/api/skill";
     const isChatEventPath = pathname === "/chat-event" || pathname === "/api/chat-event";
     const adminApi = pathname.startsWith("/api/admin/");
-    const publicAccountApi = pathname === "/api/signup" || pathname === "/api/login";
+    const publicAccountApi = pathname === "/api/signup" || pathname === "/api/login" || pathname === "/api/buyer/guide";
 
     if (adminApi) {
       const adminResult = await handleAdminApi(req, url);

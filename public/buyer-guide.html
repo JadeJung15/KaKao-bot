@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>구매자 가이드 | 픽셀곰</title>
+    <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
+    <link rel="stylesheet" href="/styles.css?v=20260524-buyer">
+  </head>
+  <body class="sub-page buyer-page">
+    <header class="site-header" aria-label="구매자 메뉴">
+      <a class="brand" href="/" aria-label="픽셀곰 홈"><img src="/assets/pixgom-closeup.png" alt=""><span>픽셀곰</span></a>
+      <nav class="nav-links" aria-label="페이지 이동">
+        <a href="/login">로그인</a>
+        <a href="/store">스토어</a>
+        <a href="/updates">업데이트</a>
+        <a class="nav-cta" href="/signup">시작하기</a>
+      </nav>
+    </header>
+    <main class="document-main">
+      <section class="document-hero">
+        <p class="section-kicker">Buyer Guide</p>
+        <h1>구매자 전용 가이드</h1>
+        <p>승인된 구매자 계정으로 로그인하면 설치, 권한, 테스트, 문제 해결 안내가 열립니다.</p>
+      </section>
+
+      <section class="buyer-gate" data-buyer-gate>
+        <div>
+          <h2>구매 인증</h2>
+          <p>이 페이지의 상세 내용은 승인된 구매자에게만 서버에서 불러옵니다. 일반 방문자에게 설치 세부 정보와 라이선스 안내는 노출하지 않습니다.</p>
+        </div>
+        <form data-buyer-form>
+          <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
+          <label>비밀번호<input name="password" type="password" autocomplete="current-password" required placeholder="비밀번호"></label>
+          <button class="button button-primary" type="submit">가이드 열기</button>
+        </form>
+        <pre class="form-status" data-buyer-status aria-live="polite">구매 승인된 계정으로 로그인하세요.</pre>
+      </section>
+
+      <section class="buyer-content" data-buyer-content hidden></section>
+    </main>
+    <script>
+      const form = document.querySelector("[data-buyer-form]");
+      const statusBox = document.querySelector("[data-buyer-status]");
+      const content = document.querySelector("[data-buyer-content]");
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function renderGuide(data) {
+        const roomCards = data.rooms.map((room) => `
+          <article class="buyer-room-card">
+            <h3>${escapeHtml(room.roomName)}</h3>
+            <dl>
+              <div><dt>roomId</dt><dd>${escapeHtml(room.roomId || "미등록")}</dd></div>
+              <div><dt>오픈채팅 링크</dt><dd>${escapeHtml(room.roomLink || "미등록")}</dd></div>
+              <div><dt>관리자</dt><dd>${escapeHtml(room.adminName || "미등록")}</dd></div>
+              <div><dt>라이선스 키</dt><dd>${escapeHtml(room.licenseKey || "승인 후 발급")}</dd></div>
+              <div><dt>구독</dt><dd>${escapeHtml(room.subscription?.remainingDays ?? "-")}일 남음</dd></div>
+            </dl>
+          </article>
+        `).join("");
+        const sections = data.sections.map((section) => `
+          <article class="buyer-guide-section">
+            <h3>${escapeHtml(section.title)}</h3>
+            <ol>${section.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>
+          </article>
+        `).join("");
+        content.innerHTML = `
+          <div class="section-heading">
+            <p class="section-kicker">Approved</p>
+            <h2>${escapeHtml(data.account.email)} 구매자 가이드</h2>
+            <p>아래 정보는 구매 승인된 계정 기준으로 표시됩니다.</p>
+          </div>
+          <div class="buyer-room-grid">${roomCards}</div>
+          <div class="buyer-guide-grid">${sections}</div>
+        `;
+        content.hidden = false;
+        statusBox.textContent = "구매자 가이드를 불러왔습니다.";
+      }
+
+      async function requestGuide(payload) {
+        const response = await fetch("/api/buyer/guide", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const json = await response.json();
+        if (!response.ok || json.ok === false) throw new Error(json.error || "buyer_guide_failed");
+        if (json.guideToken) sessionStorage.setItem("pixgomBuyerToken", json.guideToken);
+        renderGuide(json);
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        statusBox.textContent = "구매 인증 중입니다.";
+        try {
+          await requestGuide(Object.fromEntries(new FormData(form).entries()));
+          form.reset();
+        } catch (error) {
+          statusBox.textContent = error.message === "buyer_approval_required"
+            ? "구매 승인 후 이용할 수 있습니다."
+            : `가이드 접근 실패: ${error.message}`;
+        }
+      });
+
+      const savedToken = sessionStorage.getItem("pixgomBuyerToken");
+      if (savedToken) {
+        requestGuide({ token: savedToken }).catch(() => sessionStorage.removeItem("pixgomBuyerToken"));
+      }
+    </script>
+  </body>
+</html>
