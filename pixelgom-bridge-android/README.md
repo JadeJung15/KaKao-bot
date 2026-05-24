@@ -16,11 +16,11 @@
 | 패키지명 | `com.pixgom.bridge` |
 | 앱 이름 | `픽셀곰 브릿지` |
 | 서버 | `https://pixgom.com/chat-event` |
-| 방별 설정 | `픽셀곰|gu25P5vi|https://open.kakao.com/o/gu25P5vi|픽셀곰 입장확인|픽셀곰` |
+| 방 설정 | 앱에서 방 이름, roomId, 링크, 입장확인 문구, 관리자, 라이선스 키를 각각 입력 |
 | 월 이용금액 | `5,500원` |
 | targetSdk | 35 |
 | 배포 형식 | Android App Bundle `.aab` |
-| 현재 버전 | `1.0.9` / versionCode `10` |
+| 현재 버전 | `1.0.10` / versionCode `11` |
 
 ## 로컬 빌드
 
@@ -60,8 +60,8 @@ Copy-Item .\keystore.properties.example .\keystore.properties
 2. 앱 실행
 3. `시작하기`
 4. `알림 접근 권한 열기`에서 `픽셀곰 브릿지` 알림 접근 허용
-5. 방별 설정이 실제 카카오방 이름과 다르면 앱 설정에서 수정
-6. 여러 방은 줄마다 `방이름|roomId|오픈채팅링크|입장확인문구|관리자1,관리자2` 형식으로 추가
+5. 대표 방 설정에서 방 이름, roomId, 링크, 입장확인 문구, 관리자, 라이선스 키 입력
+6. 추가 방은 `https://pixgom.com/admin` 관리 콘솔에서 등록
 7. `서버 테스트 전송`으로 서버 연결 확인
 8. 필요한 경우 `JS 자동응답 사용`을 켜고 스크립트를 저장
 9. 카카오방에서 `/상태`, `/브릿지`, `/js상태` 테스트

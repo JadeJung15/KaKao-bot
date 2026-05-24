@@ -27,6 +27,7 @@ final class BridgeLocalCommands {
                 "보낸사람: " + safe(event.sender) + "\n" +
                 "roomId: " + safe(event.roomId) + "\n" +
                 "방별 설정: " + BridgeConfig.roomProfileCount(context) + "개\n" +
+                "라이선스: " + safe(event.licenseKey) + "\n" +
                 "월 이용금액: 5,500원\n" +
                 "게임 기능: 준비 중\n" +
                 "알림 감지: 켜짐(카카오 알림이 있을 때)\n" +
@@ -41,6 +42,7 @@ final class BridgeLocalCommands {
         testEvent.rawRoom = event.rawRoom;
         testEvent.roomId = event.roomId;
         testEvent.roomLink = event.roomLink;
+        testEvent.licenseKey = event.licenseKey;
         testEvent.sender = event.sender;
         testEvent.message = "/js상태";
         testEvent.packageName = event.packageName;
@@ -62,6 +64,7 @@ final class BridgeLocalCommands {
                 "등록방: " + BridgeConfig.roomName(context) + "\n" +
                 "roomId: " + BridgeConfig.roomId(context) + "\n" +
                 "방별 설정: " + BridgeConfig.roomProfileCount(context) + "개\n" +
+                "라이선스: " + safe(event.licenseKey) + "\n" +
                 "월 이용금액: 5,500원\n" +
                 "게임 기능: 준비 중\n" +
                 "알림 감지: 켜짐(카카오 알림이 있을 때)\n" +

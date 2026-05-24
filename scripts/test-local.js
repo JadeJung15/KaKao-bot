@@ -17,6 +17,7 @@ if (!baseUrl) {
   testDbPath = path.join(repoRoot, "data", `test-room-ops-db-${process.pid}.json`);
   process.env.DB_PATH = testDbPath;
   process.env.ADMIN_NAMES = "";
+  process.env.ADMIN_CONSOLE_TOKEN = "test-admin-token";
   await unlink(testDbPath).catch(() => {});
 
   const { requestHandler } = await import("../server.js");
@@ -100,7 +101,10 @@ try {
   assert.match(health.json.features.join(","), /room-join-phrase/);
   assert.match(health.json.features.join(","), /commercial-subscription-gate/);
   assert.match(health.json.features.join(","), /future-game-roadmap/);
+  assert.match(health.json.features.join(","), /license-key-guard/);
+  assert.match(health.json.features.join(","), /admin-console-api/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
+  assert.equal(health.json.adminConsoleEnabled, true);
 
   const home = await fetch(`${baseUrl}/`);
   assert.equal(home.status, 200);
@@ -120,8 +124,62 @@ try {
   assert.match(homeText, /화면 감지 없이/);
   assert.match(homeText, /5,500원/);
   assert.match(homeText, /게임/);
+  assert.match(homeText, /관리 콘솔/);
   assert.match(homeText, /href="https:\/\/open\.kakao\.com\/o\/gu25P5vi"/);
   assert.match(homeText, />문의<\/a>/);
+
+  const adminPage = await fetch(`${baseUrl}/admin`);
+  assert.equal(adminPage.status, 200);
+  assert.match(await adminPage.text(), /픽셀곰 관리 콘솔/);
+
+  const adminUnauthorized = await request("/api/admin/rooms");
+  assert.equal(adminUnauthorized.response.status, 401);
+  assert.equal(adminUnauthorized.json.error, "unauthorized");
+
+  const adminRoom = await request("/api/admin/rooms", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({
+      room: "콘솔방",
+      roomId: "consoleRoom1",
+      roomLink: "https://open.kakao.com/o/consoleRoom1",
+      joinPhrase: "콘솔 입장확인",
+      roomAdmins: ["콘솔관리자"],
+      licenseKey: "PXG-CONSOLE-1234",
+      subscriptionExpiresAt: "2099-12-31"
+    })
+  });
+  assert.equal(adminRoom.response.status, 200);
+  assert.equal(adminRoom.json.room.licenseKey, "PXG-CONSOLE-1234");
+  assert.match(adminRoom.json.room.subscription.expiresAt, /2099/);
+
+  const adminRooms = await request("/api/admin/rooms?token=test-admin-token");
+  assert.equal(adminRooms.response.status, 200);
+  assert.match(JSON.stringify(adminRooms.json.rooms), /콘솔방/);
+
+  const missingLicense = await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/상태",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1"
+  });
+  assert.equal(missingLicense.json.ignored, true);
+  assert.equal(missingLicense.json.reason, "missing_license");
+  assert.match(missingLicense.json.reply, /라이선스 확인/);
+
+  const licensedStatus = await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/상태",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: "PXG-CONSOLE-1234"
+  });
+  assert.equal(licensedStatus.json.ignored, false);
+  assert.match(licensedStatus.json.reply, /운영봇 서버 정상 연결/);
 
   const help = await request("/skill", {
     method: "POST",
@@ -216,7 +274,8 @@ try {
     msg: "/방등록 픽셀곰 입장확인",
     sender: "판매관리자",
     roomId: "salesRoom1",
-    roomLink: "https://open.kakao.com/o/salesRoom1"
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: "PXG-SALES-1234"
   });
   assert.equal(roomRegister.json.ignored, false);
   assert.match(roomRegister.json.reply, /방 등록 완료/);
@@ -228,7 +287,8 @@ try {
     msg: "/방정보",
     sender: "판매관리자",
     roomId: "salesRoom1",
-    roomLink: "https://open.kakao.com/o/salesRoom1"
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: "PXG-SALES-1234"
   });
   assert.match(roomInfo.json.reply, /판매테스트방 방 설정/);
   assert.match(roomInfo.json.reply, /입장확인 문구: 픽셀곰 입장확인/);
@@ -242,6 +302,7 @@ try {
     sender: "만료관리자",
     roomId: "expiredRoom1",
     roomLink: "https://open.kakao.com/o/expiredRoom1",
+    licenseKey: "PXG-EXP-1234",
     subscriptionExpiresAt: "2020-01-01T00:00:00.000Z"
   });
   assert.equal(expiredRoomRegister.json.ignored, false);
@@ -255,7 +316,8 @@ try {
     msg: "/출석",
     sender: "일반사용자",
     roomId: "expiredRoom1",
-    roomLink: "https://open.kakao.com/o/expiredRoom1"
+    roomLink: "https://open.kakao.com/o/expiredRoom1",
+    licenseKey: "PXG-EXP-1234"
   });
   assert.equal(expiredAttendance.json.ignored, false);
   assert.match(expiredAttendance.json.reply, /이용기간이 만료/);
@@ -267,7 +329,8 @@ try {
     msg: "/구독상태",
     sender: "만료관리자",
     roomId: "expiredRoom1",
-    roomLink: "https://open.kakao.com/o/expiredRoom1"
+    roomLink: "https://open.kakao.com/o/expiredRoom1",
+    licenseKey: "PXG-EXP-1234"
   });
   assert.match(expiredStatus.json.reply, /구독 상태/);
   assert.match(expiredStatus.json.reply, /만료/);
@@ -279,7 +342,8 @@ try {
     msg: "/구독연장 1",
     sender: "일반사용자",
     roomId: "expiredRoom1",
-    roomLink: "https://open.kakao.com/o/expiredRoom1"
+    roomLink: "https://open.kakao.com/o/expiredRoom1",
+    licenseKey: "PXG-EXP-1234"
   });
   assert.match(extendDenied.json.reply, /관리자 전용/);
 
@@ -289,7 +353,8 @@ try {
     msg: "/구독연장 1",
     sender: "만료관리자",
     roomId: "expiredRoom1",
-    roomLink: "https://open.kakao.com/o/expiredRoom1"
+    roomLink: "https://open.kakao.com/o/expiredRoom1",
+    licenseKey: "PXG-EXP-1234"
   });
   assert.match(extendSubscription.json.reply, /구독이 연장/);
   assert.match(extendSubscription.json.reply, /월 이용금액: 5,500원/);
@@ -300,7 +365,8 @@ try {
     msg: "/출석",
     sender: "일반사용자",
     roomId: "expiredRoom1",
-    roomLink: "https://open.kakao.com/o/expiredRoom1"
+    roomLink: "https://open.kakao.com/o/expiredRoom1",
+    licenseKey: "PXG-EXP-1234"
   });
   assert.doesNotMatch(activeAfterExtend.json.reply, /이용기간이 만료/);
 
@@ -310,7 +376,8 @@ try {
     msg: "픽셀곰 입장확인",
     sender: "오픈채팅봇",
     roomId: "salesRoom1",
-    roomLink: "https://open.kakao.com/o/salesRoom1"
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: "PXG-SALES-1234"
   });
   assert.equal(joinSignal.json.reply, null);
 
@@ -320,7 +387,8 @@ try {
     msg: "안녕",
     sender: "새고객 남",
     roomId: "salesRoom1",
-    roomLink: "https://open.kakao.com/o/salesRoom1"
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: "PXG-SALES-1234"
   });
   assert.equal(joinedFirstChat.json.reply, null);
 
@@ -330,7 +398,8 @@ try {
     msg: "/닉이력 새고객 남",
     sender: "판매관리자",
     roomId: "salesRoom1",
-    roomLink: "https://open.kakao.com/o/salesRoom1"
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: "PXG-SALES-1234"
   });
   assert.match(joinedHistory.json.reply, /새고객 남님 히스토리/);
   assert.doesNotMatch(joinedHistory.json.reply, /입장 히스토리\s+기록 없음/);

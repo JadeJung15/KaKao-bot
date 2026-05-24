@@ -29,7 +29,12 @@ public class MainActivity extends Activity {
     private TextView permissionStatus;
     private TextView logView;
     private EditText serverUrlInput;
-    private EditText roomProfilesInput;
+    private EditText roomNameInput;
+    private EditText roomIdInput;
+    private EditText roomLinkInput;
+    private EditText joinPhraseInput;
+    private EditText adminsInput;
+    private EditText licenseKeyInput;
     private EditText scriptSourceInput;
     private Switch enabledSwitch;
     private Switch scriptEnabledSwitch;
@@ -80,23 +85,36 @@ public class MainActivity extends Activity {
         version.setPadding(0, 0, 0, dp(12));
         root.addView(version);
 
-        TextView subtitle = text("픽셀곰 오픈채팅 운영봇을 카카오 알림, 서버, 로컬 JS 자동응답과 연결합니다.", 15, Color.rgb(87, 64, 47), false);
+        TextView subtitle = text("오픈채팅 운영봇을 카카오 알림 기반으로 연결합니다. 화면 감지는 사용하지 않습니다.", 15, Color.rgb(87, 64, 47), false);
         root.addView(subtitle);
 
         LinearLayout infoPanel = panel();
         infoPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
         root.addView(infoPanel);
 
-        infoPanel.addView(labelValue("오픈채팅방 주소", BridgeConfig.roomLink(this)));
-        infoPanel.addView(labelValue("홈페이지 주소", WEBSITE_URL));
+        BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
+        infoPanel.addView(statusRow("알림 권한", notificationPermissionEnabled() ? "허용됨" : "필요", notificationPermissionEnabled()));
+        infoPanel.addView(labelValue("등록 방", profile.name));
+        infoPanel.addView(labelValue("입장확인 문구", profile.joinPhrase));
+        infoPanel.addView(labelValue("라이선스 키", TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey));
         infoPanel.addView(labelValue("월 이용금액", "5,500원 / 방 1개 / 30일"));
-        infoPanel.addView(labelValue("방별 설정", BridgeConfig.roomProfileCount(this) + "개"));
-        infoPanel.addView(labelValue("등록 방", BridgeConfig.roomName(this) + " / " + BridgeConfig.roomId(this)));
-        infoPanel.addView(labelValue("게임 기능", "준비 중"));
+        infoPanel.addView(labelValue("관리 콘솔", WEBSITE_URL + "/admin"));
+
+        LinearLayout stepsPanel = panel();
+        stepsPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        root.addView(stepsPanel);
+        stepsPanel.addView(text("처음 설정 순서", 18, Color.rgb(58, 37, 24), true));
+        stepsPanel.addView(stepText("1", "알림 접근 권한을 허용합니다."));
+        stepsPanel.addView(stepText("2", "방 이름, 링크, 관리자, 라이선스를 입력합니다."));
+        stepsPanel.addView(stepText("3", "서버 테스트 전송 후 카카오방에서 /브릿지를 확인합니다."));
 
         Button startButton = primaryButton("시작하기");
         startButton.setOnClickListener(v -> showMain());
         root.addView(startButton);
+
+        Button permissionButton = secondaryButton("알림 권한 열기");
+        permissionButton.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+        root.addView(permissionButton);
 
         Button openChatButton = secondaryButton("오픈채팅방 열기");
         openChatButton.setOnClickListener(v -> openUrl(BridgeConfig.roomLink(this)));
@@ -105,6 +123,10 @@ public class MainActivity extends Activity {
         Button websiteButton = secondaryButton("홈페이지 열기");
         websiteButton.setOnClickListener(v -> openUrl(WEBSITE_URL));
         root.addView(websiteButton);
+
+        Button consoleButton = secondaryButton("관리 콘솔 열기");
+        consoleButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/admin"));
+        root.addView(consoleButton);
 
         return scrollView;
     }
@@ -134,7 +156,7 @@ public class MainActivity extends Activity {
         title.setPadding(0, dp(18), 0, dp(4));
         root.addView(title);
 
-        TextView subtitle = text("등록된 카카오 오픈채팅 알림만 서버로 전달하고, 서버 응답을 카카오 답장 액션으로 보냅니다.", 15, Color.rgb(87, 64, 47), false);
+        TextView subtitle = text("방 설정은 한 칸씩 입력하면 됩니다. 복잡한 구분자 형식은 더 이상 직접 입력하지 않아도 됩니다.", 15, Color.rgb(87, 64, 47), false);
         root.addView(subtitle);
 
         permissionStatus = text("", 14, Color.rgb(58, 37, 24), false);
@@ -160,12 +182,32 @@ public class MainActivity extends Activity {
         serverUrlInput = input("서버 URL", BridgeConfig.serverUrl(this));
         panel.addView(serverUrlInput);
 
-        TextView roomProfileGuide = text("방별 설정: 방이름|roomId|오픈채팅링크|입장확인문구|관리자1,관리자2", 13, Color.rgb(111, 78, 49), true);
-        roomProfileGuide.setPadding(0, dp(12), 0, 0);
-        panel.addView(roomProfileGuide);
+        TextView roomTitle = text("대표 방 설정", 20, Color.rgb(58, 37, 24), true);
+        roomTitle.setPadding(0, dp(16), 0, 0);
+        panel.addView(roomTitle);
 
-        roomProfilesInput = multiLineInput(BridgeConfig.roomProfilesText(this), 5);
-        panel.addView(roomProfilesInput);
+        BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
+        roomNameInput = input("카카오 방 이름", profile.name);
+        panel.addView(roomNameInput);
+
+        roomIdInput = input("오픈채팅 roomId", profile.roomId);
+        panel.addView(roomIdInput);
+
+        roomLinkInput = input("오픈채팅 링크", profile.roomLink);
+        panel.addView(roomLinkInput);
+
+        joinPhraseInput = input("입장확인 문구", profile.joinPhrase);
+        panel.addView(joinPhraseInput);
+
+        adminsInput = input("관리자 닉네임(쉼표로 구분)", TextUtils.join(",", profile.admins));
+        panel.addView(adminsInput);
+
+        licenseKeyInput = input("라이선스 키", TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey);
+        panel.addView(licenseKeyInput);
+
+        TextView roomHelp = text("추가 방은 홈페이지 관리 콘솔에서 등록하고, 앱에는 실제 봇폰이 들어간 대표 방을 먼저 설정하세요.", 13, Color.rgb(111, 78, 49), false);
+        roomHelp.setPadding(0, dp(10), 0, 0);
+        panel.addView(roomHelp);
 
         Button saveButton = primaryButton("설정 저장");
         saveButton.setOnClickListener(v -> saveSettings());
@@ -178,6 +220,10 @@ public class MainActivity extends Activity {
         Button privacyButton = secondaryButton("개인정보처리방침 열기");
         privacyButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/privacy"));
         panel.addView(privacyButton);
+
+        Button consoleButton = secondaryButton("관리 콘솔 열기");
+        consoleButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/admin"));
+        panel.addView(consoleButton);
 
         TextView scriptTitle = text("로컬 JS 자동응답", 20, Color.rgb(58, 37, 24), true);
         scriptTitle.setPadding(0, dp(18), 0, dp(8));
@@ -244,7 +290,12 @@ public class MainActivity extends Activity {
         permissionStatus = null;
         logView = null;
         serverUrlInput = null;
-        roomProfilesInput = null;
+        roomNameInput = null;
+        roomIdInput = null;
+        roomLinkInput = null;
+        joinPhraseInput = null;
+        adminsInput = null;
+        licenseKeyInput = null;
         scriptSourceInput = null;
         enabledSwitch = null;
         scriptEnabledSwitch = null;
@@ -253,12 +304,20 @@ public class MainActivity extends Activity {
     private void saveSettings() {
         BridgeConfig.setEnabled(this, enabledSwitch.isChecked());
         BridgeConfig.setServerUrl(this, serverUrlInput.getText().toString());
-        BridgeConfig.setRoomProfilesText(this, roomProfilesInput.getText().toString());
+        BridgeConfig.setPrimaryRoomProfile(
+                this,
+                roomNameInput.getText().toString(),
+                roomIdInput.getText().toString(),
+                roomLinkInput.getText().toString(),
+                joinPhraseInput.getText().toString(),
+                adminsInput.getText().toString(),
+                licenseKeyInput.getText().toString()
+        );
         BridgeConfig.setAccessibilitySystemEventsEnabled(this, false);
         BridgeConfig.setAccessibilityAutoReplyEnabled(this, false);
         BridgeConfig.setScriptEnabled(this, scriptEnabledSwitch.isChecked());
         BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
-        BridgeConfig.appendLog(this, "설정 저장됨 rooms=" + BridgeConfig.roomProfileCount(this) + " primary=" + BridgeConfig.roomName(this) + " js=" + BridgeConfig.scriptEnabled(this));
+        BridgeConfig.appendLog(this, "설정 저장됨 room=" + BridgeConfig.roomName(this) + " id=" + BridgeConfig.roomId(this) + " js=" + BridgeConfig.scriptEnabled(this));
         refreshStatus();
         refreshLogs();
     }
@@ -390,6 +449,33 @@ public class MainActivity extends Activity {
         valueView.setPadding(0, dp(2), 0, 0);
         layout.addView(labelView);
         layout.addView(valueView);
+        return layout;
+    }
+
+    private LinearLayout statusRow(String label, String value, boolean ok) {
+        LinearLayout layout = labelValue(label, value);
+        TextView valueView = (TextView) layout.getChildAt(1);
+        valueView.setTextColor(ok ? Color.rgb(30, 104, 58) : Color.rgb(184, 74, 43));
+        valueView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        return layout;
+    }
+
+    private LinearLayout stepText(String number, String value) {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.HORIZONTAL);
+        layout.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(10), 0, 0);
+        layout.setLayoutParams(params);
+
+        TextView badge = text(number, 13, Color.WHITE, true);
+        badge.setGravity(Gravity.CENTER);
+        badge.setBackgroundColor(Color.rgb(62, 128, 106));
+        layout.addView(badge, new LinearLayout.LayoutParams(dp(28), dp(28)));
+
+        TextView body = text(value, 14, Color.rgb(87, 64, 47), false);
+        body.setPadding(dp(10), 0, 0, 0);
+        layout.addView(body, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         return layout;
     }
 

@@ -11,6 +11,7 @@ final class BridgeEvent {
     String eventType;
     String targetName;
     String joinPhrase;
+    String licenseKey;
     String[] roomAdmins;
     int monthlyPriceKrw;
     boolean groupChat;

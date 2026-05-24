@@ -28,6 +28,7 @@ final class EventSender {
             payload.put("eventType", event.eventType == null ? "" : event.eventType);
             payload.put("targetName", event.targetName == null ? "" : event.targetName);
             payload.put("joinPhrase", event.joinPhrase == null ? "" : event.joinPhrase);
+            payload.put("licenseKey", event.licenseKey == null ? "" : event.licenseKey);
             payload.put("monthlyPriceKrw", event.monthlyPriceKrw > 0 ? event.monthlyPriceKrw : BridgeConfig.MONTHLY_PRICE_KRW);
             payload.put("roomAdmins", new JSONArray(event.roomAdmins == null ? new String[0] : event.roomAdmins));
             payload.put("isGroupChat", event.groupChat);

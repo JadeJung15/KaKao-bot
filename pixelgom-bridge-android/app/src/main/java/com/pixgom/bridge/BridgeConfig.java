@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 final class BridgeConfig {
     static final String KAKAO_PACKAGE = "com.kakao.talk";
@@ -27,6 +28,7 @@ final class BridgeConfig {
     private static final String KEY_ROOM_ID = "room_id";
     private static final String KEY_ROOM_LINK = "room_link";
     private static final String KEY_ROOM_PROFILES = "room_profiles";
+    private static final String KEY_DEVICE_LICENSE = "device_license";
     private static final String KEY_SCRIPT_ENABLED = "script_enabled";
     private static final String KEY_SCRIPT_SOURCE = "script_source";
     private static final String KEY_ACCESSIBILITY_SYSTEM_EVENTS = "accessibility_system_events";
@@ -47,7 +49,7 @@ final class BridgeConfig {
             String roomName = textOrDefault(prefs.getString(KEY_ROOM_NAME, DEFAULT_ROOM_NAME), DEFAULT_ROOM_NAME);
             String roomId = textOrDefault(prefs.getString(KEY_ROOM_ID, DEFAULT_ROOM_ID), DEFAULT_ROOM_ID);
             String roomLink = textOrDefault(prefs.getString(KEY_ROOM_LINK, DEFAULT_ROOM_LINK), DEFAULT_ROOM_LINK);
-            prefs.edit().putString(KEY_ROOM_PROFILES, roomProfileLine(roomName, roomId, roomLink, DEFAULT_JOIN_PHRASE, DEFAULT_ROOM_NAME)).apply();
+            prefs.edit().putString(KEY_ROOM_PROFILES, roomProfileLine(roomName, roomId, roomLink, DEFAULT_JOIN_PHRASE, DEFAULT_ROOM_NAME, deviceLicenseKey(context))).apply();
         }
         if (prefs.getBoolean(KEY_RECORD_ONLY_MIGRATION, false)) return;
         String currentServerUrl = prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL);
@@ -106,7 +108,31 @@ final class BridgeConfig {
     }
 
     static String defaultRoomProfilesText() {
-        return roomProfileLine(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, DEFAULT_ROOM_NAME);
+        return roomProfileLine(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, DEFAULT_ROOM_NAME, "");
+    }
+
+    static String deviceLicenseKey(Context context) {
+        SharedPreferences prefs = prefs(context);
+        String existing = prefs.getString(KEY_DEVICE_LICENSE, "");
+        if (!TextUtils.isEmpty(existing)) return existing;
+        String created = "PXG-" + DEFAULT_ROOM_ID.toUpperCase(Locale.ROOT) + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
+        prefs.edit().putString(KEY_DEVICE_LICENSE, created).apply();
+        return created;
+    }
+
+    static void setPrimaryRoomProfile(Context context, String name, String roomId, String roomLink, String joinPhrase, String admins, String licenseKey) {
+        List<RoomProfile> profiles = roomProfiles(context);
+        RoomProfile updated = new RoomProfile(name, roomId, roomLink, joinPhrase, adminList(admins), textOrDefault(licenseKey, deviceLicenseKey(context)));
+        if (profiles.isEmpty()) {
+            profiles.add(updated);
+        } else {
+            profiles.set(0, updated);
+        }
+        List<String> lines = new ArrayList<>();
+        for (RoomProfile profile : profiles) {
+            lines.add(roomProfileLine(profile.name, profile.roomId, profile.roomLink, profile.joinPhrase, TextUtils.join(",", profile.admins), profile.licenseKey));
+        }
+        prefs(context).edit().putString(KEY_ROOM_PROFILES, TextUtils.join("\n", lines)).apply();
     }
 
     static List<RoomProfile> roomProfiles(Context context) {
@@ -120,7 +146,7 @@ final class BridgeConfig {
     static RoomProfile firstRoomProfile(Context context) {
         List<RoomProfile> profiles = roomProfiles(context);
         return profiles.isEmpty()
-                ? new RoomProfile(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, new String[]{ DEFAULT_ROOM_NAME })
+                ? new RoomProfile(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, new String[]{ DEFAULT_ROOM_NAME }, deviceLicenseKey(context))
                 : profiles.get(0);
     }
 
@@ -153,6 +179,7 @@ final class BridgeConfig {
         event.roomId = profile.roomId;
         event.roomLink = profile.roomLink;
         event.joinPhrase = profile.joinPhrase;
+        event.licenseKey = profile.licenseKey;
         event.roomAdmins = profile.admins;
         event.monthlyPriceKrw = MONTHLY_PRICE_KRW;
     }
@@ -241,10 +268,11 @@ final class BridgeConfig {
             String roomLink = parts.length > 2 ? textOrDefault(parts[2], DEFAULT_ROOM_LINK) : DEFAULT_ROOM_LINK;
             String joinPhrase = parts.length > 3 ? textOrDefault(parts[3], DEFAULT_JOIN_PHRASE) : DEFAULT_JOIN_PHRASE;
             String adminsText = parts.length > 4 ? parts[4] : name;
-            profiles.add(new RoomProfile(name, roomId, roomLink, joinPhrase, adminList(adminsText)));
+            String licenseKey = parts.length > 5 ? parts[5] : "";
+            profiles.add(new RoomProfile(name, roomId, roomLink, joinPhrase, adminList(adminsText), licenseKey));
         }
         if (profiles.isEmpty()) {
-            profiles.add(new RoomProfile(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, new String[]{ DEFAULT_ROOM_NAME }));
+            profiles.add(new RoomProfile(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, new String[]{ DEFAULT_ROOM_NAME }, ""));
         }
         return profiles;
     }
@@ -260,12 +288,13 @@ final class BridgeConfig {
         return admins.toArray(new String[0]);
     }
 
-    private static String roomProfileLine(String name, String roomId, String roomLink, String joinPhrase, String admins) {
+    private static String roomProfileLine(String name, String roomId, String roomLink, String joinPhrase, String admins, String licenseKey) {
         return textOrDefault(name, DEFAULT_ROOM_NAME) + "|"
                 + textOrDefault(roomId, DEFAULT_ROOM_ID) + "|"
                 + textOrDefault(roomLink, DEFAULT_ROOM_LINK) + "|"
                 + textOrDefault(joinPhrase, DEFAULT_JOIN_PHRASE) + "|"
-                + textOrDefault(admins, DEFAULT_ROOM_NAME);
+                + textOrDefault(admins, DEFAULT_ROOM_NAME) + "|"
+                + textOrDefault(licenseKey, "");
     }
 
     static void appendLog(Context context, String line) {
@@ -309,13 +338,15 @@ final class BridgeConfig {
         final String roomLink;
         final String joinPhrase;
         final String[] admins;
+        final String licenseKey;
 
-        RoomProfile(String name, String roomId, String roomLink, String joinPhrase, String[] admins) {
+        RoomProfile(String name, String roomId, String roomLink, String joinPhrase, String[] admins, String licenseKey) {
             this.name = textOrDefault(name, DEFAULT_ROOM_NAME);
             this.roomId = textOrDefault(roomId, DEFAULT_ROOM_ID);
             this.roomLink = textOrDefault(roomLink, DEFAULT_ROOM_LINK);
             this.joinPhrase = textOrDefault(joinPhrase, DEFAULT_JOIN_PHRASE);
             this.admins = admins == null || admins.length == 0 ? new String[]{ DEFAULT_ROOM_NAME } : admins;
+            this.licenseKey = textOrDefault(licenseKey, "");
         }
     }
 

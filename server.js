@@ -1,4 +1,5 @@
 import http from "node:http";
+import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { existsSync } from "node:fs";
@@ -24,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.38";
+export const APP_VERSION = "0.4.39";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -74,12 +75,15 @@ export const FEATURES = [
   "multi-room-registry",
   "room-join-phrase",
   "commercial-bridge-mode",
-  "commercial-subscription-gate"
+  "commercial-subscription-gate",
+  "license-key-guard",
+  "admin-console-api"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
 const MONTHLY_PRICE_KRW = Math.max(0, Number(process.env.MONTHLY_PRICE_KRW || 5500)) || 5500;
 const DEFAULT_SUBSCRIPTION_DAYS = Math.max(1, Number(process.env.DEFAULT_SUBSCRIPTION_DAYS || 30));
+const ADMIN_CONSOLE_TOKEN = normalizeText(process.env.ADMIN_CONSOLE_TOKEN || process.env.PIXGOM_ADMIN_TOKEN || "");
 
 const CHAT_POINT_REWARD = 2;
 const CHAT_EXP_REWARD = 1;
@@ -235,7 +239,7 @@ async function staticResponse(req, res, pathname) {
 
   let relativePath;
   try {
-    relativePath = pathname === "/" ? "index.html" : decodeURIComponent(pathname.replace(/^\/+/, ""));
+    relativePath = pathname === "/" ? "index.html" : pathname === "/admin" ? "admin.html" : decodeURIComponent(pathname.replace(/^\/+/, ""));
   } catch {
     return false;
   }
@@ -402,6 +406,23 @@ function ensureRoom(state, room) {
 function formatKrw(value) {
   const amount = Math.max(0, Number(value || 0));
   return `${amount.toLocaleString("ko-KR")}원`;
+}
+
+function normalizeLicenseKey(value) {
+  return compactSpaces(value).toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 80);
+}
+
+function maskedLicenseKey(value) {
+  const key = normalizeLicenseKey(value);
+  if (!key) return "미발급";
+  if (key.length <= 8) return key;
+  return `${key.slice(0, 7)}…${key.slice(-4)}`;
+}
+
+function generateLicenseKey(roomState) {
+  const roomId = openChatRoomId(roomState?.settings?.roomIds?.[0] || "");
+  const roomPart = (roomId || roomKey(roomState?.name || "room")).replace(/[^A-Za-z0-9]/g, "").slice(0, 8).toUpperCase() || "ROOM";
+  return `PXG-${roomPart}-${randomBytes(3).toString("hex").toUpperCase()}`;
 }
 
 function addDaysIso(sourceDate, days) {
@@ -1181,6 +1202,43 @@ function subscriptionStatusCommand(roomState) {
   return subscriptionLines(roomState).join("\n");
 }
 
+function licenseSettings(roomState) {
+  roomState.settings ||= {};
+  roomState.settings.license ||= {};
+  roomState.settings.license.key = normalizeLicenseKey(roomState.settings.license.key || roomState.settings.licenseKey || "");
+  delete roomState.settings.licenseKey;
+  return roomState.settings.license;
+}
+
+function applyLicenseFromPayload(roomState, payload = {}) {
+  const license = licenseSettings(roomState);
+  const incoming = normalizeLicenseKey(payload.licenseKey || payload.roomLicenseKey || payload.bridgeLicenseKey);
+  license.key = incoming || license.key || generateLicenseKey(roomState);
+  license.status = "active";
+  license.updatedAt = nowIso();
+  return license;
+}
+
+function licenseGuardResult(roomState, payload = {}, message = "", registrationCommand = false) {
+  if (registrationCommand) return null;
+  const license = licenseSettings(roomState);
+  if (!license.key) return null;
+  const incoming = normalizeLicenseKey(payload.licenseKey || payload.roomLicenseKey || payload.bridgeLicenseKey);
+  if (incoming && incoming === license.key) return null;
+  const isCommand = normalizeText(message).startsWith("/");
+  return {
+    ok: true,
+    reply: isCommand ? [
+      "픽셀곰 브릿지 라이선스 확인이 필요합니다.",
+      `방: ${roomState.name || "미지정"}`,
+      `라이선스: ${incoming ? "불일치" : "미전송"}`,
+      "앱의 방 설정에서 라이선스 키를 확인하세요."
+    ].join("\n") : null,
+    ignored: true,
+    reason: incoming ? "invalid_license" : "missing_license"
+  };
+}
+
 function subscriptionExtendCommand(roomState, sender, text) {
   const denied = requireAdmin(roomState, sender);
   if (denied) return denied;
@@ -1245,6 +1303,7 @@ function roomSettingsLines(roomState) {
   const ids = (settings.roomIds || []).filter(Boolean);
   const links = (settings.roomLinks || []).filter(Boolean);
   const subscription = updateSubscriptionStatus(roomState);
+  const license = licenseSettings(roomState);
   return [
     `${roomState.name || "현재방"} 방 설정`,
     "",
@@ -1256,6 +1315,7 @@ function roomSettingsLines(roomState) {
     `월 이용금액: ${formatKrw(subscription.monthlyPriceKrw)}`,
     `이용기간 만료: ${formatSubscriptionDate(subscription.expiresAt)}`,
     `구독 상태: ${subscription.status === "expired" ? "만료" : subscription.status === "active" ? "정상" : "미설정"}`,
+    `라이선스: ${maskedLicenseKey(license.key)}`,
     "게임 기능: 준비 중"
   ];
 }
@@ -1311,6 +1371,7 @@ function roomRegisterCommand(roomState, sender, text, payload = {}) {
   for (const link of links) addUnique(roomState.settings.roomLinks, link);
   for (const adminName of payloadAdminNames(payload)) addUnique(roomState.admins, adminName);
   if (!hasAnyAdmin(roomState)) addUnique(roomState.admins, sender);
+  applyLicenseFromPayload(roomState, payload);
   applySubscriptionFromPayload(roomState, payload);
   recordRoomEvent(roomState, { type: "room_registered", by: sender, joinPhrase: phrase });
 
@@ -2573,6 +2634,7 @@ export function healthPayload() {
     gameRoadmapEnabled: true,
     monthlyPriceKrw: MONTHLY_PRICE_KRW,
     defaultSubscriptionDays: DEFAULT_SUBSCRIPTION_DAYS,
+    adminConsoleEnabled: Boolean(ADMIN_CONSOLE_TOKEN),
     features: FEATURES
   };
 }
@@ -2649,6 +2711,119 @@ function kakaoText(text) {
       outputs: [{ simpleText: { text } }]
     }
   };
+}
+
+function adminTokenFromRequest(req, url, body = {}) {
+  return normalizeText(
+    req.headers["x-admin-token"]
+      || req.headers.authorization?.replace(/^Bearer\s+/i, "")
+      || url.searchParams.get("token")
+      || body.token
+  );
+}
+
+function requireAdminConsole(req, url, body = {}) {
+  if (!ADMIN_CONSOLE_TOKEN) {
+    return { ok: false, status: 503, error: "admin_console_token_not_configured" };
+  }
+  if (adminTokenFromRequest(req, url, body) !== ADMIN_CONSOLE_TOKEN) {
+    return { ok: false, status: 401, error: "unauthorized" };
+  }
+  return { ok: true };
+}
+
+function roomAdminView(roomState) {
+  const settings = roomState.settings || {};
+  const subscription = updateSubscriptionStatus(roomState);
+  const license = licenseSettings(roomState);
+  return {
+    name: roomState.name || "",
+    registered: Boolean(settings.registered),
+    enabled: settings.enabled !== false,
+    roomIds: settings.roomIds || [],
+    roomLinks: settings.roomLinks || [],
+    joinPhrase: settings.joinPhrase || DEFAULT_JOIN_PHRASE,
+    admins: roomState.admins || [],
+    licenseKey: license.key || "",
+    subscription: {
+      status: subscription.status || "unset",
+      monthlyPriceKrw: subscription.monthlyPriceKrw || MONTHLY_PRICE_KRW,
+      startedAt: subscription.startedAt || "",
+      expiresAt: subscription.expiresAt || ""
+    }
+  };
+}
+
+function adminRoomsPayload(state) {
+  const rooms = Object.values(state.rooms || {})
+    .map(roomAdminView)
+    .sort((left, right) => keyFor(left.name).localeCompare(keyFor(right.name)));
+  return {
+    ok: true,
+    version: APP_VERSION,
+    monthlyPriceKrw: MONTHLY_PRICE_KRW,
+    defaultSubscriptionDays: DEFAULT_SUBSCRIPTION_DAYS,
+    rooms
+  };
+}
+
+function adminUpsertRoom(state, payload = {}) {
+  const roomName = normalizeText(payload.room || payload.name);
+  if (!roomName) return { ok: false, status: 400, error: "room_required" };
+  const roomState = ensureRoom(state, roomName);
+  const settings = roomState.settings;
+  const roomId = payloadRoomId(payload);
+  const link = normalizeText(payload.roomLink || payload.openChatLink || payload.link || "");
+  const joinPhrase = normalizeText(payload.joinPhrase || payload.roomJoinPhrase || settings.joinPhrase || DEFAULT_JOIN_PHRASE);
+
+  settings.registered = payload.registered === false ? false : true;
+  settings.enabled = payload.enabled === false ? false : true;
+  settings.joinPhrase = joinPhrase;
+  settings.registeredAt ||= nowIso();
+  settings.registeredBy ||= "admin_console";
+  if (roomId) addUnique(settings.roomIds, roomId);
+  if (link) addUnique(settings.roomLinks, link);
+
+  const admins = payloadAdminNames(payload);
+  if (admins.length) roomState.admins = admins;
+
+  const license = licenseSettings(roomState);
+  license.key = normalizeLicenseKey(payload.licenseKey) || license.key || generateLicenseKey(roomState);
+  license.status = payload.licenseStatus === "paused" ? "paused" : "active";
+  license.updatedAt = nowIso();
+
+  const subscription = subscriptionSettings(roomState);
+  subscription.monthlyPriceKrw = Number(payload.monthlyPriceKrw || MONTHLY_PRICE_KRW);
+  subscription.startedAt ||= parseSubscriptionDate(payload.subscriptionStartedAt || payload.subscriptionStartAt) || nowIso();
+  subscription.expiresAt = parseSubscriptionDate(payload.subscriptionExpiresAt || payload.subscriptionExpireAt || payload.subscriptionEndAt)
+    || subscription.expiresAt
+    || addDaysIso(new Date(), DEFAULT_SUBSCRIPTION_DAYS);
+  subscription.status = isSubscriptionExpired(roomState) ? "expired" : "active";
+
+  recordRoomEvent(roomState, { type: "admin_console_room_saved", by: "admin_console", joinPhrase, licenseKey: maskedLicenseKey(license.key) });
+  return { ok: true, room: roomAdminView(roomState) };
+}
+
+async function handleAdminApi(req, url) {
+  if (req.method === "GET" && url.pathname === "/api/admin/rooms") {
+    const auth = requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return { status: 200, body: adminRoomsPayload(state) };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/rooms") {
+    const body = await readBody(req);
+    const auth = requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminUpsertRoom(state, body);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  return null;
 }
 
 async function handleCommand(state, room, sender, message, identity = {}) {
@@ -2776,6 +2951,11 @@ export async function handleChatEvent(payload) {
   if (!registeredRoom && !registrationCommand) {
     return { ok: true, reply: null, ignored: true, reason: "unregistered_room" };
   }
+  const licenseGuard = licenseGuardResult(roomState, payload, message, registrationCommand);
+  if (licenseGuard) {
+    await saveState(state);
+    return licenseGuard;
+  }
   recordRawEvent(roomState, payload, { room, sender, message, event });
 
   if (!message || isBotSender(sender)) {
@@ -2802,12 +2982,22 @@ async function readBody(req) {
 
 export async function requestHandler(req, res) {
   try {
-    const pathname = new URL(req.url || "/", "http://localhost").pathname;
+    const url = new URL(req.url || "/", "http://localhost");
+    const pathname = url.pathname;
     if (await staticResponse(req, res, pathname)) return;
 
     const isHealthPath = pathname === "/" || pathname === "/health" || pathname === "/api/health";
     const isSkillPath = pathname === "/skill" || pathname === "/api/skill";
     const isChatEventPath = pathname === "/chat-event" || pathname === "/api/chat-event";
+    const adminApi = pathname.startsWith("/api/admin/");
+
+    if (adminApi) {
+      const adminResult = await handleAdminApi(req, url);
+      if (adminResult) {
+        jsonResponse(res, adminResult.status, adminResult.body);
+        return;
+      }
+    }
 
     if (req.method === "GET") {
       if (isHealthPath) {

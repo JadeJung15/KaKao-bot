@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>픽셀곰 관리 콘솔</title>
+    <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
+    <link rel="stylesheet" href="/styles.css?v=20260524-admin">
+  </head>
+  <body class="admin-page">
+    <header class="site-header" aria-label="관리 콘솔 메뉴">
+      <a class="brand" href="/" aria-label="픽셀곰 홈">
+        <img src="/assets/pixgom-closeup.png" alt="" aria-hidden="true">
+        <span>픽셀곰 관리 콘솔</span>
+      </a>
+      <nav class="nav-links" aria-label="관리 메뉴">
+        <a href="/">홈</a>
+        <a href="/health">서버 상태</a>
+      </nav>
+    </header>
+
+    <main class="admin-main">
+      <section class="admin-hero">
+        <div>
+          <p class="section-kicker">Admin</p>
+          <h1>방, 구독, 라이선스를 한 번에 관리합니다</h1>
+          <p>운영 토큰을 입력한 뒤 방 정보를 저장하면 서버에 방별 설정이 반영됩니다.</p>
+        </div>
+        <img src="/assets/pixgom-guardian.png" alt="픽셀곰 관리 콘솔 이미지">
+      </section>
+
+      <section class="admin-grid">
+        <form class="admin-form" data-admin-form>
+          <label>
+            운영 토큰
+            <input name="token" type="password" autocomplete="off" placeholder="ADMIN_CONSOLE_TOKEN">
+          </label>
+          <label>
+            방 이름
+            <input name="room" required placeholder="픽셀곰 RPG 놀이터">
+          </label>
+          <label>
+            roomId
+            <input name="roomId" placeholder="gu25P5vi">
+          </label>
+          <label>
+            오픈채팅 링크
+            <input name="roomLink" placeholder="https://open.kakao.com/o/gu25P5vi">
+          </label>
+          <label>
+            입장확인 문구
+            <input name="joinPhrase" placeholder="픽셀곰 입장확인">
+          </label>
+          <label>
+            관리자 닉네임
+            <input name="roomAdmins" placeholder="관리자1,관리자2">
+          </label>
+          <label>
+            라이선스 키
+            <input name="licenseKey" placeholder="비우면 서버가 생성">
+          </label>
+          <label>
+            구독 만료일
+            <input name="subscriptionExpiresAt" type="date">
+          </label>
+          <button class="button button-primary" type="submit">방 설정 저장</button>
+          <button class="button button-secondary" type="button" data-load-rooms>등록 방 불러오기</button>
+        </form>
+
+        <section class="admin-result" aria-live="polite">
+          <h2>등록 방</h2>
+          <pre data-admin-output>운영 토큰을 입력하고 등록 방 불러오기를 누르세요.</pre>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const form = document.querySelector("[data-admin-form]");
+      const output = document.querySelector("[data-admin-output]");
+      const loadButton = document.querySelector("[data-load-rooms]");
+
+      function token() {
+        return form.elements.token.value.trim();
+      }
+
+      function print(value) {
+        output.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      }
+
+      async function loadRooms() {
+        const response = await fetch(`/api/admin/rooms?token=${encodeURIComponent(token())}`);
+        const json = await response.json();
+        print(json);
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        data.roomAdmins = data.roomAdmins.split(",").map((item) => item.trim()).filter(Boolean);
+        const response = await fetch("/api/admin/rooms", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-admin-token": token() },
+          body: JSON.stringify(data)
+        });
+        const json = await response.json();
+        print(json);
+      });
+
+      loadButton.addEventListener("click", () => {
+        loadRooms().catch((error) => print(error.message));
+      });
+    </script>
+  </body>
+</html>
