@@ -76,6 +76,11 @@ public class MainActivity extends Activity {
         refreshLogs();
     }
 
+    private void showChecklist() {
+        clearMainRefs();
+        setContentView(buildChecklistContent());
+    }
+
     private View buildHomeContent() {
         ScrollView scrollView = baseScrollView();
 
@@ -128,6 +133,10 @@ public class MainActivity extends Activity {
         startButton.setOnClickListener(v -> showMain());
         root.addView(startButton);
 
+        Button checklistButton = secondaryButton("테스트 체크리스트");
+        checklistButton.setOnClickListener(v -> showChecklist());
+        root.addView(checklistButton);
+
         Button permissionButton = secondaryButton("알림 권한 열기");
         permissionButton.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
         root.addView(permissionButton);
@@ -147,6 +156,78 @@ public class MainActivity extends Activity {
         Button consoleButton = secondaryButton("관리 콘솔 열기");
         consoleButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/admin"));
         root.addView(consoleButton);
+
+        return scrollView;
+    }
+
+    private View buildChecklistContent() {
+        ScrollView scrollView = baseScrollView();
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(18), dp(18), dp(18), dp(28));
+        scrollView.addView(root);
+
+        Button homeButton = secondaryButton("홈으로");
+        homeButton.setOnClickListener(v -> showHome());
+        root.addView(homeButton);
+
+        TextView title = text("테스트 체크리스트", 28, Color.rgb(58, 37, 24), true);
+        title.setPadding(0, dp(18), 0, dp(4));
+        root.addView(title);
+
+        TextView subtitle = text("설치 후 구매자와 운영자가 같은 순서로 확인할 수 있게 정리한 화면입니다.", 15, Color.rgb(87, 64, 47), false);
+        root.addView(subtitle);
+
+        LinearLayout statusPanel = panel();
+        statusPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        root.addView(statusPanel);
+        BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
+        statusPanel.addView(statusRow("알림 권한", notificationPermissionEnabled() ? "허용됨" : "필요", notificationPermissionEnabled()));
+        statusPanel.addView(labelValue("버전", BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")"));
+        statusPanel.addView(labelValue("서버", BridgeConfig.serverUrl(this)));
+        statusPanel.addView(labelValue("대표 방", profile.name));
+        statusPanel.addView(labelValue("roomId", profile.roomId));
+        statusPanel.addView(labelValue("입장확인 문구", profile.joinPhrase));
+        statusPanel.addView(labelValue("라이선스 키", TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey));
+        statusPanel.addView(labelValue("등록 방 목록", BridgeConfig.roomProfilesSummary(this)));
+
+        LinearLayout kakaoPanel = panel();
+        kakaoPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        root.addView(kakaoPanel);
+        kakaoPanel.addView(text("카카오방 테스트 순서", 20, Color.rgb(58, 37, 24), true));
+        kakaoPanel.addView(stepText("1", "/브릿지 - 앱 단독 응답, 등록 방 수, 라이선스, 화면 감지 미사용 확인"));
+        kakaoPanel.addView(stepText("2", "/상태 - 서버 연결과 서버 버전 확인"));
+        kakaoPanel.addView(stepText("3", "/js상태 - 로컬 JS 엔진 확인"));
+        kakaoPanel.addView(stepText("4", "/구독상태 - 5,500원/30일 구독 만료일 확인"));
+        kakaoPanel.addView(stepText("5", "/포인트, /출석 - 기본 운영 기능 확인"));
+        kakaoPanel.addView(stepText("6", "/게임, /주사위 - 게임 기능과 방별 보상 설정 확인"));
+
+        LinearLayout troublePanel = panel();
+        troublePanel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        root.addView(troublePanel);
+        troublePanel.addView(text("문제 해결", 20, Color.rgb(58, 37, 24), true));
+        troublePanel.addView(stepText("1", "응답이 없으면 알림 접근 권한과 카카오톡 알림 표시를 먼저 확인합니다."));
+        troublePanel.addView(stepText("2", "방이 다르면 구매자 가이드의 방별 연결코드를 다시 붙여넣습니다."));
+        troublePanel.addView(stepText("3", "라이선스 오류가 나오면 관리 콘솔의 라이선스 키와 앱의 키가 같은지 확인합니다."));
+        troublePanel.addView(stepText("4", "입장 확인은 방장봇 환영 문구가 입장확인 문구와 일치해야 합니다."));
+        troublePanel.addView(stepText("5", "이 앱은 화면 감지/접근성 권한을 사용하지 않습니다. 화면을 켜두는 방식으로 운영하지 않습니다."));
+
+        Button copyButton = primaryButton("체크리스트 복사");
+        copyButton.setOnClickListener(v -> copyText("픽셀곰 테스트 체크리스트", checklistText()));
+        root.addView(copyButton);
+
+        Button guideButton = secondaryButton("구매자 가이드 열기");
+        guideButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/buyer-guide"));
+        root.addView(guideButton);
+
+        Button consoleButton = secondaryButton("관리 콘솔 열기");
+        consoleButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/admin"));
+        root.addView(consoleButton);
+
+        Button settingButton = secondaryButton("설정 화면으로 이동");
+        settingButton.setOnClickListener(v -> showMain());
+        root.addView(settingButton);
 
         return scrollView;
     }
@@ -272,6 +353,10 @@ public class MainActivity extends Activity {
         Button testButton = secondaryButton("서버 테스트 전송");
         testButton.setOnClickListener(v -> sendTestEvent());
         panel.addView(testButton);
+
+        Button checklistButton = secondaryButton("테스트 체크리스트");
+        checklistButton.setOnClickListener(v -> showChecklist());
+        panel.addView(checklistButton);
 
         Button diagnosisButton = secondaryButton("진단 내용 복사");
         diagnosisButton.setOnClickListener(v -> copyDiagnosis());
@@ -574,6 +659,34 @@ public class MainActivity extends Activity {
                 + "등록 방 목록:\n" + BridgeConfig.roomProfilesSummary(this) + "\n"
                 + "기능: " + BridgeConfig.featureSummary(this) + "\n"
                 + "화면 감지: 사용 안 함";
+    }
+
+    private String checklistText() {
+        BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
+        return "픽셀곰 브릿지 테스트 체크리스트\n"
+                + "버전: " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")\n"
+                + "알림 권한: " + (notificationPermissionEnabled() ? "허용됨" : "필요") + "\n"
+                + "서버: " + BridgeConfig.serverUrl(this) + "\n"
+                + "대표 방: " + profile.name + "\n"
+                + "roomId: " + profile.roomId + "\n"
+                + "입장확인 문구: " + profile.joinPhrase + "\n"
+                + "라이선스: " + (TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey) + "\n"
+                + "등록 방 목록:\n" + BridgeConfig.roomProfilesSummary(this) + "\n\n"
+                + "카카오방 테스트 순서\n"
+                + "1. /브릿지\n"
+                + "2. /상태\n"
+                + "3. /js상태\n"
+                + "4. /구독상태\n"
+                + "5. /포인트\n"
+                + "6. /출석\n"
+                + "7. /게임\n"
+                + "8. /주사위\n\n"
+                + "문제 해결\n"
+                + "- 응답 없음: 알림 접근 권한, 카카오톡 알림 표시, 서버 URL 확인\n"
+                + "- 방 불일치: 구매자 가이드의 방별 연결코드 재적용\n"
+                + "- 라이선스 오류: 관리 콘솔과 앱의 라이선스 키 일치 확인\n"
+                + "- 입장 감지: 방장봇 환영 문구와 입장확인 문구 일치 확인\n"
+                + "- 화면 감지: 사용 안 함";
     }
 
     private boolean notificationPermissionEnabled() {

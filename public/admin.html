@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>픽셀곰 콘솔</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260524-commerce2">
+    <link rel="stylesheet" href="/styles.css?v=20260524-commerce3">
   </head>
   <body class="admin-page">
     <header class="site-header" aria-label="관리 콘솔 메뉴">
@@ -37,6 +37,10 @@
         <label class="admin-token-save">
           <input data-save-token type="checkbox">
           이 브라우저에 토큰 저장
+        </label>
+        <label class="admin-search-field">
+          검색
+          <input data-admin-search type="search" autocomplete="off" placeholder="방, 관리자, 라이선스, 신청자">
         </label>
         <button class="button button-primary" type="button" data-load-rooms>등록 방 불러오기</button>
         <button class="button button-secondary" type="button" data-load-applications>신청/결제 불러오기</button>
@@ -100,6 +104,26 @@
             <label><input type="checkbox" name="feature_customCommands" checked> 커스텀 명령어</label>
           </fieldset>
 
+          <fieldset class="game-fieldset">
+            <legend>게임 시즌/보상 설정</legend>
+            <label>
+              시즌 이름
+              <input name="gameSeasonName" placeholder="픽셀곰 시즌 1">
+            </label>
+            <label>
+              주사위 기본 보상
+              <input name="gameDiceReward" inputmode="numeric" value="30">
+            </label>
+            <label>
+              낚시 기본 보상
+              <input name="gameFishingReward" inputmode="numeric" value="40">
+            </label>
+            <label>
+              탐험 기본 보상
+              <input name="gameExploreReward" inputmode="numeric" value="50">
+            </label>
+          </fieldset>
+
           <label class="wide-label">
             커스텀 명령어
             <textarea name="customCommands" rows="7" placeholder="/공지=오늘 공지는 여기입니다.&#10;/규칙=두글자 닉네임 뒤에 성별을 붙여주세요."></textarea>
@@ -149,6 +173,7 @@
       const applicationList = document.querySelector("[data-application-list]");
       const summary = document.querySelector("[data-summary]");
       const restoreInput = document.querySelector("[data-restore-json]");
+      const searchInput = document.querySelector("[data-admin-search]");
       const commandTriggerInput = document.querySelector("[data-command-trigger]");
       const commandResponseInput = document.querySelector("[data-command-response]");
       let rooms = [];
@@ -170,6 +195,56 @@
         output.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
       }
 
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function searchTerm() {
+        return String(searchInput.value || "").trim().toLowerCase();
+      }
+
+      function searchableText(...values) {
+        return values.flat(Infinity).map((value) => String(value ?? "")).join(" ").toLowerCase();
+      }
+
+      function roomMatchesSearch(room, term) {
+        if (!term) return true;
+        return searchableText(
+          room.name,
+          room.roomIds,
+          room.roomLinks,
+          room.admins,
+          room.licenseKey,
+          room.joinPhrase,
+          room.subscription?.status,
+          room.gameSettings?.seasonName,
+          room.gameSettings?.diceReward,
+          room.gameSettings?.fishingReward,
+          room.gameSettings?.exploreReward,
+          room.diagnostics?.problems
+        ).includes(term);
+      }
+
+      function applicationMatchesSearch(application, term) {
+        if (!term) return true;
+        return searchableText(
+          application.roomName,
+          application.email,
+          application.adminName,
+          application.contact,
+          application.roomLink,
+          application.status,
+          application.statusLabel,
+          application.payment?.status,
+          application.payment?.statusLabel
+        ).includes(term);
+      }
+
       function rememberToken() {
         if (!saveTokenInput.checked) {
           localStorage.removeItem("pixgomAdminToken");
@@ -188,6 +263,15 @@
           localJs: form.elements.feature_localJs.checked,
           games: form.elements.feature_games.checked,
           customCommands: form.elements.feature_customCommands.checked
+        };
+      }
+
+      function gameSettingsFromForm() {
+        return {
+          seasonName: form.elements.gameSeasonName.value.trim() || "픽셀곰 시즌 1",
+          diceReward: Number(form.elements.gameDiceReward.value || 30),
+          fishingReward: Number(form.elements.gameFishingReward.value || 40),
+          exploreReward: Number(form.elements.gameExploreReward.value || 50)
         };
       }
 
@@ -241,6 +325,13 @@
         form.elements.feature_customCommands.checked = features.customCommands !== false;
       }
 
+      function setGameSettingsForm(settings = {}) {
+        form.elements.gameSeasonName.value = settings.seasonName || "픽셀곰 시즌 1";
+        form.elements.gameDiceReward.value = settings.diceReward ?? 30;
+        form.elements.gameFishingReward.value = settings.fishingReward ?? 40;
+        form.elements.gameExploreReward.value = settings.exploreReward ?? 50;
+      }
+
       function fillForm(room) {
         if (!room) return;
         selectedRoom = room;
@@ -253,6 +344,7 @@
         form.elements.monthlyPriceKrw.value = room.subscription?.monthlyPriceKrw || 5500;
         form.elements.subscriptionExpiresAt.value = room.subscription?.expiresAt ? room.subscription.expiresAt.slice(0, 10) : "";
         setFeatureForm(room.features || {});
+        setGameSettingsForm(room.gameSettings || {});
         form.elements.customCommands.value = customCommandsToText(room.customCommands || []);
       }
 
@@ -268,21 +360,35 @@
       }
 
       function renderRooms(data) {
-        rooms = data.rooms || [];
-        renderSummary(data);
+        if (Array.isArray(data.rooms)) rooms = data.rooms;
+        const term = searchTerm();
+        const visibleRooms = rooms.filter((room) => roomMatchesSearch(room, term));
+        renderSummary({
+          summary: {
+            rooms: visibleRooms.length,
+            activeRooms: visibleRooms.filter((room) => room.enabled && room.registered).length,
+            expiredRooms: visibleRooms.filter((room) => room.subscription?.status === "expired").length
+          }
+        });
         roomList.innerHTML = "";
-        if (!rooms.length) {
-          roomList.innerHTML = "<p>등록된 방이 없습니다.</p>";
+        if (!visibleRooms.length) {
+          roomList.innerHTML = `<p>${term ? "검색 결과가 없습니다." : "등록된 방이 없습니다."}</p>`;
           return;
         }
-        for (const room of rooms) {
+        for (const room of visibleRooms) {
+          const game = room.gameSettings || {};
+          const roomIds = (room.roomIds || []).join(", ") || "-";
+          const admins = (room.admins || []).join(", ") || "-";
+          const problems = room.diagnostics?.ok ? "진단 정상" : (room.diagnostics?.problems || []).join(", ");
           const card = document.createElement("button");
           card.type = "button";
           card.className = "room-card";
           card.innerHTML = `
-            <strong>${room.name || "이름 없음"}</strong>
-            <span>${room.enabled ? "활성" : "비활성"} · ${room.subscription?.status || "미설정"} · ${room.subscription?.remainingDays ?? "-"}일</span>
-            <small>${room.diagnostics?.ok ? "진단 정상" : (room.diagnostics?.problems || []).join(", ")}</small>
+            <strong>${escapeHtml(room.name || "이름 없음")}</strong>
+            <span>${room.enabled ? "활성" : "비활성"} · ${escapeHtml(room.subscription?.status || "미설정")} · ${room.subscription?.remainingDays ?? "-"}일</span>
+            <small>roomId ${escapeHtml(roomIds)} · 관리자 ${escapeHtml(admins)}</small>
+            <small>게임 ${room.features?.games ? "켜짐" : "꺼짐"} · ${escapeHtml(game.seasonName || "픽셀곰 시즌 1")} · 주사위 ${game.diceReward ?? 30} / 낚시 ${game.fishingReward ?? 40} / 탐험 ${game.exploreReward ?? 50}</small>
+            <small>${escapeHtml(problems || "진단 확인 필요")}</small>
           `;
           card.addEventListener("click", () => fillForm(room));
           roomList.appendChild(card);
@@ -290,20 +396,22 @@
       }
 
       function renderApplications(data) {
-        applications = data.applications || [];
+        if (Array.isArray(data.applications)) applications = data.applications;
+        const term = searchTerm();
+        const visibleApplications = applications.filter((application) => applicationMatchesSearch(application, term));
         applicationList.innerHTML = "";
-        if (!applications.length) {
-          applicationList.innerHTML = "<p>신청 내역이 없습니다.</p>";
+        if (!visibleApplications.length) {
+          applicationList.innerHTML = `<p>${term ? "검색 결과가 없습니다." : "신청 내역이 없습니다."}</p>`;
           return;
         }
-        for (const application of applications) {
+        for (const application of visibleApplications) {
           const card = document.createElement("article");
           card.className = "application-card";
           card.innerHTML = `
             <div>
-              <strong>${application.roomName || "방 이름 없음"}</strong>
-              <span>${application.email} · ${application.statusLabel} · ${application.payment?.statusLabel || "결제 미확인"}</span>
-              <small>${application.roomLink || ""}</small>
+              <strong>${escapeHtml(application.roomName || "방 이름 없음")}</strong>
+              <span>${escapeHtml(application.email)} · ${escapeHtml(application.statusLabel)} · ${escapeHtml(application.payment?.statusLabel || "결제 미확인")}</span>
+              <small>${escapeHtml(application.adminName || "")} · ${escapeHtml(application.roomLink || "")}</small>
             </div>
             <button class="button button-secondary" type="button" ${application.status === "approved" ? "disabled" : ""}>입금 승인</button>
           `;
@@ -357,6 +465,7 @@
           data.roomAdmins = data.roomAdmins.split(",").map((item) => item.trim()).filter(Boolean);
           data.monthlyPriceKrw = Number(data.monthlyPriceKrw || 5500);
           data.features = featuresFromForm();
+          data.gameSettings = gameSettingsFromForm();
           data.customCommands = customCommandsFromForm();
           const json = await requestJson("/api/admin/rooms", {
             method: "POST",
@@ -380,6 +489,11 @@
 
       document.querySelector("[data-add-command]").addEventListener("click", () => {
         upsertCommandLine(commandTriggerInput.value, commandResponseInput.value);
+      });
+
+      searchInput.addEventListener("input", () => {
+        renderRooms({ rooms });
+        renderApplications({ applications });
       });
 
       document.querySelector("[data-diagnostics]").addEventListener("click", async () => {

@@ -122,6 +122,9 @@ try {
   assert.match(health.json.features.join(","), /buyer-room-auto-sync/);
   assert.match(health.json.features.join(","), /bridge-multi-room-auto-sync/);
   assert.match(health.json.features.join(","), /play-internal-test-link/);
+  assert.match(health.json.features.join(","), /admin-console-search/);
+  assert.match(health.json.features.join(","), /room-game-settings/);
+  assert.match(health.json.features.join(","), /bridge-test-checklist/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.adminConsoleEnabled, true);
 
@@ -177,6 +180,8 @@ try {
   assert.match(adminPageText, /백업 복구/);
   assert.match(adminPageText, /신청\/결제/);
   assert.match(adminPageText, /명령어 추가\/수정/);
+  assert.match(adminPageText, /게임 시즌\/보상 설정/);
+  assert.match(adminPageText, /방, 관리자, 라이선스/);
 
   const adminUnauthorized = await request("/api/admin/rooms");
   assert.equal(adminUnauthorized.response.status, 401);
@@ -203,6 +208,12 @@ try {
         games: true,
         customCommands: true
       },
+      gameSettings: {
+        seasonName: "콘솔 시즌",
+        diceReward: 7,
+        fishingReward: 8,
+        exploreReward: 9
+      },
       customCommands: [{ trigger: "/공지", response: "콘솔 공지입니다." }]
     })
   });
@@ -212,6 +223,8 @@ try {
   assert.equal(adminRoom.json.room.features.attendance, false);
   assert.equal(adminRoom.json.room.features.games, true);
   assert.equal(adminRoom.json.room.features.customCommands, true);
+  assert.equal(adminRoom.json.room.gameSettings.seasonName, "콘솔 시즌");
+  assert.equal(adminRoom.json.room.gameSettings.diceReward, 7);
   assert.equal(adminRoom.json.room.customCommands[0].trigger, "/공지");
 
   const adminRooms = await request("/api/admin/rooms?token=test-admin-token");
@@ -342,7 +355,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.47");
+  assert.equal(buyerGuideApproved.json.version, "0.4.48");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -419,6 +432,19 @@ try {
     licenseKey: "PXG-CONSOLE-1234"
   });
   assert.match(gameReply.json.reply, /주사위 게임/);
+  assert.match(gameReply.json.reply, /콘솔 시즌/);
+
+  const gameHelp = await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/게임",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: "PXG-CONSOLE-1234"
+  });
+  assert.match(gameHelp.json.reply, /콘솔 시즌/);
+  assert.match(gameHelp.json.reply, /주사위 기본 보상: 🅟7/);
 
   const customConsoleReply = await chatPayload({
     registeredRoom: false,

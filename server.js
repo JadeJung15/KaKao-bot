@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.47";
+export const APP_VERSION = "0.4.48";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -97,7 +97,10 @@ export const FEATURES = [
   "bridge-connect-code-api",
   "buyer-room-auto-sync",
   "bridge-multi-room-auto-sync",
-  "play-internal-test-link"
+  "play-internal-test-link",
+  "admin-console-search",
+  "room-game-settings",
+  "bridge-test-checklist"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -119,6 +122,8 @@ const TRANSFER_FEE_RATE = 0.1;
 const DICE_REWARD = 30;
 const FISHING_REWARD = 40;
 const EXPLORE_REWARD = 50;
+const GAME_REWARD_MAX = 1000000;
+const GAME_SEASON_NAME_LIMIT = 40;
 const REENTRY_CANDIDATE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const SYSTEM_EVENT_DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
 const JOIN_SIGNAL_WINDOW_MS = 30 * 60 * 1000;
@@ -132,6 +137,12 @@ const DEFAULT_ROOM_FEATURES = Object.freeze({
   localJs: true,
   games: false,
   customCommands: true
+});
+const DEFAULT_GAME_SETTINGS = Object.freeze({
+  seasonName: "픽셀곰 시즌 1",
+  diceReward: DICE_REWARD,
+  fishingReward: FISHING_REWARD,
+  exploreReward: EXPLORE_REWARD
 });
 const FEATURE_LABELS = Object.freeze({
   attendance: "출석",
@@ -645,6 +656,7 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     roomAdmins: roomView?.admins?.length ? roomView.admins : [application.adminName].filter(Boolean),
     features: roomView?.features || DEFAULT_ROOM_FEATURES,
     customCommands: roomView?.customCommands || [],
+    gameSettings: roomView?.gameSettings || DEFAULT_GAME_SETTINGS,
     subscription: roomView?.subscription || application.plan,
     monthlyPriceKrw: roomView?.subscription?.monthlyPriceKrw || application.plan?.monthlyPriceKrw || MONTHLY_PRICE_KRW,
     serverUrl: "https://pixgom.com/chat-event",
@@ -765,6 +777,7 @@ function ensureRoom(state, room) {
   roomState.settings.joinPhrase ||= DEFAULT_JOIN_PHRASE;
   roomState.settings.features = normalizeFeatureSettings(roomState.settings.features || {});
   roomState.settings.customCommands = normalizeCustomCommands(roomState.settings.customCommands || {});
+  roomState.settings.gameSettings = normalizeGameSettings(roomState.settings.gameSettings || {});
   roomState.settings.subscription ||= {};
   roomState.settings.subscription.monthlyPriceKrw = Number(roomState.settings.subscription.monthlyPriceKrw || MONTHLY_PRICE_KRW);
   roomState.pendingEntries ||= [];
@@ -810,6 +823,48 @@ function normalizeFeatureSettings(value = {}) {
     features[key] = booleanSetting(value[key], defaultValue);
   }
   return features;
+}
+
+function boundedGameReward(value, fallback) {
+  if (value === undefined || value === null || normalizeText(value) === "") return fallback;
+  const number = Number(String(value ?? "").replace(/,/g, ""));
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(GAME_REWARD_MAX, Math.max(0, Math.trunc(number)));
+}
+
+function normalizeGameSettings(value = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  const seasonName = compactSpaces(source.seasonName || source.season || source.name || DEFAULT_GAME_SETTINGS.seasonName)
+    .slice(0, GAME_SEASON_NAME_LIMIT)
+    || DEFAULT_GAME_SETTINGS.seasonName;
+  return {
+    seasonName,
+    diceReward: boundedGameReward(source.diceReward ?? source.dice ?? source.diceBaseReward, DEFAULT_GAME_SETTINGS.diceReward),
+    fishingReward: boundedGameReward(source.fishingReward ?? source.fishing ?? source.fishingBaseReward, DEFAULT_GAME_SETTINGS.fishingReward),
+    exploreReward: boundedGameReward(source.exploreReward ?? source.explore ?? source.exploreBaseReward, DEFAULT_GAME_SETTINGS.exploreReward)
+  };
+}
+
+function gameSettings(roomState) {
+  roomState.settings ||= {};
+  roomState.settings.gameSettings = normalizeGameSettings(roomState.settings.gameSettings || {});
+  return roomState.settings.gameSettings;
+}
+
+function applyGameSettingsFromPayload(roomState, payload = {}) {
+  const directSettings = payload.gameSettings;
+  if (directSettings && typeof directSettings === "object") {
+    roomState.settings.gameSettings = normalizeGameSettings(directSettings);
+    return;
+  }
+  const inlineSettings = {
+    seasonName: payload.gameSeasonName || payload.seasonName,
+    diceReward: payload.gameDiceReward ?? payload.diceReward,
+    fishingReward: payload.gameFishingReward ?? payload.fishingReward,
+    exploreReward: payload.gameExploreReward ?? payload.exploreReward
+  };
+  const hasInlineSetting = Object.values(inlineSettings).some((value) => value !== undefined && value !== null && normalizeText(value) !== "");
+  if (hasInlineSetting) roomState.settings.gameSettings = normalizeGameSettings(inlineSettings);
 }
 
 function normalizeCustomCommandTrigger(value) {
@@ -2834,12 +2889,14 @@ function transferCommand(roomState, sender, text) {
 
 function diceGameCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const settings = gameSettings(roomState);
   const roll = Math.floor(Math.random() * 6) + 1;
-  const reward = roll * DICE_REWARD;
+  const reward = roll * settings.diceReward;
   person.points += reward;
-  recordRoomEvent(roomState, { type: "game_dice", name: person.currentName, roll, reward });
+  recordRoomEvent(roomState, { type: "game_dice", name: person.currentName, roll, reward, seasonName: settings.seasonName });
   return [
     "주사위 게임",
+    `시즌: ${settings.seasonName}`,
     "",
     `${person.currentName}님 결과: ${roll}`,
     `획득: ${formatPoint(reward)}`,
@@ -2849,17 +2906,19 @@ function diceGameCommand(roomState, sender) {
 
 function fishingGameCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const settings = gameSettings(roomState);
   const outcomes = [
-    { name: "작은 물고기", reward: FISHING_REWARD },
-    { name: "반짝이는 조개", reward: FISHING_REWARD * 2 },
+    { name: "작은 물고기", reward: settings.fishingReward },
+    { name: "반짝이는 조개", reward: settings.fishingReward * 2 },
     { name: "빈 낚싯줄", reward: 0 },
-    { name: "황금 물고기", reward: FISHING_REWARD * 5 }
+    { name: "황금 물고기", reward: settings.fishingReward * 5 }
   ];
   const item = outcomes[Math.floor(Math.random() * outcomes.length)];
   person.points += item.reward;
-  recordRoomEvent(roomState, { type: "game_fishing", name: person.currentName, item: item.name, reward: item.reward });
+  recordRoomEvent(roomState, { type: "game_fishing", name: person.currentName, item: item.name, reward: item.reward, seasonName: settings.seasonName });
   return [
     "낚시 결과",
+    `시즌: ${settings.seasonName}`,
     "",
     `${person.currentName}님이 ${item.name}을(를) 낚았습니다.`,
     `획득: ${formatPoint(item.reward)}`,
@@ -2869,17 +2928,19 @@ function fishingGameCommand(roomState, sender) {
 
 function exploreGameCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const settings = gameSettings(roomState);
   const outcomes = [
-    { name: "숲길 산책", reward: EXPLORE_REWARD },
-    { name: "숨은 보물상자", reward: EXPLORE_REWARD * 3 },
+    { name: "숲길 산책", reward: settings.exploreReward },
+    { name: "숨은 보물상자", reward: settings.exploreReward * 3 },
     { name: "미끄러운 언덕", reward: 0 },
-    { name: "픽셀곰 표식", reward: EXPLORE_REWARD * 2 }
+    { name: "픽셀곰 표식", reward: settings.exploreReward * 2 }
   ];
   const item = outcomes[Math.floor(Math.random() * outcomes.length)];
   person.points += item.reward;
-  recordRoomEvent(roomState, { type: "game_explore", name: person.currentName, item: item.name, reward: item.reward });
+  recordRoomEvent(roomState, { type: "game_explore", name: person.currentName, item: item.name, reward: item.reward, seasonName: settings.seasonName });
   return [
     "탐험 결과",
+    `시즌: ${settings.seasonName}`,
     "",
     `${person.currentName}님: ${item.name}`,
     `획득: ${formatPoint(item.reward)}`,
@@ -2889,10 +2950,16 @@ function exploreGameCommand(roomState, sender) {
 
 function gameHelpText(roomState) {
   const enabled = featureEnabled(roomState, "games");
+  const settings = gameSettings(roomState);
   return [
     "픽셀곰 미니게임",
     "",
     `상태: ${enabled ? "켜짐" : "꺼짐"}`,
+    `시즌: ${settings.seasonName}`,
+    `주사위 기본 보상: ${formatPoint(settings.diceReward)} x 결과`,
+    `낚시 기본 보상: ${formatPoint(settings.fishingReward)}`,
+    `탐험 기본 보상: ${formatPoint(settings.exploreReward)}`,
+    "",
     "/주사위 - 1~6 결과에 따라 포인트 획득",
     "/낚시 - 랜덤 보상 획득",
     "/탐험 - 랜덤 보상 획득",
@@ -3506,6 +3573,7 @@ function roomAdminView(roomState) {
     licenseKey: license.key || "",
     features: roomFeatures(roomState),
     customCommands: customCommands(roomState),
+    gameSettings: gameSettings(roomState),
     subscription: {
       status: subscription.status || "unset",
       monthlyPriceKrw: subscription.monthlyPriceKrw || MONTHLY_PRICE_KRW,
@@ -3588,6 +3656,7 @@ function adminUpsertRoom(state, payload = {}) {
   license.status = payload.licenseStatus === "paused" ? "paused" : "active";
   license.updatedAt = nowIso();
   applyFeatureSettingsFromPayload(roomState, payload);
+  applyGameSettingsFromPayload(roomState, payload);
   if (Object.hasOwn(payload, "customCommands")) {
     settings.customCommands = normalizeCustomCommands(payload.customCommands);
   }
@@ -3618,6 +3687,7 @@ function restoreRoomFromAdminPayload(state, roomPayload = {}) {
     registered: roomPayload.registered,
     enabled: roomPayload.enabled,
     features: roomPayload.features,
+    gameSettings: roomPayload.gameSettings,
     customCommands: roomPayload.customCommands
   });
   if (result.ok && Array.isArray(roomPayload.roomIds)) {
