@@ -1345,7 +1345,7 @@ a {
 
 .admin-toolbar {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(150px, auto) minmax(220px, 1fr) repeat(4, auto);
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, auto) minmax(220px, 1fr) minmax(170px, 0.8fr) repeat(4, auto);
   gap: 12px;
   align-items: end;
   padding: 18px;
@@ -1381,7 +1381,12 @@ a {
   min-width: 220px;
 }
 
+.admin-filter-field {
+  min-width: 170px;
+}
+
 .admin-toolbar input,
+.admin-toolbar select,
 .admin-import textarea {
   width: 100%;
   min-height: 42px;
@@ -1394,7 +1399,7 @@ a {
 
 .admin-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 

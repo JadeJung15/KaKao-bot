@@ -125,6 +125,8 @@ try {
   assert.match(health.json.features.join(","), /admin-console-search/);
   assert.match(health.json.features.join(","), /room-game-settings/);
   assert.match(health.json.features.join(","), /bridge-test-checklist/);
+  assert.match(health.json.features.join(","), /admin-subscription-filters/);
+  assert.match(health.json.features.join(","), /game-season-schedule/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.adminConsoleEnabled, true);
 
@@ -155,6 +157,7 @@ try {
   assert.match(homeText, /주사위/);
   assert.match(homeText, /커스텀 명령어/);
   assert.match(homeText, /업데이트 기록/);
+  assert.match(homeText, /0\.4\.49/);
   assert.match(homeText, /0\.4\.43/);
   assert.match(homeText, /0\.4\.44/);
   assert.match(homeText, /0\.4\.45/);
@@ -181,6 +184,8 @@ try {
   assert.match(adminPageText, /신청\/결제/);
   assert.match(adminPageText, /명령어 추가\/수정/);
   assert.match(adminPageText, /게임 시즌\/보상 설정/);
+  assert.match(adminPageText, /만료 임박 7일/);
+  assert.match(adminPageText, /시즌 시작일/);
   assert.match(adminPageText, /방, 관리자, 라이선스/);
 
   const adminUnauthorized = await request("/api/admin/rooms");
@@ -210,6 +215,8 @@ try {
       },
       gameSettings: {
         seasonName: "콘솔 시즌",
+        seasonStartsAt: "2026-06-01",
+        seasonEndsAt: "2026-06-30",
         diceReward: 7,
         fishingReward: 8,
         exploreReward: 9
@@ -224,6 +231,8 @@ try {
   assert.equal(adminRoom.json.room.features.games, true);
   assert.equal(adminRoom.json.room.features.customCommands, true);
   assert.equal(adminRoom.json.room.gameSettings.seasonName, "콘솔 시즌");
+  assert.match(adminRoom.json.room.gameSettings.seasonStartsAt, /2026/);
+  assert.match(adminRoom.json.room.gameSettings.seasonEndsAt, /2026/);
   assert.equal(adminRoom.json.room.gameSettings.diceReward, 7);
   assert.equal(adminRoom.json.room.customCommands[0].trigger, "/공지");
 
@@ -231,6 +240,7 @@ try {
   assert.equal(adminRooms.response.status, 200);
   assert.match(JSON.stringify(adminRooms.json.rooms), /콘솔방/);
   assert.equal(adminRooms.json.summary.rooms >= 1, true);
+  assert.equal(typeof adminRooms.json.summary.expiringRooms, "number");
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
@@ -355,7 +365,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.48");
+  assert.equal(buyerGuideApproved.json.version, "0.4.49");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -444,6 +454,7 @@ try {
     licenseKey: "PXG-CONSOLE-1234"
   });
   assert.match(gameHelp.json.reply, /콘솔 시즌/);
+  assert.match(gameHelp.json.reply, /시즌 기간/);
   assert.match(gameHelp.json.reply, /주사위 기본 보상: 🅟7/);
 
   const customConsoleReply = await chatPayload({

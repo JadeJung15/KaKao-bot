@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.48";
+export const APP_VERSION = "0.4.49";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -100,7 +100,9 @@ export const FEATURES = [
   "play-internal-test-link",
   "admin-console-search",
   "room-game-settings",
-  "bridge-test-checklist"
+  "bridge-test-checklist",
+  "admin-subscription-filters",
+  "game-season-schedule"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -140,6 +142,8 @@ const DEFAULT_ROOM_FEATURES = Object.freeze({
 });
 const DEFAULT_GAME_SETTINGS = Object.freeze({
   seasonName: "픽셀곰 시즌 1",
+  seasonStartsAt: "",
+  seasonEndsAt: "",
   diceReward: DICE_REWARD,
   fishingReward: FISHING_REWARD,
   exploreReward: EXPLORE_REWARD
@@ -832,13 +836,25 @@ function boundedGameReward(value, fallback) {
   return Math.min(GAME_REWARD_MAX, Math.max(0, Math.trunc(number)));
 }
 
+function parseGameSeasonStart(value) {
+  return parseKstCalendarDate(value, { endOfDay: false });
+}
+
+function parseGameSeasonEnd(value) {
+  return parseKstCalendarDate(value, { endOfDay: true });
+}
+
 function normalizeGameSettings(value = {}) {
   const source = value && typeof value === "object" ? value : {};
   const seasonName = compactSpaces(source.seasonName || source.season || source.name || DEFAULT_GAME_SETTINGS.seasonName)
     .slice(0, GAME_SEASON_NAME_LIMIT)
     || DEFAULT_GAME_SETTINGS.seasonName;
+  const seasonStartsAt = parseGameSeasonStart(source.seasonStartsAt || source.seasonStartAt || source.startsAt || source.startAt);
+  const seasonEndsAt = parseGameSeasonEnd(source.seasonEndsAt || source.seasonEndAt || source.endsAt || source.endAt);
   return {
     seasonName,
+    seasonStartsAt,
+    seasonEndsAt,
     diceReward: boundedGameReward(source.diceReward ?? source.dice ?? source.diceBaseReward, DEFAULT_GAME_SETTINGS.diceReward),
     fishingReward: boundedGameReward(source.fishingReward ?? source.fishing ?? source.fishingBaseReward, DEFAULT_GAME_SETTINGS.fishingReward),
     exploreReward: boundedGameReward(source.exploreReward ?? source.explore ?? source.exploreBaseReward, DEFAULT_GAME_SETTINGS.exploreReward)
@@ -859,6 +875,8 @@ function applyGameSettingsFromPayload(roomState, payload = {}) {
   }
   const inlineSettings = {
     seasonName: payload.gameSeasonName || payload.seasonName,
+    seasonStartsAt: payload.gameSeasonStartsAt || payload.gameSeasonStartAt || payload.seasonStartsAt || payload.seasonStartAt,
+    seasonEndsAt: payload.gameSeasonEndsAt || payload.gameSeasonEndAt || payload.seasonEndsAt || payload.seasonEndAt,
     diceReward: payload.gameDiceReward ?? payload.diceReward,
     fishingReward: payload.gameFishingReward ?? payload.fishingReward,
     exploreReward: payload.gameExploreReward ?? payload.exploreReward
@@ -1121,21 +1139,47 @@ function addDaysIso(sourceDate, days) {
   return new Date(date.getTime() + days * 86400000).toISOString();
 }
 
-function parseSubscriptionDate(value) {
+function parseKstCalendarDate(value, { endOfDay = true } = {}) {
   const text = normalizeText(value);
   if (!text) return "";
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-    const kstEndOfDay = new Date(`${text}T23:59:59+09:00`);
-    return Number.isNaN(kstEndOfDay.getTime()) ? "" : kstEndOfDay.toISOString();
+    const time = endOfDay ? "23:59:59" : "00:00:00";
+    const kstDate = new Date(`${text}T${time}+09:00`);
+    return Number.isNaN(kstDate.getTime()) ? "" : kstDate.toISOString();
   }
   const date = new Date(text);
   return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function parseSubscriptionDate(value) {
+  return parseKstCalendarDate(value, { endOfDay: true });
 }
 
 function formatSubscriptionDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "미설정";
   return kstDateTime(date);
+}
+
+function formatGameSeasonDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "미설정";
+  return kstDateKey(date);
+}
+
+function gameSeasonPeriodText(settings = {}) {
+  if (!settings.seasonStartsAt && !settings.seasonEndsAt) return "시즌 기간: 미설정";
+  return `시즌 기간: ${settings.seasonStartsAt ? formatGameSeasonDate(settings.seasonStartsAt) : "미설정"} ~ ${settings.seasonEndsAt ? formatGameSeasonDate(settings.seasonEndsAt) : "미설정"}`;
+}
+
+function gameSeasonStatusText(settings = {}) {
+  const now = Date.now();
+  const startsAt = new Date(settings.seasonStartsAt || "");
+  const endsAt = new Date(settings.seasonEndsAt || "");
+  if (!Number.isNaN(startsAt.getTime()) && now < startsAt.getTime()) return "시즌 상태: 예정";
+  if (!Number.isNaN(endsAt.getTime()) && now > endsAt.getTime()) return "시즌 상태: 종료";
+  if (settings.seasonStartsAt || settings.seasonEndsAt) return "시즌 상태: 진행 중";
+  return "시즌 상태: 미설정";
 }
 
 function remainingDays(value) {
@@ -2956,6 +3000,8 @@ function gameHelpText(roomState) {
     "",
     `상태: ${enabled ? "켜짐" : "꺼짐"}`,
     `시즌: ${settings.seasonName}`,
+    gameSeasonStatusText(settings),
+    gameSeasonPeriodText(settings),
     `주사위 기본 보상: ${formatPoint(settings.diceReward)} x 결과`,
     `낚시 기본 보상: ${formatPoint(settings.fishingReward)}`,
     `탐험 기본 보상: ${formatPoint(settings.exploreReward)}`,
@@ -3613,6 +3659,11 @@ function roomDiagnostics(roomState) {
   };
 }
 
+function roomViewExpiringSoon(room, warningDays = 7) {
+  const remaining = Number(room.subscription?.remainingDays);
+  return room.subscription?.status === "active" && Number.isFinite(remaining) && remaining >= 0 && remaining <= warningDays;
+}
+
 function adminRoomsPayload(state) {
   const rooms = Object.values(state.rooms || {})
     .map(roomAdminView)
@@ -3625,7 +3676,9 @@ function adminRoomsPayload(state) {
     summary: {
       rooms: rooms.length,
       activeRooms: rooms.filter((room) => room.enabled && room.registered).length,
-      expiredRooms: rooms.filter((room) => room.subscription.status === "expired").length
+      expiredRooms: rooms.filter((room) => room.subscription.status === "expired").length,
+      expiringRooms: rooms.filter((room) => roomViewExpiringSoon(room)).length,
+      problemRooms: rooms.filter((room) => !room.diagnostics?.ok).length
     },
     rooms
   };

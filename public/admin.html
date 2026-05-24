@@ -42,6 +42,18 @@
           검색
           <input data-admin-search type="search" autocomplete="off" placeholder="방, 관리자, 라이선스, 신청자">
         </label>
+        <label class="admin-filter-field">
+          방 상태
+          <select data-room-status-filter>
+            <option value="all">전체 방</option>
+            <option value="active">정상 운영</option>
+            <option value="expiring">만료 임박 7일</option>
+            <option value="expired">만료</option>
+            <option value="disabled">비활성/미등록</option>
+            <option value="missingLicense">라이선스 없음</option>
+            <option value="problem">진단 필요</option>
+          </select>
+        </label>
         <button class="button button-primary" type="button" data-load-rooms>등록 방 불러오기</button>
         <button class="button button-secondary" type="button" data-load-applications>신청/결제 불러오기</button>
         <button class="button button-secondary" type="button" data-diagnostics>진단 새로고침</button>
@@ -52,6 +64,7 @@
         <article><strong>-</strong><span>전체 방</span></article>
         <article><strong>-</strong><span>활성 방</span></article>
         <article><strong>-</strong><span>만료 방</span></article>
+        <article><strong>-</strong><span>만료 임박</span></article>
       </section>
 
       <section class="admin-grid admin-grid-wide">
@@ -109,6 +122,14 @@
             <label>
               시즌 이름
               <input name="gameSeasonName" placeholder="픽셀곰 시즌 1">
+            </label>
+            <label>
+              시즌 시작일
+              <input name="gameSeasonStartsAt" type="date">
+            </label>
+            <label>
+              시즌 종료일
+              <input name="gameSeasonEndsAt" type="date">
             </label>
             <label>
               주사위 기본 보상
@@ -174,6 +195,7 @@
       const summary = document.querySelector("[data-summary]");
       const restoreInput = document.querySelector("[data-restore-json]");
       const searchInput = document.querySelector("[data-admin-search]");
+      const roomStatusFilterInput = document.querySelector("[data-room-status-filter]");
       const commandTriggerInput = document.querySelector("[data-command-trigger]");
       const commandResponseInput = document.querySelector("[data-command-response]");
       let rooms = [];
@@ -223,11 +245,35 @@
           room.joinPhrase,
           room.subscription?.status,
           room.gameSettings?.seasonName,
+          room.gameSettings?.seasonStartsAt,
+          room.gameSettings?.seasonEndsAt,
           room.gameSettings?.diceReward,
           room.gameSettings?.fishingReward,
           room.gameSettings?.exploreReward,
           room.diagnostics?.problems
         ).includes(term);
+      }
+
+      function roomRemainingDays(room) {
+        const value = Number(room.subscription?.remainingDays);
+        return Number.isFinite(value) ? value : null;
+      }
+
+      function roomIsExpiringSoon(room) {
+        const days = roomRemainingDays(room);
+        return room.subscription?.status === "active" && days !== null && days >= 0 && days <= 7;
+      }
+
+      function roomMatchesStatusFilter(room) {
+        const filter = roomStatusFilterInput.value || "all";
+        if (filter === "all") return true;
+        if (filter === "active") return room.enabled && room.registered && room.subscription?.status === "active" && !roomIsExpiringSoon(room);
+        if (filter === "expiring") return roomIsExpiringSoon(room);
+        if (filter === "expired") return room.subscription?.status === "expired" || (roomRemainingDays(room) !== null && roomRemainingDays(room) < 0);
+        if (filter === "disabled") return room.enabled === false || room.registered === false;
+        if (filter === "missingLicense") return !room.licenseKey;
+        if (filter === "problem") return room.diagnostics?.ok === false;
+        return true;
       }
 
       function applicationMatchesSearch(application, term) {
@@ -269,6 +315,8 @@
       function gameSettingsFromForm() {
         return {
           seasonName: form.elements.gameSeasonName.value.trim() || "픽셀곰 시즌 1",
+          seasonStartsAt: form.elements.gameSeasonStartsAt.value,
+          seasonEndsAt: form.elements.gameSeasonEndsAt.value,
           diceReward: Number(form.elements.gameDiceReward.value || 30),
           fishingReward: Number(form.elements.gameFishingReward.value || 40),
           exploreReward: Number(form.elements.gameExploreReward.value || 50)
@@ -292,6 +340,20 @@
 
       function customCommandsToText(commands = []) {
         return commands.map((item) => `${item.trigger}=${item.response}`).join("\n");
+      }
+
+      function dateInputValue(value) {
+        if (!value) return "";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "";
+        const parts = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Seoul",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        }).formatToParts(date);
+        const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+        return `${map.year}-${map.month}-${map.day}`;
       }
 
       function normalizeCommandTrigger(value) {
@@ -327,6 +389,8 @@
 
       function setGameSettingsForm(settings = {}) {
         form.elements.gameSeasonName.value = settings.seasonName || "픽셀곰 시즌 1";
+        form.elements.gameSeasonStartsAt.value = dateInputValue(settings.seasonStartsAt);
+        form.elements.gameSeasonEndsAt.value = dateInputValue(settings.seasonEndsAt);
         form.elements.gameDiceReward.value = settings.diceReward ?? 30;
         form.elements.gameFishingReward.value = settings.fishingReward ?? 40;
         form.elements.gameExploreReward.value = settings.exploreReward ?? 50;
@@ -342,7 +406,7 @@
         form.elements.roomAdmins.value = (room.admins || []).join(",");
         form.elements.licenseKey.value = room.licenseKey || "";
         form.elements.monthlyPriceKrw.value = room.subscription?.monthlyPriceKrw || 5500;
-        form.elements.subscriptionExpiresAt.value = room.subscription?.expiresAt ? room.subscription.expiresAt.slice(0, 10) : "";
+        form.elements.subscriptionExpiresAt.value = dateInputValue(room.subscription?.expiresAt);
         setFeatureForm(room.features || {});
         setGameSettingsForm(room.gameSettings || {});
         form.elements.customCommands.value = customCommandsToText(room.customCommands || []);
@@ -352,27 +416,41 @@
         const values = [
           data.summary?.rooms ?? rooms.length,
           data.summary?.activeRooms ?? rooms.filter((room) => room.enabled).length,
-          data.summary?.expiredRooms ?? rooms.filter((room) => room.subscription?.status === "expired").length
+          data.summary?.expiredRooms ?? rooms.filter((room) => room.subscription?.status === "expired").length,
+          data.summary?.expiringRooms ?? rooms.filter((room) => roomIsExpiringSoon(room)).length
         ];
         summary.querySelectorAll("strong").forEach((item, index) => {
           item.textContent = values[index];
         });
       }
 
+      function dateOnlyLabel(value) {
+        if (!value) return "미설정";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "미설정";
+        return new Intl.DateTimeFormat("ko-KR", {
+          timeZone: "Asia/Seoul",
+          year: "2-digit",
+          month: "2-digit",
+          day: "2-digit"
+        }).format(date).replace(/\s/g, "");
+      }
+
       function renderRooms(data) {
         if (Array.isArray(data.rooms)) rooms = data.rooms;
         const term = searchTerm();
-        const visibleRooms = rooms.filter((room) => roomMatchesSearch(room, term));
+        const visibleRooms = rooms.filter((room) => roomMatchesSearch(room, term) && roomMatchesStatusFilter(room));
         renderSummary({
           summary: {
             rooms: visibleRooms.length,
             activeRooms: visibleRooms.filter((room) => room.enabled && room.registered).length,
-            expiredRooms: visibleRooms.filter((room) => room.subscription?.status === "expired").length
+            expiredRooms: visibleRooms.filter((room) => room.subscription?.status === "expired").length,
+            expiringRooms: visibleRooms.filter((room) => roomIsExpiringSoon(room)).length
           }
         });
         roomList.innerHTML = "";
         if (!visibleRooms.length) {
-          roomList.innerHTML = `<p>${term ? "검색 결과가 없습니다." : "등록된 방이 없습니다."}</p>`;
+          roomList.innerHTML = `<p>${term || roomStatusFilterInput.value !== "all" ? "조건에 맞는 방이 없습니다." : "등록된 방이 없습니다."}</p>`;
           return;
         }
         for (const room of visibleRooms) {
@@ -380,6 +458,7 @@
           const roomIds = (room.roomIds || []).join(", ") || "-";
           const admins = (room.admins || []).join(", ") || "-";
           const problems = room.diagnostics?.ok ? "진단 정상" : (room.diagnostics?.problems || []).join(", ");
+          const seasonPeriod = `${dateOnlyLabel(game.seasonStartsAt)} ~ ${dateOnlyLabel(game.seasonEndsAt)}`;
           const card = document.createElement("button");
           card.type = "button";
           card.className = "room-card";
@@ -387,7 +466,8 @@
             <strong>${escapeHtml(room.name || "이름 없음")}</strong>
             <span>${room.enabled ? "활성" : "비활성"} · ${escapeHtml(room.subscription?.status || "미설정")} · ${room.subscription?.remainingDays ?? "-"}일</span>
             <small>roomId ${escapeHtml(roomIds)} · 관리자 ${escapeHtml(admins)}</small>
-            <small>게임 ${room.features?.games ? "켜짐" : "꺼짐"} · ${escapeHtml(game.seasonName || "픽셀곰 시즌 1")} · 주사위 ${game.diceReward ?? 30} / 낚시 ${game.fishingReward ?? 40} / 탐험 ${game.exploreReward ?? 50}</small>
+            <small>게임 ${room.features?.games ? "켜짐" : "꺼짐"} · ${escapeHtml(game.seasonName || "픽셀곰 시즌 1")} · ${escapeHtml(seasonPeriod)}</small>
+            <small>보상 주사위 ${game.diceReward ?? 30} / 낚시 ${game.fishingReward ?? 40} / 탐험 ${game.exploreReward ?? 50}</small>
             <small>${escapeHtml(problems || "진단 확인 필요")}</small>
           `;
           card.addEventListener("click", () => fillForm(room));
@@ -494,6 +574,10 @@
       searchInput.addEventListener("input", () => {
         renderRooms({ rooms });
         renderApplications({ applications });
+      });
+
+      roomStatusFilterInput.addEventListener("change", () => {
+        renderRooms({ rooms });
       });
 
       document.querySelector("[data-diagnostics]").addEventListener("click", async () => {
