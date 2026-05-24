@@ -1097,6 +1097,11 @@ a {
   line-height: 1.6;
 }
 
+.auth-card form {
+  display: grid;
+  gap: 12px;
+}
+
 .auth-card label {
   display: grid;
   gap: 7px;
@@ -1106,6 +1111,7 @@ a {
 }
 
 .auth-card input,
+.auth-card textarea,
 .wide-label textarea {
   width: 100%;
   min-height: 44px;
@@ -1114,6 +1120,22 @@ a {
   border: 1px solid #d8c8b4;
   border-radius: 8px;
   font: inherit;
+}
+
+.auth-card textarea {
+  resize: vertical;
+}
+
+.form-status {
+  min-height: 96px;
+  margin: 0;
+  padding: 12px;
+  color: #243b38;
+  background: #eef8f4;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .wide-label {
@@ -1184,7 +1206,7 @@ a {
 
 .admin-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto auto auto;
+  grid-template-columns: minmax(220px, 1fr) repeat(4, auto);
   gap: 12px;
   align-items: end;
   padding: 18px;
@@ -1284,6 +1306,28 @@ a {
   font: inherit;
 }
 
+.command-builder {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.38fr) minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 14px;
+  background: #fff8ec;
+  border: 1px solid #e2d1bd;
+  border-radius: 8px;
+}
+
+.command-builder textarea {
+  width: 100%;
+  min-height: 92px;
+  padding: 9px 11px;
+  color: var(--ink);
+  border: 1px solid #d8c8b4;
+  border-radius: 8px;
+  resize: vertical;
+  font: inherit;
+}
+
 .feature-fieldset {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1323,10 +1367,43 @@ a {
   margin: 0 0 14px;
 }
 
-.room-card-list {
+.room-card-list,
+.application-card-list {
   display: grid;
   gap: 10px;
   margin-bottom: 14px;
+}
+
+.application-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  background: #fff8ec;
+  border: 1px solid #e2d1bd;
+  border-radius: 8px;
+}
+
+.application-card strong,
+.application-card span,
+.application-card small {
+  display: block;
+}
+
+.application-card span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.application-card small {
+  color: #2d6c51;
+  overflow-wrap: anywhere;
+}
+
+.application-card button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .room-card {
@@ -1416,7 +1493,9 @@ a {
   .admin-grid,
   .admin-toolbar,
   .admin-summary,
-  .admin-form-grid {
+  .admin-form-grid,
+  .command-builder,
+  .application-card {
     grid-template-columns: 1fr;
   }
 

@@ -1,5 +1,5 @@
 import http from "node:http";
-import { randomBytes } from "node:crypto";
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { existsSync } from "node:fs";
@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.42";
+export const APP_VERSION = "0.4.43";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -84,7 +84,12 @@ export const FEATURES = [
   "chat-mini-games",
   "fixed-command-catalog",
   "custom-room-commands",
-  "public-service-pages"
+  "public-service-pages",
+  "customer-signup-api",
+  "customer-login-api",
+  "manual-payment-approval",
+  "admin-application-workflow",
+  "custom-command-console-builder"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -131,6 +136,17 @@ const FEATURE_LABELS = Object.freeze({
 });
 const CUSTOM_COMMAND_LIMIT = 30;
 const CUSTOM_COMMAND_RESPONSE_LIMIT = 700;
+const SIGNUP_PASSWORD_MIN_LENGTH = 8;
+const APPLICATION_STATUS_LABELS = Object.freeze({
+  pending_payment: "결제 대기",
+  approved: "승인 완료",
+  rejected: "반려"
+});
+const PAYMENT_STATUS_LABELS = Object.freeze({
+  awaiting_manual_deposit: "입금 대기",
+  paid: "입금 확인",
+  rejected: "반려"
+});
 const FIXED_COMMAND_GROUPS = Object.freeze([
   {
     title: "기본 운영",
@@ -171,6 +187,9 @@ const MAX_LIKE_AMOUNT = 999;
 
 const initialState = {
   rooms: {},
+  accounts: {},
+  applications: {},
+  payments: {},
   updatedAt: null
 };
 
@@ -417,7 +436,88 @@ async function saveState(state) {
 
 function normalizeState(state) {
   state.rooms ||= {};
+  state.accounts ||= {};
+  state.applications ||= {};
+  state.payments ||= {};
   return state;
+}
+
+function generateEntityId(prefix) {
+  return `${prefix}_${randomBytes(8).toString("hex")}`;
+}
+
+function normalizeEmail(value) {
+  return compactSpaces(value).toLowerCase().slice(0, 180);
+}
+
+function validEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value));
+}
+
+function hashPassword(password) {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(String(password), salt, 32).toString("hex");
+  return { algorithm: "scrypt", salt, hash };
+}
+
+function verifyPassword(password, passwordHash = {}) {
+  if (passwordHash.algorithm !== "scrypt" || !passwordHash.salt || !passwordHash.hash) return false;
+  const expected = Buffer.from(passwordHash.hash, "hex");
+  const actual = scryptSync(String(password), passwordHash.salt, expected.length);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+function findAccountByEmail(state, email) {
+  const normalized = normalizeEmail(email);
+  return Object.values(state.accounts || {}).find((account) => account.email === normalized);
+}
+
+function publicAccountView(account = {}) {
+  return {
+    id: account.id || "",
+    email: account.email || "",
+    status: account.status || "active",
+    createdAt: account.createdAt || "",
+    lastLoginAt: account.lastLoginAt || "",
+    applicationIds: account.applicationIds || []
+  };
+}
+
+function publicPaymentView(payment = {}) {
+  return {
+    id: payment.id || "",
+    applicationId: payment.applicationId || "",
+    amountKrw: Number(payment.amountKrw || MONTHLY_PRICE_KRW),
+    method: payment.method || "manual_deposit",
+    status: payment.status || "awaiting_manual_deposit",
+    statusLabel: PAYMENT_STATUS_LABELS[payment.status] || payment.status || "입금 대기",
+    createdAt: payment.createdAt || "",
+    approvedAt: payment.approvedAt || "",
+    approvedBy: payment.approvedBy || ""
+  };
+}
+
+function publicApplicationView(application = {}, state = null) {
+  const payment = state?.payments?.[application.paymentId] || {};
+  return {
+    id: application.id || "",
+    accountId: application.accountId || "",
+    email: application.email || "",
+    roomName: application.roomName || "",
+    roomLink: application.roomLink || "",
+    roomId: application.roomId || "",
+    adminName: application.adminName || "",
+    contact: application.contact || "",
+    memo: application.memo || "",
+    status: application.status || "pending_payment",
+    statusLabel: APPLICATION_STATUS_LABELS[application.status] || application.status || "결제 대기",
+    plan: application.plan || { monthlyPriceKrw: MONTHLY_PRICE_KRW, days: DEFAULT_SUBSCRIPTION_DAYS },
+    payment: publicPaymentView(payment),
+    licenseKey: application.licenseKey || "",
+    createdAt: application.createdAt || "",
+    approvedAt: application.approvedAt || "",
+    approvedBy: application.approvedBy || ""
+  };
 }
 
 function roomKey(room) {
@@ -3327,6 +3427,215 @@ function restoreRoomFromAdminPayload(state, roomPayload = {}) {
   return result;
 }
 
+function validateSignupPayload(payload = {}) {
+  const email = normalizeEmail(payload.email);
+  const password = String(payload.password || "");
+  const roomName = compactSpaces(payload.roomName || payload.room || "");
+  const roomLink = normalizeText(payload.roomLink || payload.openChatLink || payload.link || "");
+  const adminName = compactSpaces(payload.adminName || payload.roomAdmin || payload.managerName || "");
+  const roomId = payloadRoomId({ roomId: payload.roomId, roomLink });
+  const errors = [];
+  if (!validEmail(email)) errors.push("email_required");
+  if (password.length < SIGNUP_PASSWORD_MIN_LENGTH) errors.push("password_too_short");
+  if (!roomName) errors.push("room_name_required");
+  if (!roomLink || !roomId) errors.push("openchat_link_required");
+  if (!adminName) errors.push("admin_name_required");
+  return {
+    ok: errors.length === 0,
+    errors,
+    value: {
+      email,
+      password,
+      roomName,
+      roomLink,
+      roomId,
+      adminName,
+      contact: normalizeText(payload.contact || ""),
+      memo: normalizeText(payload.memo || "").slice(0, 500)
+    }
+  };
+}
+
+function createSignupApplication(state, payload = {}) {
+  const validated = validateSignupPayload(payload);
+  if (!validated.ok) return { ok: false, status: 400, error: validated.errors[0], errors: validated.errors };
+  const value = validated.value;
+  let account = findAccountByEmail(state, value.email);
+  if (account && !verifyPassword(value.password, account.passwordHash)) {
+    return { ok: false, status: 409, error: "email_already_registered" };
+  }
+  if (!account) {
+    const accountId = generateEntityId("acct");
+    account = {
+      id: accountId,
+      email: value.email,
+      passwordHash: hashPassword(value.password),
+      status: "active",
+      applicationIds: [],
+      createdAt: nowIso(),
+      updatedAt: nowIso()
+    };
+    state.accounts[accountId] = account;
+  }
+
+  const applicationId = generateEntityId("app");
+  const paymentId = generateEntityId("pay");
+  const application = {
+    id: applicationId,
+    accountId: account.id,
+    email: value.email,
+    roomName: value.roomName,
+    roomLink: value.roomLink,
+    roomId: value.roomId,
+    adminName: value.adminName,
+    contact: value.contact,
+    memo: value.memo,
+    status: "pending_payment",
+    plan: {
+      monthlyPriceKrw: MONTHLY_PRICE_KRW,
+      days: DEFAULT_SUBSCRIPTION_DAYS
+    },
+    paymentId,
+    createdAt: nowIso(),
+    updatedAt: nowIso()
+  };
+  const payment = {
+    id: paymentId,
+    applicationId,
+    accountId: account.id,
+    amountKrw: MONTHLY_PRICE_KRW,
+    method: "manual_deposit",
+    status: "awaiting_manual_deposit",
+    createdAt: nowIso(),
+    updatedAt: nowIso()
+  };
+  state.applications[applicationId] = application;
+  state.payments[paymentId] = payment;
+  account.applicationIds ||= [];
+  addUnique(account.applicationIds, applicationId);
+  account.updatedAt = nowIso();
+  return {
+    ok: true,
+    account: publicAccountView(account),
+    application: publicApplicationView(application, state),
+    payment: publicPaymentView(payment),
+    next: [
+      `월 이용금액 ${formatKrw(MONTHLY_PRICE_KRW)} 입금 확인 후 관리자가 승인합니다.`,
+      "승인되면 방 등록, 라이선스 키, 30일 구독이 자동 생성됩니다."
+    ]
+  };
+}
+
+function loginAccount(state, payload = {}) {
+  const email = normalizeEmail(payload.email);
+  const password = String(payload.password || "");
+  const account = findAccountByEmail(state, email);
+  if (!account || !verifyPassword(password, account.passwordHash)) {
+    return { ok: false, status: 401, error: "invalid_login" };
+  }
+  account.lastLoginAt = nowIso();
+  account.updatedAt = nowIso();
+  const applicationIds = account.applicationIds || [];
+  return {
+    ok: true,
+    account: publicAccountView(account),
+    applications: applicationIds
+      .map((id) => state.applications?.[id])
+      .filter(Boolean)
+      .map((application) => publicApplicationView(application, state))
+  };
+}
+
+async function handlePublicAccountApi(req, url) {
+  if (req.method === "POST" && url.pathname === "/api/signup") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = createSignupApplication(state, body);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/login") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = loginAccount(state, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  return null;
+}
+
+function adminApplicationsPayload(state) {
+  const applications = Object.values(state.applications || {})
+    .map((application) => publicApplicationView(application, state))
+    .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
+  return {
+    ok: true,
+    version: APP_VERSION,
+    monthlyPriceKrw: MONTHLY_PRICE_KRW,
+    summary: {
+      applications: applications.length,
+      pending: applications.filter((application) => application.status === "pending_payment").length,
+      approved: applications.filter((application) => application.status === "approved").length
+    },
+    applications
+  };
+}
+
+function adminApproveApplication(state, payload = {}, approvedBy = "admin_console") {
+  const applicationId = normalizeText(payload.applicationId || payload.id);
+  if (!applicationId) return { ok: false, status: 400, error: "application_id_required" };
+  const application = state.applications?.[applicationId];
+  if (!application) return { ok: false, status: 404, error: "application_not_found" };
+  const months = Math.min(24, Math.max(1, Math.floor(Number(payload.months || 1) || 1)));
+  const expiresAt = addDaysIso(new Date(), months * DEFAULT_SUBSCRIPTION_DAYS);
+  const result = adminUpsertRoom(state, {
+    room: application.roomName,
+    roomId: application.roomId,
+    roomLink: application.roomLink,
+    joinPhrase: payload.joinPhrase || DEFAULT_JOIN_PHRASE,
+    roomAdmins: [application.adminName],
+    monthlyPriceKrw: MONTHLY_PRICE_KRW,
+    subscriptionExpiresAt: expiresAt,
+    registered: true,
+    enabled: true,
+    features: {
+      attendance: true,
+      points: true,
+      rankings: true,
+      history: true,
+      profiles: true,
+      localJs: true,
+      games: false,
+      customCommands: true
+    }
+  });
+  if (!result.ok) return result;
+  const payment = state.payments?.[application.paymentId];
+  if (payment) {
+    payment.status = "paid";
+    payment.approvedAt = nowIso();
+    payment.approvedBy = approvedBy;
+    payment.amountKrw = Number(payload.amountKrw || payment.amountKrw || MONTHLY_PRICE_KRW);
+    payment.updatedAt = nowIso();
+  }
+  application.status = "approved";
+  application.approvedAt = nowIso();
+  application.approvedBy = approvedBy;
+  application.licenseKey = result.room.licenseKey;
+  application.roomId = result.room.roomIds?.[0] || application.roomId;
+  application.updatedAt = nowIso();
+  return {
+    ok: true,
+    application: publicApplicationView(application, state),
+    payment: publicPaymentView(payment),
+    room: result.room
+  };
+}
+
 async function handleAdminApi(req, url) {
   if (req.method === "GET" && url.pathname === "/api/admin/rooms") {
     const auth = requireAdminConsole(req, url);
@@ -3360,12 +3669,30 @@ async function handleAdminApi(req, url) {
     return { status: 200, body: { ok: true, version: APP_VERSION, exportedAt: nowIso(), state } };
   }
 
+  if (req.method === "GET" && url.pathname === "/api/admin/applications") {
+    const auth = requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return { status: 200, body: adminApplicationsPayload(state) };
+  }
+
   if (req.method === "POST" && url.pathname === "/api/admin/rooms") {
     const body = await readBody(req);
     const auth = requireAdminConsole(req, url, body);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     const result = adminUpsertRoom(state, body);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/applications/approve") {
+    const body = await readBody(req);
+    const auth = requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminApproveApplication(state, body, "admin_console");
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -3585,11 +3912,20 @@ export async function requestHandler(req, res) {
     const isSkillPath = pathname === "/skill" || pathname === "/api/skill";
     const isChatEventPath = pathname === "/chat-event" || pathname === "/api/chat-event";
     const adminApi = pathname.startsWith("/api/admin/");
+    const publicAccountApi = pathname === "/api/signup" || pathname === "/api/login";
 
     if (adminApi) {
       const adminResult = await handleAdminApi(req, url);
       if (adminResult) {
         jsonResponse(res, adminResult.status, adminResult.body);
+        return;
+      }
+    }
+
+    if (publicAccountApi) {
+      const accountResult = await handlePublicAccountApi(req, url);
+      if (accountResult) {
+        jsonResponse(res, accountResult.status, accountResult.body);
         return;
       }
     }

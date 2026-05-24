@@ -111,6 +111,9 @@ try {
   assert.match(health.json.features.join(","), /fixed-command-catalog/);
   assert.match(health.json.features.join(","), /custom-room-commands/);
   assert.match(health.json.features.join(","), /public-service-pages/);
+  assert.match(health.json.features.join(","), /customer-signup-api/);
+  assert.match(health.json.features.join(","), /customer-login-api/);
+  assert.match(health.json.features.join(","), /manual-payment-approval/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.adminConsoleEnabled, true);
 
@@ -140,6 +143,8 @@ try {
   assert.match(homeText, /주사위/);
   assert.match(homeText, /커스텀 명령어/);
   assert.match(homeText, /업데이트 기록/);
+  assert.match(homeText, /0\.4\.43/);
+  assert.match(homeText, /수동 입금 확인/);
   assert.match(homeText, /개인정보처리방침/);
   assert.match(homeText, /서비스 이용약관/);
   assert.match(homeText, /data-site-search/);
@@ -158,6 +163,8 @@ try {
   assert.match(adminPageText, /픽셀곰 콘솔/);
   assert.match(adminPageText, /방별 기능 ON\/OFF/);
   assert.match(adminPageText, /백업 복구/);
+  assert.match(adminPageText, /신청\/결제/);
+  assert.match(adminPageText, /명령어 추가\/수정/);
 
   const adminUnauthorized = await request("/api/admin/rooms");
   assert.equal(adminUnauthorized.response.status, 401);
@@ -208,6 +215,78 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.ok(adminBackup.json.state.rooms);
+
+  const signup = await request("/api/signup", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `tester-${process.pid}@pixgom.test`,
+      password: "password123",
+      roomName: "판매신청방",
+      roomLink: "https://open.kakao.com/o/salesRoom1",
+      adminName: "신청관리자",
+      contact: "kakao-test",
+      memo: "자동 테스트 신청"
+    })
+  });
+  assert.equal(signup.response.status, 200);
+  assert.equal(signup.json.application.status, "pending_payment");
+  assert.equal(signup.json.payment.status, "awaiting_manual_deposit");
+  assert.equal(signup.json.payment.amountKrw, 5500);
+
+  const badDuplicateSignup = await request("/api/signup", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `tester-${process.pid}@pixgom.test`,
+      password: "wrongpass123",
+      roomName: "판매신청방2",
+      roomLink: "https://open.kakao.com/o/salesRoom2",
+      adminName: "신청관리자"
+    })
+  });
+  assert.equal(badDuplicateSignup.response.status, 409);
+  assert.equal(badDuplicateSignup.json.error, "email_already_registered");
+
+  const login = await request("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `tester-${process.pid}@pixgom.test`,
+      password: "password123"
+    })
+  });
+  assert.equal(login.response.status, 200);
+  assert.equal(login.json.applications.length, 1);
+  assert.equal(login.json.applications[0].payment.status, "awaiting_manual_deposit");
+
+  const adminApplications = await request("/api/admin/applications?token=test-admin-token");
+  assert.equal(adminApplications.response.status, 200);
+  assert.match(JSON.stringify(adminApplications.json.applications), /판매신청방/);
+  assert.equal(adminApplications.json.summary.pending >= 1, true);
+
+  const approvedApplication = await request("/api/admin/applications/approve", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({ applicationId: signup.json.application.id, months: 1 })
+  });
+  assert.equal(approvedApplication.response.status, 200);
+  assert.equal(approvedApplication.json.application.status, "approved");
+  assert.equal(approvedApplication.json.payment.status, "paid");
+  assert.match(approvedApplication.json.room.licenseKey, /^PXG-/);
+
+  const approvedRoomStatus = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "/구독상태",
+    sender: "신청관리자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.equal(approvedRoomStatus.json.ignored, false);
+  assert.match(approvedRoomStatus.json.reply, /구독 상태/);
+  assert.match(approvedRoomStatus.json.reply, /상태: 정상/);
 
   const missingLicense = await chatPayload({
     registeredRoom: false,

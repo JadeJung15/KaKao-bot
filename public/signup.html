@@ -13,13 +13,51 @@
       <section class="auth-card">
         <p class="section-kicker">Start</p>
         <h1>픽셀곰 신청</h1>
-        <p>현재는 내부 테스트와 수동 상담 단계입니다. 스토어 연결 후 계정/결제 기능을 붙입니다.</p>
-        <label>이메일<input type="email" placeholder="pixelgom@example.com"></label>
-        <label>오픈채팅방 링크<input type="url" placeholder="https://open.kakao.com/o/..."></label>
-        <label>관리자 닉네임<input type="text" placeholder="운영자 닉네임"></label>
-        <button class="button button-primary" type="button">신청 준비 중</button>
+        <p>방 1개 30일 5,500원 플랜 신청을 접수합니다. 입금 확인 후 관리자가 승인하면 라이선스와 구독이 생성됩니다.</p>
+        <form data-signup-form>
+          <label>이메일<input name="email" type="email" required placeholder="pixelgom@example.com"></label>
+          <label>비밀번호<input name="password" type="password" required minlength="8" placeholder="8자 이상"></label>
+          <label>방 이름<input name="roomName" type="text" required placeholder="픽셀곰 RPG 놀이터"></label>
+          <label>오픈채팅방 링크<input name="roomLink" type="url" required placeholder="https://open.kakao.com/o/..."></label>
+          <label>관리자 닉네임<input name="adminName" type="text" required placeholder="운영자 닉네임"></label>
+          <label>연락처<input name="contact" type="text" placeholder="카카오ID 또는 연락 가능한 채널"></label>
+          <label>요청 메모<textarea name="memo" rows="4" placeholder="초기 설정 요청사항"></textarea></label>
+          <button class="button button-primary" type="submit">신청 접수</button>
+        </form>
+        <pre class="form-status" data-signup-result aria-live="polite">신청하면 결제 대기 상태로 등록됩니다.</pre>
         <a href="https://open.kakao.com/o/gu25P5vi" target="_blank" rel="noopener noreferrer">오픈채팅으로 문의하기</a>
       </section>
     </main>
+    <script>
+      const form = document.querySelector("[data-signup-form]");
+      const result = document.querySelector("[data-signup-result]");
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        result.textContent = "신청을 접수하는 중입니다.";
+        const payload = Object.fromEntries(new FormData(form).entries());
+        try {
+          const response = await fetch("/api/signup", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          const json = await response.json();
+          if (!response.ok || json.ok === false) throw new Error(json.error || "signup_failed");
+          result.textContent = [
+            "신청이 접수되었습니다.",
+            `신청번호: ${json.application.id}`,
+            `상태: ${json.application.statusLabel}`,
+            `결제: ${json.payment.statusLabel}`,
+            `금액: ${json.payment.amountKrw.toLocaleString("ko-KR")}원`,
+            "",
+            ...json.next
+          ].join("\n");
+          form.reset();
+        } catch (error) {
+          result.textContent = `신청 실패: ${error.message}`;
+        }
+      });
+    </script>
   </body>
 </html>

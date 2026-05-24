@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>픽셀곰 콘솔</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260524-brand">
+    <link rel="stylesheet" href="/styles.css?v=20260524-commerce2">
   </head>
   <body class="admin-page">
     <header class="site-header" aria-label="관리 콘솔 메뉴">
@@ -35,6 +35,7 @@
           <input data-token type="password" autocomplete="off" placeholder="ADMIN_CONSOLE_TOKEN">
         </label>
         <button class="button button-primary" type="button" data-load-rooms>등록 방 불러오기</button>
+        <button class="button button-secondary" type="button" data-load-applications>신청/결제 불러오기</button>
         <button class="button button-secondary" type="button" data-diagnostics>진단 새로고침</button>
         <button class="button button-secondary" type="button" data-backup>백업 JSON 받기</button>
       </section>
@@ -100,6 +101,17 @@
             <textarea name="customCommands" rows="7" placeholder="/공지=오늘 공지는 여기입니다.&#10;/규칙=두글자 닉네임 뒤에 성별을 붙여주세요."></textarea>
             <small>한 줄에 하나씩 `/명령어=응답내용` 형식으로 입력합니다. 고정 명령어는 등록되지 않습니다.</small>
           </label>
+          <div class="command-builder" aria-label="커스텀 명령어 제작">
+            <label>
+              명령어
+              <input data-command-trigger placeholder="/공지">
+            </label>
+            <label>
+              응답 내용
+              <textarea data-command-response rows="4" placeholder="오늘 공지는 여기입니다."></textarea>
+            </label>
+            <button class="button button-secondary" type="button" data-add-command>명령어 추가/수정</button>
+          </div>
 
           <div class="admin-actions">
             <button class="button button-primary" type="submit">방 설정 저장</button>
@@ -108,6 +120,8 @@
         </form>
 
         <section class="admin-result" aria-live="polite">
+          <h2>신청/결제</h2>
+          <div class="application-card-list" data-application-list></div>
           <h2>운영 상태</h2>
           <div class="room-card-list" data-room-list></div>
           <pre data-admin-output>운영 토큰을 입력하고 등록 방 불러오기를 누르세요.</pre>
@@ -127,9 +141,13 @@
       const form = document.querySelector("[data-admin-form]");
       const output = document.querySelector("[data-admin-output]");
       const roomList = document.querySelector("[data-room-list]");
+      const applicationList = document.querySelector("[data-application-list]");
       const summary = document.querySelector("[data-summary]");
       const restoreInput = document.querySelector("[data-restore-json]");
+      const commandTriggerInput = document.querySelector("[data-command-trigger]");
+      const commandResponseInput = document.querySelector("[data-command-response]");
       let rooms = [];
+      let applications = [];
       let selectedRoom = null;
 
       function token() {
@@ -170,6 +188,26 @@
 
       function customCommandsToText(commands = []) {
         return commands.map((item) => `${item.trigger}=${item.response}`).join("\n");
+      }
+
+      function normalizeCommandTrigger(value) {
+        const body = String(value || "").trim().replace(/^\/+/, "").split(/\s+/)[0] || "";
+        return body ? `/${body.replace(/[^\p{L}\p{N}_-]/gu, "").slice(0, 24)}` : "";
+      }
+
+      function upsertCommandLine(trigger, response) {
+        const normalizedTrigger = normalizeCommandTrigger(trigger);
+        const normalizedResponse = String(response || "").trim();
+        if (!normalizedTrigger || !normalizedResponse) {
+          print("명령어와 응답 내용을 모두 입력하세요.");
+          return;
+        }
+        const commands = customCommandsFromForm().filter((item) => item.trigger !== normalizedTrigger);
+        commands.push({ trigger: normalizedTrigger, response: normalizedResponse });
+        form.elements.customCommands.value = customCommandsToText(commands);
+        commandTriggerInput.value = "";
+        commandResponseInput.value = "";
+        print(`${normalizedTrigger} 커스텀 명령어를 편집 목록에 추가했습니다. 저장 버튼을 눌러 반영하세요.`);
       }
 
       function setFeatureForm(features = {}) {
@@ -231,6 +269,29 @@
         }
       }
 
+      function renderApplications(data) {
+        applications = data.applications || [];
+        applicationList.innerHTML = "";
+        if (!applications.length) {
+          applicationList.innerHTML = "<p>신청 내역이 없습니다.</p>";
+          return;
+        }
+        for (const application of applications) {
+          const card = document.createElement("article");
+          card.className = "application-card";
+          card.innerHTML = `
+            <div>
+              <strong>${application.roomName || "방 이름 없음"}</strong>
+              <span>${application.email} · ${application.statusLabel} · ${application.payment?.statusLabel || "결제 미확인"}</span>
+              <small>${application.roomLink || ""}</small>
+            </div>
+            <button class="button button-secondary" type="button" ${application.status === "approved" ? "disabled" : ""}>입금 승인</button>
+          `;
+          card.querySelector("button").addEventListener("click", () => approveApplication(application.id));
+          applicationList.appendChild(card);
+        }
+      }
+
       async function requestJson(path, options = {}) {
         const response = await fetch(path, options);
         const json = await response.json();
@@ -242,6 +303,23 @@
         const json = await requestJson(`/api/admin/rooms?token=${encodeURIComponent(token())}`);
         renderRooms(json);
         print(json);
+      }
+
+      async function loadApplications() {
+        const json = await requestJson(`/api/admin/applications?token=${encodeURIComponent(token())}`);
+        renderApplications(json);
+        print(json);
+      }
+
+      async function approveApplication(applicationId) {
+        const json = await requestJson("/api/admin/applications/approve", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-admin-token": token() },
+          body: JSON.stringify({ applicationId, months: 1 })
+        });
+        print(json);
+        await loadApplications();
+        await loadRooms();
       }
 
       form.addEventListener("submit", async (event) => {
@@ -262,6 +340,14 @@
 
       document.querySelector("[data-load-rooms]").addEventListener("click", () => {
         loadRooms().catch((error) => print(error.message));
+      });
+
+      document.querySelector("[data-load-applications]").addEventListener("click", () => {
+        loadApplications().catch((error) => print(error.message));
+      });
+
+      document.querySelector("[data-add-command]").addEventListener("click", () => {
+        upsertCommandLine(commandTriggerInput.value, commandResponseInput.value);
       });
 
       document.querySelector("[data-diagnostics]").addEventListener("click", async () => {
