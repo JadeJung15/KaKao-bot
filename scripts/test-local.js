@@ -108,6 +108,9 @@ try {
   assert.match(health.json.features.join(","), /admin-diagnostics-api/);
   assert.match(health.json.features.join(","), /admin-backup-restore/);
   assert.match(health.json.features.join(","), /chat-mini-games/);
+  assert.match(health.json.features.join(","), /fixed-command-catalog/);
+  assert.match(health.json.features.join(","), /custom-room-commands/);
+  assert.match(health.json.features.join(","), /public-service-pages/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.adminConsoleEnabled, true);
 
@@ -124,6 +127,9 @@ try {
   assert.match(homeText, /targetUrl\.search\}#Intent`/);
   assert.match(homeText, /기본 브라우저/);
   assert.match(homeText, /픽셀곰 브릿지/);
+  assert.match(homeText, /픽셀곰 콘솔/);
+  assert.match(homeText, /픽셀곰봇/);
+  assert.match(homeText, /픽셀곰 RPG/);
   assert.match(homeText, /다중방/);
   assert.match(homeText, /방장봇 입장확인/);
   assert.match(homeText, /화면 감지 없이/);
@@ -132,8 +138,19 @@ try {
   assert.match(homeText, /관리 콘솔/);
   assert.match(homeText, /기능 ON\/OFF/);
   assert.match(homeText, /주사위/);
+  assert.match(homeText, /커스텀 명령어/);
+  assert.match(homeText, /업데이트 기록/);
+  assert.match(homeText, /개인정보처리방침/);
+  assert.match(homeText, /서비스 이용약관/);
+  assert.match(homeText, /data-site-search/);
   assert.match(homeText, /href="https:\/\/open\.kakao\.com\/o\/gu25P5vi"/);
-  assert.match(homeText, />문의<\/a>/);
+  assert.match(homeText, /오픈채팅 문의/);
+
+  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/login", "/signup"]) {
+    const page = await fetch(`${baseUrl}${pagePath}`);
+    assert.equal(page.status, 200);
+    assert.match(page.headers.get("content-type") || "", /text\/html/);
+  }
 
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
@@ -164,8 +181,10 @@ try {
         history: true,
         profiles: true,
         localJs: true,
-        games: true
-      }
+        games: true,
+        customCommands: true
+      },
+      customCommands: [{ trigger: "/공지", response: "콘솔 공지입니다." }]
     })
   });
   assert.equal(adminRoom.response.status, 200);
@@ -173,6 +192,8 @@ try {
   assert.match(adminRoom.json.room.subscription.expiresAt, /2099/);
   assert.equal(adminRoom.json.room.features.attendance, false);
   assert.equal(adminRoom.json.room.features.games, true);
+  assert.equal(adminRoom.json.room.features.customCommands, true);
+  assert.equal(adminRoom.json.room.customCommands[0].trigger, "/공지");
 
   const adminRooms = await request("/api/admin/rooms?token=test-admin-token");
   assert.equal(adminRooms.response.status, 200);
@@ -233,6 +254,17 @@ try {
     licenseKey: "PXG-CONSOLE-1234"
   });
   assert.match(gameReply.json.reply, /주사위 게임/);
+
+  const customConsoleReply = await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/공지",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: "PXG-CONSOLE-1234"
+  });
+  assert.match(customConsoleReply.json.reply, /콘솔 공지입니다/);
 
   const help = await request("/skill", {
     method: "POST",
@@ -485,6 +517,33 @@ try {
   assert.match(adminHelp.json.reply, /고유값초기화/);
   assert.match(adminHelp.json.reply, /원본로그/);
   assert.match(adminHelp.json.reply, /포인트지급/);
+  assert.match(adminHelp.json.reply, /명령어등록/);
+
+  const fixedCommands = await chat("/고정명령어", "관리자");
+  assert.match(fixedCommands.json.reply, /픽셀곰 고정 명령어/);
+  assert.match(fixedCommands.json.reply, /게임\/연동 예약/);
+
+  const gameCommands = await chat("/게임명령어", "관리자");
+  assert.match(gameCommands.json.reply, /픽셀곰 게임 명령어/);
+  assert.match(gameCommands.json.reply, /픽셀곰게임/);
+
+  const reservedCustomCommand = await chat("/명령어등록 /상태 상태 덮어쓰기", "관리자");
+  assert.match(reservedCustomCommand.json.reply, /고정 명령어/);
+
+  const customCommandRegister = await chat("/명령어등록 /규칙 두글자 닉네임 뒤에 성별을 붙여주세요.", "관리자");
+  assert.match(customCommandRegister.json.reply, /커스텀 명령어가 저장/);
+
+  const customCommandList = await chat("/명령어목록", "관리자");
+  assert.match(customCommandList.json.reply, /\/규칙/);
+
+  const customCommandReply = await chat("/규칙", "사용자");
+  assert.match(customCommandReply.json.reply, /두글자 닉네임/);
+
+  const customCommandDelete = await chat("/명령어삭제 /규칙", "관리자");
+  assert.match(customCommandDelete.json.reply, /삭제했습니다/);
+
+  const customCommandAfterDelete = await chat("/규칙", "사용자");
+  assert.match(customCommandAfterDelete.json.reply, /등록되지 않은 명령어/);
 
   const tempAdminRegister = await chat("/관리자등록 임시관리자", "관리자");
   assert.match(tempAdminRegister.json.reply, /관리자로 등록/);

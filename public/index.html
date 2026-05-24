@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>픽셀곰 | 카카오 오픈채팅 운영봇</title>
+    <title>픽셀곰 | 카카오 오픈채팅 운영 자동화</title>
     <meta
       name="description"
-      content="픽셀곰은 카카오 오픈채팅 알림을 기반으로 자동응답, 출석, 포인트, 채팅랭킹, 방장봇 입장확인 연동을 지원하는 운영봇 서비스입니다."
+      content="픽셀곰은 카카오 오픈채팅 운영을 위한 알림 기반 운영봇 서비스입니다. 브릿지 앱, 콘솔, 봇 명령어, 커스텀 명령어, 추후 RPG 게임 연동까지 한 브랜드로 운영합니다."
     >
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260524-brand">
+    <link rel="stylesheet" href="/styles.css?v=20260524-commerce">
     <script>
       (() => {
         const userAgent = navigator.userAgent || "";
@@ -77,316 +77,353 @@
         <span>픽셀곰</span>
       </a>
       <nav class="nav-links" aria-label="페이지 이동">
-        <a href="#product">제품</a>
-        <a href="#rooms">다중방</a>
+        <a href="#features">기능</a>
+        <a href="#commands">명령어</a>
         <a href="#pricing">요금</a>
-        <a href="#console">콘솔</a>
-        <a href="#games">게임</a>
-        <a href="#setup">도입</a>
-        <a href="#limits">범위</a>
-        <a class="nav-cta" href="#contact">문의</a>
+        <a href="#updates">업데이트</a>
+        <a href="/store">스토어</a>
+        <a href="/guide">가이드</a>
+        <a href="/login">로그인</a>
+        <a class="nav-cta" href="/signup">시작하기</a>
       </nav>
     </header>
 
     <main id="top">
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-content">
-          <p class="eyebrow">Kakao Open Chat Ops</p>
+      <section class="hero commerce-hero" aria-labelledby="hero-title">
+        <div class="hero-content reveal">
+          <p class="eyebrow">Pixelgom Open Chat Ops</p>
           <h1 id="hero-title">픽셀곰</h1>
           <p class="hero-copy">
-            화면 감지 없이 카카오 알림을 받아 오픈채팅방의 자동응답, 출석, 포인트,
-            채팅랭킹, 방장봇 입장확인 연동을 운영합니다.
+            카카오 오픈채팅 운영을 자동화하는 월 5,500원 단일 요금제 서비스입니다.
+            운영 명령어는 고정하고, 방마다 커스텀 명령어를 추가할 수 있습니다.
           </p>
           <div class="hero-actions" aria-label="주요 작업">
-            <a class="button button-primary" href="#setup">도입 절차</a>
-            <a class="button button-secondary" href="https://open.kakao.com/o/gu25P5vi" target="_blank" rel="noopener noreferrer">테스트 문의</a>
+            <a class="button button-primary" href="#pricing">요금제 보기</a>
+            <a class="button button-secondary" href="https://open.kakao.com/o/gu25P5vi" target="_blank" rel="noopener noreferrer">오픈채팅 문의</a>
           </div>
+        </div>
+      </section>
+
+      <section class="search-band" aria-label="서비스 검색">
+        <div class="search-panel reveal">
+          <label for="site-search">픽셀곰 검색</label>
+          <div class="search-input-wrap">
+            <input id="site-search" data-site-search type="search" placeholder="명령어, 요금, 콘솔, RPG, 개인정보처리방침 검색">
+            <span aria-hidden="true">Ctrl K</span>
+          </div>
+          <div class="category-chips" aria-label="카테고리">
+            <a href="#features">주요 기능</a>
+            <a href="#commands">명령어</a>
+            <a href="#pricing">요금제</a>
+            <a href="#updates">공지/업데이트</a>
+            <a href="/store">스토어</a>
+            <a href="/privacy">법적 고지</a>
+          </div>
+          <div class="search-results" data-search-results aria-live="polite"></div>
         </div>
       </section>
 
       <section class="status-strip" aria-label="서비스 핵심 상태">
         <div>
-          <strong>알림 기반</strong>
-          <span>카카오 알림으로 들어온 메시지만 처리합니다.</span>
+          <strong>고정 명령어</strong>
+          <span>운영, 포인트, 히스토리, 게임 예약 명령어는 기본값으로 보호합니다.</span>
         </div>
         <div>
-          <strong>다중방 준비</strong>
-          <span>방별 설정, 관리자, 입장확인 문구를 분리합니다.</span>
+          <strong>커스텀 명령어</strong>
+          <span>방마다 /공지, /규칙 같은 자동응답을 별도로 만들 수 있습니다.</span>
         </div>
         <div>
-          <strong>월 5,500원</strong>
-          <span>30일 단위로 방별 서버 접속을 관리합니다.</span>
+          <strong>단일 요금</strong>
+          <span>방 1개 기준 30일 5,500원으로 구독 만료를 관리합니다.</span>
         </div>
       </section>
 
-      <section class="section product-section" id="product">
-        <div class="section-heading">
-          <p class="section-kicker">Product</p>
-          <h2>오픈채팅 운영을 앱과 서버로 연결합니다</h2>
-          <p>
-            픽셀곰은 봇폰의 카카오 알림을 서버로 보내고,
-            서버는 방별 규칙에 따라 필요한 답장과 운영 기록을 처리합니다.
-          </p>
+      <section class="section role-section" id="features">
+        <div class="section-heading reveal">
+          <p class="section-kicker">Brand System</p>
+          <h2>픽셀곰은 전체 서비스명입니다</h2>
+          <p>브릿지, 콘솔, 봇, RPG를 각각 분리해 판매 설명과 추후 게임 확장을 명확하게 잡았습니다.</p>
+        </div>
+        <div class="role-grid">
+          <article class="role-card reveal" data-search-source="픽셀곰 전체 서비스 브랜드 오픈채팅 운영 자동화">
+            <img src="/assets/pixgom-guardian.png" alt="" aria-hidden="true">
+            <h3>픽셀곰</h3>
+            <p>오픈채팅 운영 자동화 전체 브랜드입니다.</p>
+          </article>
+          <article class="role-card reveal" data-search-source="픽셀곰 브릿지 안드로이드 앱 카카오 알림 전송">
+            <img src="/assets/pixgom-shield.png" alt="" aria-hidden="true">
+            <h3>픽셀곰 브릿지</h3>
+            <p>봇폰에서 카카오 알림을 서버로 보내는 앱입니다.</p>
+          </article>
+          <article class="role-card reveal" data-search-source="픽셀곰 콘솔 관리자 페이지 방 설정 구독 라이선스">
+            <img src="/assets/pixgom-sign.png" alt="" aria-hidden="true">
+            <h3>픽셀곰 콘솔</h3>
+            <p>방 등록, 관리자, 구독, 기능 토글을 관리합니다.</p>
+          </article>
+          <article class="role-card reveal" data-search-source="픽셀곰봇 카카오톡 명령어 출석 포인트 랭킹">
+            <img src="/assets/pixgom-chest.png" alt="" aria-hidden="true">
+            <h3>픽셀곰봇</h3>
+            <p>카카오톡 안에서 답장하는 운영 명령어 봇입니다.</p>
+          </article>
+          <article class="role-card reveal" data-search-source="픽셀곰 RPG 게임 모바일게임 카카오톡 연동 예정">
+            <img src="/assets/pixgom-sword.png" alt="" aria-hidden="true">
+            <h3>픽셀곰 RPG</h3>
+            <p>추후 별도 게임과 카카오 포인트 연동을 담당합니다.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section product-section">
+        <div class="section-heading reveal">
+          <p class="section-kicker">Features</p>
+          <h2>운영 기능은 고정하고, 방별 자동응답은 커스텀합니다</h2>
+          <p>판매용 서비스는 방마다 규칙이 다르기 때문에 기본 기능과 커스텀 영역을 분리해야 안정적입니다.</p>
         </div>
         <div class="feature-grid">
-          <article class="feature-card">
-            <img src="/assets/pixgom-shield.png" alt="" aria-hidden="true">
-            <h3>알림 실시간 전송</h3>
-            <p>카카오 알림에서 방, 보낸사람, 메시지를 읽어 서버로 전송합니다.</p>
-          </article>
-          <article class="feature-card">
-            <img src="/assets/pixgom-chest.png" alt="" aria-hidden="true">
-            <h3>픽셀곰봇 명령어</h3>
-            <p>출석, 포인트, 좋아요, 메시지함, 랭킹을 카카오톡 안에서 처리합니다.</p>
-          </article>
-          <article class="feature-card">
-            <img src="/assets/pixgom-sign.png" alt="" aria-hidden="true">
-            <h3>방장봇 입장확인</h3>
-            <p>방장봇 환영문구를 입장 신호로 활용해 첫 채팅과 연결합니다.</p>
-          </article>
-          <article class="feature-card">
+          <article class="feature-card reveal" data-search-source="알림 기반 자동응답 카카오톡 화면 감지 사용 안 함">
             <img src="/assets/pixgom-face-wide.png" alt="" aria-hidden="true">
-            <h3>닉네임 히스토리</h3>
-            <p>채팅 기반으로 닉네임 후보와 이전 활동 기록을 이어 봅니다.</p>
+            <h3>알림 기반 연결</h3>
+            <p>화면 감지 없이 카카오 알림으로 들어온 대화만 처리합니다.</p>
           </article>
-          <article class="feature-card">
-            <img src="/assets/pixgom-sword.png" alt="" aria-hidden="true">
-            <h3>관리자 권한</h3>
-            <p>방별 관리자만 민감한 설정과 기록 명령어를 사용할 수 있습니다.</p>
+          <article class="feature-card reveal" data-search-source="방별 관리자 라이선스 구독 만료일 관리 콘솔">
+            <img src="/assets/pixgom-shield.png" alt="" aria-hidden="true">
+            <h3>방별 운영 관리</h3>
+            <p>방 이름, roomId, 관리자, 라이선스, 만료일을 분리합니다.</p>
           </article>
-          <article class="feature-card">
+          <article class="feature-card reveal" data-search-source="커스텀 명령어 공지 규칙 프로필양식 자동응답">
+            <img src="/assets/pixgom-sign.png" alt="" aria-hidden="true">
+            <h3>커스텀 명령어</h3>
+            <p>/공지, /규칙, /프로필양식 같은 방 전용 답장을 만듭니다.</p>
+          </article>
+          <article class="feature-card reveal" data-search-source="출석 포인트 랭킹 좋아요 응원 포인트 순위">
+            <img src="/assets/pixgom-chest.png" alt="" aria-hidden="true">
+            <h3>참여 보상</h3>
+            <p>출석, 포인트, 좋아요, 랭킹으로 채팅방 활동을 유도합니다.</p>
+          </article>
+          <article class="feature-card reveal" data-search-source="닉네임 히스토리 재입장 후보 입퇴장 기록">
             <img src="/assets/pixgom-slime.png" alt="" aria-hidden="true">
-            <h3>원본 알림 진단</h3>
-            <p>카카오 알림 원본을 확인해 방별 파서와 자동응답을 안정화합니다.</p>
+            <h3>히스토리 보정</h3>
+            <p>닉네임 변경과 재입장 후보를 채팅 기록 기반으로 이어 봅니다.</p>
           </article>
+          <article class="feature-card reveal" data-search-source="게임 주사위 낚시 탐험 픽셀곰 RPG 연동 예정">
+            <img src="/assets/pixgom-adventure.png" alt="" aria-hidden="true">
+            <h3>게임 확장 준비</h3>
+            <p>현재 미니게임을 시작점으로, 추후 픽셀곰 RPG와 연동합니다.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section command-section" id="commands">
+        <div class="section-heading reveal">
+          <p class="section-kicker">Commands</p>
+          <h2>명령어는 고정 영역과 커스텀 영역으로 나눕니다</h2>
+          <p>고정 명령어는 기본 운영과 게임 연동을 위해 예약하고, 고객방 전용 문구는 별도로 추가합니다.</p>
+        </div>
+        <div class="command-grid" aria-label="대표 명령어">
+          <div class="reveal" data-search-source="고정 명령어 상태 도움말 브릿지 메시지 최근이벤트">
+            <h3>기본 운영</h3>
+            <code>/상태</code>
+            <code>/브릿지</code>
+            <code>/메시지</code>
+            <code>/최근이벤트 10</code>
+          </div>
+          <div class="reveal" data-search-source="포인트 출석 좋아요 응원 랭킹">
+            <h3>참여 보상</h3>
+            <code>/출석</code>
+            <code>/포인트</code>
+            <code>/좋아요 닉네임 10</code>
+            <code>/포인트순위</code>
+          </div>
+          <div class="reveal" data-search-source="게임 명령어 주사위 낚시 탐험 RPG 예약">
+            <h3>게임</h3>
+            <code>/게임</code>
+            <code>/주사위</code>
+            <code>/낚시</code>
+            <code>/게임명령어</code>
+          </div>
+          <div class="reveal" data-search-source="커스텀 명령어 등록 삭제 목록 공지 규칙">
+            <h3>커스텀</h3>
+            <code>/명령어등록 /공지 내용</code>
+            <code>/명령어삭제 /공지</code>
+            <code>/명령어목록</code>
+            <code>/고정명령어</code>
+          </div>
         </div>
       </section>
 
       <section class="section pricing-section" id="pricing">
-        <div class="pricing-copy">
+        <div class="pricing-copy reveal">
           <p class="section-kicker">Pricing</p>
-          <h2>방 운영용 기본 요금은 월 5,500원입니다</h2>
+          <h2>요금제는 하나로 단순하게 갑니다</h2>
           <p>
-            한 달 이용기간이 지나면 서버 응답을 중단하고, 관리자가 구독을 연장해야 다시 명령어가 작동합니다.
-            판매 전 테스트에서는 방별 만료일과 관리자 권한을 먼저 확인합니다.
+            고객에게 설명하기 쉬운 단일 플랜입니다. 방 1개를 30일 단위로 운영하고,
+            만료일이 지나면 일반 명령어의 서버 응답을 중단합니다.
           </p>
         </div>
-        <div class="pricing-panel" aria-label="픽셀곰 기본 요금">
-          <span class="price-label">기본 플랜</span>
+        <div class="pricing-panel reveal" aria-label="픽셀곰 단일 요금제">
+          <span class="price-label">픽셀곰 기본 플랜</span>
           <strong>5,500원</strong>
           <span class="price-unit">방 1개 / 30일</span>
           <ul>
-            <li>방별 관리자와 입장확인 문구 등록</li>
-            <li>출석, 포인트, 랭킹, 메시지함 명령어</li>
-            <li>구독 만료 시 일반 명령어 서버 차단</li>
-            <li>방별 기능 ON/OFF와 구독 만료 알림</li>
-            <li>주사위, 낚시, 탐험 미니게임 기반</li>
+            <li>픽셀곰 브릿지 앱 연결</li>
+            <li>픽셀곰 콘솔 방 관리</li>
+            <li>픽셀곰봇 기본 운영 명령어</li>
+            <li>방별 커스텀 명령어 최대 30개</li>
+            <li>구독 만료 차단, 기능 ON/OFF, 백업/진단</li>
           </ul>
+          <a class="button button-primary" href="/signup">시작하기</a>
         </div>
       </section>
 
-      <section class="section console-section" id="console">
-        <div class="console-copy">
-          <p class="section-kicker">Admin Console</p>
-          <h2>판매 운영은 픽셀곰 콘솔에서 정리합니다</h2>
-          <p>
-            방 이름, 오픈채팅 링크, 관리자, 라이선스 키, 구독 만료일, 기능 ON/OFF를 한 곳에서 확인합니다.
-            앱은 방 설정을 쉽게 입력하고, 서버는 등록된 라이선스 키와 이용기간을 기준으로 응답합니다.
-          </p>
-          <div class="console-actions">
-            <a class="button button-primary" href="/admin">픽셀곰 콘솔 열기</a>
-            <a class="button button-secondary" href="#setup">설정 순서 보기</a>
-          </div>
+      <section class="section store-section" id="store-preview">
+        <div class="store-copy reveal">
+          <p class="section-kicker">Service Category</p>
+          <h2>스토어 연결을 고려한 서비스 카테고리</h2>
+          <p>처음에는 단일 상품으로 시작하고, 추후 설치 대행과 게임 연동 상품을 분리할 수 있게 준비합니다.</p>
         </div>
-        <div class="console-panel" aria-label="관리 콘솔 기능">
-          <div>
-            <strong>라이선스 키</strong>
-            <span>방마다 다른 키로 앱 복사 사용을 줄입니다.</span>
-          </div>
-          <div>
-            <strong>구독 만료</strong>
-            <span>만료된 방은 일반 명령어 응답을 멈춥니다.</span>
-          </div>
-          <div>
-            <strong>방별 관리자</strong>
-            <span>관리자 명령어와 설정 변경 권한을 분리합니다.</span>
-          </div>
-          <div>
-            <strong>기능 토글</strong>
-            <span>출석, 포인트, 랭킹, 히스토리, 게임을 방별로 켜고 끕니다.</span>
-          </div>
-          <div>
-            <strong>백업/진단</strong>
-            <span>운영 상태와 백업 JSON을 픽셀곰 콘솔에서 확인합니다.</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="section room-section" id="rooms">
-        <div class="room-copy">
-          <p class="section-kicker">Multi Room</p>
-          <h2>판매용은 방마다 설정이 달라야 합니다</h2>
-          <p>
-            한 방 전용 문구가 아니라, 각 오픈채팅방이 자신의 방 이름과 입장확인 문구,
-            관리자, 명령어 사용 범위를 별도로 갖는 구조로 설계합니다.
-          </p>
-        </div>
-        <div class="room-table" role="table" aria-label="방별 설정 예시">
-          <div role="row" class="room-head">
-            <span role="columnheader">방</span>
-            <span role="columnheader">입장확인 문구</span>
-            <span role="columnheader">운영 기능</span>
-          </div>
-          <div role="row">
-            <span role="cell">픽셀곰 RPG 놀이터</span>
-            <span role="cell">픽셀곰 입장확인</span>
-            <span role="cell">출석, 포인트, 랭킹</span>
-          </div>
-          <div role="row">
-            <span role="cell">테스트 오픈채팅</span>
-            <span role="cell">입장확인</span>
-            <span role="cell">자동응답, 메시지함</span>
-          </div>
-          <div role="row">
-            <span role="cell">고객 운영방</span>
-            <span role="cell">환영 확인</span>
-            <span role="cell">관리자 명령어</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="section flow-section" id="setup">
-        <div class="visual-panel">
-          <img src="/assets/pixgom-guardian.png" alt="픽셀곰을 상징하는 픽셀아트 캐릭터">
-        </div>
-        <div class="flow-content">
-          <p class="section-kicker">Setup</p>
-          <h2>도입은 네 단계로 끝냅니다</h2>
-          <ol class="flow-list">
-            <li>
-              <strong>브릿지 앱 설치</strong>
-              <span>봇폰에 픽셀곰 브릿지를 설치하고 알림 접근 권한을 켭니다.</span>
-            </li>
-            <li>
-              <strong>채팅방 등록</strong>
-              <span>방 이름, 오픈채팅 링크, 입장확인 문구, 관리자 닉네임을 등록합니다.</span>
-            </li>
-            <li>
-              <strong>방장봇 문구 설정</strong>
-              <span>방장봇 환영메시지를 방별 입장확인 문구로 맞춥니다.</span>
-            </li>
-            <li>
-              <strong>명령어 테스트</strong>
-              <span>/브릿지, /상태, /출석, /포인트로 알림과 서버 연결을 확인합니다.</span>
-            </li>
-          </ol>
-        </div>
-      </section>
-
-      <section class="section command-section">
-        <div class="section-heading">
-          <p class="section-kicker">Commands</p>
-          <h2>픽셀곰봇에 필요한 기본 명령어</h2>
-          <p>방별로 켜고 끌 수 있는 명령어를 기준으로 운영자가 바로 테스트할 수 있게 구성합니다.</p>
-        </div>
-        <div class="command-grid" aria-label="대표 명령어">
-          <div>
-            <h3>브릿지</h3>
-            <code>/브릿지</code>
-            <code>/로컬상태</code>
-            <code>/최근이벤트 10</code>
-          </div>
-          <div>
-            <h3>운영</h3>
-            <code>/상태</code>
-            <code>/도움말</code>
-            <code>/메시지</code>
-          </div>
-          <div>
-            <h3>포인트</h3>
-            <code>/출석</code>
-            <code>/포인트</code>
-            <code>/포인트순위</code>
-          </div>
-          <div>
-            <h3>히스토리</h3>
-            <code>/닉이력 닉네임</code>
-            <code>/입퇴장현황 닉네임</code>
-            <code>/채팅오늘</code>
-          </div>
-        </div>
-      </section>
-
-      <section class="section game-section" id="games">
-        <div class="game-visual">
-          <img src="/assets/pixgom-chest.png" alt="픽셀곰 게임 기능을 상징하는 보물상자 픽셀아트">
-        </div>
-        <div class="game-copy">
-          <p class="section-kicker">Game Roadmap</p>
-          <h2>게임 기능은 준비 중입니다</h2>
-          <p>
-            현재는 실제 금전, 상점, 아이템 게임을 열지 않습니다. 운영 안정화 후 채팅방 안에서 쓰는 미니게임과
-            별도 모바일게임 연동을 단계적으로 추가할 계획입니다.
-          </p>
-          <div class="game-steps" aria-label="게임 기능 준비 단계">
-            <span>채팅 미니게임 설계</span>
-            <span>방별 ON/OFF 설정</span>
-            <span>모바일게임 연동 준비</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="section limit-section" id="limits">
-        <div class="limit-copy">
-          <p class="section-kicker">Scope</p>
-          <h2>정확한 판매를 위해 가능한 범위를 분명히 합니다</h2>
-          <p>
-            픽셀곰은 화면 감지를 기본으로 쓰지 않습니다. 따라서 카카오가 알림으로 주는 메시지와
-            방장봇 환영문구를 기준으로 안정적인 운영 기능을 제공합니다.
-          </p>
-        </div>
-        <div class="scope-grid">
-          <article>
-            <h3>가능</h3>
-            <ul>
-              <li>일반 채팅 명령어 자동응답</li>
-              <li>출석, 포인트, 랭킹</li>
-              <li>방장봇 입장확인 문구 연동</li>
-              <li>첫 채팅 기반 히스토리 보정</li>
-            </ul>
+        <div class="store-grid">
+          <article class="store-card reveal" data-search-source="스토어 픽셀곰 기본 플랜 5500원">
+            <span>카카오톡</span>
+            <h3>픽셀곰 기본 플랜</h3>
+            <p>방 1개, 30일 운영 자동화</p>
+            <strong>5,500원</strong>
           </article>
-          <article>
-            <h3>조건부</h3>
-            <ul>
-              <li>입장자 닉네임 즉시 확정</li>
-              <li>퇴장/닉변 실시간 감지</li>
-              <li>카카오 알림에 없는 시스템 문구</li>
-              <li>알림이 꺼진 방의 실시간 처리</li>
-            </ul>
+          <article class="store-card reveal" data-search-source="설치 대행 알림 권한 브릿지 설정">
+            <span>설치 지원</span>
+            <h3>초기 설정 대행</h3>
+            <p>브릿지 앱, 권한, 방 설정 지원 상품 예정</p>
+            <strong>준비 중</strong>
           </article>
+          <article class="store-card reveal" data-search-source="픽셀곰 RPG 게임 연동 모바일게임 포인트">
+            <span>게임</span>
+            <h3>픽셀곰 RPG 연동</h3>
+            <p>별도 모바일게임과 포인트 연동 예정</p>
+            <strong>로드맵</strong>
+          </article>
+        </div>
+        <div class="section-actions reveal">
+          <a class="button button-secondary" href="/store">스토어 페이지 보기</a>
+        </div>
+      </section>
+
+      <section class="section updates-section" id="updates">
+        <div class="section-heading reveal">
+          <p class="section-kicker">Notice & Updates</p>
+          <h2>공지사항과 업데이트 기록</h2>
+          <p>변경 사항을 게시글 형태로 남겨 고객에게 현재 기능과 제한 범위를 투명하게 안내합니다.</p>
+        </div>
+        <div class="post-grid">
+          <article class="post-card reveal" data-search-source="업데이트 0.4.42 커스텀 명령어 홈페이지 법적 고지">
+            <span>업데이트</span>
+            <h3>픽셀곰 0.4.42 업데이트</h3>
+            <time datetime="2026-05-24">2026년 5월 24일</time>
+            <p>커스텀 명령어, 고정 명령어 안내, 홈페이지 판매 구조, 법적 문서를 추가했습니다.</p>
+          </article>
+          <article class="post-card reveal" data-search-source="공지 단일 요금제 5500원 구독 만료">
+            <span>공지</span>
+            <h3>단일 요금제 운영 안내</h3>
+            <time datetime="2026-05-24">2026년 5월 24일</time>
+            <p>픽셀곰은 방 1개 30일 기준 5,500원으로 시작하며, 만료 시 서버 응답을 중단합니다.</p>
+          </article>
+          <article class="post-card reveal" data-search-source="로드맵 픽셀곰 RPG 게임 연동">
+            <span>로드맵</span>
+            <h3>픽셀곰 RPG 연동 계획</h3>
+            <time datetime="2026-05-24">2026년 5월 24일</time>
+            <p>카카오톡 운영봇과 별도 모바일게임 포인트 연동을 장기 과제로 준비합니다.</p>
+          </article>
+        </div>
+        <div class="section-actions reveal">
+          <a class="button button-primary" href="/updates">업데이트 전체보기</a>
+          <a class="button button-secondary" href="/notice">공지사항 보기</a>
+        </div>
+      </section>
+
+      <section class="section legal-preview-section">
+        <div class="legal-preview reveal">
+          <p class="section-kicker">Legal</p>
+          <h2>판매 전 법적 고지를 분리했습니다</h2>
+          <p>
+            개인정보처리방침, 서비스 이용약관, 환불/면책 안내를 별도 페이지로 두어
+            스토어와 Play Console 연결 시 바로 참조할 수 있게 구성합니다.
+          </p>
+          <div class="legal-links">
+            <a href="/privacy">개인정보처리방침</a>
+            <a href="/terms">서비스 이용약관</a>
+            <a href="/notice">공지사항</a>
+            <a href="/guide">이용 가이드</a>
+          </div>
         </div>
       </section>
 
       <section class="section contact-section" id="contact">
-        <div>
+        <div class="reveal">
           <p class="section-kicker">Pilot</p>
           <h2>먼저 내부 테스트방으로 검증합니다</h2>
           <p>
-            판매 전에는 실제 오픈채팅방에서 알림 원본, 방장봇 입장확인, 명령어 응답,
-            다중방 설정을 순서대로 검증해야 합니다.
+            실제 판매 전에는 알림 원본, 방장봇 입장확인, 명령어 응답,
+            다중방 설정, 커스텀 명령어를 순서대로 검증합니다.
           </p>
           <div class="contact-actions">
             <a class="button button-primary" href="https://open.kakao.com/o/gu25P5vi" target="_blank" rel="noopener noreferrer">오픈채팅 문의</a>
             <a class="button button-secondary" href="/health">서버 상태 확인</a>
           </div>
         </div>
-        <img src="/assets/pixgom-forest-wide.png" alt="픽셀곰 숲 배경 픽셀아트">
+        <img class="reveal" src="/assets/pixgom-forest-wide.png" alt="픽셀곰 숲 배경 픽셀아트">
       </section>
     </main>
 
     <footer class="site-footer">
-      <span>픽셀곰</span>
-      <span>알림 기반 오픈채팅 운영봇</span>
+      <div>
+        <strong>픽셀곰</strong>
+        <span>카카오 오픈채팅 운영 자동화</span>
+      </div>
+      <nav aria-label="하단 메뉴">
+        <a href="/store">스토어</a>
+        <a href="/updates">업데이트</a>
+        <a href="/privacy">개인정보처리방침</a>
+        <a href="/terms">서비스 이용약관</a>
+        <a href="/login">로그인</a>
+      </nav>
     </footer>
+
+    <script>
+      const searchItems = [...document.querySelectorAll("[data-search-source]")].map((element) => ({
+        title: element.querySelector("h3")?.textContent?.trim() || element.textContent.trim().slice(0, 28),
+        text: `${element.dataset.searchSource || ""} ${element.textContent || ""}`.toLowerCase(),
+        target: element.id ? `#${element.id}` : `#${element.closest("section")?.id || "top"}`
+      }));
+      const searchInput = document.querySelector("[data-site-search]");
+      const searchResults = document.querySelector("[data-search-results]");
+
+      function renderSearch(query) {
+        const value = query.trim().toLowerCase();
+        if (!value) {
+          searchResults.textContent = "검색어를 입력하면 관련 기능과 문서를 보여줍니다.";
+          return;
+        }
+        const matches = searchItems.filter((item) => item.text.includes(value)).slice(0, 6);
+        searchResults.innerHTML = matches.length
+          ? matches.map((item) => `<a href="${item.target}">${item.title}</a>`).join("")
+          : "<span>검색 결과가 없습니다. 공지, 요금, 명령어 같은 단어로 다시 검색해보세요.</span>";
+      }
+
+      if (searchInput && searchResults) {
+        renderSearch("");
+        searchInput.addEventListener("input", (event) => renderSearch(event.target.value));
+        window.addEventListener("keydown", (event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+            event.preventDefault();
+            searchInput.focus();
+          }
+        });
+      }
+
+      const observer = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) entry.target.classList.add("is-visible");
+        }
+      }, { threshold: 0.16 });
+      document.querySelectorAll(".reveal").forEach((element) => observer.observe(element));
+    </script>
   </body>
 </html>

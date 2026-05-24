@@ -92,7 +92,14 @@
             <label><input type="checkbox" name="feature_profiles" checked> 프로필</label>
             <label><input type="checkbox" name="feature_localJs" checked> JS 자동응답</label>
             <label><input type="checkbox" name="feature_games"> 게임</label>
+            <label><input type="checkbox" name="feature_customCommands" checked> 커스텀 명령어</label>
           </fieldset>
+
+          <label class="wide-label">
+            커스텀 명령어
+            <textarea name="customCommands" rows="7" placeholder="/공지=오늘 공지는 여기입니다.&#10;/규칙=두글자 닉네임 뒤에 성별을 붙여주세요."></textarea>
+            <small>한 줄에 하나씩 `/명령어=응답내용` 형식으로 입력합니다. 고정 명령어는 등록되지 않습니다.</small>
+          </label>
 
           <div class="admin-actions">
             <button class="button button-primary" type="submit">방 설정 저장</button>
@@ -141,8 +148,28 @@
           history: form.elements.feature_history.checked,
           profiles: form.elements.feature_profiles.checked,
           localJs: form.elements.feature_localJs.checked,
-          games: form.elements.feature_games.checked
+          games: form.elements.feature_games.checked,
+          customCommands: form.elements.feature_customCommands.checked
         };
+      }
+
+      function customCommandsFromForm() {
+        return form.elements.customCommands.value
+          .split(/\n+/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            const [trigger, ...responseParts] = line.split("=");
+            return {
+              trigger: trigger?.trim(),
+              response: responseParts.join("=").trim()
+            };
+          })
+          .filter((item) => item.trigger && item.response);
+      }
+
+      function customCommandsToText(commands = []) {
+        return commands.map((item) => `${item.trigger}=${item.response}`).join("\n");
       }
 
       function setFeatureForm(features = {}) {
@@ -153,6 +180,7 @@
         form.elements.feature_profiles.checked = features.profiles !== false;
         form.elements.feature_localJs.checked = features.localJs !== false;
         form.elements.feature_games.checked = features.games === true;
+        form.elements.feature_customCommands.checked = features.customCommands !== false;
       }
 
       function fillForm(room) {
@@ -167,6 +195,7 @@
         form.elements.monthlyPriceKrw.value = room.subscription?.monthlyPriceKrw || 5500;
         form.elements.subscriptionExpiresAt.value = room.subscription?.expiresAt ? room.subscription.expiresAt.slice(0, 10) : "";
         setFeatureForm(room.features || {});
+        form.elements.customCommands.value = customCommandsToText(room.customCommands || []);
       }
 
       function renderSummary(data) {
@@ -221,6 +250,7 @@
         data.roomAdmins = data.roomAdmins.split(",").map((item) => item.trim()).filter(Boolean);
         data.monthlyPriceKrw = Number(data.monthlyPriceKrw || 5500);
         data.features = featuresFromForm();
+        data.customCommands = customCommandsFromForm();
         const json = await requestJson("/api/admin/rooms", {
           method: "POST",
           headers: { "content-type": "application/json", "x-admin-token": token() },

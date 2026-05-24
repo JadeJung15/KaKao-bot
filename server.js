@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.41";
+export const APP_VERSION = "0.4.42";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -81,7 +81,10 @@ export const FEATURES = [
   "subscription-reminders",
   "admin-diagnostics-api",
   "admin-backup-restore",
-  "chat-mini-games"
+  "chat-mini-games",
+  "fixed-command-catalog",
+  "custom-room-commands",
+  "public-service-pages"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -113,7 +116,8 @@ const DEFAULT_ROOM_FEATURES = Object.freeze({
   history: true,
   profiles: true,
   localJs: true,
-  games: false
+  games: false,
+  customCommands: true
 });
 const FEATURE_LABELS = Object.freeze({
   attendance: "출석",
@@ -122,8 +126,41 @@ const FEATURE_LABELS = Object.freeze({
   history: "히스토리",
   profiles: "프로필",
   localJs: "JS 자동응답",
-  games: "게임"
+  games: "게임",
+  customCommands: "커스텀 명령어"
 });
+const CUSTOM_COMMAND_LIMIT = 30;
+const CUSTOM_COMMAND_RESPONSE_LIMIT = 700;
+const FIXED_COMMAND_GROUPS = Object.freeze([
+  {
+    title: "기본 운영",
+    commands: ["/상태", "/도움말", "/브릿지", "/js상태", "/로컬상태", "/메시지", "/최근이벤트", "/출석", "/포인트", "/내정보", "/프로필", "/닉이력"]
+  },
+  {
+    title: "포인트/랭킹",
+    commands: ["/좋아요", "/응원", "/뽑기", "/홀", "/짝", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위", "/채팅오늘", "/채팅금주"]
+  },
+  {
+    title: "관리자",
+    commands: ["/방등록", "/방정보", "/방목록", "/방삭제", "/입장문구", "/기능목록", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/관리자등록", "/관리자삭제", "/관리자목록", "/원본로그", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장상세", "/고유값초기화", "/포인트지급", "/포인트차감", "/포인트설정", "/명령어등록", "/명령어삭제", "/명령어목록"]
+  },
+  {
+    title: "게임/연동 예약",
+    commands: ["/게임", "/주사위", "/낚시", "/탐험", "/픽셀곰게임", "/게임연동"]
+  }
+]);
+const RESERVED_CUSTOM_COMMANDS = new Set([
+  "/",
+  "/help",
+  "/status",
+  "/bridge",
+  "/jsstatus",
+  "/?",
+  "/커스텀명령어",
+  "/고정명령어",
+  "/게임명령어",
+  ...FIXED_COMMAND_GROUPS.flatMap((group) => group.commands)
+]);
 const LUCKY_DRAW_OUTCOMES = [
   { threshold: 0.05, label: "대박", reward: 500, chance: "5%" },
   { threshold: 0.20, label: "성공", reward: 200, chance: "15%" },
@@ -265,6 +302,9 @@ async function staticResponse(req, res, pathname) {
   let relativePath;
   try {
     relativePath = pathname === "/" ? "index.html" : pathname === "/admin" ? "admin.html" : decodeURIComponent(pathname.replace(/^\/+/, ""));
+    if (relativePath && !path.extname(relativePath) && !relativePath.endsWith("/")) {
+      relativePath = `${relativePath}.html`;
+    }
   } catch {
     return false;
   }
@@ -422,6 +462,7 @@ function ensureRoom(state, room) {
   roomState.settings.roomLinks ||= [];
   roomState.settings.joinPhrase ||= DEFAULT_JOIN_PHRASE;
   roomState.settings.features = normalizeFeatureSettings(roomState.settings.features || {});
+  roomState.settings.customCommands = normalizeCustomCommands(roomState.settings.customCommands || {});
   roomState.settings.subscription ||= {};
   roomState.settings.subscription.monthlyPriceKrw = Number(roomState.settings.subscription.monthlyPriceKrw || MONTHLY_PRICE_KRW);
   roomState.pendingEntries ||= [];
@@ -469,6 +510,158 @@ function normalizeFeatureSettings(value = {}) {
   return features;
 }
 
+function normalizeCustomCommandTrigger(value) {
+  const firstToken = compactSpaces(value).replace(/^\/+/, "").split(/\s+/)[0] || "";
+  const cleaned = firstToken.replace(/[^\p{L}\p{N}_-]/gu, "").slice(0, 24);
+  return cleaned ? `/${cleaned}` : "";
+}
+
+function normalizeCustomCommandResponse(value) {
+  return normalizeText(value).slice(0, CUSTOM_COMMAND_RESPONSE_LIMIT);
+}
+
+function normalizeCustomCommands(value = []) {
+  const source = Array.isArray(value)
+    ? value
+    : Object.entries(value || {}).map(([trigger, response]) => ({ trigger, response }));
+  const byTrigger = new Map();
+  for (const item of source) {
+    const trigger = normalizeCustomCommandTrigger(item?.trigger || item?.command || item?.name);
+    const response = normalizeCustomCommandResponse(item?.response || item?.reply || item?.text);
+    if (!trigger || !response || RESERVED_CUSTOM_COMMANDS.has(trigger)) continue;
+    byTrigger.set(trigger, {
+      trigger,
+      response,
+      updatedAt: normalizeText(item?.updatedAt) || nowIso(),
+      updatedBy: normalizeText(item?.updatedBy)
+    });
+  }
+  return [...byTrigger.values()].slice(0, CUSTOM_COMMAND_LIMIT);
+}
+
+function customCommands(roomState) {
+  roomState.settings ||= {};
+  roomState.settings.customCommands = normalizeCustomCommands(roomState.settings.customCommands || {});
+  return roomState.settings.customCommands;
+}
+
+function customCommandSummary(roomState) {
+  const commands = customCommands(roomState);
+  return commands.length ? `${commands.length}개` : "없음";
+}
+
+function fixedCommandCatalogText(isAdminUser = false) {
+  const groups = isAdminUser ? FIXED_COMMAND_GROUPS : FIXED_COMMAND_GROUPS.filter((group) => group.title !== "관리자");
+  return [
+    "픽셀곰 고정 명령어",
+    "",
+    "고정 명령어는 기본 운영과 향후 게임 연동을 위해 예약되어 있어 커스텀 명령어로 덮어쓸 수 없습니다.",
+    "",
+    ...groups.flatMap((group) => [group.title, group.commands.join(", "), ""]),
+    "커스텀 명령어는 /명령어등록 /공지 내용 형식으로 추가합니다."
+  ].join("\n").trim();
+}
+
+function gameCommandCatalogText() {
+  return [
+    "픽셀곰 게임 명령어",
+    "",
+    "현재 사용",
+    "/게임 - 미니게임 안내",
+    "/주사위 - 1~6 결과에 따라 포인트 획득",
+    "/낚시 - 랜덤 보상 획득",
+    "/탐험 - 랜덤 보상 획득",
+    "",
+    "예약",
+    "/픽셀곰게임 - 별도 픽셀곰 게임 연동 예정",
+    "/게임연동 - 모바일게임 포인트 연동 예정",
+    "",
+    "게임 예약 명령어는 커스텀 명령어로 등록할 수 없습니다."
+  ].join("\n");
+}
+
+function customCommandListText(roomState) {
+  const commands = customCommands(roomState);
+  if (!commands.length) {
+    return [
+      "등록된 커스텀 명령어가 없습니다.",
+      "관리자는 /명령어등록 /공지 내용 형식으로 추가할 수 있습니다."
+    ].join("\n");
+  }
+  return [
+    "방별 커스텀 명령어",
+    "",
+    ...commands.map((item) => `• ${item.trigger} - ${item.response.split(/\n/)[0].slice(0, 34)}${item.response.length > 34 ? "..." : ""}`),
+    "",
+    `최대 ${CUSTOM_COMMAND_LIMIT}개까지 등록할 수 있습니다.`
+  ].join("\n");
+}
+
+function parseCustomCommandRegistration(text) {
+  const body = normalizeText(text.replace(/^\/(?:명령어등록|명령어수정|커스텀등록|커스텀수정)\s*/i, ""));
+  const match = body.match(/^(\S+)\s+([\s\S]+)$/);
+  if (!match) return { trigger: "", response: "" };
+  return {
+    trigger: normalizeCustomCommandTrigger(match[1]),
+    response: normalizeCustomCommandResponse(match[2])
+  };
+}
+
+function customCommandRegisterCommand(roomState, sender, text) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const { trigger, response } = parseCustomCommandRegistration(text);
+  if (!trigger || !response) {
+    return [
+      "형식: /명령어등록 /공지 내용",
+      "예: /명령어등록 /규칙 두글자 닉네임 뒤에 성별을 붙여주세요."
+    ].join("\n");
+  }
+  if (RESERVED_CUSTOM_COMMANDS.has(trigger)) {
+    return [
+      `${trigger} 은 고정 명령어라 커스텀 명령어로 등록할 수 없습니다.`,
+      "/고정명령어 로 예약된 명령어를 확인해주세요."
+    ].join("\n");
+  }
+  const commands = customCommands(roomState);
+  const existingIndex = commands.findIndex((item) => item.trigger === trigger);
+  if (existingIndex < 0 && commands.length >= CUSTOM_COMMAND_LIMIT) {
+    return `커스텀 명령어는 최대 ${CUSTOM_COMMAND_LIMIT}개까지 등록할 수 있습니다.`;
+  }
+  const item = { trigger, response, updatedAt: nowIso(), updatedBy: sender };
+  if (existingIndex >= 0) commands[existingIndex] = item;
+  else commands.push(item);
+  recordRoomEvent(roomState, { type: "custom_command_saved", trigger, by: sender });
+  return [
+    "커스텀 명령어가 저장되었습니다.",
+    `명령어: ${trigger}`,
+    "",
+    response
+  ].join("\n");
+}
+
+function customCommandDeleteCommand(roomState, sender, text) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const trigger = normalizeCustomCommandTrigger(text.replace(/^\/(?:명령어삭제|커스텀삭제)\s*/i, ""));
+  if (!trigger) return "형식: /명령어삭제 /공지";
+  const before = customCommands(roomState).length;
+  roomState.settings.customCommands = customCommands(roomState).filter((item) => item.trigger !== trigger);
+  if (roomState.settings.customCommands.length === before) return `${trigger} 커스텀 명령어를 찾지 못했습니다.`;
+  recordRoomEvent(roomState, { type: "custom_command_deleted", trigger, by: sender });
+  return `${trigger} 커스텀 명령어를 삭제했습니다.`;
+}
+
+function customCommandReply(roomState, command) {
+  const trigger = normalizeCustomCommandTrigger(command);
+  if (!trigger) return "";
+  const item = customCommands(roomState).find((commandItem) => commandItem.trigger === trigger);
+  if (!item) return "";
+  if (!featureEnabled(roomState, "customCommands")) return featureDisabledText("customCommands");
+  recordRoomEvent(roomState, { type: "custom_command_used", trigger });
+  return item.response;
+}
+
 function roomFeatures(roomState) {
   roomState.settings ||= {};
   roomState.settings.features = normalizeFeatureSettings(roomState.settings.features || {});
@@ -492,7 +685,8 @@ function featureKeyFromText(value) {
     history: ["history", "histories", "히스토리", "닉이력", "입퇴장", "최근이벤트"],
     profiles: ["profile", "profiles", "프로필"],
     localJs: ["js", "javascript", "자동응답", "js자동응답", "localjs"],
-    games: ["game", "games", "게임", "미니게임", "주사위", "낚시", "탐험"]
+    games: ["game", "games", "게임", "미니게임", "주사위", "낚시", "탐험"],
+    customCommands: ["custom", "customcommands", "command", "commands", "커스텀", "커스텀명령어", "명령어", "자동문구"]
   };
   for (const [key, names] of Object.entries(aliases)) {
     if (names.includes(text)) return key;
@@ -2870,6 +3064,7 @@ function commandFeatureKey(command) {
   if (/^\/(?:프로필|프로칠|프로필등록|프로필삭제|별명등록|별명삭제)(?:\s|$)/.test(command)) return "profiles";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|확률뽑기|뽑기|홀짝|홀|짝|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
   if (/^\/(?:게임|주사위|낚시|탐험)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
   return "";
 }
 
@@ -2918,6 +3113,11 @@ function helpText(isAdminUser = false) {
     "게임",
     "/게임 - 미니게임 안내",
     "/주사위, /낚시, /탐험",
+    "/게임명령어 - 현재/예약 게임 명령어",
+    "",
+    "커스텀",
+    "/명령어목록 - 방별 커스텀 명령어",
+    "/고정명령어 - 예약된 기본 명령어",
     "",
     "프로필",
     "/프로필 닉네임",
@@ -2947,6 +3147,8 @@ function helpText(isAdminUser = false) {
       "/방정보, /방목록, /방삭제",
       "/기능목록, /기능켜기 출석, /기능끄기 게임",
       "/구독상태, /구독연장 1, /구독만료 2026-06-30",
+      "/명령어등록 /공지 내용",
+      "/명령어삭제 /공지",
       "/고유값초기화 닉네임 - 이름 섞임 방지",
       "/포인트지급 닉네임 포인트",
       "/포인트차감 닉네임 포인트",
@@ -3001,6 +3203,7 @@ function roomAdminView(roomState) {
     admins: roomState.admins || [],
     licenseKey: license.key || "",
     features: roomFeatures(roomState),
+    customCommands: customCommands(roomState),
     subscription: {
       status: subscription.status || "unset",
       monthlyPriceKrw: subscription.monthlyPriceKrw || MONTHLY_PRICE_KRW,
@@ -3083,6 +3286,9 @@ function adminUpsertRoom(state, payload = {}) {
   license.status = payload.licenseStatus === "paused" ? "paused" : "active";
   license.updatedAt = nowIso();
   applyFeatureSettingsFromPayload(roomState, payload);
+  if (Object.hasOwn(payload, "customCommands")) {
+    settings.customCommands = normalizeCustomCommands(payload.customCommands);
+  }
 
   const subscription = subscriptionSettings(roomState);
   subscription.monthlyPriceKrw = Number(payload.monthlyPriceKrw || MONTHLY_PRICE_KRW);
@@ -3109,7 +3315,8 @@ function restoreRoomFromAdminPayload(state, roomPayload = {}) {
     subscriptionExpiresAt: roomPayload.subscription?.expiresAt || roomPayload.subscriptionExpiresAt,
     registered: roomPayload.registered,
     enabled: roomPayload.enabled,
-    features: roomPayload.features
+    features: roomPayload.features,
+    customCommands: roomPayload.customCommands
   });
   if (result.ok && Array.isArray(roomPayload.roomIds)) {
     for (const id of roomPayload.roomIds) addUnique(ensureRoom(state, result.room.name).settings.roomIds, id);
@@ -3213,6 +3420,11 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/기능" || command === "/기능목록") return featureSettingsCommand(roomState);
   if (command.startsWith("/기능켜기 ")) return featureUpdateCommand(roomState, sender, text, true);
   if (command.startsWith("/기능끄기 ")) return featureUpdateCommand(roomState, sender, text, false);
+  if (command === "/고정명령어") return fixedCommandCatalogText(isAdmin(roomState, sender));
+  if (command === "/게임명령어") return gameCommandCatalogText();
+  if (command === "/명령어목록" || command === "/커스텀명령어") return customCommandListText(roomState);
+  if (/^\/(?:명령어등록|명령어수정|커스텀등록|커스텀수정)\s/.test(command)) return customCommandRegisterCommand(roomState, sender, text);
+  if (/^\/(?:명령어삭제|커스텀삭제)\s/.test(command)) return customCommandDeleteCommand(roomState, sender, text);
   const requiredFeature = commandFeatureKey(command);
   if (requiredFeature && !featureEnabled(roomState, requiredFeature)) return featureDisabledText(requiredFeature);
   if (command === "/" || command === "/도움말" || command === "/help" || command === "/?") return helpText(isAdmin(roomState, sender));
@@ -3262,6 +3474,9 @@ async function handleCommand(state, room, sender, message, identity = {}) {
     const query = text.replace(/^\/(?:입퇴장현황|닉이력)\s*/i, "");
     return personHistoryText(roomState, query, sender);
   }
+
+  const customReply = customCommandReply(roomState, command);
+  if (customReply) return customReply;
 
   if (command.startsWith("/")) {
     return [
