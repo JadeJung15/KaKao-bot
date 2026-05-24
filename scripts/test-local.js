@@ -74,7 +74,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.54");
+  assert.equal(health.json.version, "0.4.55");
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
   assert.match(health.json.features.join(","), /profile-registry/);
@@ -142,6 +142,7 @@ try {
   assert.match(health.json.features.join(","), /simple-status-page/);
   assert.match(health.json.features.join(","), /branded-email-template/);
   assert.match(health.json.features.join(","), /kakao-oidc-id-token-login/);
+  assert.match(health.json.features.join(","), /kakao-social-login-first-connect/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.additionalRoomPriceKrw, 2200);
   assert.equal(health.json.adminConsoleEnabled, true);
@@ -528,7 +529,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.54");
+  assert.equal(buyerGuideApproved.json.version, "0.4.55");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -543,7 +544,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.54");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.55");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);

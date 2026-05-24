@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.54";
+export const APP_VERSION = "0.4.55";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -115,7 +115,8 @@ export const FEATURES = [
   "additional-room-pricing",
   "simple-status-page",
   "branded-email-template",
-  "kakao-oidc-id-token-login"
+  "kakao-oidc-id-token-login",
+  "kakao-social-login-first-connect"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -4509,7 +4510,7 @@ async function createSignupApplicationFromRequest(state, body = {}) {
 }
 
 async function loginAccountFromRequest(state, body = {}) {
-  const external = await externalAccountFromRequest(state, body, { requireConsentsForNew: true });
+  const external = await externalAccountFromRequest(state, body, { requireConsentsForNew: false });
   if (external) {
     if (!external.ok) return external;
     const account = external.account;

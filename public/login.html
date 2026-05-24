@@ -102,7 +102,9 @@
         const payload = await window.PixelgomAuth.accessPayload({});
         if (payload.accessToken) {
           result.textContent = "로그인 세션을 확인 중입니다.";
-          finishLogin(payload).catch(() => {});
+          finishLogin(payload).catch((error) => {
+            result.textContent = `카카오 로그인 처리 실패: ${error.message}`;
+          });
         }
       })();
     </script>
