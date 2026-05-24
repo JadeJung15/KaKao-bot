@@ -79,6 +79,7 @@
             <p class="section-kicker">Approved</p>
             <h2>${escapeHtml(data.account.email)} 구매자 가이드</h2>
             <p>아래 정보는 구매 승인된 계정 기준으로 표시됩니다.</p>
+            ${data.testAppUrl ? `<a class="button button-primary" href="${escapeHtml(data.testAppUrl)}" target="_blank" rel="noopener">Play 내부 테스트 앱 열기</a>` : ""}
           </div>
           <div class="buyer-room-grid">${roomCards}</div>
           <div class="buyer-guide-grid">${sections}</div>

@@ -121,6 +121,7 @@ try {
   assert.match(health.json.features.join(","), /bridge-connect-code-api/);
   assert.match(health.json.features.join(","), /buyer-room-auto-sync/);
   assert.match(health.json.features.join(","), /bridge-multi-room-auto-sync/);
+  assert.match(health.json.features.join(","), /play-internal-test-link/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.adminConsoleEnabled, true);
 
@@ -136,6 +137,7 @@ try {
   assert.doesNotMatch(homeText, /"#Intent"/);
   assert.match(homeText, /targetUrl\.search\}#Intent`/);
   assert.match(homeText, /기본 브라우저/);
+  assert.match(homeText, /픽셀곰 브릿지/);
   assert.match(homeText, /픽셀곰 브릿지/);
   assert.match(homeText, /픽셀곰 콘솔/);
   assert.match(homeText, /픽셀곰봇/);
@@ -340,7 +342,8 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.46");
+  assert.equal(buyerGuideApproved.json.version, "0.4.47");
+  assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
   assert.match(buyerGuideApproved.json.rooms[0].bridgeConnectCode, /\./);

@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.46";
+export const APP_VERSION = "0.4.47";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -96,13 +96,15 @@ export const FEATURES = [
   "split-account-application-flow",
   "bridge-connect-code-api",
   "buyer-room-auto-sync",
-  "bridge-multi-room-auto-sync"
+  "bridge-multi-room-auto-sync",
+  "play-internal-test-link"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
 const MONTHLY_PRICE_KRW = Math.max(0, Number(process.env.MONTHLY_PRICE_KRW || 5500)) || 5500;
 const DEFAULT_SUBSCRIPTION_DAYS = Math.max(1, Number(process.env.DEFAULT_SUBSCRIPTION_DAYS || 30));
 const ADMIN_CONSOLE_TOKEN = normalizeText(process.env.ADMIN_CONSOLE_TOKEN || process.env.PIXGOM_ADMIN_TOKEN || "");
+const PLAY_INTERNAL_TEST_URL = "https://play.google.com/apps/internaltest/4700397680875890998";
 
 const CHAT_POINT_REWARD = 2;
 const CHAT_EXP_REWARD = 1;
@@ -658,12 +660,13 @@ function buyerGuidePayload(state, account = {}) {
     ok: true,
     version: APP_VERSION,
     account: publicAccountView(account),
+    testAppUrl: PLAY_INTERNAL_TEST_URL,
     rooms,
     sections: [
       {
         title: "처음 시작",
         items: [
-          "픽셀곰 브릿지 앱을 봇폰에 설치합니다.",
+          `픽셀곰 브릿지 앱을 봇폰에 설치합니다. 내부 테스트 링크: ${PLAY_INTERNAL_TEST_URL}`,
           "앱 첫 화면에서 알림 접근 권한을 허용합니다.",
           "구매자 가이드의 승인된 방 카드에서 연결코드를 복사합니다.",
           "앱에서 연결코드 자동 설정을 실행하면 방 이름, roomId, 오픈채팅 링크, 라이선스 키가 자동 입력됩니다.",
