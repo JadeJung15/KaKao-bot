@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>로그인 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260524-buyer-console">
+    <link rel="stylesheet" href="/styles.css?v=20260525-auth-pricing">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="auth-page">
@@ -15,8 +15,6 @@
         <p class="section-kicker">Login</p>
         <h1>로그인</h1>
         <p>구매자는 로그인 후 구매자 콘솔에서 자기 방과 연결코드를 확인합니다.</p>
-        <p class="auth-note">운영자 이메일로 로그인하면 운영자 어드민 권한도 자동으로 확인됩니다.</p>
-        <small data-auth-mode>로그인 방식을 확인 중입니다.</small>
         <form data-login-form>
           <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
           <label>비밀번호<input name="password" type="password" autocomplete="current-password" required placeholder="비밀번호"></label>
@@ -32,7 +30,7 @@
         </div>
       </section>
     </main>
-    <script src="/auth.js?v=20260524-buyer-console"></script>
+    <script src="/auth.js?v=20260525-auth-pricing"></script>
     <script>
       const form = document.querySelector("[data-login-form]");
       const result = document.querySelector("[data-login-result]");
@@ -60,6 +58,7 @@
           : "";
         result.textContent = [
           "로그인되었습니다.",
+          `닉네임: ${json.account.nickname || "미입력"}`,
           `계정: ${json.account.email}`,
           json.ownerAccess ? "운영자 권한: 확인됨" : "운영자 권한: 없음",
           "",
@@ -99,7 +98,6 @@
 
       (async () => {
         const cfg = await window.PixelgomAuth.config();
-        window.PixelgomAuth.showAuthMode(document.querySelector("[data-auth-mode]"), cfg);
         kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
         const payload = await window.PixelgomAuth.accessPayload({});
         if (payload.accessToken) {

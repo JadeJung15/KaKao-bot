@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.51";
+export const APP_VERSION = "0.4.53";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -77,6 +77,7 @@ export const FEATURES = [
   "commercial-subscription-gate",
   "license-key-guard",
   "admin-console-api",
+  "admin-room-delete",
   "room-feature-toggles",
   "subscription-reminders",
   "admin-diagnostics-api",
@@ -109,11 +110,16 @@ export const FEATURES = [
   "kanana-ai-roadmap",
   "signup-consent-audit",
   "password-reset-flow",
-  "owner-email-admin-access"
+  "owner-email-admin-access",
+  "account-nickname-field",
+  "additional-room-pricing",
+  "simple-status-page",
+  "branded-email-template"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
 const MONTHLY_PRICE_KRW = Math.max(0, Number(process.env.MONTHLY_PRICE_KRW || 5500)) || 5500;
+const ADDITIONAL_ROOM_PRICE_KRW = Math.max(0, Number(process.env.ADDITIONAL_ROOM_PRICE_KRW || 2200)) || 2200;
 const DEFAULT_SUBSCRIPTION_DAYS = Math.max(1, Number(process.env.DEFAULT_SUBSCRIPTION_DAYS || 30));
 const ADMIN_CONSOLE_TOKEN = normalizeText(process.env.ADMIN_CONSOLE_TOKEN || process.env.PIXGOM_ADMIN_TOKEN || "");
 const OWNER_ADMIN_EMAILS = (process.env.OWNER_ADMIN_EMAILS || process.env.ADMIN_EMAILS || "jadejung15@gmail.com")
@@ -378,6 +384,9 @@ async function staticResponse(req, res, pathname) {
   try {
     const body = await readFile(filePath);
     const extension = path.extname(filePath).toLowerCase();
+    const responseBody = extension === ".html"
+      ? injectSessionNavScript(body.toString("utf8"))
+      : body;
     const cacheControl = [".ico", ".jpg", ".jpeg", ".png", ".svg", ".webp"].includes(extension)
       ? "public, max-age=31536000, immutable"
       : "no-cache";
@@ -386,7 +395,7 @@ async function staticResponse(req, res, pathname) {
       "cache-control": cacheControl
     });
     if (req.method === "HEAD") res.end();
-    else res.end(body);
+    else res.end(responseBody);
     return true;
   } catch (error) {
     if (error?.code !== "ENOENT" && error?.code !== "EISDIR") throw error;
@@ -474,6 +483,11 @@ async function saveState(state) {
   const tmpPath = `${DB_PATH}.tmp`;
   await writeFile(tmpPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
   await replaceStateFile(tmpPath, DB_PATH);
+}
+
+function injectSessionNavScript(html) {
+  if (!html.includes("</body>") || html.includes("/session-nav.js")) return html;
+  return html.replace("</body>", '    <script src="/session-nav.js?v=20260525-admin-fix" defer></script>\n  </body>');
 }
 
 async function replaceStateFile(tmpPath, targetPath) {
@@ -571,14 +585,26 @@ function accountHasRequiredConsents(account = {}) {
   return Boolean(account.consents?.terms?.agreed && account.consents?.privacy?.agreed);
 }
 
+function normalizeAccountNickname(payload = {}) {
+  return compactSpaces(payload.nickname || payload.displayName || payload.fullName || payload.full_name || payload.name || "").slice(0, 40);
+}
+
+function applyAccountProfile(account = {}, payload = {}) {
+  const nickname = normalizeAccountNickname(payload);
+  if (nickname) account.nickname = nickname;
+  return account;
+}
+
 function validateAccountPayload(payload = {}, options = {}) {
   const email = normalizeEmail(payload.email);
   const password = String(payload.password || "");
   const passwordConfirm = String(payload.passwordConfirm || payload.confirmPassword || payload.password_confirmation || "");
+  const nickname = normalizeAccountNickname(payload);
   const errors = [];
   if (!validEmail(email)) errors.push("email_required");
   if (password.length < SIGNUP_PASSWORD_MIN_LENGTH) errors.push("password_too_short");
   if (passwordConfirm && passwordConfirm !== password) errors.push("password_mismatch");
+  if (options.requireNickname && !nickname) errors.push("nickname_required");
   if (options.requireConsents) {
     const consentValidation = validateConsentPayload(payload);
     errors.push(...consentValidation.errors);
@@ -586,7 +612,7 @@ function validateAccountPayload(payload = {}, options = {}) {
   return {
     ok: errors.length === 0,
     errors,
-    value: { email, password }
+    value: { email, password, nickname }
   };
 }
 
@@ -672,7 +698,7 @@ async function supabaseUserFromAccessToken(accessToken) {
       email,
       provider: normalizeText(user.app_metadata?.provider || user.identities?.[0]?.provider || "supabase"),
       providers: Array.isArray(user.app_metadata?.providers) ? user.app_metadata.providers : [],
-      name: normalizeText(user.user_metadata?.name || user.user_metadata?.full_name || user.user_metadata?.nickname || ""),
+      name: normalizeAccountNickname(user.user_metadata || {}),
       avatarUrl: normalizeText(user.user_metadata?.avatar_url || user.user_metadata?.picture || "")
     }
   };
@@ -705,6 +731,7 @@ function ensureExternalAccount(state, externalUser = {}, payload = {}) {
     linkedAt: account.auth?.linkedAt || nowIso()
   };
   account.email = externalUser.email || account.email;
+  applyAccountProfile(account, { nickname: normalizeAccountNickname(payload) || externalUser.name || account.nickname || "" });
   account.status ||= "active";
   account.applicationIds ||= [];
   account.lastLoginAt = nowIso();
@@ -730,6 +757,7 @@ function publicAccountView(account = {}) {
   return {
     id: account.id || "",
     email: account.email || "",
+    nickname: account.nickname || account.auth?.name || "",
     status: account.status || "active",
     ownerAccess: isOwnerEmail(account.email),
     authProvider: account.auth?.provider || "password",
@@ -762,6 +790,25 @@ function publicPaymentView(payment = {}) {
   };
 }
 
+function billableApplicationCount(state, account = {}) {
+  return (account.applicationIds || [])
+    .map((id) => state.applications?.[id])
+    .filter((application) => application && application.status !== "cancelled" && application.status !== "rejected")
+    .length;
+}
+
+function applicationPlanForAccount(state, account = {}) {
+  const additionalRoom = billableApplicationCount(state, account) > 0;
+  return {
+    type: additionalRoom ? "additional_room" : "base_room",
+    label: additionalRoom ? "추가 방" : "기본 방",
+    monthlyPriceKrw: additionalRoom ? ADDITIONAL_ROOM_PRICE_KRW : MONTHLY_PRICE_KRW,
+    baseMonthlyPriceKrw: MONTHLY_PRICE_KRW,
+    additionalRoomPriceKrw: ADDITIONAL_ROOM_PRICE_KRW,
+    days: DEFAULT_SUBSCRIPTION_DAYS
+  };
+}
+
 function publicApplicationView(application = {}, state = null) {
   const payment = state?.payments?.[application.paymentId] || {};
   return {
@@ -776,7 +823,14 @@ function publicApplicationView(application = {}, state = null) {
     memo: application.memo || "",
     status: application.status || "pending_payment",
     statusLabel: APPLICATION_STATUS_LABELS[application.status] || application.status || "결제 대기",
-    plan: application.plan || { monthlyPriceKrw: MONTHLY_PRICE_KRW, days: DEFAULT_SUBSCRIPTION_DAYS },
+    plan: application.plan || {
+      type: "base_room",
+      label: "기본 방",
+      monthlyPriceKrw: MONTHLY_PRICE_KRW,
+      baseMonthlyPriceKrw: MONTHLY_PRICE_KRW,
+      additionalRoomPriceKrw: ADDITIONAL_ROOM_PRICE_KRW,
+      days: DEFAULT_SUBSCRIPTION_DAYS
+    },
     payment: publicPaymentView(payment),
     licenseKey: application.licenseKey || "",
     createdAt: application.createdAt || "",
@@ -3711,6 +3765,7 @@ export function healthPayload() {
     gamesEnabled: true,
     gameRoadmapEnabled: true,
     monthlyPriceKrw: MONTHLY_PRICE_KRW,
+    additionalRoomPriceKrw: ADDITIONAL_ROOM_PRICE_KRW,
     defaultSubscriptionDays: DEFAULT_SUBSCRIPTION_DAYS,
     adminConsoleEnabled: OWNER_ADMIN_EMAILS.length > 0,
     features: FEATURES
@@ -3903,6 +3958,7 @@ function adminRoomsPayload(state) {
     ok: true,
     version: APP_VERSION,
     monthlyPriceKrw: MONTHLY_PRICE_KRW,
+    additionalRoomPriceKrw: ADDITIONAL_ROOM_PRICE_KRW,
     defaultSubscriptionDays: DEFAULT_SUBSCRIPTION_DAYS,
     summary: {
       rooms: rooms.length,
@@ -3912,6 +3968,31 @@ function adminRoomsPayload(state) {
       problemRooms: rooms.filter((room) => !room.diagnostics?.ok).length
     },
     rooms
+  };
+}
+
+function adminDeleteRoom(state, payload = {}) {
+  state.rooms ||= {};
+  const roomName = normalizeText(payload.room || payload.name || payload.roomName);
+  const roomId = payloadRoomId(payload);
+  if (!roomName && !roomId) return { ok: false, status: 400, error: "room_required" };
+
+  const target = Object.entries(state.rooms).find(([key, roomState]) => {
+    const ids = roomState.settings?.roomIds || [];
+    if (roomName && (key === roomKey(roomName) || keyFor(roomState.name) === keyFor(roomName))) return true;
+    return Boolean(roomId && ids.includes(roomId));
+  });
+
+  if (!target) return { ok: false, status: 404, error: "room_not_found" };
+  const [key, roomState] = target;
+  const deletedRoom = roomAdminView(roomState);
+  delete state.rooms[key];
+  return {
+    ok: true,
+    deletedRoom,
+    summary: {
+      rooms: Object.keys(state.rooms).length
+    }
   };
 }
 
@@ -4029,6 +4110,7 @@ function createApplicationForAccount(state, account = {}, payload = {}) {
   const value = validated.value;
   const applicationId = generateEntityId("app");
   const paymentId = generateEntityId("pay");
+  const plan = applicationPlanForAccount(state, account);
   const application = {
     id: applicationId,
     accountId: account.id,
@@ -4040,10 +4122,7 @@ function createApplicationForAccount(state, account = {}, payload = {}) {
     contact: value.contact,
     memo: value.memo,
     status: "pending_payment",
-    plan: {
-      monthlyPriceKrw: MONTHLY_PRICE_KRW,
-      days: DEFAULT_SUBSCRIPTION_DAYS
-    },
+    plan,
     paymentId,
     createdAt: nowIso(),
     updatedAt: nowIso()
@@ -4052,7 +4131,7 @@ function createApplicationForAccount(state, account = {}, payload = {}) {
     id: paymentId,
     applicationId,
     accountId: account.id,
-    amountKrw: MONTHLY_PRICE_KRW,
+    amountKrw: plan.monthlyPriceKrw,
     method: "manual_deposit",
     status: "awaiting_manual_deposit",
     createdAt: nowIso(),
@@ -4069,7 +4148,7 @@ function createApplicationForAccount(state, account = {}, payload = {}) {
     application: publicApplicationView(application, state),
     payment: publicPaymentView(payment),
     next: [
-      `월 이용금액 ${formatKrw(MONTHLY_PRICE_KRW)} 입금 확인 후 관리자가 승인합니다.`,
+      `${plan.label} 월 이용금액 ${formatKrw(plan.monthlyPriceKrw)} 입금 확인 후 관리자가 승인합니다.`,
       "승인되면 방 등록, 라이선스 키, 30일 구독이 자동 생성됩니다."
     ]
   };
@@ -4078,13 +4157,14 @@ function createApplicationForAccount(state, account = {}, payload = {}) {
 function createSignupAccount(state, payload = {}) {
   const existingEmail = normalizeEmail(payload.email);
   const existing = findAccountByEmail(state, existingEmail);
-  const validated = validateAccountPayload(payload, { requireConsents: !existing || !accountHasRequiredConsents(existing) });
+  const validated = validateAccountPayload(payload, { requireConsents: !existing || !accountHasRequiredConsents(existing), requireNickname: true });
   if (!validated.ok) return { ok: false, status: 400, error: validated.errors[0], errors: validated.errors };
   const value = validated.value;
   if (existing) {
     if (!verifyPassword(value.password, existing.passwordHash)) {
       return { ok: false, status: 409, error: "email_already_registered" };
     }
+    applyAccountProfile(existing, payload);
     applyConsentToAccount(existing, payload);
     existing.updatedAt = nowIso();
     return {
@@ -4102,6 +4182,7 @@ function createSignupAccount(state, payload = {}) {
   const account = {
     id: accountId,
     email: value.email,
+    nickname: value.nickname,
     passwordHash: hashPassword(value.password),
     status: "active",
     applicationIds: [],
@@ -4143,6 +4224,7 @@ function createSignupApplication(state, payload = {}) {
     targetAccount = {
       id: accountId,
       email: value.email,
+      nickname: value.nickname || normalizeAccountNickname(payload),
       passwordHash: hashPassword(value.password),
       status: "active",
       applicationIds: [],
@@ -4152,6 +4234,7 @@ function createSignupApplication(state, payload = {}) {
     };
     state.accounts[accountId] = targetAccount;
   }
+  applyAccountProfile(targetAccount, payload);
   applyConsentToAccount(targetAccount, payload);
   return createApplicationForAccount(state, targetAccount, value);
 }
@@ -4253,6 +4336,7 @@ function buyerConsolePayload(state, account = {}) {
     rooms: approvedApplications.map((application) => applicationRoomPayload(state, account, application)),
     plan: {
       monthlyPriceKrw: MONTHLY_PRICE_KRW,
+      additionalRoomPriceKrw: ADDITIONAL_ROOM_PRICE_KRW,
       days: DEFAULT_SUBSCRIPTION_DAYS
     },
     ownerAdminNotice: "/admin 은 판매자 운영자 전용입니다. 구매자는 /console, /my-rooms, /setup, /license 화면만 사용합니다."
@@ -4374,6 +4458,7 @@ function adminApplicationsPayload(state) {
     ok: true,
     version: APP_VERSION,
     monthlyPriceKrw: MONTHLY_PRICE_KRW,
+    additionalRoomPriceKrw: ADDITIONAL_ROOM_PRICE_KRW,
     summary: {
       applications: applications.length,
       pending: applications.filter((application) => application.status === "pending_payment").length,
@@ -4494,6 +4579,17 @@ async function handleAdminApi(req, url) {
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     const result = adminUpsertRoom(state, body);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if ((req.method === "DELETE" && url.pathname === "/api/admin/rooms") || (req.method === "POST" && url.pathname === "/api/admin/rooms/delete")) {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminDeleteRoom(state, body);
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };

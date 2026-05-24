@@ -1,6 +1,7 @@
 window.PixelgomAuth = (() => {
   let configPromise;
   let clientPromise;
+  const KAKAO_LOGIN_SCOPES = "profile_nickname";
 
   async function config() {
     if (!configPromise) {
@@ -29,7 +30,7 @@ window.PixelgomAuth = (() => {
 
   async function accessPayload(fallback = {}) {
     const currentSession = await session();
-    if (currentSession?.access_token) return { accessToken: currentSession.access_token };
+    if (currentSession?.access_token) return { ...fallback, accessToken: currentSession.access_token };
     return fallback;
   }
 
@@ -41,10 +42,17 @@ window.PixelgomAuth = (() => {
     return data;
   }
 
-  async function signUpWithPassword(email, password) {
+  async function signUpWithPassword(email, password, metadata = {}) {
     const supabaseClient = await client();
     if (!supabaseClient) return { local: true };
-    const { data, error } = await supabaseClient.auth.signUp({ email, password });
+    const { data, error } = await supabaseClient.auth.signUp({
+      email,
+      password,
+      options: {
+        data: metadata,
+        emailRedirectTo: `${window.location.origin}/signup`
+      }
+    });
     if (error) throw error;
     return data;
   }
@@ -73,7 +81,7 @@ window.PixelgomAuth = (() => {
     const redirectTo = `${window.location.origin}${redirectPath}`;
     const { error } = await supabaseClient.auth.signInWithOAuth({
       provider: "kakao",
-      options: { redirectTo }
+      options: { redirectTo, scopes: KAKAO_LOGIN_SCOPES }
     });
     if (error) throw error;
   }
@@ -82,6 +90,7 @@ window.PixelgomAuth = (() => {
     const supabaseClient = await client();
     if (supabaseClient) await supabaseClient.auth.signOut();
     sessionStorage.removeItem("pixgomBuyerToken");
+    sessionStorage.removeItem("pixgomOwnerToken");
   }
 
   function showAuthMode(target, cfg) {
@@ -91,8 +100,8 @@ window.PixelgomAuth = (() => {
       return;
     }
     target.textContent = cfg.auth?.kakaoEnabled
-      ? "Supabase 로그인 사용 중: 이메일/비밀번호 또는 카카오 로그인을 사용할 수 있습니다."
-      : "Supabase 이메일 로그인을 사용합니다. 카카오 로그인은 제공자 설정 후 열립니다.";
+      ? "이메일 또는 카카오로 시작할 수 있습니다."
+      : "이메일로 시작할 수 있습니다.";
   }
 
   return {

@@ -113,7 +113,8 @@
       <article class="buyer-guide-section">
         <h3>요금과 라이선스</h3>
         <ol>
-          <li>단일 요금제: 방 1개 / 30일 / ${formatKrw(data.plan?.monthlyPriceKrw)}</li>
+          <li>기본 요금: 방 1개 / 30일 / ${formatKrw(data.plan?.monthlyPriceKrw)}</li>
+          <li>추가 방: 방마다 / 30일 / ${formatKrw(data.plan?.additionalRoomPriceKrw || 2200)}</li>
           <li>구독이 만료되면 서버 응답이 차단됩니다.</li>
           <li>라이선스 키는 승인된 방마다 별도로 발급됩니다.</li>
           <li>앱을 재설치해도 연결코드를 다시 입력하면 같은 라이선스를 사용할 수 있습니다.</li>

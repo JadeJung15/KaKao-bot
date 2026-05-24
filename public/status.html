@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>서버 상태 | 픽셀곰</title>
+    <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
+    <link rel="stylesheet" href="/styles.css?v=20260525-auth-pricing">
+  </head>
+  <body class="sub-page">
+    <header class="site-header" aria-label="주요 메뉴">
+      <a class="brand" href="/" aria-label="픽셀곰 홈"><img src="/assets/pixgom-closeup.png" alt=""><span>픽셀곰</span></a>
+      <nav class="nav-links" aria-label="페이지 이동">
+        <a href="/updates">업데이트</a>
+        <a href="/guide">가이드</a>
+        <a href="/login">로그인</a>
+        <a class="nav-cta" href="/apply">서비스 신청</a>
+      </nav>
+    </header>
+    <main class="document-main">
+      <section class="document-hero">
+        <p class="section-kicker">Status</p>
+        <h1>서버 상태</h1>
+        <p>운영자가 빠르게 확인할 수 있게 핵심 상태만 표시합니다.</p>
+      </section>
+      <section class="status-dashboard" aria-live="polite">
+        <article>
+          <span>연결 상태</span>
+          <strong data-status-ok>확인 중</strong>
+        </article>
+        <article>
+          <span>서버 버전</span>
+          <strong data-status-version>-</strong>
+        </article>
+        <article>
+          <span>저장소</span>
+          <strong data-status-storage>-</strong>
+        </article>
+        <article>
+          <span>요금</span>
+          <strong data-status-price>-</strong>
+        </article>
+      </section>
+      <section class="document-body status-note">
+        <h2>문제가 있을 때</h2>
+        <p>상태가 정상인데 카카오톡 응답이 없으면 브릿지 앱의 알림 접근 권한, 등록 방, 연결코드를 먼저 확인해 주세요.</p>
+        <p>개발자용 원본 상태는 <a href="/api/health">/api/health</a>에서 확인할 수 있습니다.</p>
+      </section>
+    </main>
+    <script>
+      const setText = (selector, value) => {
+        const element = document.querySelector(selector);
+        if (element) element.textContent = value;
+      };
+
+      fetch("/api/health", { cache: "no-store" })
+        .then((response) => response.json())
+        .then((health) => {
+          setText("[data-status-ok]", health.ok ? "정상" : "점검 필요");
+          setText("[data-status-version]", health.version || "-");
+          setText("[data-status-storage]", health.storage === "postgres" ? "운영 DB" : "로컬 저장소");
+          setText(
+            "[data-status-price]",
+            `기본 ${Number(health.monthlyPriceKrw || 5500).toLocaleString("ko-KR")}원 / 추가 방 ${Number(health.additionalRoomPriceKrw || 2200).toLocaleString("ko-KR")}원`
+          );
+        })
+        .catch(() => {
+          setText("[data-status-ok]", "연결 실패");
+          document.body.classList.add("status-error");
+        });
+    </script>
+  </body>
+</html>

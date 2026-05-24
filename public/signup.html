@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>회원가입 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260524-buyer-console">
+    <link rel="stylesheet" href="/styles.css?v=20260525-auth-pricing">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="auth-page">
@@ -14,9 +14,10 @@
       <section class="auth-card">
         <p class="section-kicker">Account</p>
         <h1>회원가입</h1>
-        <p>구매자 계정을 만든 뒤 서비스 신청으로 이동합니다. 이메일 인증이 필요한 경우 인증 후 로그인해 주세요.</p>
+        <p>구매자 계정을 만든 뒤 이메일 인증을 완료하면 서비스 신청으로 이동할 수 있습니다.</p>
         <small data-auth-mode>로그인 방식을 확인 중입니다.</small>
         <form data-signup-form>
+          <label>닉네임<input name="nickname" type="text" autocomplete="nickname" required maxlength="40" placeholder="콘솔에 표시될 이름"></label>
           <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
           <label>비밀번호<input name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="8자 이상"></label>
           <label>비밀번호 확인<input name="passwordConfirm" type="password" autocomplete="new-password" required minlength="8" placeholder="비밀번호 다시 입력"></label>
@@ -37,7 +38,7 @@
           <button class="button button-primary" type="submit">계정 만들기</button>
           <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 시작</button>
         </form>
-        <pre class="form-status" data-signup-result aria-live="polite">계정을 만든 뒤 서비스 신청으로 이동합니다.</pre>
+        <pre class="form-status" data-signup-result aria-live="polite">가입 정보를 입력하면 인증 메일을 발송합니다.</pre>
         <div class="auth-links">
           <a href="/apply">이미 계정이 있으면 서비스 신청</a>
           <a href="/login">로그인</a>
@@ -45,7 +46,7 @@
         </div>
       </section>
     </main>
-    <script src="/auth.js?v=20260524-buyer-console"></script>
+    <script src="/auth.js?v=20260525-auth-pricing"></script>
     <script>
       const form = document.querySelector("[data-signup-form]");
       const result = document.querySelector("[data-signup-result]");
@@ -67,6 +68,10 @@
         event.preventDefault();
         result.textContent = "계정을 만드는 중입니다.";
         const payload = Object.fromEntries(new FormData(form).entries());
+        if (!payload.nickname?.trim()) {
+          result.textContent = "회원가입 실패: 닉네임을 입력해 주세요.";
+          return;
+        }
         if (payload.password !== payload.passwordConfirm) {
           result.textContent = "회원가입 실패: 비밀번호가 일치하지 않습니다.";
           return;
@@ -76,16 +81,24 @@
           return;
         }
         try {
-          const signupResult = await window.PixelgomAuth.signUpWithPassword(payload.email, payload.password);
+          const signupResult = await window.PixelgomAuth.signUpWithPassword(payload.email, payload.password, { nickname: payload.nickname });
           const authPayload = signupResult.local ? payload : await window.PixelgomAuth.accessPayload(payload);
           if (!authPayload.accessToken && !signupResult.local) {
-            result.textContent = "가입 확인 메일을 보냈습니다. 이메일 인증 후 로그인해 주세요.";
+            sessionStorage.setItem("pixgomSignupEmail", payload.email || "");
+            sessionStorage.setItem("pixgomSignupNickname", payload.nickname || "");
+            result.textContent = [
+              "인증 메일을 발송했습니다.",
+              "",
+              "메일함에서 '이메일 인증하기' 버튼을 눌러 가입을 완료해 주세요.",
+              "인증 후 로그인하면 서비스 신청을 이어갈 수 있습니다."
+            ].join("\n");
             return;
           }
           const json = await registerServerAccount(authPayload);
           sessionStorage.setItem("pixgomSignupEmail", payload.email || "");
           result.textContent = [
             json.created ? "회원가입이 완료되었습니다." : "이미 가입된 계정입니다.",
+            `닉네임: ${json.account.nickname || payload.nickname}`,
             `계정: ${json.account.email}`,
             "",
             ...json.next,
@@ -109,6 +122,7 @@
             return;
           }
           sessionStorage.setItem("pixgomSignupConsent", JSON.stringify({
+            nickname: payload.nickname || "",
             termsAgreed: true,
             privacyAgreed: true,
             marketingAgreed: Boolean(payload.marketingAgreed)
@@ -123,10 +137,12 @@
         const cfg = await window.PixelgomAuth.config();
         window.PixelgomAuth.showAuthMode(document.querySelector("[data-auth-mode]"), cfg);
         kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
-          const authPayload = await window.PixelgomAuth.accessPayload({});
-          if (authPayload.accessToken) {
-            result.textContent = "소셜 계정을 연결 중입니다.";
+        const authPayload = await window.PixelgomAuth.accessPayload({});
+        if (authPayload.accessToken) {
+          result.textContent = "소셜 계정을 연결 중입니다.";
           const storedConsent = JSON.parse(sessionStorage.getItem("pixgomSignupConsent") || "{}");
+          const fallbackNickname = sessionStorage.getItem("pixgomSignupNickname") || "";
+          if (fallbackNickname && !storedConsent.nickname) storedConsent.nickname = fallbackNickname;
           registerServerAccount({ ...storedConsent, ...authPayload })
             .then(() => {
               result.textContent = "계정 연결이 완료되었습니다. 서비스 신청으로 이동합니다.";

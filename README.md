@@ -7,7 +7,7 @@
 
 - 채팅방 봇 웹훅: `POST /chat-event`
 - 카카오 i 스킬 웹훅: `POST /skill`
-- 상태 확인: `GET /health`
+- 상태 확인: `GET /status`, 개발자용 원본 `GET /health`
 - 픽셀곰 기능 소개 홈페이지: `GET /`
 - 회원가입/서비스 신청/로그인: `GET /signup`, `GET /apply`, `GET /login`
 - 구매자 전용 가이드/콘솔: `GET /buyer-guide`, `GET /console`, `GET /my-rooms`, `GET /setup`, `GET /license`, `POST /api/buyer/guide`, `POST /api/buyer/console`
@@ -41,6 +41,8 @@
 - 26차 판매 흐름 단순화: 계정 생성과 서비스 신청을 분리하고, 승인된 방마다 브릿지 앱 연결코드를 발급
 - 27차 운영자/구매자 분리: `/admin`은 판매자 전용, 구매자는 `/console`, `/my-rooms`, `/setup`, `/license`만 사용
 - 28차 인증 확장 준비: Supabase 이메일 인증과 카카오 로그인 연결 준비, Kanana AI 활용 후보 로드맵 추가
+- 29차 가입/요금 개선: 회원가입 닉네임, 브랜드 이메일 인증 템플릿, 간단 서버 상태 화면, 추가 방 2,200원 요금 안내
+- 30차 어드민 안정화: 등록방 삭제 API/UI, 로그인 세션 표시 보정, 관리자 화면 스크롤 안정화, 카카오 로그인 요청 scope 축소
 
 ## 명령어
 
@@ -229,12 +231,15 @@ https://pixgom.com/chat-event   안드로이드 브릿지 기본 API 주소
 
 ## 회원가입과 라이선스 흐름
 
-1. `/signup`에서 이메일, 비밀번호, 비밀번호 확인을 입력하고 서비스 이용약관/개인정보처리방침에 동의해 계정을 만듭니다.
-2. `/apply`에서 방 이름, 오픈채팅 링크, 관리자 닉네임을 입력해 서비스를 신청합니다.
-3. 관리자가 입금 확인 후 운영자 전용 `/admin`에서 신청을 승인합니다.
-4. 승인 시 방별 라이선스 키와 앱 연결코드가 생성되고 30일 구독이 시작됩니다.
-5. 구매자는 `/console`, `/my-rooms`, `/setup`, `/license`에서 자기 방의 연결코드와 라이선스만 확인합니다.
-6. 구독 만료 후에는 해당 방의 서버 응답이 차단됩니다.
+1. `/signup`에서 닉네임, 이메일, 비밀번호, 비밀번호 확인을 입력하고 서비스 이용약관/개인정보처리방침에 동의해 계정을 만듭니다.
+2. Supabase 이메일 인증이 켜져 있으면 인증 메일의 `이메일 인증하기` 버튼을 눌러 가입을 완료합니다.
+3. `/apply`에서 방 이름, 오픈채팅 링크, 관리자 닉네임을 입력해 서비스를 신청합니다.
+4. 관리자가 입금 확인 후 운영자 전용 `/admin`에서 신청을 승인합니다.
+5. 승인 시 방별 라이선스 키와 앱 연결코드가 생성되고 30일 구독이 시작됩니다.
+6. 구매자는 `/console`, `/my-rooms`, `/setup`, `/license`에서 자기 방의 연결코드와 라이선스만 확인합니다.
+7. 구독 만료 후에는 해당 방의 서버 응답이 차단됩니다.
+
+요금은 기본 방 1개 30일 5,500원입니다. 같은 계정에서 방을 추가 신청하면 추가 방마다 30일 2,200원을 결제 대상으로 표시합니다.
 
 ## 운영자 어드민과 구매자 콘솔
 
@@ -263,8 +268,11 @@ https://pixgom.com/chat-event   안드로이드 브릿지 기본 API 주소
 3. Kakao Developers에서 웹 플랫폼 도메인 `https://pixgom.com`을 등록합니다.
 4. Kakao Login Redirect URI에는 Supabase 콜백 URL `https://프로젝트.ref.supabase.co/auth/v1/callback`을 등록합니다.
 5. Kakao REST API 키를 Supabase Auth Providers의 Kakao Client ID에 넣습니다. 카카오 앱에서 Client Secret을 켠 경우에만 Supabase에도 Secret을 넣습니다.
-6. Kakao provider 저장까지 끝난 뒤 Vercel의 `SUPABASE_KAKAO_ENABLED=true`를 설정합니다. provider가 준비되지 않은 상태에서는 `false`로 둡니다.
-7. 설정 후 `/api/auth/config`가 `mode: "supabase"`, Kakao provider 완료 후에는 `kakaoEnabled: true`를 반환하는지 확인합니다.
+6. 카카오 동의항목에는 기본 닉네임 제공 항목을 허용합니다. 픽셀곰 웹은 `profile_nickname`만 요청해 `KOE205 invalid_scope` 가능성을 줄입니다.
+7. Kakao provider 저장까지 끝난 뒤 Vercel의 `SUPABASE_KAKAO_ENABLED=true`를 설정합니다. provider가 준비되지 않은 상태에서는 `false`로 둡니다.
+8. 설정 후 `/api/auth/config`가 `mode: "supabase"`, Kakao provider 완료 후에는 `kakaoEnabled: true`를 반환하는지 확인합니다.
+
+이메일 인증 메일은 Supabase Auth Email Templates의 Confirm signup 템플릿에 `docs/supabase-email-confirmation-template.html` 내용을 붙여 넣어 사용합니다. 템플릿에는 픽셀곰 로고, `이메일 인증하기` 버튼, 24시간 유효 안내, 발신 전용 안내가 포함되어 있습니다.
 
 ## Kanana AI 활용 후보
 
