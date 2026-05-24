@@ -10,6 +10,9 @@ final class BridgeEvent {
     String packageName;
     String eventType;
     String targetName;
+    String joinPhrase;
+    String[] roomAdmins;
+    int monthlyPriceKrw;
     boolean groupChat;
 
     boolean hasRequiredFields() {

@@ -32,21 +32,23 @@ public class PixelgomNotificationListener extends NotificationListenerService {
         BridgeConfig.applyMigrations(this);
         if (!BridgeConfig.isEnabled(this)) return;
 
-        String configuredRoom = BridgeConfig.roomName(this);
+        String configuredRoom = BridgeConfig.roomNames(this);
         BridgeEvent event = KakaoNotificationParser.parse(
                 sbn,
                 configuredRoom,
-                BridgeConfig.roomId(this),
-                BridgeConfig.roomLink(this)
+                BridgeConfig.DEFAULT_ROOM_ID,
+                BridgeConfig.DEFAULT_ROOM_LINK
         );
         if (event == null) {
             BridgeConfig.appendLog(this, "무시: 카카오 알림에서 방/메시지 추출 실패");
             return;
         }
-        if (!BridgeConfig.roomMatches(this, event.rawRoom)) {
+        BridgeConfig.RoomProfile profile = BridgeConfig.matchingProfile(this, event.rawRoom);
+        if (profile == null) {
             BridgeConfig.appendLog(this, "무시: 등록방 아님 rawRoom=" + event.rawRoom);
             return;
         }
+        BridgeConfig.applyRoomProfile(event, profile);
         if (!event.hasRequiredFields()) {
             BridgeConfig.appendLog(this, "무시: 필수값 부족 sender=" + event.sender + " msg=" + event.message);
             return;

@@ -17,6 +17,8 @@ final class BridgeConfig {
     static final String DEFAULT_ROOM_NAME = "픽셀곰";
     static final String DEFAULT_ROOM_ID = "gu25P5vi";
     static final String DEFAULT_ROOM_LINK = "https://open.kakao.com/o/gu25P5vi";
+    static final String DEFAULT_JOIN_PHRASE = "픽셀곰 입장확인";
+    static final int MONTHLY_PRICE_KRW = 5500;
 
     private static final String PREFS = "pixelgom_bridge";
     private static final String KEY_ENABLED = "enabled";
@@ -24,6 +26,7 @@ final class BridgeConfig {
     private static final String KEY_ROOM_NAME = "room_name";
     private static final String KEY_ROOM_ID = "room_id";
     private static final String KEY_ROOM_LINK = "room_link";
+    private static final String KEY_ROOM_PROFILES = "room_profiles";
     private static final String KEY_SCRIPT_ENABLED = "script_enabled";
     private static final String KEY_SCRIPT_SOURCE = "script_source";
     private static final String KEY_ACCESSIBILITY_SYSTEM_EVENTS = "accessibility_system_events";
@@ -40,6 +43,12 @@ final class BridgeConfig {
 
     static void applyMigrations(Context context) {
         SharedPreferences prefs = prefs(context);
+        if (TextUtils.isEmpty(prefs.getString(KEY_ROOM_PROFILES, ""))) {
+            String roomName = textOrDefault(prefs.getString(KEY_ROOM_NAME, DEFAULT_ROOM_NAME), DEFAULT_ROOM_NAME);
+            String roomId = textOrDefault(prefs.getString(KEY_ROOM_ID, DEFAULT_ROOM_ID), DEFAULT_ROOM_ID);
+            String roomLink = textOrDefault(prefs.getString(KEY_ROOM_LINK, DEFAULT_ROOM_LINK), DEFAULT_ROOM_LINK);
+            prefs.edit().putString(KEY_ROOM_PROFILES, roomProfileLine(roomName, roomId, roomLink, DEFAULT_JOIN_PHRASE, DEFAULT_ROOM_NAME)).apply();
+        }
         if (prefs.getBoolean(KEY_RECORD_ONLY_MIGRATION, false)) return;
         String currentServerUrl = prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL);
         SharedPreferences.Editor editor = prefs.edit()
@@ -68,7 +77,7 @@ final class BridgeConfig {
     }
 
     static String roomName(Context context) {
-        return textOrDefault(prefs(context).getString(KEY_ROOM_NAME, DEFAULT_ROOM_NAME), DEFAULT_ROOM_NAME);
+        return firstRoomProfile(context).name;
     }
 
     static void setRoomName(Context context, String value) {
@@ -76,7 +85,7 @@ final class BridgeConfig {
     }
 
     static String roomId(Context context) {
-        return textOrDefault(prefs(context).getString(KEY_ROOM_ID, DEFAULT_ROOM_ID), DEFAULT_ROOM_ID);
+        return firstRoomProfile(context).roomId;
     }
 
     static void setRoomId(Context context, String value) {
@@ -84,7 +93,68 @@ final class BridgeConfig {
     }
 
     static String roomLink(Context context) {
-        return textOrDefault(prefs(context).getString(KEY_ROOM_LINK, DEFAULT_ROOM_LINK), DEFAULT_ROOM_LINK);
+        return firstRoomProfile(context).roomLink;
+    }
+
+    static String roomProfilesText(Context context) {
+        return textOrDefault(prefs(context).getString(KEY_ROOM_PROFILES, defaultRoomProfilesText()), defaultRoomProfilesText());
+    }
+
+    static void setRoomProfilesText(Context context, String value) {
+        String text = textOrDefault(value, defaultRoomProfilesText());
+        prefs(context).edit().putString(KEY_ROOM_PROFILES, text).apply();
+    }
+
+    static String defaultRoomProfilesText() {
+        return roomProfileLine(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, DEFAULT_ROOM_NAME);
+    }
+
+    static List<RoomProfile> roomProfiles(Context context) {
+        return parseRoomProfiles(roomProfilesText(context));
+    }
+
+    static int roomProfileCount(Context context) {
+        return roomProfiles(context).size();
+    }
+
+    static RoomProfile firstRoomProfile(Context context) {
+        List<RoomProfile> profiles = roomProfiles(context);
+        return profiles.isEmpty()
+                ? new RoomProfile(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, new String[]{ DEFAULT_ROOM_NAME })
+                : profiles.get(0);
+    }
+
+    static String roomNames(Context context) {
+        List<String> names = new ArrayList<>();
+        for (RoomProfile profile : roomProfiles(context)) {
+            if (!TextUtils.isEmpty(profile.name)) names.add(profile.name);
+        }
+        return TextUtils.join(",", names);
+    }
+
+    static RoomProfile matchingProfile(Context context, String rawRoom) {
+        String raw = normalizedRoomName(rawRoom);
+        if (raw.isEmpty()) return null;
+        List<RoomProfile> profiles = roomProfiles(context);
+        profiles.sort((left, right) -> Integer.compare(normalizedRoomName(right.name).length(), normalizedRoomName(left.name).length()));
+        for (RoomProfile profile : profiles) {
+            String configured = normalizedRoomName(profile.name);
+            if (configured.isEmpty()) continue;
+            if (configured.equals(raw) || raw.startsWith(configured + " ") || raw.startsWith(configured + "(")) {
+                return profile;
+            }
+        }
+        return null;
+    }
+
+    static void applyRoomProfile(BridgeEvent event, RoomProfile profile) {
+        if (event == null || profile == null) return;
+        event.room = profile.name;
+        event.roomId = profile.roomId;
+        event.roomLink = profile.roomLink;
+        event.joinPhrase = profile.joinPhrase;
+        event.roomAdmins = profile.admins;
+        event.monthlyPriceKrw = MONTHLY_PRICE_KRW;
     }
 
     static boolean scriptEnabled(Context context) {
@@ -129,7 +199,7 @@ final class BridgeConfig {
     }
 
     static boolean roomMatches(Context context, String rawRoom) {
-        return !matchingRoomName(roomName(context), rawRoom).isEmpty();
+        return matchingProfile(context, rawRoom) != null;
     }
 
     static String matchingRoomName(String configuredRooms, String rawRoom) {
@@ -156,6 +226,46 @@ final class BridgeConfig {
         }
         if (names.isEmpty()) names.add(DEFAULT_ROOM_NAME);
         return names;
+    }
+
+    private static List<RoomProfile> parseRoomProfiles(String value) {
+        List<RoomProfile> profiles = new ArrayList<>();
+        String source = textOrDefault(value, defaultRoomProfilesText());
+        for (String rawLine : source.split("\\r?\\n")) {
+            String line = rawLine.trim();
+            if (line.isEmpty()) continue;
+            String[] parts = line.split("\\|", -1);
+            String name = parts.length > 0 ? parts[0].trim() : "";
+            if (TextUtils.isEmpty(name)) continue;
+            String roomId = parts.length > 1 ? textOrDefault(parts[1], DEFAULT_ROOM_ID) : DEFAULT_ROOM_ID;
+            String roomLink = parts.length > 2 ? textOrDefault(parts[2], DEFAULT_ROOM_LINK) : DEFAULT_ROOM_LINK;
+            String joinPhrase = parts.length > 3 ? textOrDefault(parts[3], DEFAULT_JOIN_PHRASE) : DEFAULT_JOIN_PHRASE;
+            String adminsText = parts.length > 4 ? parts[4] : name;
+            profiles.add(new RoomProfile(name, roomId, roomLink, joinPhrase, adminList(adminsText)));
+        }
+        if (profiles.isEmpty()) {
+            profiles.add(new RoomProfile(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, new String[]{ DEFAULT_ROOM_NAME }));
+        }
+        return profiles;
+    }
+
+    private static String[] adminList(String value) {
+        String source = textOrDefault(value, DEFAULT_ROOM_NAME);
+        List<String> admins = new ArrayList<>();
+        for (String item : source.split(",")) {
+            String name = item.trim();
+            if (!name.isEmpty()) admins.add(name);
+        }
+        if (admins.isEmpty()) admins.add(DEFAULT_ROOM_NAME);
+        return admins.toArray(new String[0]);
+    }
+
+    private static String roomProfileLine(String name, String roomId, String roomLink, String joinPhrase, String admins) {
+        return textOrDefault(name, DEFAULT_ROOM_NAME) + "|"
+                + textOrDefault(roomId, DEFAULT_ROOM_ID) + "|"
+                + textOrDefault(roomLink, DEFAULT_ROOM_LINK) + "|"
+                + textOrDefault(joinPhrase, DEFAULT_JOIN_PHRASE) + "|"
+                + textOrDefault(admins, DEFAULT_ROOM_NAME);
     }
 
     static void appendLog(Context context, String line) {
@@ -191,6 +301,22 @@ final class BridgeConfig {
         text = text.replaceAll("\\s*\\([0-9]+\\)$", "");
         text = text.replaceAll("\\s+[0-9]+$", "");
         return text.trim();
+    }
+
+    static final class RoomProfile {
+        final String name;
+        final String roomId;
+        final String roomLink;
+        final String joinPhrase;
+        final String[] admins;
+
+        RoomProfile(String name, String roomId, String roomLink, String joinPhrase, String[] admins) {
+            this.name = textOrDefault(name, DEFAULT_ROOM_NAME);
+            this.roomId = textOrDefault(roomId, DEFAULT_ROOM_ID);
+            this.roomLink = textOrDefault(roomLink, DEFAULT_ROOM_LINK);
+            this.joinPhrase = textOrDefault(joinPhrase, DEFAULT_JOIN_PHRASE);
+            this.admins = admins == null || admins.length == 0 ? new String[]{ DEFAULT_ROOM_NAME } : admins;
+        }
     }
 
     private static final String DEFAULT_SCRIPT_SOURCE =

@@ -29,8 +29,7 @@ public class MainActivity extends Activity {
     private TextView permissionStatus;
     private TextView logView;
     private EditText serverUrlInput;
-    private EditText roomNameInput;
-    private EditText roomIdInput;
+    private EditText roomProfilesInput;
     private EditText scriptSourceInput;
     private Switch enabledSwitch;
     private Switch scriptEnabledSwitch;
@@ -90,7 +89,10 @@ public class MainActivity extends Activity {
 
         infoPanel.addView(labelValue("오픈채팅방 주소", BridgeConfig.roomLink(this)));
         infoPanel.addView(labelValue("홈페이지 주소", WEBSITE_URL));
+        infoPanel.addView(labelValue("월 이용금액", "5,500원 / 방 1개 / 30일"));
+        infoPanel.addView(labelValue("방별 설정", BridgeConfig.roomProfileCount(this) + "개"));
         infoPanel.addView(labelValue("등록 방", BridgeConfig.roomName(this) + " / " + BridgeConfig.roomId(this)));
+        infoPanel.addView(labelValue("게임 기능", "준비 중"));
 
         Button startButton = primaryButton("시작하기");
         startButton.setOnClickListener(v -> showMain());
@@ -158,11 +160,12 @@ public class MainActivity extends Activity {
         serverUrlInput = input("서버 URL", BridgeConfig.serverUrl(this));
         panel.addView(serverUrlInput);
 
-        roomNameInput = input("카카오 방 이름(쉼표로 여러 방)", BridgeConfig.roomName(this));
-        panel.addView(roomNameInput);
+        TextView roomProfileGuide = text("방별 설정: 방이름|roomId|오픈채팅링크|입장확인문구|관리자1,관리자2", 13, Color.rgb(111, 78, 49), true);
+        roomProfileGuide.setPadding(0, dp(12), 0, 0);
+        panel.addView(roomProfileGuide);
 
-        roomIdInput = input("오픈채팅 roomId", BridgeConfig.roomId(this));
-        panel.addView(roomIdInput);
+        roomProfilesInput = multiLineInput(BridgeConfig.roomProfilesText(this), 5);
+        panel.addView(roomProfilesInput);
 
         Button saveButton = primaryButton("설정 저장");
         saveButton.setOnClickListener(v -> saveSettings());
@@ -241,8 +244,7 @@ public class MainActivity extends Activity {
         permissionStatus = null;
         logView = null;
         serverUrlInput = null;
-        roomNameInput = null;
-        roomIdInput = null;
+        roomProfilesInput = null;
         scriptSourceInput = null;
         enabledSwitch = null;
         scriptEnabledSwitch = null;
@@ -251,24 +253,25 @@ public class MainActivity extends Activity {
     private void saveSettings() {
         BridgeConfig.setEnabled(this, enabledSwitch.isChecked());
         BridgeConfig.setServerUrl(this, serverUrlInput.getText().toString());
-        BridgeConfig.setRoomName(this, roomNameInput.getText().toString());
-        BridgeConfig.setRoomId(this, roomIdInput.getText().toString());
+        BridgeConfig.setRoomProfilesText(this, roomProfilesInput.getText().toString());
         BridgeConfig.setAccessibilitySystemEventsEnabled(this, false);
         BridgeConfig.setAccessibilityAutoReplyEnabled(this, false);
         BridgeConfig.setScriptEnabled(this, scriptEnabledSwitch.isChecked());
         BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
-        BridgeConfig.appendLog(this, "설정 저장됨 room=" + BridgeConfig.roomName(this) + " id=" + BridgeConfig.roomId(this) + " js=" + BridgeConfig.scriptEnabled(this));
+        BridgeConfig.appendLog(this, "설정 저장됨 rooms=" + BridgeConfig.roomProfileCount(this) + " primary=" + BridgeConfig.roomName(this) + " js=" + BridgeConfig.scriptEnabled(this));
         refreshStatus();
         refreshLogs();
     }
 
     private void sendTestEvent() {
         saveSettings();
+        BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
         BridgeEvent event = new BridgeEvent();
-        event.room = BridgeConfig.roomName(this);
-        event.rawRoom = BridgeConfig.roomName(this);
-        event.roomId = BridgeConfig.roomId(this);
-        event.roomLink = BridgeConfig.roomLink(this);
+        event.room = profile.name;
+        event.rawRoom = profile.name;
+        event.roomId = profile.roomId;
+        event.roomLink = profile.roomLink;
+        BridgeConfig.applyRoomProfile(event, profile);
         event.sender = "픽셀곰앱테스트";
         event.message = "/상태";
         event.packageName = getPackageName();
@@ -294,11 +297,13 @@ public class MainActivity extends Activity {
 
     private void testScript() {
         BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
+        BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
         BridgeEvent event = new BridgeEvent();
-        event.room = BridgeConfig.roomName(this);
-        event.rawRoom = BridgeConfig.roomName(this);
-        event.roomId = BridgeConfig.roomId(this);
-        event.roomLink = BridgeConfig.roomLink(this);
+        event.room = profile.name;
+        event.rawRoom = profile.name;
+        event.roomId = profile.roomId;
+        event.roomLink = profile.roomLink;
+        BridgeConfig.applyRoomProfile(event, profile);
         event.sender = "픽셀곰앱테스트";
         event.message = "/브릿지";
         event.packageName = getPackageName();
@@ -351,6 +356,23 @@ public class MainActivity extends Activity {
         editText.setTextSize(15);
         editText.setSelectAllOnFocus(false);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(10), 0, 0);
+        editText.setLayoutParams(params);
+        return editText;
+    }
+
+    private EditText multiLineInput(String value, int minLines) {
+        EditText editText = new EditText(this);
+        editText.setText(value);
+        editText.setTextSize(13);
+        editText.setGravity(Gravity.TOP | Gravity.START);
+        editText.setSingleLine(false);
+        editText.setMinLines(minLines);
+        editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        editText.setHorizontallyScrolling(false);
+        editText.setBackgroundColor(Color.rgb(255, 252, 246));
+        editText.setPadding(dp(10), dp(10), dp(10), dp(10));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(150));
         params.setMargins(0, dp(10), 0, 0);
         editText.setLayoutParams(params);
         return editText;

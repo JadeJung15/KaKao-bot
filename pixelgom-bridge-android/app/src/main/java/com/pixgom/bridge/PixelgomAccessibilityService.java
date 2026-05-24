@@ -96,17 +96,19 @@ public class PixelgomAccessibilityService extends AccessibilityService {
     }
 
     private BridgeEvent buildBridgeEvent(String rawRoom, SystemLine line) {
+        BridgeConfig.RoomProfile profile = BridgeConfig.matchingProfile(this, rawRoom);
         BridgeEvent event = new BridgeEvent();
-        event.room = BridgeConfig.roomName(this);
+        event.room = profile == null ? BridgeConfig.roomName(this) : profile.name;
         event.rawRoom = rawRoom;
-        event.roomId = BridgeConfig.roomId(this);
-        event.roomLink = BridgeConfig.roomLink(this);
+        event.roomId = profile == null ? BridgeConfig.roomId(this) : profile.roomId;
+        event.roomLink = profile == null ? BridgeConfig.roomLink(this) : profile.roomLink;
         event.sender = "카카오시스템";
         event.message = line.message;
         event.packageName = BridgeConfig.KAKAO_PACKAGE;
         event.groupChat = true;
         event.eventType = line.eventType;
         event.targetName = line.targetName;
+        if (profile != null) BridgeConfig.applyRoomProfile(event, profile);
         return event;
     }
 

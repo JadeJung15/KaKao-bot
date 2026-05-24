@@ -98,6 +98,9 @@ try {
   assert.match(health.json.features.join(","), /passive-notification-guard/);
   assert.match(health.json.features.join(","), /multi-room-registry/);
   assert.match(health.json.features.join(","), /room-join-phrase/);
+  assert.match(health.json.features.join(","), /commercial-subscription-gate/);
+  assert.match(health.json.features.join(","), /future-game-roadmap/);
+  assert.equal(health.json.monthlyPriceKrw, 5500);
 
   const home = await fetch(`${baseUrl}/`);
   assert.equal(home.status, 200);
@@ -115,6 +118,8 @@ try {
   assert.match(homeText, /다중방/);
   assert.match(homeText, /방장봇 입장확인/);
   assert.match(homeText, /화면 감지 없이/);
+  assert.match(homeText, /5,500원/);
+  assert.match(homeText, /게임/);
   assert.match(homeText, /href="https:\/\/open\.kakao\.com\/o\/gu25P5vi"/);
   assert.match(homeText, />문의<\/a>/);
 
@@ -227,6 +232,77 @@ try {
   });
   assert.match(roomInfo.json.reply, /판매테스트방 방 설정/);
   assert.match(roomInfo.json.reply, /입장확인 문구: 픽셀곰 입장확인/);
+  assert.match(roomInfo.json.reply, /월 이용금액: 5,500원/);
+  assert.match(roomInfo.json.reply, /이용기간 만료:/);
+
+  const expiredRoomRegister = await chatPayload({
+    registeredRoom: false,
+    room: "만료테스트방",
+    msg: "/방등록 만료 입장확인",
+    sender: "만료관리자",
+    roomId: "expiredRoom1",
+    roomLink: "https://open.kakao.com/o/expiredRoom1",
+    subscriptionExpiresAt: "2020-01-01T00:00:00.000Z"
+  });
+  assert.equal(expiredRoomRegister.json.ignored, false);
+  assert.match(expiredRoomRegister.json.reply, /방 등록 완료/);
+  assert.match(expiredRoomRegister.json.reply, /월 이용금액: 5,500원/);
+  assert.match(expiredRoomRegister.json.reply, /이용기간 만료:/);
+
+  const expiredAttendance = await chatPayload({
+    registeredRoom: false,
+    room: "만료테스트방",
+    msg: "/출석",
+    sender: "일반사용자",
+    roomId: "expiredRoom1",
+    roomLink: "https://open.kakao.com/o/expiredRoom1"
+  });
+  assert.equal(expiredAttendance.json.ignored, false);
+  assert.match(expiredAttendance.json.reply, /이용기간이 만료/);
+  assert.match(expiredAttendance.json.reply, /5,500원/);
+
+  const expiredStatus = await chatPayload({
+    registeredRoom: false,
+    room: "만료테스트방",
+    msg: "/구독상태",
+    sender: "만료관리자",
+    roomId: "expiredRoom1",
+    roomLink: "https://open.kakao.com/o/expiredRoom1"
+  });
+  assert.match(expiredStatus.json.reply, /구독 상태/);
+  assert.match(expiredStatus.json.reply, /만료/);
+  assert.match(expiredStatus.json.reply, /5,500원/);
+
+  const extendDenied = await chatPayload({
+    registeredRoom: false,
+    room: "만료테스트방",
+    msg: "/구독연장 1",
+    sender: "일반사용자",
+    roomId: "expiredRoom1",
+    roomLink: "https://open.kakao.com/o/expiredRoom1"
+  });
+  assert.match(extendDenied.json.reply, /관리자 전용/);
+
+  const extendSubscription = await chatPayload({
+    registeredRoom: false,
+    room: "만료테스트방",
+    msg: "/구독연장 1",
+    sender: "만료관리자",
+    roomId: "expiredRoom1",
+    roomLink: "https://open.kakao.com/o/expiredRoom1"
+  });
+  assert.match(extendSubscription.json.reply, /구독이 연장/);
+  assert.match(extendSubscription.json.reply, /월 이용금액: 5,500원/);
+
+  const activeAfterExtend = await chatPayload({
+    registeredRoom: false,
+    room: "만료테스트방",
+    msg: "/출석",
+    sender: "일반사용자",
+    roomId: "expiredRoom1",
+    roomLink: "https://open.kakao.com/o/expiredRoom1"
+  });
+  assert.doesNotMatch(activeAfterExtend.json.reply, /이용기간이 만료/);
 
   const joinSignal = await chatPayload({
     registeredRoom: false,

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
 const DEFAULT_BOT_NAME = process.env.BOT_DISPLAY_NAME || "운영봇";
-const ROOM_BRAND_NAME = process.env.ROOM_BRAND_NAME || "무잔썸";
+const ROOM_BRAND_NAME = process.env.ROOM_BRAND_NAME || "픽셀곰";
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
@@ -24,7 +24,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.37";
+export const APP_VERSION = "0.4.38";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -62,6 +62,7 @@ export const FEATURES = [
   "private-chat-guard",
   "registered-room-guard",
   "no-games",
+  "future-game-roadmap",
   "bridge-self-test-commands",
   "entry-reentry-candidate-history",
   "reserved-name-nickname-guard",
@@ -72,10 +73,13 @@ export const FEATURES = [
   "passive-notification-guard",
   "multi-room-registry",
   "room-join-phrase",
-  "commercial-bridge-mode"
+  "commercial-bridge-mode",
+  "commercial-subscription-gate"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
+const MONTHLY_PRICE_KRW = Math.max(0, Number(process.env.MONTHLY_PRICE_KRW || 5500)) || 5500;
+const DEFAULT_SUBSCRIPTION_DAYS = Math.max(1, Number(process.env.DEFAULT_SUBSCRIPTION_DAYS || 30));
 
 const CHAT_POINT_REWARD = 2;
 const CHAT_EXP_REWARD = 1;
@@ -388,9 +392,44 @@ function ensureRoom(state, room) {
   roomState.settings.roomIds ||= [];
   roomState.settings.roomLinks ||= [];
   roomState.settings.joinPhrase ||= DEFAULT_JOIN_PHRASE;
+  roomState.settings.subscription ||= {};
+  roomState.settings.subscription.monthlyPriceKrw = Number(roomState.settings.subscription.monthlyPriceKrw || MONTHLY_PRICE_KRW);
   roomState.pendingEntries ||= [];
   for (const person of Object.values(roomState.people)) normalizePersonState(person);
   return roomState;
+}
+
+function formatKrw(value) {
+  const amount = Math.max(0, Number(value || 0));
+  return `${amount.toLocaleString("ko-KR")}원`;
+}
+
+function addDaysIso(sourceDate, days) {
+  const date = sourceDate instanceof Date ? sourceDate : new Date(sourceDate || Date.now());
+  return new Date(date.getTime() + days * 86400000).toISOString();
+}
+
+function parseSubscriptionDate(value) {
+  const text = normalizeText(value);
+  if (!text) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const kstEndOfDay = new Date(`${text}T23:59:59+09:00`);
+    return Number.isNaN(kstEndOfDay.getTime()) ? "" : kstEndOfDay.toISOString();
+  }
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function formatSubscriptionDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "미설정";
+  return kstDateTime(date);
+}
+
+function remainingDays(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.ceil((date.getTime() - Date.now()) / 86400000);
 }
 
 function personKey(name) {
@@ -1081,13 +1120,131 @@ function adminListCommand(roomState) {
 }
 
 function roomRegistrationCommand(text) {
-  return /^\/(?:방등록|방설정|입장문구|방정보|방목록|방삭제)(?:\s|$)/i.test(normalizeText(text));
+  return /^\/(?:방등록|방설정|입장문구|방정보|방목록|방삭제|구독상태|구독연장|구독만료)(?:\s|$)/i.test(normalizeText(text));
+}
+
+function subscriptionSettings(roomState) {
+  roomState.settings ||= {};
+  roomState.settings.subscription ||= {};
+  const subscription = roomState.settings.subscription;
+  subscription.monthlyPriceKrw = Number(subscription.monthlyPriceKrw || MONTHLY_PRICE_KRW);
+  return subscription;
+}
+
+function updateSubscriptionStatus(roomState) {
+  const subscription = subscriptionSettings(roomState);
+  if (!subscription.expiresAt) {
+    subscription.status = "unset";
+    return subscription;
+  }
+  subscription.status = isSubscriptionExpired(roomState) ? "expired" : "active";
+  return subscription;
+}
+
+function isSubscriptionExpired(roomState) {
+  const subscription = subscriptionSettings(roomState);
+  if (!subscription.expiresAt) return false;
+  const expiresAt = new Date(subscription.expiresAt).getTime();
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now();
+}
+
+function subscriptionBypassCommand(text) {
+  return /^\/(?:구독상태|구독연장|구독만료|방정보|방등록|방설정|입장문구|방목록|도움말|help|\?)(?:\s|$)/i.test(normalizeText(text));
+}
+
+function subscriptionExpiredText(roomState) {
+  const subscription = updateSubscriptionStatus(roomState);
+  return [
+    "픽셀곰 브릿지 이용기간이 만료되었습니다.",
+    `월 이용금액: ${formatKrw(subscription.monthlyPriceKrw)}`,
+    `이용기간 만료: ${formatSubscriptionDate(subscription.expiresAt)}`,
+    "관리자에게 /구독연장 1 을 요청하세요."
+  ].join("\n");
+}
+
+function subscriptionLines(roomState) {
+  const subscription = updateSubscriptionStatus(roomState);
+  const days = remainingDays(subscription.expiresAt);
+  const status = subscription.status === "expired" ? "만료" : subscription.status === "active" ? "정상" : "미설정";
+  return [
+    "구독 상태",
+    "",
+    `상태: ${status}`,
+    `월 이용금액: ${formatKrw(subscription.monthlyPriceKrw)}`,
+    `이용기간 시작: ${formatSubscriptionDate(subscription.startedAt)}`,
+    `이용기간 만료: ${formatSubscriptionDate(subscription.expiresAt)}`,
+    days === null ? "남은 기간: 미설정" : `남은 기간: ${Math.max(0, days)}일`
+  ];
+}
+
+function subscriptionStatusCommand(roomState) {
+  return subscriptionLines(roomState).join("\n");
+}
+
+function subscriptionExtendCommand(roomState, sender, text) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const rawMonths = Number(normalizeText(text.replace(/^\/구독연장\s*/i, "")) || 1);
+  const months = Math.min(24, Math.max(1, Number.isFinite(rawMonths) ? Math.floor(rawMonths) : 1));
+  const subscription = subscriptionSettings(roomState);
+  const currentExpires = new Date(subscription.expiresAt || 0);
+  const base = Number.isFinite(currentExpires.getTime()) && currentExpires.getTime() > Date.now()
+    ? currentExpires
+    : new Date();
+  subscription.startedAt ||= nowIso();
+  subscription.expiresAt = addDaysIso(base, months * DEFAULT_SUBSCRIPTION_DAYS);
+  subscription.status = "active";
+  subscription.monthlyPriceKrw = MONTHLY_PRICE_KRW;
+  recordRoomEvent(roomState, { type: "subscription_extended", by: sender, months, expiresAt: subscription.expiresAt });
+  return [
+    `구독이 연장되었습니다. (${months}개월)`,
+    "",
+    ...subscriptionLines(roomState)
+  ].join("\n");
+}
+
+function subscriptionExpireCommand(roomState, sender, text) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const value = normalizeText(text.replace(/^\/구독만료\s*/i, ""));
+  const expiresAt = parseSubscriptionDate(value);
+  if (!expiresAt) return "형식: /구독만료 2026-06-30";
+  const subscription = subscriptionSettings(roomState);
+  subscription.startedAt ||= nowIso();
+  subscription.expiresAt = expiresAt;
+  subscription.status = isSubscriptionExpired(roomState) ? "expired" : "active";
+  subscription.monthlyPriceKrw = MONTHLY_PRICE_KRW;
+  recordRoomEvent(roomState, { type: "subscription_expiry_set", by: sender, expiresAt });
+  return [
+    "구독 만료일이 설정되었습니다.",
+    "",
+    ...subscriptionLines(roomState)
+  ].join("\n");
+}
+
+function applySubscriptionFromPayload(roomState, payload = {}) {
+  const subscription = subscriptionSettings(roomState);
+  const payloadPrice = Number(payload.monthlyPriceKrw || payload.monthlyPrice || payload.priceKrw || 0);
+  subscription.monthlyPriceKrw = payloadPrice > 0 ? payloadPrice : MONTHLY_PRICE_KRW;
+  subscription.startedAt ||= parseSubscriptionDate(payload.subscriptionStartedAt || payload.subscriptionStartAt) || nowIso();
+  const payloadExpiry = parseSubscriptionDate(payload.subscriptionExpiresAt || payload.subscriptionExpireAt || payload.subscriptionEndAt);
+  subscription.expiresAt = payloadExpiry || subscription.expiresAt || addDaysIso(new Date(), DEFAULT_SUBSCRIPTION_DAYS);
+  subscription.status = isSubscriptionExpired(roomState) ? "expired" : "active";
+  return subscription;
+}
+
+function payloadAdminNames(payload = {}) {
+  const value = Array.isArray(payload.roomAdmins)
+    ? payload.roomAdmins.join(",")
+    : payload.roomAdmins || payload.admins || payload.adminNames || "";
+  return parseAdminNames(value);
 }
 
 function roomSettingsLines(roomState) {
   const settings = roomState.settings || {};
   const ids = (settings.roomIds || []).filter(Boolean);
   const links = (settings.roomLinks || []).filter(Boolean);
+  const subscription = updateSubscriptionStatus(roomState);
   return [
     `${roomState.name || "현재방"} 방 설정`,
     "",
@@ -1095,7 +1252,11 @@ function roomSettingsLines(roomState) {
     `입장확인 문구: ${settings.joinPhrase || DEFAULT_JOIN_PHRASE}`,
     `roomId: ${ids.length ? ids.join(", ") : "미등록"}`,
     `링크: ${links.length ? links.join(", ") : "미등록"}`,
-    `관리자: ${(roomState.admins || []).length ? roomState.admins.join(", ") : "미등록"}`
+    `관리자: ${(roomState.admins || []).length ? roomState.admins.join(", ") : "미등록"}`,
+    `월 이용금액: ${formatKrw(subscription.monthlyPriceKrw)}`,
+    `이용기간 만료: ${formatSubscriptionDate(subscription.expiresAt)}`,
+    `구독 상태: ${subscription.status === "expired" ? "만료" : subscription.status === "active" ? "정상" : "미설정"}`,
+    "게임 기능: 준비 중"
   ];
 }
 
@@ -1126,7 +1287,11 @@ function roomRegisterCommand(roomState, sender, text, payload = {}) {
 
   const body = normalizeText(text.replace(/^\/방등록\s*/i, ""));
   const linkMatch = body.match(/https?:\/\/open\.kakao\.com\/o\/[A-Za-z0-9_-]+/i);
-  const phrase = normalizeText(body.replace(/https?:\/\/open\.kakao\.com\/o\/[A-Za-z0-9_-]+/ig, "")) || roomState.settings.joinPhrase || DEFAULT_JOIN_PHRASE;
+  const payloadPhrase = normalizeText(payload.joinPhrase || payload.roomJoinPhrase || "");
+  const phrase = payloadPhrase
+    || normalizeText(body.replace(/https?:\/\/open\.kakao\.com\/o\/[A-Za-z0-9_-]+/ig, ""))
+    || roomState.settings.joinPhrase
+    || DEFAULT_JOIN_PHRASE;
   const ids = [
     payloadRoomId(payload),
     openChatRoomId(linkMatch?.[0] || ""),
@@ -1144,7 +1309,9 @@ function roomRegisterCommand(roomState, sender, text, payload = {}) {
   roomState.settings.registeredBy ||= sender;
   for (const id of ids) addUnique(roomState.settings.roomIds, id);
   for (const link of links) addUnique(roomState.settings.roomLinks, link);
+  for (const adminName of payloadAdminNames(payload)) addUnique(roomState.admins, adminName);
   if (!hasAnyAdmin(roomState)) addUnique(roomState.admins, sender);
+  applySubscriptionFromPayload(roomState, payload);
   recordRoomEvent(roomState, { type: "room_registered", by: sender, joinPhrase: phrase });
 
   return [
@@ -2373,7 +2540,7 @@ function statusText(room = "") {
     `시간: ${kstTimestamp()}`,
     `방: ${room || "미지정"}`,
     `버전: ${APP_VERSION}`,
-    "게임 기능: 사용 안 함"
+    "게임 기능: 준비 중"
   ].join("\n");
 }
 
@@ -2403,6 +2570,9 @@ export function healthPayload() {
     mode: "operations",
     storage: process.env.DATABASE_URL ? "postgres" : "local-json",
     gamesEnabled: false,
+    gameRoadmapEnabled: true,
+    monthlyPriceKrw: MONTHLY_PRICE_KRW,
+    defaultSubscriptionDays: DEFAULT_SUBSCRIPTION_DAYS,
     features: FEATURES
   };
 }
@@ -2459,6 +2629,7 @@ function helpText(isAdminUser = false) {
       "/방등록 입장확인문구",
       "/입장문구 입장확인문구",
       "/방정보, /방목록, /방삭제",
+      "/구독상태, /구독연장 1, /구독만료 2026-06-30",
       "/고유값초기화 닉네임 - 이름 섞임 방지",
       "/포인트지급 닉네임 포인트",
       "/포인트차감 닉네임 포인트",
@@ -2467,7 +2638,7 @@ function helpText(isAdminUser = false) {
     );
   }
 
-  lines.push("실제 금전, 상점, 아이템 기능은 사용하지 않습니다.");
+  lines.push(`월 이용금액은 ${formatKrw(MONTHLY_PRICE_KRW)} 기준이며, 실제 금전/상점/아이템 게임 기능은 아직 사용하지 않습니다.`);
   return lines.join("\n");
 }
 
@@ -2494,6 +2665,9 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/방정보") return roomInfoCommand(roomState);
   if (command === "/방목록") return roomListCommand(state);
   if (command === "/방삭제") return roomDeleteCommand(roomState, sender);
+  if (command === "/구독상태") return subscriptionStatusCommand(roomState);
+  if (command.startsWith("/구독연장")) return subscriptionExtendCommand(roomState, sender, text);
+  if (command.startsWith("/구독만료")) return subscriptionExpireCommand(roomState, sender, text);
   if (command === "/" || command === "/도움말" || command === "/help" || command === "/?") return helpText(isAdmin(roomState, sender));
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
   if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return recentEventsCommand(state, roomState, sender, text);
@@ -2553,6 +2727,10 @@ async function handleMessage(state, room, sender, message, identity = {}, detect
   const text = normalizeText(message);
   const event = detectedEvent || detectSystemEvent(message);
   const targetIdentity = identity.targetUserId || "";
+  const isCommand = text.startsWith("/");
+  if (isSubscriptionExpired(roomState) && !subscriptionBypassCommand(text)) {
+    return isCommand ? subscriptionExpiredText(roomState) : null;
+  }
   if (isDuplicateSystemEvent(roomState, event)) return null;
   if (event?.type === "entered") return recordEntry(roomState, event.name, targetIdentity);
   if (event?.type === "left") return recordExit(roomState, event.name, "left", targetIdentity);
@@ -2561,7 +2739,6 @@ async function handleMessage(state, room, sender, message, identity = {}, detect
   if (isBridgeReplyEchoMessage(sender, message) || isPassiveAttachmentNotice(sender, message)) return null;
   if (roomJoinPhraseMessage(roomState, sender, message)) return recordJoinPhraseSignal(roomState, sender, message);
 
-  const isCommand = text.startsWith("/");
   const activityReply = recordActivity(roomState, sender, identity.senderId, { firstChatNotice: !isCommand });
   if (isCommand) return handleCommand(state, room, sender, message, identity);
 

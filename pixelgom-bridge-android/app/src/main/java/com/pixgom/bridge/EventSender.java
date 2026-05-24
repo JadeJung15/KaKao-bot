@@ -2,6 +2,7 @@ package com.pixgom.bridge;
 
 import android.content.Context;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -26,6 +27,9 @@ final class EventSender {
             payload.put("sender", event.sender);
             payload.put("eventType", event.eventType == null ? "" : event.eventType);
             payload.put("targetName", event.targetName == null ? "" : event.targetName);
+            payload.put("joinPhrase", event.joinPhrase == null ? "" : event.joinPhrase);
+            payload.put("monthlyPriceKrw", event.monthlyPriceKrw > 0 ? event.monthlyPriceKrw : BridgeConfig.MONTHLY_PRICE_KRW);
+            payload.put("roomAdmins", new JSONArray(event.roomAdmins == null ? new String[0] : event.roomAdmins));
             payload.put("isGroupChat", event.groupChat);
             payload.put("rawIsGroupChat", event.groupChat);
             payload.put("packageName", event.packageName);
