@@ -1,6 +1,6 @@
 import http from "node:http";
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.44";
+export const APP_VERSION = "0.4.45";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -92,7 +92,10 @@ export const FEATURES = [
   "custom-command-console-builder",
   "buyer-guide-api",
   "protected-buyer-guide",
-  "buyer-session-token"
+  "buyer-session-token",
+  "split-account-application-flow",
+  "bridge-connect-code-api",
+  "buyer-room-auto-sync"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -435,7 +438,25 @@ async function saveState(state) {
   await mkdir(path.dirname(DB_PATH), { recursive: true });
   const tmpPath = `${DB_PATH}.tmp`;
   await writeFile(tmpPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-  await rename(tmpPath, DB_PATH);
+  await replaceStateFile(tmpPath, DB_PATH);
+}
+
+async function replaceStateFile(tmpPath, targetPath) {
+  try {
+    await rename(tmpPath, targetPath);
+    return;
+  } catch (error) {
+    if (!["EPERM", "EBUSY", "EACCES"].includes(error?.code)) throw error;
+  }
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  try {
+    await rename(tmpPath, targetPath);
+    return;
+  } catch (error) {
+    if (!["EPERM", "EBUSY", "EACCES"].includes(error?.code)) throw error;
+  }
+  await copyFile(tmpPath, targetPath);
+  await unlink(tmpPath).catch(() => {});
 }
 
 function normalizeState(state) {
@@ -456,6 +477,19 @@ function normalizeEmail(value) {
 
 function validEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value));
+}
+
+function validateAccountPayload(payload = {}) {
+  const email = normalizeEmail(payload.email);
+  const password = String(payload.password || "");
+  const errors = [];
+  if (!validEmail(email)) errors.push("email_required");
+  if (password.length < SIGNUP_PASSWORD_MIN_LENGTH) errors.push("password_too_short");
+  return {
+    ok: errors.length === 0,
+    errors,
+    value: { email, password }
+  };
 }
 
 function hashPassword(password) {
@@ -560,8 +594,20 @@ function verifyTokenPayload(token) {
 
 function buyerTokenForAccount(account = {}) {
   return signTokenPayload({
+    kind: "buyer-guide",
     sub: account.id,
     email: account.email,
+    exp: Date.now() + BUYER_TOKEN_TTL_MS
+  });
+}
+
+function bridgeConnectCodeForApplication(account = {}, application = {}) {
+  return signTokenPayload({
+    kind: "bridge-connect",
+    sub: account.id,
+    app: application.id,
+    email: account.email,
+    room: application.roomName,
     exp: Date.now() + BUYER_TOKEN_TTL_MS
   });
 }
@@ -582,22 +628,31 @@ function approvedBuyerApplications(state, account = {}) {
     .filter((application) => state.payments?.[application.paymentId]?.status === "paid");
 }
 
+function applicationRoomPayload(state, account = {}, application = {}) {
+  const roomState = state.rooms?.[roomKey(application.roomName)];
+  const roomView = roomState ? roomAdminView(roomState) : null;
+  return {
+    applicationId: application.id || "",
+    roomName: application.roomName || "",
+    roomId: application.roomId || roomView?.roomIds?.[0] || "",
+    roomLink: application.roomLink || roomView?.roomLinks?.[0] || "",
+    adminName: application.adminName || "",
+    joinPhrase: roomView?.joinPhrase || DEFAULT_JOIN_PHRASE,
+    licenseKey: application.licenseKey || roomView?.licenseKey || "",
+    roomAdmins: roomView?.admins?.length ? roomView.admins : [application.adminName].filter(Boolean),
+    features: roomView?.features || DEFAULT_ROOM_FEATURES,
+    customCommands: roomView?.customCommands || [],
+    subscription: roomView?.subscription || application.plan,
+    monthlyPriceKrw: roomView?.subscription?.monthlyPriceKrw || application.plan?.monthlyPriceKrw || MONTHLY_PRICE_KRW,
+    serverUrl: "https://pixgom.com/chat-event",
+    bridgeConnectCode: bridgeConnectCodeForApplication(account, application)
+  };
+}
+
 function buyerGuidePayload(state, account = {}) {
   const applications = approvedBuyerApplications(state, account);
   if (!applications.length) return { ok: false, status: 403, error: "buyer_approval_required" };
-  const rooms = applications.map((application) => {
-    const roomState = state.rooms?.[roomKey(application.roomName)];
-    const roomView = roomState ? roomAdminView(roomState) : null;
-    return {
-      roomName: application.roomName,
-      roomId: application.roomId || roomView?.roomIds?.[0] || "",
-      roomLink: application.roomLink || roomView?.roomLinks?.[0] || "",
-      adminName: application.adminName,
-      licenseKey: application.licenseKey || roomView?.licenseKey || "",
-      subscription: roomView?.subscription || application.plan,
-      features: roomView?.features || DEFAULT_ROOM_FEATURES
-    };
-  });
+  const rooms = applications.map((application) => applicationRoomPayload(state, account, application));
   return {
     ok: true,
     version: APP_VERSION,
@@ -609,7 +664,8 @@ function buyerGuidePayload(state, account = {}) {
         items: [
           "픽셀곰 브릿지 앱을 봇폰에 설치합니다.",
           "앱 첫 화면에서 알림 접근 권한을 허용합니다.",
-          "구매 승인된 방 이름, roomId, 오픈채팅 링크, 라이선스 키를 앱 대표 방 설정에 입력합니다.",
+          "구매자 가이드의 승인된 방 카드에서 연결코드를 복사합니다.",
+          "앱에서 연결코드 자동 설정을 실행하면 방 이름, roomId, 오픈채팅 링크, 라이선스 키가 자동 입력됩니다.",
           "앱에서 서버 테스트 전송 후 카카오방에서 /브릿지, /상태를 확인합니다."
         ]
       },
@@ -625,6 +681,7 @@ function buyerGuidePayload(state, account = {}) {
         title: "모바일에서 접속",
         items: [
           "휴대폰 브라우저에서 https://pixgom.com/buyer-guide 를 열고 로그인합니다.",
+          "연결코드는 승인된 방마다 별도로 발급됩니다.",
           "Android Chrome은 메뉴에서 '홈 화면에 추가'를 선택해 바로가기를 만들 수 있습니다.",
           "iPhone Safari는 공유 버튼에서 '홈 화면에 추가'를 선택합니다."
         ]
@@ -3597,6 +3654,49 @@ function validateSignupPayload(payload = {}) {
   };
 }
 
+function createSignupAccount(state, payload = {}) {
+  const validated = validateAccountPayload(payload);
+  if (!validated.ok) return { ok: false, status: 400, error: validated.errors[0], errors: validated.errors };
+  const value = validated.value;
+  const existing = findAccountByEmail(state, value.email);
+  if (existing) {
+    if (!verifyPassword(value.password, existing.passwordHash)) {
+      return { ok: false, status: 409, error: "email_already_registered" };
+    }
+    existing.updatedAt = nowIso();
+    return {
+      ok: true,
+      created: false,
+      account: publicAccountView(existing),
+      next: [
+        "이미 가입된 계정입니다.",
+        "서비스 신청 화면에서 방 정보를 등록하거나 로그인에서 신청 상태를 확인하세요."
+      ]
+    };
+  }
+
+  const accountId = generateEntityId("acct");
+  const account = {
+    id: accountId,
+    email: value.email,
+    passwordHash: hashPassword(value.password),
+    status: "active",
+    applicationIds: [],
+    createdAt: nowIso(),
+    updatedAt: nowIso()
+  };
+  state.accounts[accountId] = account;
+  return {
+    ok: true,
+    created: true,
+    account: publicAccountView(account),
+    next: [
+      "회원가입이 완료되었습니다.",
+      "다음 단계에서 방 이름, 오픈채팅 링크, 관리자 닉네임을 입력해 서비스를 신청하세요."
+    ]
+  };
+}
+
 function createSignupApplication(state, payload = {}) {
   const validated = validateSignupPayload(payload);
   if (!validated.ok) return { ok: false, status: 400, error: validated.errors[0], errors: validated.errors };
@@ -3677,12 +3777,14 @@ function loginAccount(state, payload = {}) {
   account.lastLoginAt = nowIso();
   account.updatedAt = nowIso();
   const applicationIds = account.applicationIds || [];
-  const buyerAccess = approvedBuyerApplications(state, account).length > 0;
+  const approvedApplications = approvedBuyerApplications(state, account);
+  const buyerAccess = approvedApplications.length > 0;
   return {
     ok: true,
     account: publicAccountView(account),
     buyerAccess,
     ...(buyerAccess ? { guideToken: buyerTokenForAccount(account) } : {}),
+    ...(buyerAccess ? { buyerRooms: approvedApplications.map((application) => applicationRoomPayload(state, account, application)) } : {}),
     applications: applicationIds
       .map((id) => state.applications?.[id])
       .filter(Boolean)
@@ -3692,7 +3794,7 @@ function loginAccount(state, payload = {}) {
 
 function buyerGuideFromRequest(state, req, body = {}) {
   const tokenPayload = verifyTokenPayload(tokenFromRequest(req, body));
-  if (tokenPayload?.sub && state.accounts?.[tokenPayload.sub]) {
+  if (tokenPayload?.sub && (!tokenPayload.kind || tokenPayload.kind === "buyer-guide") && state.accounts?.[tokenPayload.sub]) {
     return buyerGuidePayload(state, state.accounts[tokenPayload.sub]);
   }
   const login = loginAccount(state, body);
@@ -3703,8 +3805,37 @@ function buyerGuideFromRequest(state, req, body = {}) {
   return { ...guide, guideToken: buyerTokenForAccount(account) };
 }
 
+function bridgeConnectFromRequest(state, body = {}) {
+  const tokenPayload = verifyTokenPayload(normalizeText(body.code || body.connectCode || body.bridgeConnectCode || body.token));
+  if (tokenPayload?.kind !== "bridge-connect" || !tokenPayload.sub || !tokenPayload.app) {
+    return { ok: false, status: 401, error: "invalid_connect_code" };
+  }
+  const account = state.accounts?.[tokenPayload.sub];
+  const application = state.applications?.[tokenPayload.app];
+  if (!account || !application || application.accountId !== account.id) {
+    return { ok: false, status: 404, error: "connect_target_not_found" };
+  }
+  if (application.status !== "approved" || state.payments?.[application.paymentId]?.status !== "paid") {
+    return { ok: false, status: 403, error: "buyer_approval_required" };
+  }
+  return {
+    ok: true,
+    version: APP_VERSION,
+    room: applicationRoomPayload(state, account, application)
+  };
+}
+
 async function handlePublicAccountApi(req, url) {
   if (req.method === "POST" && url.pathname === "/api/signup") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = createSignupAccount(state, body);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/apply") {
     const body = await readBody(req);
     const state = await loadState();
     const result = createSignupApplication(state, body);
@@ -3729,6 +3860,13 @@ async function handlePublicAccountApi(req, url) {
     if (!result.ok) return { status: result.status || 401, body: result };
     await saveState(state);
     return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/bridge/connect") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = bridgeConnectFromRequest(state, body);
+    return { status: result.status || 200, body: result };
   }
 
   return null;
@@ -4078,7 +4216,11 @@ export async function requestHandler(req, res) {
     const isSkillPath = pathname === "/skill" || pathname === "/api/skill";
     const isChatEventPath = pathname === "/chat-event" || pathname === "/api/chat-event";
     const adminApi = pathname.startsWith("/api/admin/");
-    const publicAccountApi = pathname === "/api/signup" || pathname === "/api/login" || pathname === "/api/buyer/guide";
+    const publicAccountApi = pathname === "/api/signup"
+      || pathname === "/api/apply"
+      || pathname === "/api/login"
+      || pathname === "/api/buyer/guide"
+      || pathname === "/api/bridge/connect";
 
     if (adminApi) {
       const adminResult = await handleAdminApi(req, url);

@@ -34,6 +34,10 @@
           운영 토큰
           <input data-token type="password" autocomplete="off" placeholder="ADMIN_CONSOLE_TOKEN">
         </label>
+        <label class="admin-token-save">
+          <input data-save-token type="checkbox">
+          이 브라우저에 토큰 저장
+        </label>
         <button class="button button-primary" type="button" data-load-rooms>등록 방 불러오기</button>
         <button class="button button-secondary" type="button" data-load-applications>신청/결제 불러오기</button>
         <button class="button button-secondary" type="button" data-diagnostics>진단 새로고침</button>
@@ -138,6 +142,7 @@
 
     <script>
       const tokenInput = document.querySelector("[data-token]");
+      const saveTokenInput = document.querySelector("[data-save-token]");
       const form = document.querySelector("[data-admin-form]");
       const output = document.querySelector("[data-admin-output]");
       const roomList = document.querySelector("[data-room-list]");
@@ -154,8 +159,23 @@
         return tokenInput.value.trim();
       }
 
+      function friendlyError(error) {
+        const message = String(error?.message || error || "");
+        if (message === "unauthorized") return "운영 토큰이 없거나 틀립니다. Vercel 환경변수 ADMIN_CONSOLE_TOKEN 값을 입력하세요.";
+        if (message === "admin_console_token_not_configured") return "서버에 ADMIN_CONSOLE_TOKEN 환경변수가 설정되지 않았습니다.";
+        return message;
+      }
+
       function print(value) {
         output.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      }
+
+      function rememberToken() {
+        if (!saveTokenInput.checked) {
+          localStorage.removeItem("pixgomAdminToken");
+          return;
+        }
+        localStorage.setItem("pixgomAdminToken", token());
       }
 
       function featuresFromForm() {
@@ -300,50 +320,62 @@
       }
 
       async function loadRooms() {
+        rememberToken();
         const json = await requestJson(`/api/admin/rooms?token=${encodeURIComponent(token())}`);
         renderRooms(json);
         print(json);
       }
 
       async function loadApplications() {
+        rememberToken();
         const json = await requestJson(`/api/admin/applications?token=${encodeURIComponent(token())}`);
         renderApplications(json);
         print(json);
       }
 
       async function approveApplication(applicationId) {
-        const json = await requestJson("/api/admin/applications/approve", {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-admin-token": token() },
-          body: JSON.stringify({ applicationId, months: 1 })
-        });
-        print(json);
-        await loadApplications();
-        await loadRooms();
+        try {
+          rememberToken();
+          const json = await requestJson("/api/admin/applications/approve", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-admin-token": token() },
+            body: JSON.stringify({ applicationId, months: 1 })
+          });
+          print(json);
+          await loadApplications();
+          await loadRooms();
+        } catch (error) {
+          print(friendlyError(error));
+        }
       }
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const data = Object.fromEntries(new FormData(form).entries());
-        data.roomAdmins = data.roomAdmins.split(",").map((item) => item.trim()).filter(Boolean);
-        data.monthlyPriceKrw = Number(data.monthlyPriceKrw || 5500);
-        data.features = featuresFromForm();
-        data.customCommands = customCommandsFromForm();
-        const json = await requestJson("/api/admin/rooms", {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-admin-token": token() },
-          body: JSON.stringify(data)
-        });
-        print(json);
-        await loadRooms();
+        try {
+          rememberToken();
+          const data = Object.fromEntries(new FormData(form).entries());
+          data.roomAdmins = data.roomAdmins.split(",").map((item) => item.trim()).filter(Boolean);
+          data.monthlyPriceKrw = Number(data.monthlyPriceKrw || 5500);
+          data.features = featuresFromForm();
+          data.customCommands = customCommandsFromForm();
+          const json = await requestJson("/api/admin/rooms", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-admin-token": token() },
+            body: JSON.stringify(data)
+          });
+          print(json);
+          await loadRooms();
+        } catch (error) {
+          print(friendlyError(error));
+        }
       });
 
       document.querySelector("[data-load-rooms]").addEventListener("click", () => {
-        loadRooms().catch((error) => print(error.message));
+        loadRooms().catch((error) => print(friendlyError(error)));
       });
 
       document.querySelector("[data-load-applications]").addEventListener("click", () => {
-        loadApplications().catch((error) => print(error.message));
+        loadApplications().catch((error) => print(friendlyError(error)));
       });
 
       document.querySelector("[data-add-command]").addEventListener("click", () => {
@@ -354,7 +386,7 @@
         try {
           print(await requestJson(`/api/admin/diagnostics?token=${encodeURIComponent(token())}`));
         } catch (error) {
-          print(error.message);
+          print(friendlyError(error));
         }
       });
 
@@ -364,7 +396,7 @@
           restoreInput.value = JSON.stringify(json, null, 2);
           print("백업 JSON을 아래 복구 입력칸에 준비했습니다.");
         } catch (error) {
-          print(error.message);
+          print(friendlyError(error));
         }
       });
 
@@ -379,13 +411,20 @@
           }));
           await loadRooms();
         } catch (error) {
-          print(error.message);
+          print(friendlyError(error));
         }
       });
 
       document.querySelector("[data-fill-selected]").addEventListener("click", () => {
         fillForm(selectedRoom || rooms[0]);
       });
+
+      const savedAdminToken = localStorage.getItem("pixgomAdminToken");
+      if (savedAdminToken) {
+        tokenInput.value = savedAdminToken;
+        saveTokenInput.checked = true;
+        print("저장된 운영 토큰을 불러왔습니다. 신청/결제 불러오기를 누르세요.");
+      }
     </script>
   </body>
 </html>

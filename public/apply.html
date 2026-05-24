@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>서비스 신청 | 픽셀곰</title>
+    <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
+    <link rel="stylesheet" href="/styles.css?v=20260524-sales-flow">
+  </head>
+  <body class="auth-page">
+    <main class="auth-shell">
+      <a class="brand auth-brand" href="/"><img src="/assets/pixgom-closeup.png" alt=""><span>픽셀곰</span></a>
+      <section class="auth-card">
+        <p class="section-kicker">Apply</p>
+        <h1>서비스 신청</h1>
+        <p>방 1개 30일 5,500원 플랜을 신청합니다. 입금 확인 후 관리자가 승인하면 라이선스와 연결코드가 생성됩니다.</p>
+        <form data-apply-form>
+          <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
+          <label>비밀번호<input name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="회원 비밀번호"></label>
+          <label>방 이름<input name="roomName" type="text" required placeholder="픽셀곰 RPG 놀이터"></label>
+          <label>오픈채팅방 링크<input name="roomLink" type="url" required placeholder="https://open.kakao.com/o/..."></label>
+          <label>관리자 닉네임<input name="adminName" type="text" required placeholder="운영자 닉네임"></label>
+          <label>연락처<input name="contact" type="text" placeholder="카카오ID 또는 연락 가능한 채널"></label>
+          <label>요청 메모<textarea name="memo" rows="4" placeholder="초기 설정 요청사항"></textarea></label>
+          <button class="button button-primary" type="submit">신청 접수</button>
+        </form>
+        <pre class="form-status" data-apply-result aria-live="polite">신청하면 결제 대기 상태로 등록됩니다.</pre>
+        <div class="auth-links">
+          <a href="/signup">계정 만들기</a>
+          <a href="/login">신청 상태 확인</a>
+          <a href="https://open.kakao.com/o/gu25P5vi" target="_blank" rel="noopener noreferrer">오픈채팅 문의</a>
+        </div>
+      </section>
+    </main>
+    <script>
+      const form = document.querySelector("[data-apply-form]");
+      const result = document.querySelector("[data-apply-result]");
+      const savedEmail = sessionStorage.getItem("pixgomSignupEmail");
+      if (savedEmail) form.elements.email.value = savedEmail;
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        result.textContent = "신청을 접수하는 중입니다.";
+        const payload = Object.fromEntries(new FormData(form).entries());
+        try {
+          const response = await fetch("/api/apply", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          const json = await response.json();
+          if (!response.ok || json.ok === false) throw new Error(json.error || "apply_failed");
+          result.textContent = [
+            "신청이 접수되었습니다.",
+            `신청번호: ${json.application.id}`,
+            `상태: ${json.application.statusLabel}`,
+            `결제: ${json.payment.statusLabel}`,
+            `금액: ${json.payment.amountKrw.toLocaleString("ko-KR")}원`,
+            "",
+            ...json.next,
+            "",
+            "운영자가 승인하면 /login 과 /buyer-guide 에서 연결코드를 확인할 수 있습니다."
+          ].join("\n");
+          form.reset();
+        } catch (error) {
+          result.textContent = `신청 실패: ${error.message}`;
+        }
+      });
+    </script>
+  </body>
+</html>

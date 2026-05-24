@@ -550,6 +550,13 @@ a {
   box-shadow: var(--shadow);
 }
 
+.pricing-icon {
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+  margin-bottom: 10px;
+}
+
 .price-label,
 .price-unit {
   display: block;
@@ -822,6 +829,12 @@ a {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 12px 30px rgba(55, 38, 23, 0.08);
+}
+
+.store-card img {
+  width: 76px;
+  height: 76px;
+  object-fit: contain;
 }
 
 .store-card span,
@@ -1126,6 +1139,23 @@ a {
   resize: vertical;
 }
 
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.auth-links a {
+  color: #3b806a;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.auth-links a:hover {
+  text-decoration: underline;
+}
+
 .form-status {
   min-height: 96px;
   margin: 0;
@@ -1222,6 +1252,24 @@ a {
   overflow-wrap: anywhere;
 }
 
+.buyer-room-card code {
+  display: block;
+  max-width: 100%;
+  padding: 8px 10px;
+  color: #243b38;
+  background: #eef8f4;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.buyer-room-card .button {
+  margin-top: 14px;
+}
+
 .buyer-guide-section ol {
   margin: 0;
   padding-left: 22px;
@@ -1313,6 +1361,20 @@ a {
   color: var(--muted);
   font-size: 13px;
   font-weight: 900;
+}
+
+.admin-token-save {
+  display: flex !important;
+  min-height: 42px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px !important;
+  color: var(--ink) !important;
+}
+
+.admin-token-save input {
+  width: auto !important;
+  min-height: auto !important;
 }
 
 .admin-toolbar input,

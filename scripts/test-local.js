@@ -117,6 +117,9 @@ try {
   assert.match(health.json.features.join(","), /buyer-guide-api/);
   assert.match(health.json.features.join(","), /protected-buyer-guide/);
   assert.match(health.json.features.join(","), /buyer-session-token/);
+  assert.match(health.json.features.join(","), /split-account-application-flow/);
+  assert.match(health.json.features.join(","), /bridge-connect-code-api/);
+  assert.match(health.json.features.join(","), /buyer-room-auto-sync/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.adminConsoleEnabled, true);
 
@@ -148,6 +151,7 @@ try {
   assert.match(homeText, /업데이트 기록/);
   assert.match(homeText, /0\.4\.43/);
   assert.match(homeText, /0\.4\.44/);
+  assert.match(homeText, /0\.4\.45/);
   assert.match(homeText, /수동 입금 확인/);
   assert.match(homeText, /구매자 전용/);
   assert.match(homeText, /개인정보처리방침/);
@@ -156,7 +160,7 @@ try {
   assert.match(homeText, /href="https:\/\/open\.kakao\.com\/o\/gu25P5vi"/);
   assert.match(homeText, /오픈채팅 문의/);
 
-  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup"]) {
+  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup", "/apply"]) {
     const page = await fetch(`${baseUrl}${pagePath}`);
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-type") || "", /text\/html/);
@@ -226,6 +230,19 @@ try {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       email: `tester-${process.pid}@pixgom.test`,
+      password: "password123"
+    })
+  });
+  assert.equal(signup.response.status, 200);
+  assert.equal(signup.json.created, true);
+  assert.equal(signup.json.account.email, `tester-${process.pid}@pixgom.test`);
+  assert.equal(Object.hasOwn(signup.json, "application"), false);
+
+  const apply = await request("/api/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `tester-${process.pid}@pixgom.test`,
       password: "password123",
       roomName: "판매신청방",
       roomLink: "https://open.kakao.com/o/salesRoom1",
@@ -234,10 +251,10 @@ try {
       memo: "자동 테스트 신청"
     })
   });
-  assert.equal(signup.response.status, 200);
-  assert.equal(signup.json.application.status, "pending_payment");
-  assert.equal(signup.json.payment.status, "awaiting_manual_deposit");
-  assert.equal(signup.json.payment.amountKrw, 5500);
+  assert.equal(apply.response.status, 200);
+  assert.equal(apply.json.application.status, "pending_payment");
+  assert.equal(apply.json.payment.status, "awaiting_manual_deposit");
+  assert.equal(apply.json.payment.amountKrw, 5500);
 
   const badDuplicateSignup = await request("/api/signup", {
     method: "POST",
@@ -294,7 +311,7 @@ try {
   const approvedApplication = await request("/api/admin/applications/approve", {
     method: "POST",
     headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
-    body: JSON.stringify({ applicationId: signup.json.application.id, months: 1 })
+    body: JSON.stringify({ applicationId: apply.json.application.id, months: 1 })
   });
   assert.equal(approvedApplication.response.status, 200);
   assert.equal(approvedApplication.json.application.status, "approved");
@@ -312,6 +329,8 @@ try {
   assert.equal(approvedLogin.response.status, 200);
   assert.equal(approvedLogin.json.buyerAccess, true);
   assert.match(approvedLogin.json.guideToken, /\./);
+  assert.equal(approvedLogin.json.buyerRooms.length, 1);
+  assert.match(approvedLogin.json.buyerRooms[0].bridgeConnectCode, /\./);
 
   const buyerGuideApproved = await request("/api/buyer/guide", {
     method: "POST",
@@ -320,11 +339,23 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.44");
+  assert.equal(buyerGuideApproved.json.version, "0.4.45");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
+  assert.match(buyerGuideApproved.json.rooms[0].bridgeConnectCode, /\./);
   assert.match(JSON.stringify(buyerGuideApproved.json.sections), /알림 접근 권한/);
   assert.match(JSON.stringify(buyerGuideApproved.json.sections), /화면 감지\/접근성 권한을 사용하지 않습니다/);
+
+  const bridgeConnect = await request("/api/bridge/connect", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: buyerGuideApproved.json.rooms[0].bridgeConnectCode })
+  });
+  assert.equal(bridgeConnect.response.status, 200);
+  assert.equal(bridgeConnect.json.ok, true);
+  assert.equal(bridgeConnect.json.room.roomName, "판매신청방");
+  assert.equal(bridgeConnect.json.room.roomId, "salesRoom1");
+  assert.match(bridgeConnect.json.room.licenseKey, /^PXG-/);
 
   const approvedRoomStatus = await chatPayload({
     registeredRoom: false,

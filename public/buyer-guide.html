@@ -14,7 +14,7 @@
         <a href="/login">로그인</a>
         <a href="/store">스토어</a>
         <a href="/updates">업데이트</a>
-        <a class="nav-cta" href="/signup">시작하기</a>
+        <a class="nav-cta" href="/apply">서비스 신청</a>
       </nav>
     </header>
     <main class="document-main">
@@ -62,8 +62,10 @@
               <div><dt>오픈채팅 링크</dt><dd>${escapeHtml(room.roomLink || "미등록")}</dd></div>
               <div><dt>관리자</dt><dd>${escapeHtml(room.adminName || "미등록")}</dd></div>
               <div><dt>라이선스 키</dt><dd>${escapeHtml(room.licenseKey || "승인 후 발급")}</dd></div>
+              <div><dt>앱 연결코드</dt><dd><code>${escapeHtml(room.bridgeConnectCode || "승인 후 발급")}</code></dd></div>
               <div><dt>구독</dt><dd>${escapeHtml(room.subscription?.remainingDays ?? "-")}일 남음</dd></div>
             </dl>
+            <button class="button button-secondary" type="button" data-copy-code="${escapeHtml(room.bridgeConnectCode || "")}">연결코드 복사</button>
           </article>
         `).join("");
         const sections = data.sections.map((section) => `
@@ -83,6 +85,14 @@
         `;
         content.hidden = false;
         statusBox.textContent = "구매자 가이드를 불러왔습니다.";
+        content.querySelectorAll("[data-copy-code]").forEach((button) => {
+          button.addEventListener("click", async () => {
+            const code = button.dataset.copyCode || "";
+            if (!code) return;
+            await navigator.clipboard.writeText(code);
+            statusBox.textContent = "앱 연결코드를 복사했습니다. 픽셀곰 브릿지 앱의 연결코드 자동 설정에 붙여넣으세요.";
+          });
+        });
       }
 
       async function requestGuide(payload) {

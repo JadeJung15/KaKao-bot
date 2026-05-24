@@ -33,6 +33,7 @@ public class MainActivity extends Activity {
     private TextView permissionStatus;
     private TextView logView;
     private EditText serverUrlInput;
+    private EditText connectionCodeInput;
     private EditText roomNameInput;
     private EditText roomIdInput;
     private EditText roomLinkInput;
@@ -117,7 +118,7 @@ public class MainActivity extends Activity {
         root.addView(stepsPanel);
         stepsPanel.addView(text("처음 설정 순서", 18, Color.rgb(58, 37, 24), true));
         stepsPanel.addView(stepText("1", "알림 접근 권한을 허용합니다."));
-        stepsPanel.addView(stepText("2", "방 이름, 링크, 관리자, 라이선스를 입력합니다."));
+        stepsPanel.addView(stepText("2", "구매자 가이드에서 앱 연결코드를 복사해 자동 설정합니다."));
         stepsPanel.addView(stepText("3", "서버 테스트 전송 후 카카오방에서 /브릿지를 확인합니다."));
 
         Button startButton = primaryButton("시작하기");
@@ -197,6 +198,21 @@ public class MainActivity extends Activity {
 
         serverUrlInput = input("서버 URL", BridgeConfig.serverUrl(this));
         panel.addView(serverUrlInput);
+
+        TextView connectTitle = text("앱 자동 연결", 20, Color.rgb(58, 37, 24), true);
+        connectTitle.setPadding(0, dp(16), 0, 0);
+        panel.addView(connectTitle);
+
+        TextView connectHelp = text("구매자 가이드에서 복사한 앱 연결코드를 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 입력됩니다.", 13, Color.rgb(111, 78, 49), false);
+        connectHelp.setPadding(0, dp(8), 0, 0);
+        panel.addView(connectHelp);
+
+        connectionCodeInput = input("앱 연결코드", "");
+        panel.addView(connectionCodeInput);
+
+        Button connectButton = secondaryButton("연결코드로 자동 설정");
+        connectButton.setOnClickListener(v -> connectWithCode());
+        panel.addView(connectButton);
 
         TextView roomTitle = text("대표 방 설정", 20, Color.rgb(58, 37, 24), true);
         roomTitle.setPadding(0, dp(16), 0, 0);
@@ -345,6 +361,7 @@ public class MainActivity extends Activity {
         joinPhraseInput = null;
         adminsInput = null;
         licenseKeyInput = null;
+        connectionCodeInput = null;
         scriptSourceInput = null;
         enabledSwitch = null;
         scriptEnabledSwitch = null;
@@ -407,6 +424,54 @@ public class MainActivity extends Activity {
                     BridgeConfig.appendLog(this, "서버 테스트 성공: " + reply);
                 } else {
                     BridgeConfig.appendLog(this, "서버 테스트 실패: " + result.error);
+                }
+                refreshLogs();
+            });
+        });
+    }
+
+    private void connectWithCode() {
+        String code = connectionCodeInput == null ? "" : connectionCodeInput.getText().toString().trim();
+        if (TextUtils.isEmpty(code)) {
+            Toast.makeText(this, "앱 연결코드를 입력하세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        BridgeConfig.setServerUrl(this, serverUrlInput.getText().toString());
+        BridgeConfig.appendLog(this, "앱 연결코드 확인 시작");
+        refreshLogs();
+        executor.execute(() -> {
+            EventSender.ConnectResult result = EventSender.connect(this, code);
+            runOnUiThread(() -> {
+                if (result.ok()) {
+                    BridgeConfig.setServerUrl(this, TextUtils.isEmpty(result.serverUrl) ? BridgeConfig.DEFAULT_SERVER_URL : result.serverUrl);
+                    BridgeConfig.setPrimaryRoomProfile(this, result.roomName, result.roomId, result.roomLink, result.joinPhrase, TextUtils.join(",", result.admins), result.licenseKey);
+                    BridgeConfig.setAttendanceEnabled(this, result.attendance);
+                    BridgeConfig.setPointsEnabled(this, result.points);
+                    BridgeConfig.setRankingsEnabled(this, result.rankings);
+                    BridgeConfig.setHistoryEnabled(this, result.history);
+                    BridgeConfig.setProfilesEnabled(this, result.profiles);
+                    BridgeConfig.setScriptEnabled(this, result.localJs);
+                    BridgeConfig.setGamesEnabled(this, result.games);
+                    BridgeConfig.appendLog(this, "앱 자동 연결 완료: " + result.roomName + " / " + result.roomId);
+                    if (serverUrlInput != null) serverUrlInput.setText(BridgeConfig.serverUrl(this));
+                    if (roomNameInput != null) roomNameInput.setText(result.roomName);
+                    if (roomIdInput != null) roomIdInput.setText(result.roomId);
+                    if (roomLinkInput != null) roomLinkInput.setText(result.roomLink);
+                    if (joinPhraseInput != null) joinPhraseInput.setText(result.joinPhrase);
+                    if (adminsInput != null) adminsInput.setText(TextUtils.join(",", result.admins));
+                    if (licenseKeyInput != null) licenseKeyInput.setText(result.licenseKey);
+                    if (attendanceFeatureSwitch != null) attendanceFeatureSwitch.setChecked(result.attendance);
+                    if (pointsFeatureSwitch != null) pointsFeatureSwitch.setChecked(result.points);
+                    if (rankingsFeatureSwitch != null) rankingsFeatureSwitch.setChecked(result.rankings);
+                    if (historyFeatureSwitch != null) historyFeatureSwitch.setChecked(result.history);
+                    if (profilesFeatureSwitch != null) profilesFeatureSwitch.setChecked(result.profiles);
+                    if (scriptEnabledSwitch != null) scriptEnabledSwitch.setChecked(result.localJs);
+                    if (gamesFeatureSwitch != null) gamesFeatureSwitch.setChecked(result.games);
+                    refreshStatus();
+                    Toast.makeText(this, "방 설정이 자동 적용되었습니다.", Toast.LENGTH_SHORT).show();
+                } else {
+                    BridgeConfig.appendLog(this, "앱 자동 연결 실패: " + result.error);
+                    Toast.makeText(this, "연결코드를 확인하세요.", Toast.LENGTH_SHORT).show();
                 }
                 refreshLogs();
             });
