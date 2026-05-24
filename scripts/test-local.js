@@ -74,11 +74,12 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.55");
+  assert.equal(health.json.version, "0.4.56");
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
   assert.match(health.json.features.join(","), /profile-registry/);
   assert.match(health.json.features.join(","), /message-inbox/);
+  assert.match(health.json.features.join(","), /point-shop/);
   assert.match(health.json.features.join(","), /detailed-member-history/);
   assert.match(health.json.features.join(","), /admin-commands/);
   assert.match(health.json.features.join(","), /point-ledger/);
@@ -529,7 +530,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.55");
+  assert.equal(buyerGuideApproved.json.version, "0.4.56");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -544,7 +545,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.55");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.56");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -601,7 +602,8 @@ try {
   });
   assert.equal(missingLicense.json.ignored, true);
   assert.equal(missingLicense.json.reason, "missing_license");
-  assert.match(missingLicense.json.reply, /라이선스 확인/);
+  assert.match(missingLicense.json.reply, /연결 확인/);
+  assert.doesNotMatch(missingLicense.json.reply, /라이선스|PXG|5,500원|roomId/);
 
   const licensedStatus = await chatPayload({
     registeredRoom: false,
@@ -680,8 +682,13 @@ try {
   assert.equal(help.response.status, 200);
   assert.match(help.json.template.outputs[0].simpleText.text, /참여자 명령어/);
   assert.match(help.json.template.outputs[0].simpleText.text, /메시지/);
-  assert.match(help.json.template.outputs[0].simpleText.text, /최근이벤트/);
+  assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /최근이벤트/);
   assert.match(help.json.template.outputs[0].simpleText.text, /포인트/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /ㅊㅊ/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /미출석/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /출석순위/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /상점/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /가방선물/);
   assert.match(help.json.template.outputs[0].simpleText.text, /좋아요/);
   assert.match(help.json.template.outputs[0].simpleText.text, /이체/);
   assert.match(help.json.template.outputs[0].simpleText.text, /응원/);
@@ -693,6 +700,7 @@ try {
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /관리자등록/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /관리자재설정/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /원본로그/);
+  assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /구독|라이선스|월 이용금액|5,500원|roomId/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /벤치마크|laggobot|라꼬봇/i);
   assert.match(help.json.template.outputs[0].simpleText.text, /가상 포인트/);
 
@@ -773,8 +781,18 @@ try {
   });
   assert.match(roomInfo.json.reply, /판매테스트방 방 설정/);
   assert.match(roomInfo.json.reply, /입장확인 문구: 픽셀곰 입장확인/);
-  assert.match(roomInfo.json.reply, /월 이용금액: 5,500원/);
-  assert.match(roomInfo.json.reply, /이용기간 만료:/);
+  assert.doesNotMatch(roomInfo.json.reply, /월 이용금액|5,500원|라이선스|PXG-SALES-1234|salesRoom1|open\.kakao/);
+
+  const roomInfoDenied = await chatPayload({
+    registeredRoom: false,
+    room: "판매테스트방",
+    msg: "/방정보",
+    sender: "일반참여자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: "PXG-SALES-1234"
+  });
+  assert.match(roomInfoDenied.json.reply, /관리자 전용/);
 
   const expiredRoomRegister = await chatPayload({
     registeredRoom: false,
@@ -788,8 +806,7 @@ try {
   });
   assert.equal(expiredRoomRegister.json.ignored, false);
   assert.match(expiredRoomRegister.json.reply, /방 등록 완료/);
-  assert.match(expiredRoomRegister.json.reply, /월 이용금액: 5,500원/);
-  assert.match(expiredRoomRegister.json.reply, /이용기간 만료:/);
+  assert.doesNotMatch(expiredRoomRegister.json.reply, /월 이용금액|5,500원|라이선스/);
 
   const expiredAttendance = await chatPayload({
     registeredRoom: false,
@@ -802,7 +819,7 @@ try {
   });
   assert.equal(expiredAttendance.json.ignored, false);
   assert.match(expiredAttendance.json.reply, /이용기간이 만료/);
-  assert.match(expiredAttendance.json.reply, /5,500원/);
+  assert.doesNotMatch(expiredAttendance.json.reply, /5,500원|라이선스|이용기간 만료:/);
 
   const expiredStatus = await chatPayload({
     registeredRoom: false,
@@ -815,7 +832,7 @@ try {
   });
   assert.match(expiredStatus.json.reply, /구독 상태/);
   assert.match(expiredStatus.json.reply, /만료/);
-  assert.match(expiredStatus.json.reply, /5,500원/);
+  assert.doesNotMatch(expiredStatus.json.reply, /월 이용금액|5,500원|라이선스/);
 
   const extendDenied = await chatPayload({
     registeredRoom: false,
@@ -838,7 +855,7 @@ try {
     licenseKey: "PXG-EXP-1234"
   });
   assert.match(extendSubscription.json.reply, /구독이 연장/);
-  assert.match(extendSubscription.json.reply, /월 이용금액: 5,500원/);
+  assert.doesNotMatch(extendSubscription.json.reply, /월 이용금액|5,500원|라이선스/);
 
   const activeAfterExtend = await chatPayload({
     registeredRoom: false,
@@ -984,14 +1001,15 @@ try {
   assert.match(uniqueReentry.json.reply, /고유대상 남/);
   assert.match(uniqueReentry.json.reply, /바뀐대상 남/);
 
+  await chat("/관리자등록 일반사용자", "관리자", "고유값방");
   const recentEvents = await chat("/최근이벤트 5", "일반사용자", "고유값방");
   assert.match(recentEvents.json.reply, /targetUserId : openchat-user-1/);
   assert.match(recentEvents.json.reply, /id 후보/);
 
-  const rawLogDenied = await chat("/원본로그 3", "일반사용자", "고유값방");
+  const rawLogDenied = await chat("/원본로그 3", "비관리자", "고유값방");
   assert.match(rawLogDenied.json.reply, /관리자 전용/);
 
-  const rawLog = await chat("/원본로그 4", "관리자", "고유값방");
+  const rawLog = await chat("/원본로그 5", "관리자", "고유값방");
   assert.match(rawLog.json.reply, /원본 이벤트 로그/);
   assert.match(rawLog.json.reply, /targetUserId/);
 
@@ -1069,6 +1087,7 @@ try {
   });
   assert.equal(arrowText.json.reply, null);
 
+  await chat("/관리자등록 오탐사용자", "관리자", "오탐방");
   const arrowEvents = await chat("/최근이벤트 1", "오탐사용자", "오탐방");
   assert.match(arrowEvents.json.reply, /event : -/);
   assert.doesNotMatch(arrowEvents.json.reply, /nickname_changed/);
@@ -1099,6 +1118,7 @@ try {
     profileHash: "profile-hash-rename-1"
   });
 
+  await chat("/관리자등록 일반사용자", "관리자", "해시닉변방");
   const hashRenameEvents = await chat("/최근이벤트 5", "일반사용자", "해시닉변방");
   assert.match(hashRenameEvents.json.reply, /회원이력 : 새해시닉 남 \(이전닉: 예전해시닉 남\)/);
 
@@ -1268,6 +1288,7 @@ try {
     profileHash: "raw-recover-id-1"
   });
 
+  await chat("/관리자등록 복구후닉 남", "관리자", "원본복구방");
   const recoverEventsBeforePersonRename = await chatPayload({
     room: "원본복구방",
     msg: "/최근이벤트 5",
@@ -1284,6 +1305,7 @@ try {
     profileHash: "cross-room-recover-id-1"
   });
 
+  await chat("/관리자등록 현재방닉 남", "관리자", "원본복구현재방");
   const crossRoomRecoverEvents = await chatPayload({
     room: "원본복구현재방",
     msg: "/최근이벤트 10",
@@ -1326,9 +1348,61 @@ try {
   const attendanceDuplicate = await chat("/출석체크", "포순이 여");
   assert.match(attendanceDuplicate.json.reply, /이미 출첵/);
 
+  const shortAttendance = await chat("ㅊㅊ", "초성출석 남");
+  assert.match(shortAttendance.json.reply, /초성출석 남님 출석/);
+
   const pointGrant = await chat("/포인트지급 포순이 여 1000", "관리자");
   assert.match(pointGrant.json.reply, /포인트 지급 완료/);
   assert.match(pointGrant.json.reply, /포순이 여/);
+
+  const shopAddDenied = await chat("/상점추가 물약 100 HP 회복", "사용자");
+  assert.match(shopAddDenied.json.reply, /관리자 전용/);
+
+  const shopAdd = await chat("/상점추가 물약 100 HP 회복", "관리자");
+  assert.match(shopAdd.json.reply, /상점 상품이 추가/);
+  assert.match(shopAdd.json.reply, /1\. 물약 - 🅟100/);
+
+  const shopList = await chat("/상점", "포순이 여");
+  assert.match(shopList.json.reply, /픽셀곰 상점/);
+  assert.match(shopList.json.reply, /물약/);
+
+  const purchase = await chat("/구매 1", "포순이 여");
+  assert.match(purchase.json.reply, /구매 완료/);
+  assert.match(purchase.json.reply, /물약/);
+
+  const bag = await chat("/가방", "포순이 여");
+  assert.match(bag.json.reply, /포순이 여님의 가방/);
+  assert.match(bag.json.reply, /1\. 물약 x 1/);
+
+  const itemGrant = await chat("/아이템지급 미미 여 1 2", "관리자");
+  assert.match(itemGrant.json.reply, /아이템지급 완료/);
+
+  const adminBag = await chat("/가방 미미 여", "관리자");
+  assert.match(adminBag.json.reply, /미미 여님의 가방/);
+  assert.match(adminBag.json.reply, /물약 x 2/);
+
+  const itemRevoke = await chat("/아이템회수 미미 여 1 1", "관리자");
+  assert.match(itemRevoke.json.reply, /아이템회수 완료/);
+
+  const gift = await chat("/가방선물 미미 여 1 1", "포순이 여");
+  assert.match(gift.json.reply, /가방 선물 완료/);
+
+  const itemUse = await chat("/사용 1", "미미 여");
+  assert.match(itemUse.json.reply, /아이템 사용 완료/);
+
+  const purchaseHistory = await chat("/구매내역", "포순이 여");
+  assert.match(purchaseHistory.json.reply, /구매\/아이템 내역/);
+  assert.match(purchaseHistory.json.reply, /물약/);
+
+  const shopHistory = await chat("/상점내역", "관리자");
+  assert.match(shopHistory.json.reply, /상점 내역/);
+  assert.match(shopHistory.json.reply, /물약/);
+
+  const shopDelete = await chat("/상점삭제 1", "관리자");
+  assert.match(shopDelete.json.reply, /상점에서 숨겼습니다/);
+
+  const emptyShop = await chat("/상점", "포순이 여");
+  assert.match(emptyShop.json.reply, /등록된 상품이 없습니다/);
 
   const pointView = await chat("/포인트", "포순이 여");
   assert.match(pointView.json.reply, /포순이 여님의 포인트 : 🅟/);
@@ -1338,6 +1412,10 @@ try {
   assert.match(pointGuide.json.reply, /응원 카드/);
   assert.match(pointGuide.json.reply, /뽑기/);
   assert.match(pointGuide.json.reply, /\/홀 금액/);
+
+  const drawCatalog = await chat("/뽑기목록", "포순이 여");
+  assert.match(drawCatalog.json.reply, /뽑기 목록/);
+  assert.match(drawCatalog.json.reply, /대박/);
 
   const invalidLikeAmount = await chat("/좋아요 미미 10000", "포순이 여");
   assert.match(invalidLikeAmount.json.reply, /1 ~ 999 범위/);
@@ -1385,6 +1463,14 @@ try {
   const pointRank = await chat("/포인트순위", "포순이 여");
   assert.match(pointRank.json.reply, /채팅방 포인트 순위/);
   assert.match(pointRank.json.reply, /포순이 여/);
+
+  const attendanceRank = await chat("/출석순위", "포순이 여");
+  assert.match(attendanceRank.json.reply, /채팅방 출석 순위/);
+  assert.match(attendanceRank.json.reply, /포순이 여/);
+
+  const missingAttendance = await chat("/미출석", "포순이 여");
+  assert.match(missingAttendance.json.reply, /오늘 미출석/);
+  assert.match(missingAttendance.json.reply, /미미 여/);
 
   const likeRank = await chat("/좋아요순위", "포순이 여");
   assert.match(likeRank.json.reply, /채팅방 좋아요순위/);

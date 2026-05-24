@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.55";
+export const APP_VERSION = "0.4.56";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -116,7 +116,16 @@ export const FEATURES = [
   "simple-status-page",
   "branded-email-template",
   "kakao-oidc-id-token-login",
-  "kakao-social-login-first-connect"
+  "kakao-social-login-first-connect",
+  "attendance-short-command",
+  "attendance-missing-list",
+  "attendance-ranking",
+  "lucky-draw-catalog",
+  "point-shop",
+  "member-inventory",
+  "item-gift",
+  "shop-admin-commands",
+  "chat-sensitive-info-redaction"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -154,6 +163,12 @@ const FISHING_REWARD = 40;
 const EXPLORE_REWARD = 50;
 const GAME_REWARD_MAX = 1000000;
 const GAME_SEASON_NAME_LIMIT = 40;
+const SHOP_PRODUCT_LIMIT = 50;
+const SHOP_PRODUCT_NAME_LIMIT = 40;
+const SHOP_PRODUCT_DESCRIPTION_LIMIT = 140;
+const SHOP_TRANSACTION_LIMIT = 300;
+const SHOP_MAX_PRICE = 1000000;
+const SHOP_MAX_QUANTITY = 99;
 const REENTRY_CANDIDATE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const SYSTEM_EVENT_DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
 const JOIN_SIGNAL_WINDOW_MS = 30 * 60 * 1000;
@@ -166,6 +181,7 @@ const DEFAULT_ROOM_FEATURES = Object.freeze({
   profiles: true,
   localJs: true,
   games: false,
+  shop: true,
   customCommands: true
 });
 const DEFAULT_GAME_SETTINGS = Object.freeze({
@@ -184,6 +200,7 @@ const FEATURE_LABELS = Object.freeze({
   profiles: "프로필",
   localJs: "JS 자동응답",
   games: "게임",
+  shop: "상점",
   customCommands: "커스텀 명령어"
 });
 const CUSTOM_COMMAND_LIMIT = 30;
@@ -205,15 +222,19 @@ const PAYMENT_STATUS_LABELS = Object.freeze({
 const FIXED_COMMAND_GROUPS = Object.freeze([
   {
     title: "기본 운영",
-    commands: ["/상태", "/도움말", "/브릿지", "/js상태", "/로컬상태", "/메시지", "/최근이벤트", "/출석", "/포인트", "/내정보", "/프로필", "/닉이력"]
+    commands: ["/상태", "/도움말", "/브릿지", "/js상태", "/로컬상태", "/메시지", "/출석", "/출첵", "/ㅊㅊ", "/포인트", "/내정보", "/프로필", "/닉이력"]
   },
   {
     title: "포인트/랭킹",
-    commands: ["/좋아요", "/응원", "/뽑기", "/홀", "/짝", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위", "/채팅오늘", "/채팅금주"]
+    commands: ["/좋아요", "/응원", "/뽑기", "/뽑기목록", "/홀", "/짝", "/이체", "/미출석", "/출석순위", "/포인트순위", "/좋아요순위", "/레벨순위", "/채팅오늘", "/채팅금주"]
+  },
+  {
+    title: "상점/가방",
+    commands: ["/상점", "/구매", "/구매내역", "/가방", "/사용", "/가방선물"]
   },
   {
     title: "관리자",
-    commands: ["/방등록", "/방정보", "/방목록", "/방삭제", "/입장문구", "/기능목록", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/관리자등록", "/관리자삭제", "/관리자목록", "/원본로그", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장상세", "/고유값초기화", "/포인트지급", "/포인트차감", "/포인트설정", "/명령어등록", "/명령어삭제", "/명령어목록"]
+    commands: ["/방등록", "/방정보", "/방목록", "/방삭제", "/입장문구", "/기능목록", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/관리자등록", "/관리자삭제", "/관리자목록", "/최근이벤트", "/원본로그", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장상세", "/고유값초기화", "/포인트지급", "/포인트차감", "/포인트설정", "/상점추가", "/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수", "/명령어등록", "/명령어삭제", "/명령어목록"]
   },
   {
     title: "게임/연동 예약",
@@ -1246,6 +1267,7 @@ function ensureRoom(state, room) {
     rawEvents: [],
     peopleByIdentity: {},
     ambiguousIdentities: [],
+    shop: {},
     settings: {},
     pendingEntries: []
   };
@@ -1260,6 +1282,7 @@ function ensureRoom(state, room) {
   roomState.rawEvents ||= [];
   roomState.peopleByIdentity ||= {};
   roomState.ambiguousIdentities ||= [];
+  roomState.shop = normalizeShopState(roomState.shop || {});
   roomState.settings ||= {};
   roomState.settings.enabled = roomState.settings.enabled !== false;
   roomState.settings.registered ||= false;
@@ -1274,6 +1297,64 @@ function ensureRoom(state, room) {
   roomState.pendingEntries ||= [];
   for (const person of Object.values(roomState.people)) normalizePersonState(person);
   return roomState;
+}
+
+function normalizeInventory(value = {}) {
+  const entries = Array.isArray(value)
+    ? value.map((item) => [item?.productId ?? item?.id, item?.quantity ?? item?.qty ?? 1])
+    : Object.entries(value || {});
+  const inventory = {};
+  for (const [rawId, rawQuantity] of entries) {
+    const id = String(Math.trunc(Number(rawId || 0)));
+    const quantity = Math.max(0, Math.trunc(Number(rawQuantity || 0)));
+    if (!id || id === "0" || !quantity) continue;
+    inventory[id] = (inventory[id] || 0) + quantity;
+  }
+  return inventory;
+}
+
+function normalizeShopState(value = {}) {
+  const shop = value && typeof value === "object" ? value : {};
+  const products = Array.isArray(shop.products) ? shop.products : [];
+  let maxId = 0;
+  shop.products = products
+    .map((product) => {
+      const id = Math.max(0, Math.trunc(Number(product?.id || 0)));
+      if (!id) return null;
+      maxId = Math.max(maxId, id);
+      return {
+        id,
+        name: compactSpaces(product.name).slice(0, SHOP_PRODUCT_NAME_LIMIT) || `상품${id}`,
+        price: Math.min(SHOP_MAX_PRICE, Math.max(1, Math.trunc(Number(product.price || 0) || 1))),
+        description: compactSpaces(product.description).slice(0, SHOP_PRODUCT_DESCRIPTION_LIMIT),
+        active: product.active !== false,
+        createdAt: normalizeText(product.createdAt) || nowIso(),
+        createdBy: normalizeText(product.createdBy),
+        updatedAt: normalizeText(product.updatedAt) || normalizeText(product.createdAt) || nowIso(),
+        updatedBy: normalizeText(product.updatedBy),
+        deletedAt: normalizeText(product.deletedAt),
+        deletedBy: normalizeText(product.deletedBy)
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.id - right.id);
+  shop.nextProductId = Math.max(maxId + 1, Math.trunc(Number(shop.nextProductId || 1)) || 1);
+  shop.transactions = (Array.isArray(shop.transactions) ? shop.transactions : [])
+    .map((transaction) => ({
+      id: normalizeText(transaction.id) || randomBytes(4).toString("hex"),
+      type: normalizeText(transaction.type) || "unknown",
+      productId: Math.max(0, Math.trunc(Number(transaction.productId || 0))),
+      productName: compactSpaces(transaction.productName).slice(0, SHOP_PRODUCT_NAME_LIMIT),
+      quantity: Math.max(1, Math.trunc(Number(transaction.quantity || 1))),
+      unitPrice: Math.max(0, Math.trunc(Number(transaction.unitPrice || 0))),
+      totalPrice: Math.max(0, Math.trunc(Number(transaction.totalPrice || 0))),
+      from: stripKakaoSuffix(transaction.from || ""),
+      to: stripKakaoSuffix(transaction.to || ""),
+      by: stripKakaoSuffix(transaction.by || ""),
+      at: normalizeText(transaction.at) || nowIso()
+    }))
+    .slice(-SHOP_TRANSACTION_LIMIT);
+  return shop;
 }
 
 function formatKrw(value) {
@@ -1548,6 +1629,7 @@ function featureKeyFromText(value) {
     profiles: ["profile", "profiles", "프로필"],
     localJs: ["js", "javascript", "자동응답", "js자동응답", "localjs"],
     games: ["game", "games", "게임", "미니게임", "주사위", "낚시", "탐험"],
+    shop: ["shop", "store", "inventory", "item", "상점", "가방", "아이템", "구매"],
     customCommands: ["custom", "customcommands", "command", "commands", "커스텀", "커스텀명령어", "명령어", "자동문구"]
   };
   for (const [key, names] of Object.entries(aliases)) {
@@ -1568,7 +1650,8 @@ function applyFeatureSettingsFromPayload(roomState, payload = {}) {
     history: payload.historyEnabled,
     profiles: payload.profilesEnabled || payload.profileEnabled,
     localJs: payload.localJsEnabled || payload.jsAutoReplyEnabled || payload.scriptEnabled,
-    games: payload.gamesEnabled || payload.gameEnabled
+    games: payload.gamesEnabled || payload.gameEnabled,
+    shop: payload.shopEnabled || payload.storeEnabled || payload.inventoryEnabled
   };
   let changed = false;
   for (const key of Object.keys(DEFAULT_ROOM_FEATURES)) {
@@ -1865,6 +1948,7 @@ function normalizePersonState(person) {
   person.chats.total = Math.max(0, Number(person.chats.total || 0));
   person.chats.byDate ||= {};
   person.chats.byWeek ||= {};
+  person.inventory = normalizeInventory(person.inventory || {});
   person.identities ||= [];
   person.firstChatReentryNotices ||= [];
   cleanupReservedPersonHistory(person);
@@ -2396,12 +2480,10 @@ function subscriptionBypassCommand(text) {
 }
 
 function subscriptionExpiredText(roomState) {
-  const subscription = updateSubscriptionStatus(roomState);
+  updateSubscriptionStatus(roomState);
   return [
-    "픽셀곰 이용기간이 만료되었습니다.",
-    `월 이용금액: ${formatKrw(subscription.monthlyPriceKrw)}`,
-    `이용기간 만료: ${formatSubscriptionDate(subscription.expiresAt)}`,
-    "관리자에게 /구독연장 1 을 요청하세요."
+    "픽셀곰 이용기간이 만료되어 일반 명령어 응답이 중단되었습니다.",
+    "방 관리자에게 문의해주세요."
   ].join("\n");
 }
 
@@ -2413,10 +2495,9 @@ function subscriptionLines(roomState) {
     "구독 상태",
     "",
     `상태: ${status}`,
-    `월 이용금액: ${formatKrw(subscription.monthlyPriceKrw)}`,
-    `이용기간 시작: ${formatSubscriptionDate(subscription.startedAt)}`,
     `이용기간 만료: ${formatSubscriptionDate(subscription.expiresAt)}`,
-    days === null ? "남은 기간: 미설정" : `남은 기간: ${Math.max(0, days)}일`
+    days === null ? "남은 기간: 미설정" : `남은 기간: ${Math.max(0, days)}일`,
+    "상세 운영 정보는 관리 콘솔에서 확인하세요."
   ];
 }
 
@@ -2477,10 +2558,8 @@ function licenseGuardResult(roomState, payload = {}, message = "", registrationC
   return {
     ok: true,
     reply: isCommand ? [
-      "픽셀곰 라이선스 확인이 필요합니다.",
-      `방: ${roomState.name || "미지정"}`,
-      `라이선스: ${incoming ? "불일치" : "미전송"}`,
-      "앱의 방 설정에서 라이선스 키를 확인하세요."
+      "픽셀곰 연결 확인이 필요합니다.",
+      "방 관리자에게 앱 설정 확인을 요청해주세요."
     ].join("\n") : null,
     ignored: true,
     reason: incoming ? "invalid_license" : "missing_license"
@@ -2548,22 +2627,15 @@ function payloadAdminNames(payload = {}) {
 
 function roomSettingsLines(roomState) {
   const settings = roomState.settings || {};
-  const ids = (settings.roomIds || []).filter(Boolean);
-  const links = (settings.roomLinks || []).filter(Boolean);
   const subscription = updateSubscriptionStatus(roomState);
-  const license = licenseSettings(roomState);
   return [
     `${roomState.name || "현재방"} 방 설정`,
     "",
     `등록: ${settings.registered ? "켜짐" : "꺼짐"}`,
     `입장확인 문구: ${settings.joinPhrase || DEFAULT_JOIN_PHRASE}`,
-    `roomId: ${ids.length ? ids.join(", ") : "미등록"}`,
-    `링크: ${links.length ? links.join(", ") : "미등록"}`,
-    `관리자: ${(roomState.admins || []).length ? roomState.admins.join(", ") : "미등록"}`,
-    `월 이용금액: ${formatKrw(subscription.monthlyPriceKrw)}`,
-    `이용기간 만료: ${formatSubscriptionDate(subscription.expiresAt)}`,
+    `관리자: ${(roomState.admins || []).length ? `${roomState.admins.length}명 등록` : "미등록"}`,
     `구독 상태: ${subscription.status === "expired" ? "만료" : subscription.status === "active" ? "정상" : "미설정"}`,
-    `라이선스: ${maskedLicenseKey(license.key)}`,
+    "상세 운영 정보는 관리 콘솔에서만 확인합니다.",
     "",
     "방별 기능",
     ...featureLines(roomState)
@@ -2581,13 +2653,13 @@ function roomListCommand(state) {
   if (!rooms.length) return "등록된 방이 없습니다.\n현재 방에서 /방등록 입장확인문구 를 실행하세요.";
   const lines = ["등록 방 목록"];
   rooms.forEach((roomState, index) => {
-    const ids = roomState.settings?.roomIds || [];
     lines.push(
       `${index + 1}. ${roomState.name || "이름없음"}`,
       `   입장문구: ${roomState.settings?.joinPhrase || DEFAULT_JOIN_PHRASE}`,
-      `   roomId: ${ids.length ? ids.join(", ") : "미등록"}`
+      `   상태: ${roomState.settings?.enabled === false ? "비활성" : "활성"}`
     );
   });
+  lines.push("", "상세 운영 정보는 관리 콘솔에서만 확인합니다.");
   return lines.join("\n");
 }
 
@@ -3206,6 +3278,52 @@ function attendanceCommand(roomState, sender) {
   ].join("\n");
 }
 
+function missingAttendanceCommand(roomState) {
+  const today = kstDateKey();
+  const people = Object.values(roomState.people || {})
+    .map((person) => normalizePersonState(person))
+    .filter((person) => !isReservedPersonName(person.currentName))
+    .filter((person) => person.chats.total > 0 || person.attendance.dates.length > 0 || person.entries.length > 0)
+    .filter((person) => !person.attendance.dates.includes(today))
+    .sort((left, right) => keyFor(left.currentName).localeCompare(keyFor(right.currentName)));
+
+  if (!people.length) {
+    return [
+      "오늘 미출석",
+      "",
+      "기록된 참여자 기준으로 미출석자가 없습니다.",
+      "카카오톡 전체 멤버 목록은 서버로 제공되지 않아, 봇이 기록한 참여자만 기준으로 집계합니다."
+    ].join("\n");
+  }
+
+  return [
+    `오늘 미출석 ${people.length}명`,
+    "",
+    ...people.slice(0, 30).map((person, index) => `${index + 1}. ${person.currentName}`),
+    people.length > 30 ? `...외 ${people.length - 30}명` : "",
+    "",
+    "기준: 봇이 기록한 참여자"
+  ].filter(Boolean).join("\n");
+}
+
+function attendanceRankingCommand(roomState, sender) {
+  const rows = rankedPeople(roomState, (person) => person.attendance.dates.length);
+  const senderKey = existingPersonKey(roomState, sender) || personKey(sender);
+  const ownRank = rows.findIndex((item) => item.key === senderKey) + 1;
+  const lines = [
+    "채팅방 출석 순위",
+    "",
+    `• ${displayNameForKey(roomState, senderKey, sender)}님 : ${ownRank ? `${ownRank}위` : "순위 없음"}`,
+    ""
+  ];
+  rows.slice(0, 15).forEach((item, index) => {
+    const rank = index + 1;
+    lines.push(`${medal(rank)} ${item.person.currentName} ${formatNumber(item.person.attendance.dates.length)}일`);
+  });
+  if (!rows.length) lines.push("기록 없음");
+  return lines.join("\n");
+}
+
 function likeCommand(roomState, sender, text) {
   const parsed = parseTargetAndAmount(text, /^\/좋아요\s*/i);
   if (!parsed?.target || !parsed.amount) return "형식: /좋아요 닉네임 1~999";
@@ -3322,6 +3440,467 @@ function luckyDrawCommand(roomState, sender) {
     `사용 : ${formatPoint(LUCKY_DRAW_POINT_COST)}`,
     `획득 : ${formatPoint(outcome.reward)}`,
     `보유 : ${formatPoint(person.points)}`
+  ].join("\n");
+}
+
+function luckyDrawCatalogText() {
+  return [
+    "뽑기 목록",
+    "",
+    `참가 비용: ${formatPoint(LUCKY_DRAW_POINT_COST)}`,
+    "",
+    ...LUCKY_DRAW_OUTCOMES.map((item) => `• ${item.label}: ${item.chance} / ${formatPoint(item.reward)}`),
+    "",
+    "/뽑기 로 1회 참여합니다."
+  ].join("\n");
+}
+
+function shopState(roomState) {
+  roomState.shop = normalizeShopState(roomState.shop || {});
+  return roomState.shop;
+}
+
+function shopProductById(roomState, productId) {
+  const id = Math.max(0, Math.trunc(Number(productId || 0)));
+  if (!id) return null;
+  return shopState(roomState).products.find((product) => product.id === id) || null;
+}
+
+function activeShopProducts(roomState) {
+  return shopState(roomState).products.filter((product) => product.active !== false);
+}
+
+function productLine(product) {
+  return `${product.id}. ${product.name} - ${formatPoint(product.price)}${product.description ? `\n   ${product.description}` : ""}`;
+}
+
+function recordShopTransaction(roomState, transaction) {
+  const shop = shopState(roomState);
+  shop.transactions.push({
+    id: randomBytes(5).toString("hex"),
+    at: nowIso(),
+    quantity: 1,
+    unitPrice: 0,
+    totalPrice: 0,
+    ...transaction
+  });
+  if (shop.transactions.length > SHOP_TRANSACTION_LIMIT) shop.transactions = shop.transactions.slice(-SHOP_TRANSACTION_LIMIT);
+}
+
+function inventoryQuantity(person, productId) {
+  normalizePersonState(person);
+  return Math.max(0, Math.trunc(Number(person.inventory[String(productId)] || 0)));
+}
+
+function addInventory(person, productId, quantity) {
+  normalizePersonState(person);
+  const id = String(productId);
+  const amount = Math.max(0, Math.trunc(Number(quantity || 0)));
+  if (!amount) return inventoryQuantity(person, id);
+  const current = inventoryQuantity(person, id);
+  person.inventory[id] = current + amount;
+  return person.inventory[id];
+}
+
+function removeInventory(person, productId, quantity) {
+  normalizePersonState(person);
+  const id = String(productId);
+  const amount = Math.max(0, Math.trunc(Number(quantity || 0)));
+  if (!amount) return inventoryQuantity(person, id);
+  const current = inventoryQuantity(person, id);
+  if (current < amount) return -1;
+  const next = current - amount;
+  if (next) person.inventory[id] = next;
+  else delete person.inventory[id];
+  return next;
+}
+
+function parseProductIdFromCommand(text, pattern) {
+  const body = compactSpaces(text.replace(pattern, ""));
+  const productId = Math.trunc(Number(body));
+  if (!productId || String(productId) !== body.replace(/,/g, "")) return 0;
+  return productId;
+}
+
+function shopListCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const products = activeShopProducts(roomState);
+  if (!products.length) {
+    return [
+      "픽셀곰 상점",
+      "",
+      "등록된 상품이 없습니다.",
+      "관리자가 /상점추가 상품명 가격 설명 으로 추가할 수 있습니다."
+    ].join("\n");
+  }
+  return [
+    "픽셀곰 상점",
+    "",
+    `보유 포인트: ${formatPoint(person.points)}`,
+    "",
+    ...products.map(productLine),
+    "",
+    "/구매 번호 로 구매합니다."
+  ].join("\n");
+}
+
+function purchaseItemCommand(roomState, sender, text) {
+  const productId = parseProductIdFromCommand(text, /^\/구매\s*/i);
+  if (!productId) return "형식: /구매 번호";
+  const product = shopProductById(roomState, productId);
+  if (!product || product.active === false) return "판매 중인 상품 번호가 아닙니다. /상점 으로 목록을 확인해주세요.";
+  const buyer = ensurePerson(roomState, sender);
+  if (buyer.points < product.price) {
+    return [
+      "포인트가 부족합니다.",
+      "",
+      `• 필요 포인트 : ${formatPoint(product.price)}`,
+      `• 보유 포인트 : ${formatPoint(buyer.points)}`
+    ].join("\n");
+  }
+  buyer.points -= product.price;
+  buyer.spentPoints += product.price;
+  const quantity = addInventory(buyer, product.id, 1);
+  recordShopTransaction(roomState, {
+    type: "purchase",
+    productId: product.id,
+    productName: product.name,
+    quantity: 1,
+    unitPrice: product.price,
+    totalPrice: product.price,
+    from: buyer.currentName,
+    to: buyer.currentName,
+    by: buyer.currentName
+  });
+  return [
+    "구매 완료",
+    "",
+    `• 상품 : ${product.name}`,
+    `• 사용 포인트 : ${formatPoint(product.price)}`,
+    `• 보유 수량 : ${quantity}개`,
+    `• 남은 포인트 : ${formatPoint(buyer.points)}`
+  ].join("\n");
+}
+
+function inventoryRows(roomState, person) {
+  normalizePersonState(person);
+  return Object.entries(person.inventory)
+    .map(([productId, quantity]) => {
+      const product = shopProductById(roomState, productId);
+      return {
+        productId: Number(productId),
+        quantity,
+        name: product?.name || `삭제된 상품 #${productId}`,
+        active: product?.active !== false
+      };
+    })
+    .filter((item) => item.quantity > 0)
+    .sort((left, right) => left.productId - right.productId);
+}
+
+function inventoryCommand(roomState, sender, text) {
+  const query = stripKakaoSuffix(text.replace(/^\/가방\s*/i, ""));
+  let target = sender;
+  if (query) {
+    const denied = requireAdmin(roomState, sender);
+    if (denied) return denied;
+    target = query;
+  }
+  const key = existingPersonKey(roomState, target) || (query ? "" : personKey(sender));
+  const person = key ? roomState.people[key] || ensurePerson(roomState, target) : null;
+  if (!person) return `"${target}" 사용자를 찾을 수 없습니다.`;
+  const rows = inventoryRows(roomState, person);
+  if (!rows.length) {
+    return [
+      `${person.currentName}님의 가방`,
+      "",
+      "보유한 아이템이 없습니다.",
+      "/상점 으로 구매 가능한 상품을 확인하세요."
+    ].join("\n");
+  }
+  return [
+    `${person.currentName}님의 가방`,
+    "",
+    ...rows.map((item) => `${item.productId}. ${item.name} x ${item.quantity}`),
+    "",
+    "/사용 번호 로 아이템을 사용합니다."
+  ].join("\n");
+}
+
+function useItemCommand(roomState, sender, text) {
+  const productId = parseProductIdFromCommand(text, /^\/사용\s*/i);
+  if (!productId) return "형식: /사용 번호";
+  const product = shopProductById(roomState, productId);
+  const person = ensurePerson(roomState, sender);
+  const nextQuantity = removeInventory(person, productId, 1);
+  if (nextQuantity < 0) return "가방에 해당 아이템이 없습니다.";
+  recordShopTransaction(roomState, {
+    type: "use",
+    productId,
+    productName: product?.name || `상품 #${productId}`,
+    quantity: 1,
+    from: person.currentName,
+    to: person.currentName,
+    by: person.currentName
+  });
+  return [
+    "아이템 사용 완료",
+    "",
+    `• 상품 : ${product?.name || `상품 #${productId}`}`,
+    `• 남은 수량 : ${nextQuantity}개`,
+    "효과형 아이템은 추후 게임 기능과 연결됩니다."
+  ].join("\n");
+}
+
+function parseGiftItem(text) {
+  const body = compactSpaces(text.replace(/^\/가방선물\s*/i, ""));
+  const match = body.match(/^(.+?)\s+([0-9]+)\s+([0-9]+)$/);
+  if (!match) return null;
+  return {
+    target: stripKakaoSuffix(match[1]),
+    productId: Math.trunc(Number(match[2])),
+    quantity: Math.min(SHOP_MAX_QUANTITY, Math.max(1, Math.trunc(Number(match[3]))))
+  };
+}
+
+function giftItemCommand(roomState, sender, text) {
+  const parsed = parseGiftItem(text);
+  if (!parsed?.target || !parsed.productId || !parsed.quantity) return "형식: /가방선물 닉네임 번호 수량";
+  const giver = ensurePerson(roomState, sender);
+  const targetKey = existingPersonKey(roomState, parsed.target);
+  if (!targetKey) return `"${parsed.target}" 사용자를 찾을 수 없습니다.`;
+  if (targetKey === personKey(sender)) return "본인에게는 선물할 수 없습니다.";
+  const receiver = roomState.people[targetKey];
+  const nextGiverQuantity = removeInventory(giver, parsed.productId, parsed.quantity);
+  if (nextGiverQuantity < 0) return "선물할 아이템 수량이 부족합니다.";
+  const product = shopProductById(roomState, parsed.productId);
+  const receiverQuantity = addInventory(receiver, parsed.productId, parsed.quantity);
+  recordShopTransaction(roomState, {
+    type: "gift",
+    productId: parsed.productId,
+    productName: product?.name || `상품 #${parsed.productId}`,
+    quantity: parsed.quantity,
+    from: giver.currentName,
+    to: receiver.currentName,
+    by: giver.currentName
+  });
+  return [
+    "가방 선물 완료",
+    "",
+    `• 상품 : ${product?.name || `상품 #${parsed.productId}`}`,
+    `• 보낸 사람 : ${giver.currentName}`,
+    `• 받은 사람 : ${receiver.currentName}`,
+    `• 수량 : ${parsed.quantity}개`,
+    `• 받은 사람 보유 : ${receiverQuantity}개`
+  ].join("\n");
+}
+
+function purchaseHistoryCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const nameKey = personKey(person.currentName);
+  const transactions = shopState(roomState).transactions
+    .filter((item) => [item.from, item.to, item.by].some((name) => personKey(name) === nameKey))
+    .slice(-10)
+    .reverse();
+  if (!transactions.length) return `${person.currentName}님의 구매/아이템 내역이 없습니다.`;
+  return [
+    `${person.currentName}님 구매/아이템 내역`,
+    "",
+    ...transactions.map((item, index) => `${index + 1}. ${shortKstDate(new Date(item.at))} ${shopTransactionLabel(item)} ${item.productName || `상품 #${item.productId}`} x ${item.quantity}`)
+  ].join("\n");
+}
+
+function parseShopAdd(text) {
+  const body = normalizeText(text.replace(/^\/상점추가\s*/i, ""));
+  const match = body.match(/^(.+?)\s+([0-9][0-9,]*)\s+([\s\S]+)$/);
+  if (!match) return null;
+  return {
+    name: compactSpaces(match[1]).slice(0, SHOP_PRODUCT_NAME_LIMIT),
+    price: parseAmount(match[2]),
+    description: compactSpaces(match[3]).slice(0, SHOP_PRODUCT_DESCRIPTION_LIMIT)
+  };
+}
+
+function shopAddCommand(roomState, sender, text) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const parsed = parseShopAdd(text);
+  if (!parsed?.name || !parsed.price || !parsed.description) return "형식: /상점추가 상품명 가격 설명";
+  if (parsed.price > SHOP_MAX_PRICE) return `상품 가격은 최대 ${formatPoint(SHOP_MAX_PRICE)}까지 가능합니다.`;
+  const shop = shopState(roomState);
+  if (activeShopProducts(roomState).length >= SHOP_PRODUCT_LIMIT) return `상점 상품은 최대 ${SHOP_PRODUCT_LIMIT}개까지 등록할 수 있습니다.`;
+  const product = {
+    id: shop.nextProductId++,
+    name: parsed.name,
+    price: parsed.price,
+    description: parsed.description,
+    active: true,
+    createdAt: nowIso(),
+    createdBy: sender,
+    updatedAt: nowIso(),
+    updatedBy: sender
+  };
+  shop.products.push(product);
+  recordShopTransaction(roomState, {
+    type: "product_added",
+    productId: product.id,
+    productName: product.name,
+    by: sender
+  });
+  return [
+    "상점 상품이 추가되었습니다.",
+    "",
+    productLine(product)
+  ].join("\n");
+}
+
+function parseShopUpdate(text) {
+  const body = normalizeText(text.replace(/^\/상점수정\s*/i, ""));
+  const match = body.match(/^([0-9]+)\s+([0-9][0-9,]*)\s+([\s\S]+)$/);
+  if (!match) return null;
+  return {
+    productId: Math.trunc(Number(match[1])),
+    price: parseAmount(match[2]),
+    description: compactSpaces(match[3]).slice(0, SHOP_PRODUCT_DESCRIPTION_LIMIT)
+  };
+}
+
+function shopUpdateCommand(roomState, sender, text) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const parsed = parseShopUpdate(text);
+  if (!parsed?.productId || !parsed.price || !parsed.description) return "형식: /상점수정 번호 가격 설명";
+  if (parsed.price > SHOP_MAX_PRICE) return `상품 가격은 최대 ${formatPoint(SHOP_MAX_PRICE)}까지 가능합니다.`;
+  const product = shopProductById(roomState, parsed.productId);
+  if (!product) return "상품 번호를 찾을 수 없습니다.";
+  product.price = parsed.price;
+  product.description = parsed.description;
+  product.active = true;
+  product.updatedAt = nowIso();
+  product.updatedBy = sender;
+  recordShopTransaction(roomState, {
+    type: "product_updated",
+    productId: product.id,
+    productName: product.name,
+    unitPrice: product.price,
+    by: sender
+  });
+  return [
+    "상점 상품이 수정되었습니다.",
+    "",
+    productLine(product)
+  ].join("\n");
+}
+
+function shopDeleteCommand(roomState, sender, text) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const productId = parseProductIdFromCommand(text, /^\/상점삭제\s*/i);
+  if (!productId) return "형식: /상점삭제 번호";
+  const product = shopProductById(roomState, productId);
+  if (!product) return "상품 번호를 찾을 수 없습니다.";
+  product.active = false;
+  product.deletedAt = nowIso();
+  product.deletedBy = sender;
+  product.updatedAt = product.deletedAt;
+  product.updatedBy = sender;
+  recordShopTransaction(roomState, {
+    type: "product_deleted",
+    productId: product.id,
+    productName: product.name,
+    by: sender
+  });
+  return `${product.name} 상품을 상점에서 숨겼습니다. 기존 가방 아이템은 유지됩니다.`;
+}
+
+function shopResetCommand(roomState, sender) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const shop = shopState(roomState);
+  for (const product of shop.products) {
+    if (product.active === false) continue;
+    product.active = false;
+    product.deletedAt = nowIso();
+    product.deletedBy = sender;
+  }
+  recordShopTransaction(roomState, { type: "shop_reset", by: sender });
+  return "상점 상품을 모두 숨겼습니다. 기존 가방 아이템은 유지됩니다.";
+}
+
+function shopTransactionLabel(transaction) {
+  const labels = {
+    purchase: "구매",
+    use: "사용",
+    gift: "선물",
+    product_added: "상품추가",
+    product_updated: "상품수정",
+    product_deleted: "상품삭제",
+    shop_reset: "상점초기화",
+    item_granted: "아이템지급",
+    item_revoked: "아이템회수"
+  };
+  return labels[transaction.type] || transaction.type || "기록";
+}
+
+function shopHistoryCommand(roomState, sender) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const transactions = shopState(roomState).transactions.slice(-15).reverse();
+  if (!transactions.length) return "상점 내역이 없습니다.";
+  return [
+    "상점 내역",
+    "",
+    ...transactions.map((item, index) => {
+      const names = [item.from && `from ${item.from}`, item.to && `to ${item.to}`, item.by && `by ${item.by}`].filter(Boolean).join(" / ");
+      const amount = item.totalPrice ? ` / ${formatPoint(item.totalPrice)}` : "";
+      return `${index + 1}. ${shortKstDate(new Date(item.at))} ${shopTransactionLabel(item)} ${item.productName || `상품 #${item.productId}`} x ${item.quantity}${amount}${names ? ` / ${names}` : ""}`;
+    })
+  ].join("\n");
+}
+
+function parseAdminItemTransfer(text, commandPattern) {
+  const body = compactSpaces(text.replace(commandPattern, ""));
+  const match = body.match(/^(.+?)\s+([0-9]+)\s+([0-9]+)$/);
+  if (!match) return null;
+  return {
+    target: stripKakaoSuffix(match[1]),
+    productId: Math.trunc(Number(match[2])),
+    quantity: Math.min(SHOP_MAX_QUANTITY, Math.max(1, Math.trunc(Number(match[3]))))
+  };
+}
+
+function adminItemTransferCommand(roomState, sender, text, mode) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const commandPattern = mode === "grant" ? /^\/아이템지급\s*/i : /^\/아이템회수\s*/i;
+  const parsed = parseAdminItemTransfer(text, commandPattern);
+  const label = mode === "grant" ? "아이템지급" : "아이템회수";
+  if (!parsed?.target || !parsed.productId || !parsed.quantity) return `형식: /${label} 닉네임 번호 수량`;
+  const product = shopProductById(roomState, parsed.productId);
+  if (!product) return "상품 번호를 찾을 수 없습니다.";
+  const targetKey = existingPersonKey(roomState, parsed.target) || personKey(parsed.target);
+  const person = roomState.people[targetKey] || ensurePerson(roomState, parsed.target);
+  let nextQuantity = 0;
+  if (mode === "grant") nextQuantity = addInventory(person, parsed.productId, parsed.quantity);
+  else {
+    nextQuantity = removeInventory(person, parsed.productId, parsed.quantity);
+    if (nextQuantity < 0) return "회수할 아이템 수량이 부족합니다.";
+  }
+  recordShopTransaction(roomState, {
+    type: mode === "grant" ? "item_granted" : "item_revoked",
+    productId: product.id,
+    productName: product.name,
+    quantity: parsed.quantity,
+    to: person.currentName,
+    by: sender
+  });
+  return [
+    `${label} 완료`,
+    "",
+    `• 대상 : ${person.currentName}`,
+    `• 상품 : ${product.name}`,
+    `• 수량 : ${parsed.quantity}개`,
+    `• 현재 보유 : ${nextQuantity}개`
   ].join("\n");
 }
 
@@ -3919,7 +4498,13 @@ function isBridgeReplyEchoMessage(sender, message) {
     "【 닉네임 변경 】",
     "님의 포인트 :",
     "이미 출석 하셨습니다",
-    "획득"
+    "획득",
+    "픽셀곰 상점",
+    "님의 가방",
+    "구매 완료",
+    "아이템 사용 완료",
+    "가방 선물 완료",
+    "상점 내역"
   ].some((marker) => text.includes(marker));
 }
 
@@ -3958,14 +4543,15 @@ function bridgeJsServerText() {
 }
 
 function commandFeatureKey(command) {
-  if (/^\/(?:출석|출석체크|출첵)$/.test(command)) return "attendance";
+  if (/^\/(?:출석|출석체크|출첵|ㅊㅊ|미출석)$/.test(command)) return "attendance";
   if (/^\/(?:포인트안내|포인트규칙)$/.test(command)) return "points";
-  if (/^\/포인트\s*순위$|^\/포인트순위$|^\/좋아요\s*순위$|^\/좋아요순위$|^\/레벨\s*순위$|^\/레벨순위$/.test(command)) return "rankings";
+  if (/^\/포인트\s*순위$|^\/포인트순위$|^\/좋아요\s*순위$|^\/좋아요순위$|^\/레벨\s*순위$|^\/레벨순위$|^\/출석\s*순위$|^\/출석순위$/.test(command)) return "rankings";
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
   if (/^\/(?:프로필|프로칠|프로필등록|프로필삭제|별명등록|별명삭제)(?:\s|$)/.test(command)) return "profiles";
-  if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|확률뽑기|뽑기|홀짝|홀|짝|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
+  if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
   if (/^\/(?:게임|주사위|낚시|탐험)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:상점|구매|구매내역|가방|사용|가방선물|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
   return "";
 }
@@ -3999,19 +4585,31 @@ function helpText(isAdminUser = false) {
     "",
     "운영",
     "/메시지 - 내 메시지함 확인",
-    "/최근이벤트 - 브릿지 원본 이벤트 확인",
+    "",
+    "출석",
+    "/출석, /출석체크, /출첵, /ㅊㅊ - 일일 출석 보상",
+    "/미출석 - 기록된 참여자 중 오늘 미출석 확인",
+    "/출석순위 - 누적 출석 순위",
     "",
     "포인트",
-    "/출석, /출석체크 - 일일 출석 보상",
     "/포인트, /내포인트 - 내 포인트 확인",
     "/내정보, /레벨 - 레벨/포인트/채팅 정보",
     "/좋아요 닉네임 1~999 - 포인트로 하트 보내기",
     "/응원 닉네임 메시지 - 포인트 응원 카드",
     "/뽑기 - 공개 확률 포인트 뽑기",
+    "/뽑기목록 - 뽑기 확률과 보상 확인",
     "/홀 금액, /짝 금액 - 맞히면 x2",
     "/이체 닉네임 포인트 - 포인트 이체",
     "/포인트순위, /좋아요순위, /레벨순위",
     "/채팅오늘, /채팅금주",
+    "",
+    "상점/가방",
+    "/상점 - 구매 가능한 아이템 확인",
+    "/구매 번호 - 포인트로 아이템 구매",
+    "/가방 - 내 아이템 확인",
+    "/사용 번호 - 아이템 사용",
+    "/가방선물 닉네임 번호 수량 - 아이템 선물",
+    "/구매내역 - 내 구매/아이템 내역",
     "",
     "게임",
     "/게임 - 미니게임 안내",
@@ -4045,11 +4643,19 @@ function helpText(isAdminUser = false) {
       "/관리자재설정 닉네임1,닉네임2",
       "/관리자초기화 - 방 관리자 목록 초기화",
       "/관리자목록",
+      "/최근이벤트 - 브릿지 원본 이벤트 요약",
       "/방등록 입장확인문구",
       "/입장문구 입장확인문구",
       "/방정보, /방목록, /방삭제",
       "/기능목록, /기능켜기 출석, /기능끄기 게임",
       "/구독상태, /구독연장 1, /구독만료 2026-06-30",
+      "/상점추가 상품명 가격 설명",
+      "/상점수정 번호 가격 설명",
+      "/상점삭제 번호, /상점초기화",
+      "/상점내역",
+      "/아이템지급 닉네임 번호 수량",
+      "/아이템회수 닉네임 번호 수량",
+      "/가방 닉네임 - 특정 참여자 가방 확인",
       "/명령어등록 /공지 내용",
       "/명령어삭제 /공지",
       "/고유값초기화 닉네임 - 이름 섞임 방지",
@@ -4060,7 +4666,7 @@ function helpText(isAdminUser = false) {
     );
   }
 
-  lines.push(`월 이용금액은 ${formatKrw(MONTHLY_PRICE_KRW)} 기준이며, 모든 보상은 채팅방 가상 포인트로만 사용합니다.`);
+  lines.push("모든 보상과 상점 아이템은 채팅방 가상 포인트로만 사용합니다.");
   return lines.join("\n");
 }
 
@@ -4708,6 +5314,7 @@ function adminApproveApplication(state, payload = {}, approvedBy = "admin_consol
       profiles: true,
       localJs: true,
       games: false,
+      shop: true,
       customCommands: true
     }
   });
@@ -4853,7 +5460,8 @@ async function handleAdminApi(req, url) {
 async function handleCommand(state, room, sender, message, identity = {}) {
   const roomState = ensureRoom(state, room);
   const text = normalizeText(message);
-  const command = compactSpaces(text);
+  let command = compactSpaces(text);
+  if (command === "ㅊㅊ") command = "/ㅊㅊ";
 
   if (command === "/상태" || command === "/status") return statusText(room);
   if (command === "/브릿지" || command === "/bridge") return bridgeServerText(room);
@@ -4861,13 +5469,13 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/로컬상태") return `${DEFAULT_BOT_NAME} 자동응답 스크립트가 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.`;
   if (command.startsWith("/방등록")) return roomRegisterCommand(roomState, sender, text, identity.payload || {});
   if (/^\/(?:방설정|입장문구)(?:\s|$)/.test(command)) return roomJoinPhraseCommand(roomState, sender, text);
-  if (command === "/방정보") return roomInfoCommand(roomState);
-  if (command === "/방목록") return roomListCommand(state);
+  if (command === "/방정보") return requireAdmin(roomState, sender) || roomInfoCommand(roomState);
+  if (command === "/방목록") return requireAdmin(roomState, sender) || roomListCommand(state);
   if (command === "/방삭제") return roomDeleteCommand(roomState, sender);
-  if (command === "/구독상태") return subscriptionStatusCommand(roomState);
+  if (command === "/구독상태") return requireAdmin(roomState, sender) || subscriptionStatusCommand(roomState);
   if (command.startsWith("/구독연장")) return subscriptionExtendCommand(roomState, sender, text);
   if (command.startsWith("/구독만료")) return subscriptionExpireCommand(roomState, sender, text);
-  if (command === "/기능" || command === "/기능목록") return featureSettingsCommand(roomState);
+  if (command === "/기능" || command === "/기능목록") return requireAdmin(roomState, sender) || featureSettingsCommand(roomState);
   if (command.startsWith("/기능켜기 ")) return featureUpdateCommand(roomState, sender, text, true);
   if (command.startsWith("/기능끄기 ")) return featureUpdateCommand(roomState, sender, text, false);
   if (command === "/고정명령어") return fixedCommandCatalogText(isAdmin(roomState, sender));
@@ -4883,9 +5491,11 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/낚시") return fishingGameCommand(roomState, sender);
   if (command === "/탐험") return exploreGameCommand(roomState, sender);
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
-  if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return recentEventsCommand(state, roomState, sender, text);
+  if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return requireAdmin(roomState, sender) || recentEventsCommand(state, roomState, sender, text);
   if (/^\/(?:원본로그|원본이벤트)(?:\s|$)/.test(command)) return rawLogCommand(roomState, sender, text);
-  if (/^\/(?:출석|출석체크|출첵)$/.test(command)) return attendanceCommand(roomState, sender);
+  if (/^\/(?:출석|출석체크|출첵|ㅊㅊ)$/.test(command)) return attendanceCommand(roomState, sender);
+  if (command === "/미출석") return missingAttendanceCommand(roomState);
+  if (/^\/출석\s*순위$|^\/출석순위$/.test(command)) return attendanceRankingCommand(roomState, sender);
   if (/^\/(?:포인트안내|포인트규칙)$/.test(command)) return pointGuideText();
   if (/^\/포인트\s*순위$|^\/포인트순위$/.test(command)) return rankingText(roomState, sender, "points");
   if (/^\/좋아요\s*순위$|^\/좋아요순위$/.test(command)) return rankingText(roomState, sender, "likes");
@@ -4898,9 +5508,23 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (/^\/(?:포인트|내포인트)(?:\s|$)/.test(command)) return pointViewCommand(roomState, text, sender);
   if (command.startsWith("/좋아요 ")) return likeCommand(roomState, sender, text);
   if (command.startsWith("/응원 ")) return cheerCommand(roomState, sender, text);
+  if (command === "/뽑기목록") return luckyDrawCatalogText();
   if (command === "/확률뽑기" || command === "/뽑기") return luckyDrawCommand(roomState, sender);
   if (command.startsWith("/홀짝") || /^\/(?:홀|짝)(?:\s|$)/.test(command)) return oddEvenCommand(roomState, sender, text);
   if (command.startsWith("/이체 ")) return transferCommand(roomState, sender, text);
+  if (command === "/상점") return shopListCommand(roomState, sender);
+  if (command.startsWith("/구매 ")) return purchaseItemCommand(roomState, sender, text);
+  if (command === "/구매내역") return purchaseHistoryCommand(roomState, sender);
+  if (command === "/가방" || command.startsWith("/가방 ")) return inventoryCommand(roomState, sender, text);
+  if (command.startsWith("/사용 ")) return useItemCommand(roomState, sender, text);
+  if (command.startsWith("/가방선물 ")) return giftItemCommand(roomState, sender, text);
+  if (command.startsWith("/상점추가 ")) return shopAddCommand(roomState, sender, text);
+  if (command.startsWith("/상점수정 ")) return shopUpdateCommand(roomState, sender, text);
+  if (command.startsWith("/상점삭제 ")) return shopDeleteCommand(roomState, sender, text);
+  if (command === "/상점초기화") return shopResetCommand(roomState, sender);
+  if (command === "/상점내역") return shopHistoryCommand(roomState, sender);
+  if (command.startsWith("/아이템지급 ")) return adminItemTransferCommand(roomState, sender, text, "grant");
+  if (command.startsWith("/아이템회수 ")) return adminItemTransferCommand(roomState, sender, text, "revoke");
   if (/^\/(?:내정보|레벨)(?:\s|$)/.test(command) || command.startsWith("/정보 ")) return memberInfoCommand(roomState, text, sender);
   if (command.startsWith("/관리자등록 ")) return adminRegisterCommand(roomState, sender, text);
   if (command.startsWith("/관리자삭제 ")) return adminDeleteCommand(roomState, sender, text);
@@ -4943,7 +5567,7 @@ async function handleMessage(state, room, sender, message, identity = {}, detect
   const text = normalizeText(message);
   const event = detectedEvent || detectSystemEvent(message);
   const targetIdentity = identity.targetUserId || "";
-  const isCommand = text.startsWith("/");
+  const isCommand = text.startsWith("/") || compactSpaces(text) === "ㅊㅊ";
   if (isSubscriptionExpired(roomState) && !subscriptionBypassCommand(text)) {
     return isCommand ? subscriptionExpiredText(roomState) : null;
   }
