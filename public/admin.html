@@ -35,11 +35,11 @@
         <div class="admin-session-status" data-owner-status>운영자 로그인 확인 중입니다.</div>
         <label class="admin-search-field">
           검색
-          <input data-admin-search type="search" autocomplete="off" placeholder="방, 관리자, 라이선스, 신청자">
+          <input id="admin-search" name="adminSearch" data-admin-search type="search" autocomplete="off" placeholder="방, 관리자, 라이선스, 신청자">
         </label>
         <label class="admin-filter-field">
           방 상태
-          <select data-room-status-filter>
+          <select id="room-status-filter" name="roomStatusFilter" data-room-status-filter>
             <option value="all">전체 방</option>
             <option value="active">정상 운영</option>
             <option value="expiring">만료 임박 7일</option>
@@ -149,11 +149,11 @@
           <div class="command-builder" aria-label="커스텀 명령어 제작">
             <label>
               명령어
-              <input data-command-trigger placeholder="/공지, 공지, !공지">
+              <input id="command-trigger" name="commandTrigger" data-command-trigger placeholder="/공지, 공지, !공지">
             </label>
             <label>
               응답 내용
-              <textarea data-command-response rows="4" placeholder="오늘 공지는 여기입니다."></textarea>
+              <textarea id="command-response" name="commandResponse" data-command-response rows="4" placeholder="오늘 공지는 여기입니다."></textarea>
             </label>
             <button class="button button-secondary" type="button" data-add-command>명령어 추가/수정</button>
           </div>
@@ -177,7 +177,7 @@
       <section class="admin-import">
         <h2>백업 복구</h2>
         <p>관리 콘솔에서 받은 백업 JSON을 붙여넣고 복구할 수 있습니다. 운영자 로그인 세션이 필요합니다.</p>
-        <textarea data-restore-json rows="8" placeholder='{"rooms":[...]}'></textarea>
+        <textarea id="restore-json" name="restoreJson" data-restore-json rows="8" placeholder='{"rooms":[...]}'></textarea>
         <button class="button button-secondary" type="button" data-restore>백업 복구 실행</button>
       </section>
     </main>
