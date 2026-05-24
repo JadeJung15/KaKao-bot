@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.57";
+export const APP_VERSION = "0.4.58";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -129,7 +129,11 @@ export const FEATURES = [
   "command-template-store",
   "command-template-catalog-400",
   "buyer-command-template-install",
-  "owned-bridge-engine-marketing"
+  "owned-bridge-engine-marketing",
+  "command-template-response-editor",
+  "command-template-cart-favorites",
+  "buyer-custom-command-management",
+  "game-template-engine-shortcuts"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -380,11 +384,14 @@ function commandTemplateSlug(value) {
 }
 
 function commandTemplateResponse(category, word, action, serial) {
+  const proxyCommand = gameTemplateProxyCommand(category, word);
   if (category.kind === "game-template") {
     return [
       `${word} ${action}`,
       "",
-      "이 명령어는 게임 확장용 템플릿입니다.",
+      proxyCommand
+        ? `${proxyCommand} 게임 엔진으로 연결할 수 있는 템플릿입니다.`
+        : "이 명령어는 게임 확장용 안내 템플릿입니다.",
       "관리자가 보상, 쿨타임, 확률을 방 설정에 맞게 조정해 주세요.",
       `템플릿 번호: ${serial}`
     ].join("\n");
@@ -405,6 +412,14 @@ function commandTemplateResponse(category, word, action, serial) {
     "필요한 문구를 구매자 콘솔에서 방 분위기에 맞게 수정해 주세요.",
     `템플릿 번호: ${serial}`
   ].join("\n");
+}
+
+function gameTemplateProxyCommand(category, word) {
+  if (category.kind !== "game-template") return "";
+  if (/주사위/.test(word)) return "/주사위";
+  if (/낚시/.test(word)) return "/낚시";
+  if (/탐험|던전|채집|광산|보스|퀘스트/.test(word)) return "/탐험";
+  return "";
 }
 
 function fixedCommandTemplates() {
@@ -453,14 +468,17 @@ function generatedCommandTemplates() {
           trigger,
           audience: category.audience,
           kind: category.kind,
-          installable: category.kind === "custom",
+          installable: category.kind === "custom" || category.kind === "game-template",
           editable: category.kind !== "fixed",
           description: category.kind === "custom"
             ? "구매자가 문구를 수정해서 방별 커스텀 명령어로 설치할 수 있습니다."
             : category.kind === "game-template"
-              ? "게임 확장용 템플릿입니다. 기능 엔진 연결 전에는 안내 문구로 설치할 수 있습니다."
+              ? (gameTemplateProxyCommand(category, word)
+                ? "설치하면 해당 명령어가 기존 픽셀곰 미니게임 엔진으로 연결됩니다."
+                : "게임 확장용 템플릿입니다. 현재는 안내 문구로 설치할 수 있습니다.")
               : "AI 기능 후보 템플릿입니다. 실제 자동화 전에는 운영자 검토가 필요합니다.",
           response: commandTemplateResponse(category, word, action, serial),
+          proxyCommand: gameTemplateProxyCommand(category, word),
           tags: [category.title, category.audience === "admin" ? "관리자" : "참여자", category.kind]
         });
         serial += 1;
@@ -502,6 +520,7 @@ function publicCommandTemplate(template) {
     editable: template.editable,
     description: template.description,
     response: template.response,
+    proxyCommand: template.proxyCommand || "",
     tags: template.tags
   };
 }
@@ -1722,7 +1741,10 @@ function normalizeCustomCommands(value = []) {
       trigger,
       response,
       updatedAt: normalizeText(item?.updatedAt) || nowIso(),
-      updatedBy: normalizeText(item?.updatedBy)
+      updatedBy: normalizeText(item?.updatedBy),
+      sourceTemplateId: normalizeText(item?.sourceTemplateId),
+      sourceTemplateKind: normalizeText(item?.sourceTemplateKind),
+      proxyCommand: normalizeCustomCommandTrigger(item?.proxyCommand)
     });
   }
   return [...byTrigger.values()].slice(0, CUSTOM_COMMAND_LIMIT);
@@ -1841,12 +1863,18 @@ function customCommandDeleteCommand(roomState, sender, text) {
   return `${trigger} 커스텀 명령어를 삭제했습니다.`;
 }
 
-function customCommandReply(roomState, command) {
+function customCommandReply(roomState, command, sender) {
   const trigger = normalizeCustomCommandTrigger(command);
   if (!trigger) return "";
   const item = customCommands(roomState).find((commandItem) => commandItem.trigger === trigger);
   if (!item) return "";
   if (!featureEnabled(roomState, "customCommands")) return featureDisabledText("customCommands");
+  if (item.proxyCommand) {
+    if (!featureEnabled(roomState, "games")) return featureDisabledText("games");
+    if (item.proxyCommand === "/주사위") return diceGameCommand(roomState, sender);
+    if (item.proxyCommand === "/낚시") return fishingGameCommand(roomState, sender);
+    if (item.proxyCommand === "/탐험") return exploreGameCommand(roomState, sender);
+  }
   recordRoomEvent(roomState, { type: "custom_command_used", trigger });
   return item.response;
 }
@@ -5443,7 +5471,9 @@ function installCommandTemplateForBuyer(state, account = {}, body = {}) {
     response,
     updatedAt: nowIso(),
     updatedBy: account.email || account.nickname || "buyer_console",
-    sourceTemplateId: template.id
+    sourceTemplateId: template.id,
+    sourceTemplateKind: template.kind,
+    proxyCommand: template.proxyCommand || ""
   };
   if (existingIndex >= 0) commands[existingIndex] = item;
   else commands.push(item);
@@ -5460,6 +5490,49 @@ function installCommandTemplateForBuyer(state, account = {}, body = {}) {
     room: applicationRoomPayload(state, account, application),
     template: publicCommandTemplate(template),
     command: item
+  };
+}
+
+function buyerCustomCommandsForAccount(state, account = {}, body = {}) {
+  const application = approvedApplicationForInstall(state, account, body);
+  if (!application) return { ok: false, status: 404, error: "approved_room_not_found" };
+  const roomState = ensureRoom(state, application.roomName);
+  return {
+    ok: true,
+    version: APP_VERSION,
+    room: applicationRoomPayload(state, account, application),
+    commands: customCommands(roomState).map((item) => ({
+      trigger: item.trigger,
+      response: item.response,
+      updatedAt: item.updatedAt,
+      updatedBy: item.updatedBy,
+      sourceTemplateId: item.sourceTemplateId || "",
+      sourceTemplateKind: item.sourceTemplateKind || "",
+      proxyCommand: item.proxyCommand || ""
+    }))
+  };
+}
+
+function deleteBuyerCustomCommand(state, account = {}, body = {}) {
+  const application = approvedApplicationForInstall(state, account, body);
+  if (!application) return { ok: false, status: 404, error: "approved_room_not_found" };
+  const trigger = normalizeCustomCommandTrigger(body.trigger || body.command);
+  if (!trigger) return { ok: false, status: 400, error: "invalid_command_trigger" };
+  const roomState = ensureRoom(state, application.roomName);
+  const before = customCommands(roomState).length;
+  roomState.settings.customCommands = customCommands(roomState).filter((item) => item.trigger !== trigger);
+  if (roomState.settings.customCommands.length === before) return { ok: false, status: 404, error: "custom_command_not_found" };
+  recordRoomEvent(roomState, {
+    type: "buyer_custom_command_deleted",
+    trigger,
+    by: account.email || account.nickname || "buyer_console"
+  });
+  return {
+    ok: true,
+    version: APP_VERSION,
+    room: applicationRoomPayload(state, account, application),
+    deleted: trigger,
+    commands: customCommands(roomState)
   };
 }
 
@@ -5494,6 +5567,22 @@ async function buyerCommandTemplateInstallFromRequest(state, req, body = {}) {
   const auth = await accountFromBuyerRequest(state, req, body);
   if (!auth.ok) return auth;
   const result = installCommandTemplateForBuyer(state, auth.account, body);
+  if (!result.ok) return result;
+  return { ...result, guideToken: buyerTokenForAccount(auth.account) };
+}
+
+async function buyerCustomCommandsFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const result = buyerCustomCommandsForAccount(state, auth.account, body);
+  if (!result.ok) return result;
+  return { ...result, guideToken: buyerTokenForAccount(auth.account) };
+}
+
+async function buyerCustomCommandDeleteFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const result = deleteBuyerCustomCommand(state, auth.account, body);
   if (!result.ok) return result;
   return { ...result, guideToken: buyerTokenForAccount(auth.account) };
 }
@@ -5576,6 +5665,23 @@ async function handlePublicAccountApi(req, url) {
     const body = await readBody(req);
     const state = await loadState();
     const result = await buyerCommandTemplateInstallFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/custom-commands") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerCustomCommandsFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/custom-commands/delete") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerCustomCommandDeleteFromRequest(state, req, body);
     if (!result.ok) return { status: result.status || 401, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -5869,7 +5975,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
     return personHistoryText(roomState, query, sender);
   }
 
-  const customReply = customCommandReply(roomState, command);
+  const customReply = customCommandReply(roomState, command, sender);
   if (customReply) return customReply;
 
   if (command.startsWith("/")) {
@@ -5995,6 +6101,8 @@ export async function requestHandler(req, res) {
       || pathname === "/api/buyer/guide"
       || pathname === "/api/buyer/console"
       || pathname === "/api/buyer/command-templates/install"
+      || pathname === "/api/buyer/custom-commands"
+      || pathname === "/api/buyer/custom-commands/delete"
       || pathname === "/api/bridge/connect";
 
     if (adminApi) {

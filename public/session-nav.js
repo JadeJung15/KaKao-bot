@@ -37,10 +37,32 @@
   const targetHref = ownerToken ? "/admin" : "/console";
   const targetText = ownerToken ? "운영자 어드민" : "구매자 콘솔";
 
+  function signOut() {
+    try {
+      sessionStorage.removeItem("pixgomOwnerToken");
+      sessionStorage.removeItem("pixgomBuyerToken");
+      for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+        const key = localStorage.key(index) || "";
+        if (key.startsWith("sb-") && key.endsWith("-auth-token")) localStorage.removeItem(key);
+      }
+    } catch {
+      // Ignore storage cleanup failures and still move the user to login.
+    }
+    window.location.href = "/login";
+  }
+
   for (const anchor of document.querySelectorAll("a")) {
     if (!isLoginLink(anchor)) continue;
     anchor.href = targetHref;
     anchor.textContent = targetText;
     anchor.classList.add("nav-logged-in");
+    if (!anchor.parentElement?.querySelector(".nav-logout")) {
+      const logoutButton = document.createElement("button");
+      logoutButton.type = "button";
+      logoutButton.className = "nav-logout";
+      logoutButton.textContent = "로그아웃";
+      logoutButton.addEventListener("click", signOut);
+      anchor.insertAdjacentElement("afterend", logoutButton);
+    }
   }
 })();
