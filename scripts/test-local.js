@@ -74,7 +74,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.56");
+  assert.equal(health.json.version, "0.4.57");
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
   assert.match(health.json.features.join(","), /profile-registry/);
@@ -144,6 +144,10 @@ try {
   assert.match(health.json.features.join(","), /branded-email-template/);
   assert.match(health.json.features.join(","), /kakao-oidc-id-token-login/);
   assert.match(health.json.features.join(","), /kakao-social-login-first-connect/);
+  assert.match(health.json.features.join(","), /command-template-store/);
+  assert.match(health.json.features.join(","), /command-template-catalog-400/);
+  assert.match(health.json.features.join(","), /buyer-command-template-install/);
+  assert.match(health.json.features.join(","), /owned-bridge-engine-marketing/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.additionalRoomPriceKrw, 2200);
   assert.equal(health.json.adminConsoleEnabled, true);
@@ -199,12 +203,36 @@ try {
   assert.match(homeText, /AI 운영 도우미 후보/);
   assert.match(homeText, /0\.4\.53/);
   assert.match(homeText, /0\.4\.52/);
+  assert.match(homeText, /0\.4\.57/);
+  assert.match(homeText, /MessengerBotR/);
+  assert.match(homeText, /전용 브릿지 엔진/);
+  assert.match(homeText, /400개 템플릿/);
+  assert.match(homeText, /명령어 스토어/);
 
-  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup", "/forgot-password", "/reset-password", "/apply", "/console", "/my-rooms", "/setup", "/license", "/status"]) {
+  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup", "/forgot-password", "/reset-password", "/apply", "/console", "/my-rooms", "/setup", "/license", "/status", "/command-store"]) {
     const page = await fetch(`${baseUrl}${pagePath}`);
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-type") || "", /text\/html/);
   }
+
+  const commandStorePage = await fetch(`${baseUrl}/command-store`);
+  const commandStoreText = await commandStorePage.text();
+  assert.match(commandStoreText, /명령어 스토어/);
+  assert.match(commandStoreText, /400개/);
+  assert.match(commandStoreText, /펫키우기/);
+  assert.match(commandStoreText, /data-template-grid/);
+
+  const commandTemplates = await request("/api/command-templates");
+  assert.equal(commandTemplates.response.status, 200);
+  assert.equal(commandTemplates.json.ok, true);
+  assert.equal(commandTemplates.json.version, "0.4.57");
+  assert.equal(commandTemplates.json.total, 400);
+  assert.equal(commandTemplates.json.templates.length, 400);
+  assert.equal(commandTemplates.json.categories.some((category) => category.title === "펫키우기"), true);
+  assert.equal(commandTemplates.json.categories.some((category) => category.title === "확률게임"), true);
+  assert.equal(commandTemplates.json.categories.some((category) => category.title === "관리자용"), true);
+  assert.equal(commandTemplates.json.templates.some((template) => template.trigger === "/출석" && template.kind === "fixed"), true);
+  assert.equal(commandTemplates.json.templates.some((template) => template.installable && template.kind === "custom"), true);
 
   const statusPage = await fetch(`${baseUrl}/status`);
   const statusPageText = await statusPage.text();
@@ -530,7 +558,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.56");
+  assert.equal(buyerGuideApproved.json.version, "0.4.57");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -545,11 +573,53 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.56");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.57");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
   assert.equal(buyerConsoleApproved.json.plan.additionalRoomPriceKrw, 2200);
+  assert.equal(buyerConsoleApproved.json.commandStore.total, 400);
+
+  const fixedTemplate = commandTemplates.json.templates.find((template) => template.trigger === "/출석");
+  const fixedTemplateInstall = await request("/api/buyer/command-templates/install", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      templateId: fixedTemplate.id
+    })
+  });
+  assert.equal(fixedTemplateInstall.response.status, 400);
+  assert.equal(fixedTemplateInstall.json.error, "template_not_installable");
+
+  const installableTemplate = commandTemplates.json.templates.find((template) => template.installable && template.categoryId === "basic-ops");
+  assert.ok(installableTemplate);
+  const templateInstall = await request("/api/buyer/command-templates/install", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      templateId: installableTemplate.id
+    })
+  });
+  assert.equal(templateInstall.response.status, 200);
+  assert.equal(templateInstall.json.ok, true);
+  assert.equal(templateInstall.json.command.trigger, installableTemplate.trigger);
+  assert.equal(templateInstall.json.room.roomName, "판매신청방");
+
+  const installedTemplateReply = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: installableTemplate.trigger,
+    sender: "구매자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.equal(installedTemplateReply.json.ignored, false);
+  assert.match(installedTemplateReply.json.reply, /템플릿 번호/);
 
   const additionalRoomApply = await request("/api/apply", {
     method: "POST",

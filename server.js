@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.56";
+export const APP_VERSION = "0.4.57";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -125,7 +125,11 @@ export const FEATURES = [
   "member-inventory",
   "item-gift",
   "shop-admin-commands",
-  "chat-sensitive-info-redaction"
+  "chat-sensitive-info-redaction",
+  "command-template-store",
+  "command-template-catalog-400",
+  "buyer-command-template-install",
+  "owned-bridge-engine-marketing"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -260,6 +264,90 @@ const LUCKY_DRAW_OUTCOMES = [
   { threshold: 1, label: "꽝", reward: 0, chance: "50%" }
 ];
 const MAX_LIKE_AMOUNT = 999;
+const COMMAND_TEMPLATE_TOTAL = 400;
+
+const COMMAND_TEMPLATE_CATEGORY_CONFIGS = Object.freeze([
+  {
+    id: "basic-ops",
+    title: "기본 운영",
+    audience: "participant",
+    kind: "custom",
+    words: ["공지", "규칙", "문의", "운영진", "방소개", "초보안내", "인사", "자주묻는질문", "시간표", "신고"],
+    actions: ["안내", "요약", "확인", "바로보기", "오늘", "필수", "모음", "처음"]
+  },
+  {
+    id: "participant",
+    title: "참여자용",
+    audience: "participant",
+    kind: "custom",
+    words: ["프로필양식", "닉네임규칙", "입장인사", "대화주제", "자기소개", "오늘질문", "친구찾기", "방분위기", "참여팁", "활동안내"],
+    actions: ["보기", "작성", "확인", "추천", "시작", "예시", "가이드", "체크"]
+  },
+  {
+    id: "admin",
+    title: "관리자용",
+    audience: "admin",
+    kind: "custom",
+    words: ["점검공지", "경고안내", "운영메모", "제재기준", "신고처리", "이벤트등록", "랭킹보상", "상점공지", "관리규칙", "휴방안내"],
+    actions: ["양식", "공지", "체크", "기록", "안내", "템플릿", "요약", "보고"]
+  },
+  {
+    id: "chance-game",
+    title: "확률게임",
+    audience: "participant",
+    kind: "game-template",
+    words: ["행운상자", "복권", "카드뽑기", "동전던지기", "랜덤박스", "룰렛", "보물상자", "주사위", "운세뽑기", "별뽑기"],
+    actions: ["안내", "확률", "보상표", "시작", "랭킹", "주의", "시즌", "참여"]
+  },
+  {
+    id: "pet",
+    title: "펫키우기",
+    audience: "participant",
+    kind: "game-template",
+    words: ["펫입양", "밥주기", "산책", "놀아주기", "펫상태", "펫상점", "펫훈련", "펫진화", "펫랭킹", "펫선물"],
+    actions: ["안내", "방법", "보상", "쿨타임", "아이템", "성장", "시즌", "도움말"]
+  },
+  {
+    id: "rpg",
+    title: "RPG/탐험",
+    audience: "participant",
+    kind: "game-template",
+    words: ["탐험", "던전", "채집", "광산", "낚시터", "보스", "퀘스트", "장비", "스킬", "길드"],
+    actions: ["안내", "시작", "보상", "랭킹", "상점", "강화", "시즌", "도움말"]
+  },
+  {
+    id: "shop-item",
+    title: "상점/아이템",
+    audience: "participant",
+    kind: "custom",
+    words: ["상점안내", "아이템목록", "가방안내", "구매방법", "선물방법", "사용방법", "포인트안내", "보상교환", "쿠폰", "시즌상품"],
+    actions: ["보기", "안내", "예시", "규칙", "추천", "확인", "도움말", "주의"]
+  },
+  {
+    id: "event-season",
+    title: "이벤트/시즌",
+    audience: "participant",
+    kind: "custom",
+    words: ["출석이벤트", "랭킹이벤트", "신규이벤트", "주말이벤트", "시즌공지", "보상안내", "미션", "챌린지", "기념일", "투표"],
+    actions: ["안내", "참여", "보상", "기간", "규칙", "현황", "결과", "예정"]
+  },
+  {
+    id: "community-fun",
+    title: "커뮤니티/재미",
+    audience: "participant",
+    kind: "custom",
+    words: ["오늘운세", "밸런스게임", "칭찬", "응원문구", "랜덤질문", "오늘메뉴", "심심풀이", "익명사연", "인기투표", "분위기전환"],
+    actions: ["시작", "추천", "보기", "뽑기", "나누기", "참여", "예시", "모음"]
+  },
+  {
+    id: "ai-helper",
+    title: "AI 운영도우미 후보",
+    audience: "admin",
+    kind: "roadmap",
+    words: ["공지초안", "규칙검토", "문의답변", "운영문구", "이벤트초안", "신고요약", "프로필검토", "채팅요약", "분위기분석", "도움말추천"],
+    actions: ["후보", "초안", "검토", "요약", "추천", "정리", "자동화", "가이드"]
+  }
+]);
 
 const initialState = {
   rooms: {},
@@ -281,6 +369,164 @@ function compactSpaces(value) {
 
 function keyFor(value) {
   return compactSpaces(value).toLowerCase();
+}
+
+function commandTemplateSlug(value) {
+  return keyFor(value)
+    .replace(/[^a-z0-9가-힣_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+}
+
+function commandTemplateResponse(category, word, action, serial) {
+  if (category.kind === "game-template") {
+    return [
+      `${word} ${action}`,
+      "",
+      "이 명령어는 게임 확장용 템플릿입니다.",
+      "관리자가 보상, 쿨타임, 확률을 방 설정에 맞게 조정해 주세요.",
+      `템플릿 번호: ${serial}`
+    ].join("\n");
+  }
+  if (category.kind === "roadmap") {
+    return [
+      `${word} ${action}`,
+      "",
+      "AI 운영도우미 후보 템플릿입니다.",
+      "실제 AI 자동화 연결 전에는 개인정보와 운영 정책을 먼저 확인해 주세요.",
+      `템플릿 번호: ${serial}`
+    ].join("\n");
+  }
+  return [
+    `${word} ${action}`,
+    "",
+    "[방이름] 운영 안내입니다.",
+    "필요한 문구를 구매자 콘솔에서 방 분위기에 맞게 수정해 주세요.",
+    `템플릿 번호: ${serial}`
+  ].join("\n");
+}
+
+function fixedCommandTemplates() {
+  const templates = [];
+  for (const group of FIXED_COMMAND_GROUPS) {
+    for (const command of group.commands) {
+      const audience = group.title === "관리자" ? "admin" : "participant";
+      templates.push({
+        id: `fixed-${commandTemplateSlug(command)}`,
+        categoryId: "fixed-current",
+        categoryTitle: "현재 기본 명령어",
+        title: `${command} 기본 기능`,
+        command,
+        trigger: command,
+        audience,
+        kind: "fixed",
+        installable: false,
+        editable: false,
+        description: "현재 서버에 내장된 고정 명령어입니다. 커스텀 명령어로 덮어쓸 수 없습니다.",
+        response: "",
+        tags: [group.title, "고정", audience === "admin" ? "관리자" : "참여자"]
+      });
+    }
+  }
+  return templates;
+}
+
+function generatedCommandTemplates() {
+  const templates = fixedCommandTemplates();
+  const usedTriggers = new Set(templates.map((template) => template.trigger));
+  let serial = 1;
+  for (const category of COMMAND_TEMPLATE_CATEGORY_CONFIGS) {
+    for (const word of category.words) {
+      for (const action of category.actions) {
+        if (templates.length >= COMMAND_TEMPLATE_TOTAL) return templates;
+        const commandBase = commandTemplateSlug(`${word}${action}`);
+        let trigger = normalizeCustomCommandTrigger(commandBase) || `/템플릿${serial}`;
+        if (usedTriggers.has(trigger)) trigger = normalizeCustomCommandTrigger(`${commandBase}-${serial}`) || `/템플릿${serial}`;
+        usedTriggers.add(trigger);
+        templates.push({
+          id: `${category.id}-${String(serial).padStart(3, "0")}`,
+          categoryId: category.id,
+          categoryTitle: category.title,
+          title: `${word} ${action}`,
+          command: trigger,
+          trigger,
+          audience: category.audience,
+          kind: category.kind,
+          installable: category.kind === "custom",
+          editable: category.kind !== "fixed",
+          description: category.kind === "custom"
+            ? "구매자가 문구를 수정해서 방별 커스텀 명령어로 설치할 수 있습니다."
+            : category.kind === "game-template"
+              ? "게임 확장용 템플릿입니다. 기능 엔진 연결 전에는 안내 문구로 설치할 수 있습니다."
+              : "AI 기능 후보 템플릿입니다. 실제 자동화 전에는 운영자 검토가 필요합니다.",
+          response: commandTemplateResponse(category, word, action, serial),
+          tags: [category.title, category.audience === "admin" ? "관리자" : "참여자", category.kind]
+        });
+        serial += 1;
+      }
+    }
+  }
+  return templates.slice(0, COMMAND_TEMPLATE_TOTAL);
+}
+
+const COMMAND_TEMPLATES = Object.freeze(generatedCommandTemplates());
+
+function commandTemplateCategories() {
+  const byId = new Map();
+  for (const template of COMMAND_TEMPLATES) {
+    const current = byId.get(template.categoryId) || {
+      id: template.categoryId,
+      title: template.categoryTitle,
+      count: 0,
+      installableCount: 0
+    };
+    current.count += 1;
+    if (template.installable) current.installableCount += 1;
+    byId.set(template.categoryId, current);
+  }
+  return [...byId.values()];
+}
+
+function publicCommandTemplate(template) {
+  return {
+    id: template.id,
+    categoryId: template.categoryId,
+    categoryTitle: template.categoryTitle,
+    title: template.title,
+    command: template.command,
+    trigger: template.trigger,
+    audience: template.audience,
+    kind: template.kind,
+    installable: template.installable,
+    editable: template.editable,
+    description: template.description,
+    response: template.response,
+    tags: template.tags
+  };
+}
+
+function commandTemplateCatalogPayload() {
+  const categories = commandTemplateCategories();
+  return {
+    ok: true,
+    version: APP_VERSION,
+    total: COMMAND_TEMPLATES.length,
+    categories,
+    summary: {
+      participant: COMMAND_TEMPLATES.filter((template) => template.audience === "participant").length,
+      admin: COMMAND_TEMPLATES.filter((template) => template.audience === "admin").length,
+      installable: COMMAND_TEMPLATES.filter((template) => template.installable).length,
+      fixed: COMMAND_TEMPLATES.filter((template) => template.kind === "fixed").length,
+      games: COMMAND_TEMPLATES.filter((template) => template.kind === "game-template").length
+    },
+    templates: COMMAND_TEMPLATES.map(publicCommandTemplate)
+  };
+}
+
+function commandTemplateById(id) {
+  const templateId = normalizeText(id);
+  return COMMAND_TEMPLATES.find((template) => template.id === templateId) || null;
 }
 
 function nowIso() {
@@ -5160,7 +5406,60 @@ function buyerConsolePayload(state, account = {}) {
       additionalRoomPriceKrw: ADDITIONAL_ROOM_PRICE_KRW,
       days: DEFAULT_SUBSCRIPTION_DAYS
     },
+    commandStore: commandTemplateCatalogPayload(),
     ownerAdminNotice: "/admin 은 판매자 운영자 전용입니다. 구매자는 /console, /my-rooms, /setup, /license 화면만 사용합니다."
+  };
+}
+
+function approvedApplicationForInstall(state, account = {}, body = {}) {
+  const applications = approvedBuyerApplications(state, account);
+  const applicationId = normalizeText(body.applicationId || body.appId);
+  const roomName = normalizeText(body.roomName || body.room);
+  if (applicationId) return applications.find((application) => application.id === applicationId) || null;
+  if (roomName) return applications.find((application) => keyFor(application.roomName) === keyFor(roomName)) || null;
+  return applications[0] || null;
+}
+
+function installCommandTemplateForBuyer(state, account = {}, body = {}) {
+  const application = approvedApplicationForInstall(state, account, body);
+  if (!application) return { ok: false, status: 404, error: "approved_room_not_found" };
+  const template = commandTemplateById(body.templateId || body.id);
+  if (!template) return { ok: false, status: 404, error: "template_not_found" };
+  if (!template.installable) return { ok: false, status: 400, error: "template_not_installable" };
+
+  const trigger = normalizeCustomCommandTrigger(body.trigger || template.trigger);
+  const response = normalizeCustomCommandResponse(body.response || template.response);
+  if (!trigger || !response) return { ok: false, status: 400, error: "invalid_template_payload" };
+  if (RESERVED_CUSTOM_COMMANDS.has(trigger)) return { ok: false, status: 409, error: "reserved_command" };
+
+  const roomState = ensureRoom(state, application.roomName);
+  const commands = customCommands(roomState);
+  const existingIndex = commands.findIndex((item) => item.trigger === trigger);
+  if (existingIndex < 0 && commands.length >= CUSTOM_COMMAND_LIMIT) {
+    return { ok: false, status: 400, error: "custom_command_limit" };
+  }
+  const item = {
+    trigger,
+    response,
+    updatedAt: nowIso(),
+    updatedBy: account.email || account.nickname || "buyer_console",
+    sourceTemplateId: template.id
+  };
+  if (existingIndex >= 0) commands[existingIndex] = item;
+  else commands.push(item);
+  roomState.settings.customCommands = normalizeCustomCommands(commands);
+  recordRoomEvent(roomState, {
+    type: "buyer_command_template_installed",
+    trigger,
+    templateId: template.id,
+    by: account.email || account.nickname || "buyer_console"
+  });
+  return {
+    ok: true,
+    version: APP_VERSION,
+    room: applicationRoomPayload(state, account, application),
+    template: publicCommandTemplate(template),
+    command: item
   };
 }
 
@@ -5191,6 +5490,14 @@ async function buyerConsoleFromRequest(state, req, body = {}) {
   return { ...buyerConsolePayload(state, auth.account), guideToken: buyerTokenForAccount(auth.account) };
 }
 
+async function buyerCommandTemplateInstallFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const result = installCommandTemplateForBuyer(state, auth.account, body);
+  if (!result.ok) return result;
+  return { ...result, guideToken: buyerTokenForAccount(auth.account) };
+}
+
 function bridgeConnectFromRequest(state, body = {}) {
   const tokenPayload = verifyTokenPayload(normalizeText(body.code || body.connectCode || body.bridgeConnectCode || body.token));
   if (tokenPayload?.kind !== "bridge-connect" || !tokenPayload.sub || !tokenPayload.app) {
@@ -5214,6 +5521,10 @@ function bridgeConnectFromRequest(state, body = {}) {
 async function handlePublicAccountApi(req, url) {
   if (req.method === "GET" && url.pathname === "/api/auth/config") {
     return { status: 200, body: authConfigPayload() };
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/command-templates") {
+    return { status: 200, body: commandTemplateCatalogPayload() };
   }
 
   if (req.method === "POST" && url.pathname === "/api/signup") {
@@ -5256,6 +5567,15 @@ async function handlePublicAccountApi(req, url) {
     const body = await readBody(req);
     const state = await loadState();
     const result = await buyerConsoleFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/command-templates/install") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerCommandTemplateInstallFromRequest(state, req, body);
     if (!result.ok) return { status: result.status || 401, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -5668,11 +5988,13 @@ export async function requestHandler(req, res) {
     const isChatEventPath = pathname === "/chat-event" || pathname === "/api/chat-event";
     const adminApi = pathname.startsWith("/api/admin/");
     const publicAccountApi = pathname === "/api/auth/config"
+      || pathname === "/api/command-templates"
       || pathname === "/api/signup"
       || pathname === "/api/apply"
       || pathname === "/api/login"
       || pathname === "/api/buyer/guide"
       || pathname === "/api/buyer/console"
+      || pathname === "/api/buyer/command-templates/install"
       || pathname === "/api/bridge/connect";
 
     if (adminApi) {

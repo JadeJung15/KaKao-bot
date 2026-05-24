@@ -6,7 +6,7 @@
     <title>픽셀곰 | 카카오 오픈채팅 운영 자동화</title>
     <meta
       name="description"
-      content="픽셀곰은 카카오 오픈채팅 운영을 위한 알림 기반 운영봇 서비스입니다. 브릿지 앱, 콘솔, 봇 명령어, 커스텀 명령어, 추후 RPG 게임 연동까지 한 브랜드로 운영합니다."
+      content="픽셀곰은 MessengerBotR에 의존하지 않고 자체 개발한 전용 브릿지 엔진 앱으로 카카오 오픈채팅 운영을 연결하는 서비스입니다. 콘솔, 봇 명령어, 명령어 스토어, 추후 RPG 게임 연동까지 한 브랜드로 운영합니다."
     >
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
     <link rel="stylesheet" href="/styles.css?v=20260525-auth-pricing">
@@ -79,6 +79,7 @@
       <nav class="nav-links" aria-label="페이지 이동">
         <a href="#features">기능</a>
         <a href="#commands">명령어</a>
+        <a href="/command-store">명령어 스토어</a>
         <a href="#pricing">요금</a>
         <a href="#updates">업데이트</a>
         <a href="/store">스토어</a>
@@ -96,7 +97,8 @@
           <h1 id="hero-title">픽셀곰</h1>
           <p class="hero-copy">
             카카오 오픈채팅 운영을 자동화하는 월 5,500원 기본 요금제 서비스입니다.
-            운영 명령어는 고정하고, 방마다 커스텀 명령어를 추가할 수 있습니다.
+            MessengerBotR 스크립트 의존을 줄이고 자체 전용 브릿지 엔진 앱으로 연결해,
+            운영 명령어와 방별 커스텀 명령어를 더 안정적으로 관리합니다.
           </p>
           <div class="hero-actions" aria-label="주요 작업">
             <a class="button button-primary" href="/apply">서비스 신청</a>
@@ -115,6 +117,7 @@
           <div class="category-chips" aria-label="카테고리">
             <a href="#features">주요 기능</a>
             <a href="#commands">명령어</a>
+            <a href="/command-store">명령어 스토어</a>
             <a href="#pricing">요금제</a>
             <a href="#updates">공지/업데이트</a>
             <a href="/store">스토어</a>
@@ -132,7 +135,11 @@
         </div>
         <div>
           <strong>커스텀 명령어</strong>
-          <span>방마다 /공지, /규칙 같은 자동응답을 별도로 만들 수 있습니다.</span>
+          <span>명령어 스토어에서 400개 템플릿을 고르고 방별 자동응답으로 설치합니다.</span>
+        </div>
+        <div>
+          <strong>전용 브릿지</strong>
+          <span>MessengerBotR 대신 자체 개발한 픽셀곰 브릿지 엔진 앱을 기준으로 운영합니다.</span>
         </div>
         <div>
           <strong>단일 요금</strong>
@@ -144,7 +151,7 @@
         <div class="section-heading reveal">
           <p class="section-kicker">Brand System</p>
           <h2>픽셀곰은 전체 서비스명입니다</h2>
-          <p>브릿지, 콘솔, 봇, RPG를 각각 분리해 판매 설명과 추후 게임 확장을 명확하게 잡았습니다.</p>
+          <p>자체 브릿지 엔진, 콘솔, 봇, 명령어 스토어, RPG를 분리해 판매 설명과 추후 게임 확장을 명확하게 잡았습니다.</p>
         </div>
         <div class="role-grid">
           <article class="role-card reveal" data-search-source="픽셀곰 전체 서비스 브랜드 오픈채팅 운영 자동화">
@@ -155,7 +162,7 @@
           <article class="role-card reveal" data-search-source="픽셀곰 브릿지 안드로이드 앱 카카오 알림 전송">
             <img src="/assets/pixgom-shield.png" alt="" aria-hidden="true">
             <h3>픽셀곰 브릿지</h3>
-            <p>봇폰에서 카카오 알림을 서버로 보내는 앱입니다.</p>
+            <p>MessengerBotR를 쓰지 않고 자체 엔진으로 봇폰 알림을 서버에 연결하는 앱입니다.</p>
           </article>
           <article class="role-card reveal" data-search-source="픽셀곰 콘솔 관리자 페이지 방 설정 구독 라이선스">
             <img src="/assets/pixgom-sign.png" alt="" aria-hidden="true">
@@ -179,13 +186,18 @@
         <div class="section-heading reveal">
           <p class="section-kicker">Features</p>
           <h2>운영 기능은 고정하고, 방별 자동응답은 커스텀합니다</h2>
-          <p>판매용 서비스는 방마다 규칙이 다르기 때문에 기본 기능과 커스텀 영역을 분리해야 안정적입니다.</p>
+          <p>판매용 서비스는 방마다 규칙이 다르기 때문에 전용 브릿지, 기본 기능, 커스텀 영역을 분리해야 안정적입니다.</p>
         </div>
         <div class="feature-grid">
           <article class="feature-card reveal" data-search-source="알림 기반 자동응답 카카오톡 화면 감지 사용 안 함">
             <img src="/assets/pixgom-face-wide.png" alt="" aria-hidden="true">
             <h3>알림 기반 연결</h3>
             <p>화면 감지 없이 카카오 알림으로 들어온 대화만 처리합니다.</p>
+          </article>
+          <article class="feature-card reveal" data-search-source="자체 개발 전용 브릿지 엔진 MessengerBotR 미사용 안정성">
+            <img src="/assets/pixgom-shield.png" alt="" aria-hidden="true">
+            <h3>전용 브릿지 엔진</h3>
+            <p>MessengerBotR 방별 스크립트에 의존하지 않고 픽셀곰 앱과 서버 계약으로 동작합니다.</p>
           </article>
           <article class="feature-card reveal" data-search-source="방별 관리자 라이선스 구독 만료일 관리 콘솔">
             <img src="/assets/pixgom-shield.png" alt="" aria-hidden="true">
@@ -264,6 +276,10 @@
             <code>/고정명령어</code>
           </div>
         </div>
+        <div class="section-actions reveal">
+          <a class="button button-primary" href="/command-store">명령어 스토어 보기</a>
+          <a class="button button-secondary" href="/console">구매자 콘솔에서 설치</a>
+        </div>
       </section>
 
       <section class="section pricing-section" id="pricing">
@@ -294,6 +310,7 @@
             <li>픽셀곰 브릿지 앱 연결</li>
             <li>픽셀곰 콘솔 방 관리</li>
             <li>픽셀곰봇 기본 운영 명령어</li>
+            <li>명령어 스토어 400개 템플릿 조회</li>
             <li>방별 커스텀 명령어 최대 30개</li>
             <li>회원 신청, 수동 입금 확인, 구독 승인 흐름</li>
             <li>구매자 전용 설치/권한/문제 해결 가이드</li>
@@ -310,6 +327,13 @@
           <p>처음에는 단일 상품으로 시작하고, 추후 설치 대행과 게임 연동 상품을 분리할 수 있게 준비합니다.</p>
         </div>
         <div class="store-grid">
+          <article class="store-card reveal" data-search-source="명령어 스토어 400개 템플릿 관리자 참여자 게임 펫키우기">
+            <img src="/assets/pixgom-checklist.png" alt="" aria-hidden="true">
+            <span>명령어</span>
+            <h3>명령어 스토어</h3>
+            <p>400개 템플릿을 고르고 구매자 콘솔로 방에 설치</p>
+            <strong>포함</strong>
+          </article>
           <article class="store-card reveal" data-search-source="스토어 픽셀곰 기본 플랜 5500원">
             <img src="/assets/pixgom-star-badge.png" alt="" aria-hidden="true">
             <span>카카오톡</span>
@@ -335,6 +359,7 @@
         </div>
         <div class="section-actions reveal">
           <a class="button button-secondary" href="/store">스토어 페이지 보기</a>
+          <a class="button button-primary" href="/command-store">명령어 템플릿 보기</a>
         </div>
       </section>
 
@@ -345,6 +370,12 @@
           <p>변경 사항을 게시글 형태로 남겨 고객에게 현재 기능과 제한 범위를 투명하게 안내합니다.</p>
         </div>
         <div class="post-grid">
+          <article class="post-card reveal" data-search-source="업데이트 0.4.57 명령어 스토어 400개 템플릿 전용 브릿지 엔진 MessengerBotR 미사용">
+            <span>업데이트</span>
+            <h3>픽셀곰 0.4.57 업데이트</h3>
+            <time datetime="2026-05-25">2026년 5월 25일</time>
+            <p>명령어 스토어 400개 템플릿과 구매자 방 설치 API를 추가하고, 자체 전용 브릿지 엔진 앱 기반 운영 장점을 홈페이지에 반영했습니다.</p>
+          </article>
           <article class="post-card reveal" data-search-source="업데이트 0.4.56 출석 ㅊㅊ 미출석 출석순위 뽑기목록 상점 가방 아이템 선물 민감정보 숨김">
             <span>업데이트</span>
             <h3>픽셀곰 0.4.56 업데이트</h3>

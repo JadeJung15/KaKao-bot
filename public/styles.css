@@ -1609,6 +1609,191 @@ a {
   overflow-wrap: anywhere;
 }
 
+.command-store-main {
+  width: min(1220px, 100%);
+  margin: 0 auto;
+  padding: 104px 20px 72px;
+}
+
+.command-store-hero {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(180px, 320px);
+  gap: clamp(18px, 4vw, 42px);
+  align-items: center;
+  padding: clamp(24px, 5vw, 46px);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.command-store-hero h1 {
+  margin: 0;
+  max-width: 780px;
+  font-size: clamp(34px, 6vw, 60px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.command-store-hero p:last-child {
+  max-width: 760px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.command-store-hero img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  box-shadow: 8px 8px 0 rgba(55, 38, 23, 0.22);
+}
+
+.command-store-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(170px, 240px) minmax(150px, 210px);
+  gap: 12px;
+  margin: 22px 0;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.command-store-toolbar input,
+.command-store-toolbar select,
+.command-store-install select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid #d8c8b4;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.command-store-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.command-store-summary article,
+.command-store-install,
+.template-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(55, 38, 23, 0.08);
+}
+
+.command-store-summary article {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+}
+
+.command-store-summary strong {
+  font-size: clamp(26px, 4vw, 40px);
+}
+
+.command-store-summary span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.command-store-install {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(220px, 360px);
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 18px;
+}
+
+.command-store-install strong,
+.command-store-install span {
+  display: block;
+}
+
+.command-store-install span {
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.template-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.template-card-head,
+.template-actions,
+.template-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.template-card-head {
+  justify-content: space-between;
+}
+
+.template-card-head span,
+.template-badges span {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 5px 8px;
+  color: #174b38;
+  background: #eef8f4;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.template-card-head strong {
+  overflow-wrap: anywhere;
+}
+
+.template-card h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.template-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.template-card pre {
+  max-height: 160px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #fff8ec;
+  border: 1px solid #e2d1bd;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .wide-label {
   display: grid;
   gap: 7px;
@@ -2079,7 +2264,12 @@ a {
   .buyer-console-hero,
   .buyer-mini-grid,
   .buyer-room-grid,
-  .buyer-guide-grid {
+  .buyer-guide-grid,
+  .command-store-hero,
+  .command-store-toolbar,
+  .command-store-summary,
+  .command-store-install,
+  .template-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2127,6 +2317,16 @@ a {
 
   .buyer-console-main {
     padding: 86px 14px 42px;
+  }
+
+  .command-store-main {
+    padding: 86px 14px 42px;
+  }
+
+  .template-card,
+  .command-store-summary article,
+  .command-store-install {
+    padding: 15px;
   }
 
   .buyer-console-hero {

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>명령어 스토어 | 픽셀곰</title>
+    <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
+    <link rel="stylesheet" href="/styles.css?v=20260525-command-store">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body class="sub-page command-store-page">
+    <header class="site-header" aria-label="주요 메뉴">
+      <a class="brand" href="/" aria-label="픽셀곰 홈"><img src="/assets/pixgom-closeup.png" alt=""><span>픽셀곰</span></a>
+      <nav class="nav-links" aria-label="페이지 이동">
+        <a href="/console">구매자 콘솔</a>
+        <a href="/command-store">명령어 스토어</a>
+        <a href="/updates">업데이트</a>
+        <a class="nav-cta" href="/apply">서비스 신청</a>
+      </nav>
+    </header>
+    <main class="command-store-main">
+      <section class="command-store-hero">
+        <div>
+          <p class="section-kicker">Command Store</p>
+          <h1>필요한 명령어를 고르고 방에 설치합니다</h1>
+          <p>기본 운영, 관리자용, 확률게임, 펫키우기, RPG, 상점까지 400개 템플릿을 카테고리별로 고르고 문구를 수정해 방별 커스텀 명령어로 설치할 수 있습니다.</p>
+        </div>
+        <img src="/assets/pixgom-checklist.png" alt="">
+      </section>
+
+      <section class="command-store-toolbar" aria-label="명령어 검색">
+        <input type="search" data-template-search placeholder="명령어, 카테고리, 펫키우기, 확률게임 검색">
+        <select data-template-category aria-label="카테고리 선택">
+          <option value="all">전체 카테고리</option>
+        </select>
+        <select data-template-audience aria-label="권한 선택">
+          <option value="all">전체 권한</option>
+          <option value="participant">참여자용</option>
+          <option value="admin">관리자용</option>
+        </select>
+      </section>
+
+      <section class="command-store-summary" data-template-summary></section>
+
+      <section class="command-store-install" data-install-panel hidden>
+        <div>
+          <strong>구매자 설치</strong>
+          <span>로그인된 구매자는 설치 가능한 문구형 템플릿을 자기 방에 바로 담을 수 있습니다.</span>
+        </div>
+        <select data-install-room aria-label="설치할 방"></select>
+      </section>
+
+      <section class="template-grid" data-template-grid aria-live="polite"></section>
+      <pre class="form-status" data-template-status>명령어 템플릿을 불러오는 중입니다.</pre>
+    </main>
+    <script src="/auth.js?v=20260525-command-store"></script>
+    <script src="/command-store.js?v=20260525-command-store"></script>
+  </body>
+</html>

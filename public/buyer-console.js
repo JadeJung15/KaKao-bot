@@ -143,6 +143,7 @@
       <nav class="buyer-console-tabs" aria-label="구매자 콘솔 메뉴">
         <a href="/console">요약</a>
         <a href="/my-rooms">내 방</a>
+        <a href="/command-store">명령어 스토어</a>
         <a href="/setup">설치</a>
         <a href="/license">라이선스</a>
       </nav>
