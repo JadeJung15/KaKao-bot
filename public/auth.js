@@ -69,9 +69,13 @@ window.PixelgomAuth = (() => {
 
   function showAuthMode(target, cfg) {
     if (!target) return;
-    target.textContent = cfg.auth?.supabaseEnabled
+    if (!cfg.auth?.supabaseEnabled) {
+      target.textContent = "로컬 계정 모드: 이메일/비밀번호로만 이용합니다.";
+      return;
+    }
+    target.textContent = cfg.auth?.kakaoEnabled
       ? "Supabase 로그인 사용 중: 이메일/비밀번호 또는 카카오 로그인을 사용할 수 있습니다."
-      : "로컬 계정 모드: 이메일/비밀번호로만 이용합니다.";
+      : "Supabase 이메일 로그인을 사용합니다. 카카오 로그인은 제공자 설정 후 열립니다.";
   }
 
   return {
