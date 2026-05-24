@@ -179,7 +179,8 @@ Vercel production에서 프로필과 입퇴장 기록을 유지하려면 Postgre
 DATABASE_URL=postgresql://...
 PGSSL=require
 ADMIN_NAMES=관리자1,관리자2
-ADMIN_CONSOLE_TOKEN=긴_운영_토큰
+OWNER_ADMIN_EMAILS=jadejung15@gmail.com
+ADMIN_CONSOLE_TOKEN=비상용_운영_토큰
 BUYER_TOKEN_SECRET=긴_구매자_세션_서명값
 PUBLIC_SITE_URL=https://pixgom.com
 SUPABASE_URL=https://프로젝트.ref.supabase.co
@@ -228,7 +229,7 @@ https://pixgom.com/chat-event   안드로이드 브릿지 기본 API 주소
 
 ## 회원가입과 라이선스 흐름
 
-1. `/signup`에서 이메일과 비밀번호로 계정을 만듭니다.
+1. `/signup`에서 이메일, 비밀번호, 비밀번호 확인을 입력하고 서비스 이용약관/개인정보처리방침에 동의해 계정을 만듭니다.
 2. `/apply`에서 방 이름, 오픈채팅 링크, 관리자 닉네임을 입력해 서비스를 신청합니다.
 3. 관리자가 입금 확인 후 운영자 전용 `/admin`에서 신청을 승인합니다.
 4. 승인 시 방별 라이선스 키와 앱 연결코드가 생성되고 30일 구독이 시작됩니다.
@@ -237,24 +238,28 @@ https://pixgom.com/chat-event   안드로이드 브릿지 기본 API 주소
 
 ## 운영자 어드민과 구매자 콘솔
 
-`/admin`은 판매자/운영자 전용입니다. 전체 구매자, 전체 방, 구독 만료일, 라이선스 발급/차단, 백업/복구를 관리하므로 `ADMIN_CONSOLE_TOKEN`으로 보호합니다.
+`/admin`은 판매자/운영자 전용입니다. 전체 구매자, 전체 방, 구독 만료일, 라이선스 발급/차단, 백업/복구를 관리하므로 `OWNER_ADMIN_EMAILS`에 등록된 운영자 이메일 로그인으로 보호합니다.
+
+`ADMIN_CONSOLE_TOKEN`은 자동화나 긴급 복구용 비상 키로만 남겨둘 수 있습니다. 일반 운영 화면에서는 토큰을 직접 입력하지 않습니다.
 
 구매자는 `/admin`을 사용하지 않습니다. 구매자 화면은 다음처럼 분리합니다.
 
 ```text
 /login       구매자 로그인
+/forgot-password 비밀번호 재설정 메일 요청
+/reset-password 새 비밀번호 저장
 /console     구매자 요약 콘솔
 /my-rooms    승인된 내 방과 연결코드
 /setup       앱 설치와 권한 안내
 /license     라이선스/요금/만료 안내
 ```
 
-초기 MVP에서는 로컬 계정과 구매자 세션 토큰을 같이 지원합니다. Supabase 환경변수를 설정하면 이메일/비밀번호 인증과 카카오 OAuth 로그인 버튼이 활성화됩니다.
+초기 MVP에서는 로컬 계정과 구매자 세션 토큰을 같이 지원합니다. Supabase 환경변수를 설정하면 이메일/비밀번호 인증, 비밀번호 재설정, 카카오 OAuth 로그인 버튼이 활성화됩니다.
 
 ## Supabase/Kakao 로그인 설정
 
 1. Supabase 프로젝트를 만들고 `SUPABASE_URL`, `SUPABASE_ANON_KEY`를 Vercel 환경변수로 설정합니다.
-2. Supabase Auth URL Configuration에 `https://pixgom.com/login`, `https://pixgom.com/console`, `https://pixgom.com/signup`, `https://pixgom.com/apply`를 허용 리다이렉트 URL로 추가합니다.
+2. Supabase Auth URL Configuration에 `https://pixgom.com/login`, `https://pixgom.com/console`, `https://pixgom.com/signup`, `https://pixgom.com/apply`, `https://pixgom.com/reset-password`를 허용 리다이렉트 URL로 추가합니다.
 3. Kakao Developers에서 웹 플랫폼 도메인 `https://pixgom.com`을 등록합니다.
 4. Kakao Login Redirect URI에는 Supabase 콜백 URL `https://프로젝트.ref.supabase.co/auth/v1/callback`을 등록합니다.
 5. Kakao REST API 키를 Supabase Auth Providers의 Kakao Client ID에 넣습니다. 카카오 앱에서 Client Secret을 켠 경우에만 Supabase에도 Secret을 넣습니다.

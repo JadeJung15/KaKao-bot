@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.50";
+export const APP_VERSION = "0.4.51";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -106,13 +106,20 @@ export const FEATURES = [
   "buyer-owner-console-split",
   "supabase-auth-bridge",
   "kakao-login-ready",
-  "kanana-ai-roadmap"
+  "kanana-ai-roadmap",
+  "signup-consent-audit",
+  "password-reset-flow",
+  "owner-email-admin-access"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
 const MONTHLY_PRICE_KRW = Math.max(0, Number(process.env.MONTHLY_PRICE_KRW || 5500)) || 5500;
 const DEFAULT_SUBSCRIPTION_DAYS = Math.max(1, Number(process.env.DEFAULT_SUBSCRIPTION_DAYS || 30));
 const ADMIN_CONSOLE_TOKEN = normalizeText(process.env.ADMIN_CONSOLE_TOKEN || process.env.PIXGOM_ADMIN_TOKEN || "");
+const OWNER_ADMIN_EMAILS = (process.env.OWNER_ADMIN_EMAILS || process.env.ADMIN_EMAILS || "jadejung15@gmail.com")
+  .split(",")
+  .map((email) => normalizeEmail(email))
+  .filter(Boolean);
 const PLAY_INTERNAL_TEST_URL = "https://play.google.com/apps/internaltest/4700397680875890998";
 const PUBLIC_SITE_URL = normalizeText(process.env.PUBLIC_SITE_URL || process.env.SITE_URL || "https://pixgom.com").replace(/\/+$/, "");
 const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
@@ -169,7 +176,9 @@ const FEATURE_LABELS = Object.freeze({
 const CUSTOM_COMMAND_LIMIT = 30;
 const CUSTOM_COMMAND_RESPONSE_LIMIT = 700;
 const SIGNUP_PASSWORD_MIN_LENGTH = 8;
+const LEGAL_CONSENT_VERSION = "2026-05-25";
 const BUYER_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const OWNER_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const APPLICATION_STATUS_LABELS = Object.freeze({
   pending_payment: "결제 대기",
   approved: "승인 완료",
@@ -505,12 +514,75 @@ function validEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value));
 }
 
-function validateAccountPayload(payload = {}) {
+function truthyConsent(value) {
+  if (value === true) return true;
+  const normalized = normalizeText(value).toLowerCase();
+  return ["1", "true", "yes", "y", "on", "동의"].includes(normalized);
+}
+
+function validateConsentPayload(payload = {}) {
+  const errors = [];
+  if (!truthyConsent(payload.termsAgreed || payload.termsConsent)) errors.push("terms_required");
+  if (!truthyConsent(payload.privacyAgreed || payload.privacyConsent)) errors.push("privacy_required");
+  return {
+    ok: errors.length === 0,
+    errors,
+    value: {
+      termsAgreed: true,
+      privacyAgreed: true,
+      marketingAgreed: truthyConsent(payload.marketingAgreed || payload.marketingConsent)
+    }
+  };
+}
+
+function consentAuditFromPayload(payload = {}) {
+  const now = nowIso();
+  return {
+    terms: {
+      agreed: truthyConsent(payload.termsAgreed || payload.termsConsent),
+      at: now,
+      version: LEGAL_CONSENT_VERSION
+    },
+    privacy: {
+      agreed: truthyConsent(payload.privacyAgreed || payload.privacyConsent),
+      at: now,
+      version: LEGAL_CONSENT_VERSION
+    },
+    marketing: {
+      agreed: truthyConsent(payload.marketingAgreed || payload.marketingConsent),
+      at: now,
+      version: LEGAL_CONSENT_VERSION
+    }
+  };
+}
+
+function applyConsentToAccount(account = {}, payload = {}) {
+  if (!truthyConsent(payload.termsAgreed || payload.termsConsent) && !truthyConsent(payload.privacyAgreed || payload.privacyConsent)) {
+    return account;
+  }
+  account.consents = {
+    ...(account.consents || {}),
+    ...consentAuditFromPayload(payload)
+  };
+  return account;
+}
+
+function accountHasRequiredConsents(account = {}) {
+  return Boolean(account.consents?.terms?.agreed && account.consents?.privacy?.agreed);
+}
+
+function validateAccountPayload(payload = {}, options = {}) {
   const email = normalizeEmail(payload.email);
   const password = String(payload.password || "");
+  const passwordConfirm = String(payload.passwordConfirm || payload.confirmPassword || payload.password_confirmation || "");
   const errors = [];
   if (!validEmail(email)) errors.push("email_required");
   if (password.length < SIGNUP_PASSWORD_MIN_LENGTH) errors.push("password_too_short");
+  if (passwordConfirm && passwordConfirm !== password) errors.push("password_mismatch");
+  if (options.requireConsents) {
+    const consentValidation = validateConsentPayload(payload);
+    errors.push(...consentValidation.errors);
+  }
   return {
     ok: errors.length === 0,
     errors,
@@ -568,7 +640,13 @@ function authConfigPayload() {
       buyerConsole: "/console",
       rooms: "/my-rooms",
       setup: "/setup",
-      license: "/license"
+      license: "/license",
+      forgotPassword: "/forgot-password",
+      resetPassword: "/reset-password"
+    },
+    ownerAdmin: {
+      enabled: OWNER_ADMIN_EMAILS.length > 0,
+      auth: "email_allowlist"
     }
   };
 }
@@ -600,7 +678,11 @@ async function supabaseUserFromAccessToken(accessToken) {
   };
 }
 
-function ensureExternalAccount(state, externalUser = {}) {
+function isOwnerEmail(email) {
+  return OWNER_ADMIN_EMAILS.includes(normalizeEmail(email));
+}
+
+function ensureExternalAccount(state, externalUser = {}, payload = {}) {
   const provider = externalUser.provider || "supabase";
   let account = findAccountByExternalUser(state, provider, externalUser.id) || findAccountByEmail(state, externalUser.email);
   if (!account) {
@@ -626,16 +708,22 @@ function ensureExternalAccount(state, externalUser = {}) {
   account.status ||= "active";
   account.applicationIds ||= [];
   account.lastLoginAt = nowIso();
+  applyConsentToAccount(account, payload);
   account.updatedAt = nowIso();
   return account;
 }
 
-async function externalAccountFromRequest(state, body = {}) {
+async function externalAccountFromRequest(state, body = {}, options = {}) {
   const accessToken = normalizeText(body.accessToken || body.supabaseAccessToken || body.jwt);
   if (!accessToken) return null;
   const auth = await supabaseUserFromAccessToken(accessToken);
   if (!auth.ok) return auth;
-  return { ok: true, account: ensureExternalAccount(state, auth.user) };
+  const existing = findAccountByExternalUser(state, auth.user.provider || "supabase", auth.user.id) || findAccountByEmail(state, auth.user.email);
+  if (!existing && options.requireConsentsForNew) {
+    const consentValidation = validateConsentPayload(body);
+    if (!consentValidation.ok) return { ok: false, status: 400, error: consentValidation.errors[0], errors: consentValidation.errors };
+  }
+  return { ok: true, account: ensureExternalAccount(state, auth.user, body) };
 }
 
 function publicAccountView(account = {}) {
@@ -643,9 +731,19 @@ function publicAccountView(account = {}) {
     id: account.id || "",
     email: account.email || "",
     status: account.status || "active",
+    ownerAccess: isOwnerEmail(account.email),
     authProvider: account.auth?.provider || "password",
     createdAt: account.createdAt || "",
     lastLoginAt: account.lastLoginAt || "",
+    consents: {
+      terms: Boolean(account.consents?.terms?.agreed),
+      privacy: Boolean(account.consents?.privacy?.agreed),
+      marketing: Boolean(account.consents?.marketing?.agreed),
+      termsAt: account.consents?.terms?.at || "",
+      privacyAt: account.consents?.privacy?.at || "",
+      marketingAt: account.consents?.marketing?.at || "",
+      version: account.consents?.terms?.version || LEGAL_CONSENT_VERSION
+    },
     applicationIds: account.applicationIds || []
   };
 }
@@ -730,6 +828,15 @@ function buyerTokenForAccount(account = {}) {
   });
 }
 
+function ownerTokenForAccount(account = {}) {
+  return signTokenPayload({
+    kind: "owner-admin",
+    sub: account.id,
+    email: account.email,
+    exp: Date.now() + OWNER_TOKEN_TTL_MS
+  });
+}
+
 function bridgeConnectCodeForApplication(account = {}, application = {}) {
   return signTokenPayload({
     kind: "bridge-connect",
@@ -805,7 +912,7 @@ function buyerGuidePayload(state, account = {}) {
         items: [
           "https://pixgom.com/login 으로 로그인해 구매 상태를 확인합니다.",
           "관리자는 https://pixgom.com/admin 에서 방 등록, 구독, 커스텀 명령어를 관리합니다.",
-          "콘솔은 운영 토큰이 필요하며, 구매자 계정 비밀번호와 운영 토큰은 서로 다릅니다."
+          "운영자 어드민은 등록된 운영자 이메일 로그인으로만 접근합니다."
         ]
       },
       {
@@ -3605,7 +3712,7 @@ export function healthPayload() {
     gameRoadmapEnabled: true,
     monthlyPriceKrw: MONTHLY_PRICE_KRW,
     defaultSubscriptionDays: DEFAULT_SUBSCRIPTION_DAYS,
-    adminConsoleEnabled: Boolean(ADMIN_CONSOLE_TOKEN),
+    adminConsoleEnabled: OWNER_ADMIN_EMAILS.length > 0,
     features: FEATURES
   };
 }
@@ -3699,20 +3806,33 @@ function kakaoText(text) {
 function adminTokenFromRequest(req, url, body = {}) {
   return normalizeText(
     req.headers["x-admin-token"]
+      || req.headers["x-admin-session"]
       || req.headers.authorization?.replace(/^Bearer\s+/i, "")
       || url.searchParams.get("token")
       || body.token
+      || body.ownerToken
   );
 }
 
-function requireAdminConsole(req, url, body = {}) {
-  if (!ADMIN_CONSOLE_TOKEN) {
-    return { ok: false, status: 503, error: "admin_console_token_not_configured" };
+async function requireAdminConsole(req, url, body = {}) {
+  const token = adminTokenFromRequest(req, url, body);
+  if (!token) return { ok: false, status: 401, error: "owner_login_required" };
+
+  if (ADMIN_CONSOLE_TOKEN && token === ADMIN_CONSOLE_TOKEN) {
+    return { ok: true, by: "admin_console_token" };
   }
-  if (adminTokenFromRequest(req, url, body) !== ADMIN_CONSOLE_TOKEN) {
-    return { ok: false, status: 401, error: "unauthorized" };
+
+  const tokenPayload = verifyTokenPayload(token);
+  if (tokenPayload?.kind === "owner-admin" && isOwnerEmail(tokenPayload.email)) {
+    return { ok: true, by: tokenPayload.email };
   }
-  return { ok: true };
+
+  const external = await supabaseUserFromAccessToken(token);
+  if (external.ok && isOwnerEmail(external.user.email)) {
+    return { ok: true, by: external.user.email };
+  }
+
+  return { ok: false, status: 403, error: "owner_only" };
 }
 
 function roomAdminView(roomState) {
@@ -3956,14 +4076,16 @@ function createApplicationForAccount(state, account = {}, payload = {}) {
 }
 
 function createSignupAccount(state, payload = {}) {
-  const validated = validateAccountPayload(payload);
+  const existingEmail = normalizeEmail(payload.email);
+  const existing = findAccountByEmail(state, existingEmail);
+  const validated = validateAccountPayload(payload, { requireConsents: !existing || !accountHasRequiredConsents(existing) });
   if (!validated.ok) return { ok: false, status: 400, error: validated.errors[0], errors: validated.errors };
   const value = validated.value;
-  const existing = findAccountByEmail(state, value.email);
   if (existing) {
     if (!verifyPassword(value.password, existing.passwordHash)) {
       return { ok: false, status: 409, error: "email_already_registered" };
     }
+    applyConsentToAccount(existing, payload);
     existing.updatedAt = nowIso();
     return {
       ok: true,
@@ -3983,6 +4105,7 @@ function createSignupAccount(state, payload = {}) {
     passwordHash: hashPassword(value.password),
     status: "active",
     applicationIds: [],
+    consents: consentAuditFromPayload(payload),
     createdAt: nowIso(),
     updatedAt: nowIso()
   };
@@ -3999,27 +4122,38 @@ function createSignupAccount(state, payload = {}) {
 }
 
 function createSignupApplication(state, payload = {}) {
-  const validated = validateSignupPayload(payload);
-  if (!validated.ok) return { ok: false, status: 400, error: validated.errors[0], errors: validated.errors };
-  const value = validated.value;
-  let account = findAccountByEmail(state, value.email);
-  if (account && !verifyPassword(value.password, account.passwordHash)) {
+  const email = normalizeEmail(payload.email);
+  const account = findAccountByEmail(state, email);
+  if (account && !verifyPassword(String(payload.password || ""), account.passwordHash)) {
     return { ok: false, status: 409, error: "email_already_registered" };
   }
-  if (!account) {
+  if (!account || !accountHasRequiredConsents(account)) {
+    const accountValidation = validateAccountPayload(payload, { requireConsents: true });
+    if (!accountValidation.ok) return { ok: false, status: 400, error: accountValidation.errors[0], errors: accountValidation.errors };
+  }
+  const applicationValidation = validateApplicationFields(payload, email);
+  if (!applicationValidation.ok) return { ok: false, status: 400, error: applicationValidation.errors[0], errors: applicationValidation.errors };
+  const value = {
+    ...(account ? { email } : validateAccountPayload(payload).value),
+    ...applicationValidation.value
+  };
+  let targetAccount = account;
+  if (!targetAccount) {
     const accountId = generateEntityId("acct");
-    account = {
+    targetAccount = {
       id: accountId,
       email: value.email,
       passwordHash: hashPassword(value.password),
       status: "active",
       applicationIds: [],
+      consents: consentAuditFromPayload(payload),
       createdAt: nowIso(),
       updatedAt: nowIso()
     };
-    state.accounts[accountId] = account;
+    state.accounts[accountId] = targetAccount;
   }
-  return createApplicationForAccount(state, account, value);
+  applyConsentToAccount(targetAccount, payload);
+  return createApplicationForAccount(state, targetAccount, value);
 }
 
 function loginAccount(state, payload = {}) {
@@ -4034,10 +4168,13 @@ function loginAccount(state, payload = {}) {
   const applicationIds = account.applicationIds || [];
   const approvedApplications = approvedBuyerApplications(state, account);
   const buyerAccess = approvedApplications.length > 0;
+  const ownerAccess = isOwnerEmail(account.email);
   return {
     ok: true,
     account: publicAccountView(account),
     buyerAccess,
+    ownerAccess,
+    ...(ownerAccess ? { ownerToken: ownerTokenForAccount(account), ownerNext: "/admin" } : {}),
     ...(buyerAccess ? { guideToken: buyerTokenForAccount(account) } : {}),
     ...(buyerAccess ? { buyerRooms: approvedApplications.map((application) => applicationRoomPayload(state, account, application)) } : {}),
     applications: applicationIds
@@ -4048,7 +4185,7 @@ function loginAccount(state, payload = {}) {
 }
 
 async function createSignupAccountFromRequest(state, body = {}) {
-  const external = await externalAccountFromRequest(state, body);
+  const external = await externalAccountFromRequest(state, body, { requireConsentsForNew: true });
   if (external) {
     if (!external.ok) return external;
     return {
@@ -4066,7 +4203,7 @@ async function createSignupAccountFromRequest(state, body = {}) {
 }
 
 async function createSignupApplicationFromRequest(state, body = {}) {
-  const external = await externalAccountFromRequest(state, body);
+  const external = await externalAccountFromRequest(state, body, { requireConsentsForNew: true });
   if (external) {
     if (!external.ok) return external;
     return createApplicationForAccount(state, external.account, { ...body, email: external.account.email });
@@ -4075,17 +4212,20 @@ async function createSignupApplicationFromRequest(state, body = {}) {
 }
 
 async function loginAccountFromRequest(state, body = {}) {
-  const external = await externalAccountFromRequest(state, body);
+  const external = await externalAccountFromRequest(state, body, { requireConsentsForNew: true });
   if (external) {
     if (!external.ok) return external;
     const account = external.account;
     const applicationIds = account.applicationIds || [];
     const approvedApplications = approvedBuyerApplications(state, account);
     const buyerAccess = approvedApplications.length > 0;
+    const ownerAccess = isOwnerEmail(account.email);
     return {
       ok: true,
       account: publicAccountView(account),
       buyerAccess,
+      ownerAccess,
+      ...(ownerAccess ? { ownerToken: ownerTokenForAccount(account), ownerNext: "/admin" } : {}),
       guideToken: buyerTokenForAccount(account),
       ...(buyerAccess ? { buyerRooms: approvedApplications.map((application) => applicationRoomPayload(state, account, application)) } : {}),
       applications: applicationIds
@@ -4295,15 +4435,29 @@ function adminApproveApplication(state, payload = {}, approvedBy = "admin_consol
 }
 
 async function handleAdminApi(req, url) {
+  if (req.method === "GET" && url.pathname === "/api/admin/me") {
+    const auth = await requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        version: APP_VERSION,
+        owner: auth.by || "admin",
+        ownerEmailsConfigured: OWNER_ADMIN_EMAILS.length
+      }
+    };
+  }
+
   if (req.method === "GET" && url.pathname === "/api/admin/rooms") {
-    const auth = requireAdminConsole(req, url);
+    const auth = await requireAdminConsole(req, url);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     return { status: 200, body: adminRoomsPayload(state) };
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/diagnostics") {
-    const auth = requireAdminConsole(req, url);
+    const auth = await requireAdminConsole(req, url);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     return {
@@ -4321,14 +4475,14 @@ async function handleAdminApi(req, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/backup") {
-    const auth = requireAdminConsole(req, url);
+    const auth = await requireAdminConsole(req, url);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     return { status: 200, body: { ok: true, version: APP_VERSION, exportedAt: nowIso(), state } };
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/applications") {
-    const auth = requireAdminConsole(req, url);
+    const auth = await requireAdminConsole(req, url);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     return { status: 200, body: adminApplicationsPayload(state) };
@@ -4336,7 +4490,7 @@ async function handleAdminApi(req, url) {
 
   if (req.method === "POST" && url.pathname === "/api/admin/rooms") {
     const body = await readBody(req);
-    const auth = requireAdminConsole(req, url, body);
+    const auth = await requireAdminConsole(req, url, body);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     const result = adminUpsertRoom(state, body);
@@ -4347,7 +4501,7 @@ async function handleAdminApi(req, url) {
 
   if (req.method === "POST" && url.pathname === "/api/admin/applications/approve") {
     const body = await readBody(req);
-    const auth = requireAdminConsole(req, url, body);
+    const auth = await requireAdminConsole(req, url, body);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     const result = adminApproveApplication(state, body, "admin_console");
@@ -4358,7 +4512,7 @@ async function handleAdminApi(req, url) {
 
   if (req.method === "POST" && url.pathname === "/api/admin/restore") {
     const body = await readBody(req);
-    const auth = requireAdminConsole(req, url, body);
+    const auth = await requireAdminConsole(req, url, body);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     if (body.state?.rooms && typeof body.state.rooms === "object" && !Array.isArray(body.state.rooms)) {

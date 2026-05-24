@@ -49,6 +49,23 @@ window.PixelgomAuth = (() => {
     return data;
   }
 
+  async function resetPasswordForEmail(email) {
+    const supabaseClient = await client();
+    if (!supabaseClient) throw new Error("password_reset_requires_supabase");
+    const redirectTo = `${window.location.origin}/reset-password`;
+    const { data, error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw error;
+    return data;
+  }
+
+  async function updatePassword(password) {
+    const supabaseClient = await client();
+    if (!supabaseClient) throw new Error("password_reset_requires_supabase");
+    const { data, error } = await supabaseClient.auth.updateUser({ password });
+    if (error) throw error;
+    return data;
+  }
+
   async function signInWithKakao(redirectPath = "/login") {
     const cfg = await config();
     const supabaseClient = await client();
@@ -85,6 +102,8 @@ window.PixelgomAuth = (() => {
     accessPayload,
     signInWithPassword,
     signUpWithPassword,
+    resetPasswordForEmail,
+    updatePassword,
     signInWithKakao,
     signOut,
     showAuthMode

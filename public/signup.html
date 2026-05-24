@@ -14,11 +14,26 @@
       <section class="auth-card">
         <p class="section-kicker">Account</p>
         <h1>회원가입</h1>
-        <p>구매자 계정을 만든 뒤 서비스 신청으로 이동합니다. Supabase가 연결되면 카카오 로그인도 사용할 수 있습니다.</p>
+        <p>구매자 계정을 만든 뒤 서비스 신청으로 이동합니다. 이메일 인증이 필요한 경우 인증 후 로그인해 주세요.</p>
         <small data-auth-mode>로그인 방식을 확인 중입니다.</small>
         <form data-signup-form>
           <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
           <label>비밀번호<input name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="8자 이상"></label>
+          <label>비밀번호 확인<input name="passwordConfirm" type="password" autocomplete="new-password" required minlength="8" placeholder="비밀번호 다시 입력"></label>
+          <div class="consent-list" aria-label="약관 동의">
+            <label class="check-row">
+              <input name="termsAgreed" type="checkbox" required>
+              <span><strong>필수</strong> <a href="/terms" target="_blank" rel="noopener">서비스 이용약관</a>에 동의합니다.</span>
+            </label>
+            <label class="check-row">
+              <input name="privacyAgreed" type="checkbox" required>
+              <span><strong>필수</strong> <a href="/privacy" target="_blank" rel="noopener">개인정보처리방침</a>에 동의합니다.</span>
+            </label>
+            <label class="check-row">
+              <input name="marketingAgreed" type="checkbox">
+              <span><strong>선택</strong> 업데이트/이벤트 안내 수신에 동의합니다.</span>
+            </label>
+          </div>
           <button class="button button-primary" type="submit">계정 만들기</button>
           <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 시작</button>
         </form>
@@ -26,6 +41,7 @@
         <div class="auth-links">
           <a href="/apply">이미 계정이 있으면 서비스 신청</a>
           <a href="/login">로그인</a>
+          <a href="/forgot-password">비밀번호 찾기</a>
         </div>
       </section>
     </main>
@@ -51,6 +67,14 @@
         event.preventDefault();
         result.textContent = "계정을 만드는 중입니다.";
         const payload = Object.fromEntries(new FormData(form).entries());
+        if (payload.password !== payload.passwordConfirm) {
+          result.textContent = "회원가입 실패: 비밀번호가 일치하지 않습니다.";
+          return;
+        }
+        if (!payload.termsAgreed || !payload.privacyAgreed) {
+          result.textContent = "회원가입 실패: 필수 약관에 동의해 주세요.";
+          return;
+        }
         try {
           const signupResult = await window.PixelgomAuth.signUpWithPassword(payload.email, payload.password);
           const authPayload = signupResult.local ? payload : await window.PixelgomAuth.accessPayload(payload);
@@ -79,6 +103,16 @@
       kakaoButton.addEventListener("click", async () => {
         result.textContent = "카카오 로그인으로 이동합니다.";
         try {
+          const payload = Object.fromEntries(new FormData(form).entries());
+          if (!payload.termsAgreed || !payload.privacyAgreed) {
+            result.textContent = "카카오 가입 전 필수 약관에 동의해 주세요.";
+            return;
+          }
+          sessionStorage.setItem("pixgomSignupConsent", JSON.stringify({
+            termsAgreed: true,
+            privacyAgreed: true,
+            marketingAgreed: Boolean(payload.marketingAgreed)
+          }));
           await window.PixelgomAuth.signInWithKakao("/signup");
         } catch (error) {
           result.textContent = `카카오 로그인 실패: ${error.message}`;
@@ -89,10 +123,11 @@
         const cfg = await window.PixelgomAuth.config();
         window.PixelgomAuth.showAuthMode(document.querySelector("[data-auth-mode]"), cfg);
         kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
-        const authPayload = await window.PixelgomAuth.accessPayload({});
-        if (authPayload.accessToken) {
-          result.textContent = "소셜 계정을 연결 중입니다.";
-          registerServerAccount(authPayload)
+          const authPayload = await window.PixelgomAuth.accessPayload({});
+          if (authPayload.accessToken) {
+            result.textContent = "소셜 계정을 연결 중입니다.";
+          const storedConsent = JSON.parse(sessionStorage.getItem("pixgomSignupConsent") || "{}");
+          registerServerAccount({ ...storedConsent, ...authPayload })
             .then(() => {
               result.textContent = "계정 연결이 완료되었습니다. 서비스 신청으로 이동합니다.";
               setTimeout(() => { window.location.href = "/apply"; }, 700);

@@ -24,6 +24,20 @@
           <label>관리자 닉네임<input name="adminName" type="text" required placeholder="운영자 닉네임"></label>
           <label>연락처<input name="contact" type="text" placeholder="카카오ID 또는 연락 가능한 채널"></label>
           <label>요청 메모<textarea name="memo" rows="4" placeholder="초기 설정 요청사항"></textarea></label>
+          <div class="consent-list" aria-label="약관 동의">
+            <label class="check-row">
+              <input name="termsAgreed" type="checkbox" required>
+              <span><strong>필수</strong> <a href="/terms" target="_blank" rel="noopener">서비스 이용약관</a>에 동의합니다.</span>
+            </label>
+            <label class="check-row">
+              <input name="privacyAgreed" type="checkbox" required>
+              <span><strong>필수</strong> <a href="/privacy" target="_blank" rel="noopener">개인정보처리방침</a>에 동의합니다.</span>
+            </label>
+            <label class="check-row">
+              <input name="marketingAgreed" type="checkbox">
+              <span><strong>선택</strong> 업데이트/이벤트 안내 수신에 동의합니다.</span>
+            </label>
+          </div>
           <button class="button button-primary" type="submit">신청 접수</button>
           <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인 후 신청</button>
         </form>

@@ -1114,6 +1114,13 @@ a {
   line-height: 1.6;
 }
 
+.auth-note {
+  padding: 10px 12px;
+  background: #fff7e2;
+  border: 1px solid #ecd6aa;
+  border-radius: 8px;
+}
+
 .auth-card form {
   display: grid;
   gap: 12px;
@@ -1141,6 +1148,36 @@ a {
 
 .auth-card textarea {
   resize: vertical;
+}
+
+.consent-list {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: #fffaf1;
+  border: 1px solid #ecd6aa;
+  border-radius: 8px;
+}
+
+.auth-card .check-row {
+  grid-template-columns: 18px 1fr;
+  align-items: start;
+  gap: 9px;
+  color: var(--ink);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.auth-card .check-row input {
+  width: 18px;
+  min-height: 18px;
+  margin-top: 2px;
+  padding: 0;
+}
+
+.auth-card .check-row a {
+  color: #2d6c51;
+  font-weight: 900;
 }
 
 .auth-links {
@@ -1546,7 +1583,7 @@ a {
 
 .admin-toolbar {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(150px, auto) minmax(220px, 1fr) minmax(170px, 0.8fr) repeat(4, auto);
+  grid-template-columns: minmax(220px, 1.1fr) minmax(220px, 1fr) minmax(170px, 0.8fr) repeat(4, auto);
   gap: 12px;
   align-items: end;
   padding: 18px;
@@ -1554,6 +1591,26 @@ a {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 12px 30px rgba(55, 38, 23, 0.08);
+}
+
+.admin-session-status {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  padding: 9px 11px;
+  color: #6f4b21;
+  background: #fff7e2;
+  border: 1px solid #ecd6aa;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.admin-session-status[data-ok="true"] {
+  color: #2d6c51;
+  background: #eef8f4;
+  border-color: #cce4d8;
 }
 
 .admin-toolbar label {
