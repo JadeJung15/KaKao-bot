@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>서비스 신청 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260524-sales-flow">
+    <link rel="stylesheet" href="/styles.css?v=20260524-buyer-console">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="auth-page">
     <main class="auth-shell">
@@ -14,6 +15,7 @@
         <p class="section-kicker">Apply</p>
         <h1>서비스 신청</h1>
         <p>방 1개 30일 5,500원 플랜을 신청합니다. 입금 확인 후 관리자가 승인하면 라이선스와 연결코드가 생성됩니다.</p>
+        <small data-auth-mode>로그인 방식을 확인 중입니다.</small>
         <form data-apply-form>
           <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
           <label>비밀번호<input name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="회원 비밀번호"></label>
@@ -23,6 +25,7 @@
           <label>연락처<input name="contact" type="text" placeholder="카카오ID 또는 연락 가능한 채널"></label>
           <label>요청 메모<textarea name="memo" rows="4" placeholder="초기 설정 요청사항"></textarea></label>
           <button class="button button-primary" type="submit">신청 접수</button>
+          <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인 후 신청</button>
         </form>
         <pre class="form-status" data-apply-result aria-live="polite">신청하면 결제 대기 상태로 등록됩니다.</pre>
         <div class="auth-links">
@@ -32,9 +35,11 @@
         </div>
       </section>
     </main>
+    <script src="/auth.js?v=20260524-buyer-console"></script>
     <script>
       const form = document.querySelector("[data-apply-form]");
       const result = document.querySelector("[data-apply-result]");
+      const kakaoButton = document.querySelector("[data-kakao-login]");
       const savedEmail = sessionStorage.getItem("pixgomSignupEmail");
       if (savedEmail) form.elements.email.value = savedEmail;
 
@@ -43,10 +48,11 @@
         result.textContent = "신청을 접수하는 중입니다.";
         const payload = Object.fromEntries(new FormData(form).entries());
         try {
+          const authPayload = await window.PixelgomAuth.accessPayload(payload);
           const response = await fetch("/api/apply", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(authPayload.accessToken ? { ...payload, accessToken: authPayload.accessToken } : payload)
           });
           const json = await response.json();
           if (!response.ok || json.ok === false) throw new Error(json.error || "apply_failed");
@@ -66,6 +72,27 @@
           result.textContent = `신청 실패: ${error.message}`;
         }
       });
+
+      kakaoButton.addEventListener("click", async () => {
+        result.textContent = "카카오 로그인으로 이동합니다.";
+        try {
+          await window.PixelgomAuth.signInWithKakao("/apply");
+        } catch (error) {
+          result.textContent = `카카오 로그인 실패: ${error.message}`;
+        }
+      });
+
+      (async () => {
+        const cfg = await window.PixelgomAuth.config();
+        window.PixelgomAuth.showAuthMode(document.querySelector("[data-auth-mode]"), cfg);
+        kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
+        const session = await window.PixelgomAuth.session();
+        if (session?.user?.email) {
+          form.elements.email.value = session.user.email;
+          form.elements.password.required = false;
+          form.elements.password.placeholder = "소셜 로그인 사용 중";
+        }
+      })();
     </script>
   </body>
 </html>

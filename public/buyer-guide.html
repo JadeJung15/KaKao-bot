@@ -5,13 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>구매자 가이드 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260524-buyer">
+    <link rel="stylesheet" href="/styles.css?v=20260524-buyer-console">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="sub-page buyer-page">
     <header class="site-header" aria-label="구매자 메뉴">
       <a class="brand" href="/" aria-label="픽셀곰 홈"><img src="/assets/pixgom-closeup.png" alt=""><span>픽셀곰</span></a>
       <nav class="nav-links" aria-label="페이지 이동">
         <a href="/login">로그인</a>
+        <a href="/console">콘솔</a>
         <a href="/store">스토어</a>
         <a href="/updates">업데이트</a>
         <a class="nav-cta" href="/apply">서비스 신청</a>
@@ -27,22 +29,26 @@
       <section class="buyer-gate" data-buyer-gate>
         <div>
           <h2>구매 인증</h2>
-          <p>이 페이지의 상세 내용은 승인된 구매자에게만 서버에서 불러옵니다. 일반 방문자에게 설치 세부 정보와 라이선스 안내는 노출하지 않습니다.</p>
+          <p>이 페이지의 상세 내용은 승인된 구매자에게만 서버에서 불러옵니다. 전체 구매자 화면은 <a href="/console">/console</a>에서 확인하세요.</p>
+          <small data-auth-mode>로그인 방식을 확인 중입니다.</small>
         </div>
         <form data-buyer-form>
           <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
           <label>비밀번호<input name="password" type="password" autocomplete="current-password" required placeholder="비밀번호"></label>
           <button class="button button-primary" type="submit">가이드 열기</button>
+          <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인</button>
         </form>
         <pre class="form-status" data-buyer-status aria-live="polite">구매 승인된 계정으로 로그인하세요.</pre>
       </section>
 
       <section class="buyer-content" data-buyer-content hidden></section>
     </main>
+    <script src="/auth.js?v=20260524-buyer-console"></script>
     <script>
       const form = document.querySelector("[data-buyer-form]");
       const statusBox = document.querySelector("[data-buyer-status]");
       const content = document.querySelector("[data-buyer-content]");
+      const kakaoButton = document.querySelector("[data-kakao-login]");
 
       function escapeHtml(value) {
         return String(value ?? "")
@@ -112,7 +118,9 @@
         event.preventDefault();
         statusBox.textContent = "구매 인증 중입니다.";
         try {
-          await requestGuide(Object.fromEntries(new FormData(form).entries()));
+          const values = Object.fromEntries(new FormData(form).entries());
+          await window.PixelgomAuth.signInWithPassword(values.email, values.password);
+          await requestGuide(await window.PixelgomAuth.accessPayload(values));
           form.reset();
         } catch (error) {
           statusBox.textContent = error.message === "buyer_approval_required"
@@ -121,10 +129,27 @@
         }
       });
 
-      const savedToken = sessionStorage.getItem("pixgomBuyerToken");
-      if (savedToken) {
-        requestGuide({ token: savedToken }).catch(() => sessionStorage.removeItem("pixgomBuyerToken"));
-      }
+      kakaoButton.addEventListener("click", async () => {
+        statusBox.textContent = "카카오 로그인으로 이동합니다.";
+        try {
+          await window.PixelgomAuth.signInWithKakao("/buyer-guide");
+        } catch (error) {
+          statusBox.textContent = `카카오 로그인 실패: ${error.message}`;
+        }
+      });
+
+      (async () => {
+        const cfg = await window.PixelgomAuth.config();
+        window.PixelgomAuth.showAuthMode(document.querySelector("[data-auth-mode]"), cfg);
+        kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
+        const savedToken = sessionStorage.getItem("pixgomBuyerToken");
+        if (savedToken) {
+          requestGuide({ token: savedToken }).catch(() => sessionStorage.removeItem("pixgomBuyerToken"));
+          return;
+        }
+        const payload = await window.PixelgomAuth.accessPayload({});
+        if (payload.accessToken) requestGuide(payload).catch(() => {});
+      })();
     </script>
   </body>
 </html>

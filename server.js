@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.49";
+export const APP_VERSION = "0.4.50";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -102,7 +102,11 @@ export const FEATURES = [
   "room-game-settings",
   "bridge-test-checklist",
   "admin-subscription-filters",
-  "game-season-schedule"
+  "game-season-schedule",
+  "buyer-owner-console-split",
+  "supabase-auth-bridge",
+  "kakao-login-ready",
+  "kanana-ai-roadmap"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -110,6 +114,10 @@ const MONTHLY_PRICE_KRW = Math.max(0, Number(process.env.MONTHLY_PRICE_KRW || 55
 const DEFAULT_SUBSCRIPTION_DAYS = Math.max(1, Number(process.env.DEFAULT_SUBSCRIPTION_DAYS || 30));
 const ADMIN_CONSOLE_TOKEN = normalizeText(process.env.ADMIN_CONSOLE_TOKEN || process.env.PIXGOM_ADMIN_TOKEN || "");
 const PLAY_INTERNAL_TEST_URL = "https://play.google.com/apps/internaltest/4700397680875890998";
+const PUBLIC_SITE_URL = normalizeText(process.env.PUBLIC_SITE_URL || process.env.SITE_URL || "https://pixgom.com").replace(/\/+$/, "");
+const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
+const SUPABASE_ANON_KEY = normalizeText(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
+const SUPABASE_KAKAO_ENABLED = normalizeText(process.env.SUPABASE_KAKAO_ENABLED || "true") !== "false";
 
 const CHAT_POINT_REWARD = 2;
 const CHAT_EXP_REWARD = 1;
@@ -528,11 +536,114 @@ function findAccountByEmail(state, email) {
   return Object.values(state.accounts || {}).find((account) => account.email === normalized);
 }
 
+function findAccountByExternalUser(state, provider, externalId) {
+  const normalizedProvider = normalizeText(provider);
+  const normalizedExternalId = normalizeText(externalId);
+  if (!normalizedProvider || !normalizedExternalId) return null;
+  return Object.values(state.accounts || {}).find((account) => (
+    account.auth?.provider === normalizedProvider
+    && account.auth?.externalId === normalizedExternalId
+  ));
+}
+
+function supabaseEnabled() {
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+}
+
+function authConfigPayload() {
+  return {
+    ok: true,
+    version: APP_VERSION,
+    auth: {
+      mode: supabaseEnabled() ? "supabase" : "local",
+      supabaseEnabled: supabaseEnabled(),
+      supabaseUrl: SUPABASE_URL,
+      supabaseAnonKey: SUPABASE_ANON_KEY,
+      kakaoEnabled: supabaseEnabled() && SUPABASE_KAKAO_ENABLED,
+      loginRedirectUrl: `${PUBLIC_SITE_URL}/login`,
+      consoleRedirectUrl: `${PUBLIC_SITE_URL}/console`
+    },
+    routes: {
+      ownerAdmin: "/admin",
+      buyerConsole: "/console",
+      rooms: "/my-rooms",
+      setup: "/setup",
+      license: "/license"
+    }
+  };
+}
+
+async function supabaseUserFromAccessToken(accessToken) {
+  const token = normalizeText(accessToken);
+  if (!token) return { ok: false, status: 401, error: "missing_access_token" };
+  if (!supabaseEnabled()) return { ok: false, status: 503, error: "supabase_not_configured" };
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      authorization: `Bearer ${token}`
+    }
+  });
+  if (!response.ok) return { ok: false, status: 401, error: "invalid_access_token" };
+  const user = await response.json();
+  const email = normalizeEmail(user.email || user.user_metadata?.email);
+  if (!user.id || !validEmail(email)) return { ok: false, status: 401, error: "invalid_supabase_user" };
+  return {
+    ok: true,
+    user: {
+      id: normalizeText(user.id),
+      email,
+      provider: normalizeText(user.app_metadata?.provider || user.identities?.[0]?.provider || "supabase"),
+      providers: Array.isArray(user.app_metadata?.providers) ? user.app_metadata.providers : [],
+      name: normalizeText(user.user_metadata?.name || user.user_metadata?.full_name || user.user_metadata?.nickname || ""),
+      avatarUrl: normalizeText(user.user_metadata?.avatar_url || user.user_metadata?.picture || "")
+    }
+  };
+}
+
+function ensureExternalAccount(state, externalUser = {}) {
+  const provider = externalUser.provider || "supabase";
+  let account = findAccountByExternalUser(state, provider, externalUser.id) || findAccountByEmail(state, externalUser.email);
+  if (!account) {
+    const accountId = generateEntityId("acct");
+    account = {
+      id: accountId,
+      email: externalUser.email,
+      status: "active",
+      applicationIds: [],
+      createdAt: nowIso()
+    };
+    state.accounts[accountId] = account;
+  }
+  account.auth = {
+    provider,
+    externalId: externalUser.id,
+    providers: externalUser.providers || [],
+    name: externalUser.name || account.auth?.name || "",
+    avatarUrl: externalUser.avatarUrl || account.auth?.avatarUrl || "",
+    linkedAt: account.auth?.linkedAt || nowIso()
+  };
+  account.email = externalUser.email || account.email;
+  account.status ||= "active";
+  account.applicationIds ||= [];
+  account.lastLoginAt = nowIso();
+  account.updatedAt = nowIso();
+  return account;
+}
+
+async function externalAccountFromRequest(state, body = {}) {
+  const accessToken = normalizeText(body.accessToken || body.supabaseAccessToken || body.jwt);
+  if (!accessToken) return null;
+  const auth = await supabaseUserFromAccessToken(accessToken);
+  if (!auth.ok) return auth;
+  return { ok: true, account: ensureExternalAccount(state, auth.user) };
+}
+
 function publicAccountView(account = {}) {
   return {
     id: account.id || "",
     email: account.email || "",
     status: account.status || "active",
+    authProvider: account.auth?.provider || "password",
     createdAt: account.createdAt || "",
     lastLoginAt: account.lastLoginAt || "",
     applicationIds: account.applicationIds || []
@@ -3753,15 +3864,27 @@ function restoreRoomFromAdminPayload(state, roomPayload = {}) {
 }
 
 function validateSignupPayload(payload = {}) {
+  const accountValidation = validateAccountPayload(payload);
+  const applicationValidation = validateApplicationFields(payload, accountValidation.value.email);
+  return {
+    ok: accountValidation.ok && applicationValidation.ok,
+    errors: [...accountValidation.errors, ...applicationValidation.errors],
+    value: {
+      ...accountValidation.value,
+      ...applicationValidation.value
+    }
+  };
+}
+
+function validateApplicationFields(payload = {}, fallbackEmail = "") {
   const email = normalizeEmail(payload.email);
-  const password = String(payload.password || "");
   const roomName = compactSpaces(payload.roomName || payload.room || "");
   const roomLink = normalizeText(payload.roomLink || payload.openChatLink || payload.link || "");
   const adminName = compactSpaces(payload.adminName || payload.roomAdmin || payload.managerName || "");
   const roomId = payloadRoomId({ roomId: payload.roomId, roomLink });
   const errors = [];
-  if (!validEmail(email)) errors.push("email_required");
-  if (password.length < SIGNUP_PASSWORD_MIN_LENGTH) errors.push("password_too_short");
+  const resolvedEmail = email || normalizeEmail(fallbackEmail);
+  if (!validEmail(resolvedEmail)) errors.push("email_required");
   if (!roomName) errors.push("room_name_required");
   if (!roomLink || !roomId) errors.push("openchat_link_required");
   if (!adminName) errors.push("admin_name_required");
@@ -3769,8 +3892,7 @@ function validateSignupPayload(payload = {}) {
     ok: errors.length === 0,
     errors,
     value: {
-      email,
-      password,
+      email: resolvedEmail,
       roomName,
       roomLink,
       roomId,
@@ -3778,6 +3900,58 @@ function validateSignupPayload(payload = {}) {
       contact: normalizeText(payload.contact || ""),
       memo: normalizeText(payload.memo || "").slice(0, 500)
     }
+  };
+}
+
+function createApplicationForAccount(state, account = {}, payload = {}) {
+  const validated = validateApplicationFields(payload, account.email);
+  if (!validated.ok) return { ok: false, status: 400, error: validated.errors[0], errors: validated.errors };
+  const value = validated.value;
+  const applicationId = generateEntityId("app");
+  const paymentId = generateEntityId("pay");
+  const application = {
+    id: applicationId,
+    accountId: account.id,
+    email: value.email,
+    roomName: value.roomName,
+    roomLink: value.roomLink,
+    roomId: value.roomId,
+    adminName: value.adminName,
+    contact: value.contact,
+    memo: value.memo,
+    status: "pending_payment",
+    plan: {
+      monthlyPriceKrw: MONTHLY_PRICE_KRW,
+      days: DEFAULT_SUBSCRIPTION_DAYS
+    },
+    paymentId,
+    createdAt: nowIso(),
+    updatedAt: nowIso()
+  };
+  const payment = {
+    id: paymentId,
+    applicationId,
+    accountId: account.id,
+    amountKrw: MONTHLY_PRICE_KRW,
+    method: "manual_deposit",
+    status: "awaiting_manual_deposit",
+    createdAt: nowIso(),
+    updatedAt: nowIso()
+  };
+  state.applications[applicationId] = application;
+  state.payments[paymentId] = payment;
+  account.applicationIds ||= [];
+  addUnique(account.applicationIds, applicationId);
+  account.updatedAt = nowIso();
+  return {
+    ok: true,
+    account: publicAccountView(account),
+    application: publicApplicationView(application, state),
+    payment: publicPaymentView(payment),
+    next: [
+      `월 이용금액 ${formatKrw(MONTHLY_PRICE_KRW)} 입금 확인 후 관리자가 승인합니다.`,
+      "승인되면 방 등록, 라이선스 키, 30일 구독이 자동 생성됩니다."
+    ]
   };
 }
 
@@ -3845,53 +4019,7 @@ function createSignupApplication(state, payload = {}) {
     };
     state.accounts[accountId] = account;
   }
-
-  const applicationId = generateEntityId("app");
-  const paymentId = generateEntityId("pay");
-  const application = {
-    id: applicationId,
-    accountId: account.id,
-    email: value.email,
-    roomName: value.roomName,
-    roomLink: value.roomLink,
-    roomId: value.roomId,
-    adminName: value.adminName,
-    contact: value.contact,
-    memo: value.memo,
-    status: "pending_payment",
-    plan: {
-      monthlyPriceKrw: MONTHLY_PRICE_KRW,
-      days: DEFAULT_SUBSCRIPTION_DAYS
-    },
-    paymentId,
-    createdAt: nowIso(),
-    updatedAt: nowIso()
-  };
-  const payment = {
-    id: paymentId,
-    applicationId,
-    accountId: account.id,
-    amountKrw: MONTHLY_PRICE_KRW,
-    method: "manual_deposit",
-    status: "awaiting_manual_deposit",
-    createdAt: nowIso(),
-    updatedAt: nowIso()
-  };
-  state.applications[applicationId] = application;
-  state.payments[paymentId] = payment;
-  account.applicationIds ||= [];
-  addUnique(account.applicationIds, applicationId);
-  account.updatedAt = nowIso();
-  return {
-    ok: true,
-    account: publicAccountView(account),
-    application: publicApplicationView(application, state),
-    payment: publicPaymentView(payment),
-    next: [
-      `월 이용금액 ${formatKrw(MONTHLY_PRICE_KRW)} 입금 확인 후 관리자가 승인합니다.`,
-      "승인되면 방 등록, 라이선스 키, 30일 구독이 자동 생성됩니다."
-    ]
-  };
+  return createApplicationForAccount(state, account, value);
 }
 
 function loginAccount(state, payload = {}) {
@@ -3919,17 +4047,103 @@ function loginAccount(state, payload = {}) {
   };
 }
 
-function buyerGuideFromRequest(state, req, body = {}) {
+async function createSignupAccountFromRequest(state, body = {}) {
+  const external = await externalAccountFromRequest(state, body);
+  if (external) {
+    if (!external.ok) return external;
+    return {
+      ok: true,
+      created: false,
+      account: publicAccountView(external.account),
+      guideToken: buyerTokenForAccount(external.account),
+      next: [
+        "소셜 로그인 계정이 연결되었습니다.",
+        "서비스 신청 화면에서 방 정보를 등록하거나 구매자 콘솔에서 상태를 확인하세요."
+      ]
+    };
+  }
+  return createSignupAccount(state, body);
+}
+
+async function createSignupApplicationFromRequest(state, body = {}) {
+  const external = await externalAccountFromRequest(state, body);
+  if (external) {
+    if (!external.ok) return external;
+    return createApplicationForAccount(state, external.account, { ...body, email: external.account.email });
+  }
+  return createSignupApplication(state, body);
+}
+
+async function loginAccountFromRequest(state, body = {}) {
+  const external = await externalAccountFromRequest(state, body);
+  if (external) {
+    if (!external.ok) return external;
+    const account = external.account;
+    const applicationIds = account.applicationIds || [];
+    const approvedApplications = approvedBuyerApplications(state, account);
+    const buyerAccess = approvedApplications.length > 0;
+    return {
+      ok: true,
+      account: publicAccountView(account),
+      buyerAccess,
+      guideToken: buyerTokenForAccount(account),
+      ...(buyerAccess ? { buyerRooms: approvedApplications.map((application) => applicationRoomPayload(state, account, application)) } : {}),
+      applications: applicationIds
+        .map((id) => state.applications?.[id])
+        .filter(Boolean)
+        .map((application) => publicApplicationView(application, state))
+    };
+  }
+  return loginAccount(state, body);
+}
+
+function buyerConsolePayload(state, account = {}) {
+  const applicationIds = account.applicationIds || [];
+  const applications = applicationIds
+    .map((id) => state.applications?.[id])
+    .filter(Boolean)
+    .map((application) => publicApplicationView(application, state));
+  const approvedApplications = approvedBuyerApplications(state, account);
+  return {
+    ok: true,
+    version: APP_VERSION,
+    account: publicAccountView(account),
+    testAppUrl: PLAY_INTERNAL_TEST_URL,
+    applications,
+    rooms: approvedApplications.map((application) => applicationRoomPayload(state, account, application)),
+    plan: {
+      monthlyPriceKrw: MONTHLY_PRICE_KRW,
+      days: DEFAULT_SUBSCRIPTION_DAYS
+    },
+    ownerAdminNotice: "/admin 은 판매자 운영자 전용입니다. 구매자는 /console, /my-rooms, /setup, /license 화면만 사용합니다."
+  };
+}
+
+async function accountFromBuyerRequest(state, req, body = {}) {
   const tokenPayload = verifyTokenPayload(tokenFromRequest(req, body));
   if (tokenPayload?.sub && (!tokenPayload.kind || tokenPayload.kind === "buyer-guide") && state.accounts?.[tokenPayload.sub]) {
-    return buyerGuidePayload(state, state.accounts[tokenPayload.sub]);
+    return { ok: true, account: state.accounts[tokenPayload.sub] };
   }
+  const external = await externalAccountFromRequest(state, body);
+  if (external) return external;
   const login = loginAccount(state, body);
   if (!login.ok) return login;
-  const account = state.accounts[login.account.id];
+  return { ok: true, account: state.accounts[login.account.id] };
+}
+
+async function buyerGuideFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const account = auth.account;
   const guide = buyerGuidePayload(state, account);
   if (!guide.ok) return guide;
   return { ...guide, guideToken: buyerTokenForAccount(account) };
+}
+
+async function buyerConsoleFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  return { ...buyerConsolePayload(state, auth.account), guideToken: buyerTokenForAccount(auth.account) };
 }
 
 function bridgeConnectFromRequest(state, body = {}) {
@@ -3953,10 +4167,14 @@ function bridgeConnectFromRequest(state, body = {}) {
 }
 
 async function handlePublicAccountApi(req, url) {
+  if (req.method === "GET" && url.pathname === "/api/auth/config") {
+    return { status: 200, body: authConfigPayload() };
+  }
+
   if (req.method === "POST" && url.pathname === "/api/signup") {
     const body = await readBody(req);
     const state = await loadState();
-    const result = createSignupAccount(state, body);
+    const result = await createSignupAccountFromRequest(state, body);
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -3965,7 +4183,7 @@ async function handlePublicAccountApi(req, url) {
   if (req.method === "POST" && url.pathname === "/api/apply") {
     const body = await readBody(req);
     const state = await loadState();
-    const result = createSignupApplication(state, body);
+    const result = await createSignupApplicationFromRequest(state, body);
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -3974,7 +4192,7 @@ async function handlePublicAccountApi(req, url) {
   if (req.method === "POST" && url.pathname === "/api/login") {
     const body = await readBody(req);
     const state = await loadState();
-    const result = loginAccount(state, body);
+    const result = await loginAccountFromRequest(state, body);
     if (!result.ok) return { status: result.status || 401, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -3983,7 +4201,16 @@ async function handlePublicAccountApi(req, url) {
   if (req.method === "POST" && url.pathname === "/api/buyer/guide") {
     const body = await readBody(req);
     const state = await loadState();
-    const result = buyerGuideFromRequest(state, req, body);
+    const result = await buyerGuideFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/console") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerConsoleFromRequest(state, req, body);
     if (!result.ok) return { status: result.status || 401, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -4343,10 +4570,12 @@ export async function requestHandler(req, res) {
     const isSkillPath = pathname === "/skill" || pathname === "/api/skill";
     const isChatEventPath = pathname === "/chat-event" || pathname === "/api/chat-event";
     const adminApi = pathname.startsWith("/api/admin/");
-    const publicAccountApi = pathname === "/api/signup"
+    const publicAccountApi = pathname === "/api/auth/config"
+      || pathname === "/api/signup"
       || pathname === "/api/apply"
       || pathname === "/api/login"
       || pathname === "/api/buyer/guide"
+      || pathname === "/api/buyer/console"
       || pathname === "/api/bridge/connect";
 
     if (adminApi) {

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>내 방 | 픽셀곰</title>
+    <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
+    <link rel="stylesheet" href="/styles.css?v=20260524-buyer-console">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body class="sub-page buyer-console-page" data-console-view="rooms">
+    <header class="site-header" aria-label="구매자 콘솔 메뉴">
+      <a class="brand" href="/" aria-label="픽셀곰 홈"><img src="/assets/pixgom-closeup.png" alt=""><span>픽셀곰</span></a>
+      <nav class="nav-links" aria-label="페이지 이동">
+        <a href="/console">콘솔</a>
+        <a href="/my-rooms">내 방</a>
+        <a href="/setup">설치</a>
+        <a href="/license">라이선스</a>
+        <button class="nav-button" type="button" data-sign-out hidden>로그아웃</button>
+      </nav>
+    </header>
+    <main class="document-main buyer-console-main">
+      <section class="buyer-gate" data-console-gate>
+        <div>
+          <p class="section-kicker">Rooms</p>
+          <h1>내 방</h1>
+          <p>구매 승인된 방의 연결코드와 라이선스를 확인합니다.</p>
+          <small data-auth-mode>로그인 방식을 확인 중입니다.</small>
+        </div>
+        <form data-console-login>
+          <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
+          <label>비밀번호<input name="password" type="password" autocomplete="current-password" required placeholder="비밀번호"></label>
+          <button class="button button-primary" type="submit">내 방 열기</button>
+          <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인</button>
+        </form>
+        <pre class="form-status" data-console-status aria-live="polite">구매 승인된 계정으로 로그인하세요.</pre>
+      </section>
+      <section data-console-content hidden></section>
+    </main>
+    <script src="/auth.js?v=20260524-buyer-console"></script>
+    <script src="/buyer-console.js?v=20260524-buyer-console"></script>
+  </body>
+</html>

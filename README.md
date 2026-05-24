@@ -10,8 +10,8 @@
 - 상태 확인: `GET /health`
 - 픽셀곰 기능 소개 홈페이지: `GET /`
 - 회원가입/서비스 신청/로그인: `GET /signup`, `GET /apply`, `GET /login`
-- 구매자 전용 가이드: `GET /buyer-guide`, `POST /api/buyer/guide`
-- 관리 콘솔: `GET /admin`, `/api/admin/*`
+- 구매자 전용 가이드/콘솔: `GET /buyer-guide`, `GET /console`, `GET /my-rooms`, `GET /setup`, `GET /license`, `POST /api/buyer/guide`, `POST /api/buyer/console`
+- 운영자 전용 어드민: `GET /admin`, `/api/admin/*`
 - 게임 기능: 방별 기능이 켜진 경우 채팅 미니게임 사용
 - 저장소: 로컬 JSON 또는 PostgreSQL
 - 2차 운영 기능: 메시지함, 입퇴장 상세, 관리자 전용 명령어
@@ -39,6 +39,8 @@
 - 24차 판매용 서비스: 회원 신청, 수동 입금 승인, 라이선스 키, 구독 만료 차단, 방별 기능 ON/OFF, 백업/복구
 - 25차 구매자 전용 안내: 승인된 구매자만 설치/권한/문제 해결 가이드를 서버에서 조회
 - 26차 판매 흐름 단순화: 계정 생성과 서비스 신청을 분리하고, 승인된 방마다 브릿지 앱 연결코드를 발급
+- 27차 운영자/구매자 분리: `/admin`은 판매자 전용, 구매자는 `/console`, `/my-rooms`, `/setup`, `/license`만 사용
+- 28차 인증 확장 준비: Supabase 이메일 인증과 카카오 로그인 연결 준비, Kanana AI 활용 후보 로드맵 추가
 
 ## 명령어
 
@@ -179,6 +181,10 @@ PGSSL=require
 ADMIN_NAMES=관리자1,관리자2
 ADMIN_CONSOLE_TOKEN=긴_운영_토큰
 BUYER_TOKEN_SECRET=긴_구매자_세션_서명값
+PUBLIC_SITE_URL=https://pixgom.com
+SUPABASE_URL=https://프로젝트.ref.supabase.co
+SUPABASE_ANON_KEY=Supabase_anon_publishable_key
+SUPABASE_KAKAO_ENABLED=true
 ROOM_BRAND_NAME=픽셀곰
 REGISTERED_ROOM_IDS=gu25P5vi
 REGISTERED_ROOM_LINKS=https://open.kakao.com/o/gu25P5vi
@@ -224,10 +230,47 @@ https://pixgom.com/chat-event   안드로이드 브릿지 기본 API 주소
 
 1. `/signup`에서 이메일과 비밀번호로 계정을 만듭니다.
 2. `/apply`에서 방 이름, 오픈채팅 링크, 관리자 닉네임을 입력해 서비스를 신청합니다.
-3. 관리자가 입금 확인 후 `/admin`에서 신청을 승인합니다.
+3. 관리자가 입금 확인 후 운영자 전용 `/admin`에서 신청을 승인합니다.
 4. 승인 시 방별 라이선스 키와 앱 연결코드가 생성되고 30일 구독이 시작됩니다.
-5. 사용자는 `/login` 또는 `/buyer-guide`에서 연결코드를 확인합니다.
+5. 구매자는 `/console`, `/my-rooms`, `/setup`, `/license`에서 자기 방의 연결코드와 라이선스만 확인합니다.
 6. 구독 만료 후에는 해당 방의 서버 응답이 차단됩니다.
+
+## 운영자 어드민과 구매자 콘솔
+
+`/admin`은 판매자/운영자 전용입니다. 전체 구매자, 전체 방, 구독 만료일, 라이선스 발급/차단, 백업/복구를 관리하므로 `ADMIN_CONSOLE_TOKEN`으로 보호합니다.
+
+구매자는 `/admin`을 사용하지 않습니다. 구매자 화면은 다음처럼 분리합니다.
+
+```text
+/login       구매자 로그인
+/console     구매자 요약 콘솔
+/my-rooms    승인된 내 방과 연결코드
+/setup       앱 설치와 권한 안내
+/license     라이선스/요금/만료 안내
+```
+
+초기 MVP에서는 로컬 계정과 구매자 세션 토큰을 같이 지원합니다. Supabase 환경변수를 설정하면 이메일/비밀번호 인증과 카카오 OAuth 로그인 버튼이 활성화됩니다.
+
+## Supabase/Kakao 로그인 설정
+
+1. Supabase 프로젝트를 만들고 `SUPABASE_URL`, `SUPABASE_ANON_KEY`를 Vercel 환경변수로 설정합니다.
+2. Supabase Auth URL Configuration에 `https://pixgom.com/login`, `https://pixgom.com/console`, `https://pixgom.com/signup`, `https://pixgom.com/apply`를 허용 리다이렉트 URL로 추가합니다.
+3. Kakao Developers에서 웹 플랫폼 도메인 `https://pixgom.com`을 등록합니다.
+4. Kakao Login Redirect URI에는 Supabase 콜백 URL `https://프로젝트.ref.supabase.co/auth/v1/callback`을 등록합니다.
+5. Kakao REST API 키를 Supabase Auth Providers의 Kakao Client ID에 넣습니다. 카카오 앱에서 Client Secret을 켠 경우에만 Supabase에도 Secret을 넣습니다.
+6. 설정 후 `/api/auth/config`가 `mode: "supabase"`, `kakaoEnabled: true`를 반환하는지 확인합니다.
+
+## Kanana AI 활용 후보
+
+카카오가 Hugging Face에 공개한 Kanana 모델은 한국어 운영 문구 생성, 공지/규칙 초안, 커스텀 명령어 답변 추천, 문의 답변 초안에 활용할 수 있는 후보입니다.
+
+현 단계에서는 바로 서버에 붙이지 않습니다. 모델별 라이선스, 상업 이용 조건, 추론 비용, 개인정보 입력 차단 정책을 확인한 뒤 별도 AI 기능으로 분리합니다.
+
+우선 후보:
+
+- `kakaocorp/kanana-1.5-2.1b-instruct-2505`: Apache-2.0 표기, 가벼운 테스트 후보
+- `kakaocorp/kanana-2-30b-a3b-instruct-2601`: Kanana License 표기, 성능 후보지만 상업 조건 검토 필요
+- `kakaocorp/kanana-nano-2.1b-embedding`: 검색/FAQ/문서 유사도 후보
 
 MessengerBot 스크립트는 과거 호환용으로만 남겨둡니다. 신규 판매/테스트 기준은 픽셀곰 브릿지 앱입니다.
 

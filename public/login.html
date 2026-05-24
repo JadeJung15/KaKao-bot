@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>로그인 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260524-commerce">
+    <link rel="stylesheet" href="/styles.css?v=20260524-buyer-console">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="auth-page">
     <main class="auth-shell">
@@ -13,11 +14,13 @@
       <section class="auth-card">
         <p class="section-kicker">Login</p>
         <h1>로그인</h1>
-        <p>신청한 방과 결제 대기/승인 상태를 확인합니다. 승인된 방은 연결코드를 바로 확인할 수 있습니다.</p>
+        <p>구매자는 로그인 후 구매자 콘솔에서 자기 방과 연결코드를 확인합니다.</p>
+        <small data-auth-mode>로그인 방식을 확인 중입니다.</small>
         <form data-login-form>
           <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
           <label>비밀번호<input name="password" type="password" autocomplete="current-password" required placeholder="비밀번호"></label>
           <button class="button button-primary" type="submit">로그인</button>
+          <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인</button>
         </form>
         <pre class="form-status" data-login-result aria-live="polite">회원가입 후 신청 상태를 확인할 수 있습니다.</pre>
         <div class="auth-links">
@@ -27,48 +30,79 @@
         </div>
       </section>
     </main>
+    <script src="/auth.js?v=20260524-buyer-console"></script>
     <script>
       const form = document.querySelector("[data-login-form]");
       const result = document.querySelector("[data-login-result]");
+      const kakaoButton = document.querySelector("[data-kakao-login]");
+
+      async function finishLogin(payload) {
+        const response = await fetch("/api/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const json = await response.json();
+        if (!response.ok || json.ok === false) throw new Error(json.error || "login_failed");
+        if (json.guideToken) sessionStorage.setItem("pixgomBuyerToken", json.guideToken);
+        const applications = json.applications.length
+          ? json.applications.map((item) => `- ${item.roomName}: ${item.statusLabel} / ${item.payment.statusLabel}`).join("\n")
+          : "신청 내역이 없습니다.";
+        const buyerRooms = json.buyerRooms?.length
+          ? json.buyerRooms.map((room) => [
+              `- ${room.roomName}`,
+              `  라이선스: ${room.licenseKey || "승인 후 발급"}`,
+              `  연결코드: ${room.bridgeConnectCode || "승인 후 발급"}`
+            ].join("\n")).join("\n")
+          : "";
+        result.textContent = [
+          "로그인되었습니다.",
+          `계정: ${json.account.email}`,
+          "",
+          "신청 내역",
+          applications,
+          "",
+          buyerRooms ? "승인된 방 연결정보" : "",
+          buyerRooms,
+          "",
+          "다음: /console 구매자 콘솔로 이동합니다."
+        ].join("\n");
+        setTimeout(() => {
+          window.location.href = "/console";
+        }, 700);
+      }
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         result.textContent = "로그인 확인 중입니다.";
+        const values = Object.fromEntries(new FormData(form).entries());
         try {
-          const response = await fetch("/api/login", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(Object.fromEntries(new FormData(form).entries()))
-          });
-          const json = await response.json();
-          if (!response.ok || json.ok === false) throw new Error(json.error || "login_failed");
-          const applications = json.applications.length
-            ? json.applications.map((item) => `- ${item.roomName}: ${item.statusLabel} / ${item.payment.statusLabel}`).join("\n")
-            : "신청 내역이 없습니다.";
-          const buyerRooms = json.buyerRooms?.length
-            ? json.buyerRooms.map((room) => [
-                `- ${room.roomName}`,
-                `  라이선스: ${room.licenseKey || "승인 후 발급"}`,
-                `  연결코드: ${room.bridgeConnectCode || "승인 후 발급"}`
-              ].join("\n")).join("\n")
-            : "";
-          if (json.guideToken) sessionStorage.setItem("pixgomBuyerToken", json.guideToken);
-          result.textContent = [
-            "로그인되었습니다.",
-            `계정: ${json.account.email}`,
-            "",
-            "신청 내역",
-            applications,
-            "",
-            buyerRooms ? "승인된 방 연결정보" : "",
-            buyerRooms,
-            buyerRooms ? "" : "",
-            json.buyerAccess ? "구매자 전용 가이드: /buyer-guide 에서 확인할 수 있습니다." : "구매 승인 후 구매자 전용 가이드가 열립니다."
-          ].join("\n");
+          await window.PixelgomAuth.signInWithPassword(values.email, values.password);
+          await finishLogin(await window.PixelgomAuth.accessPayload(values));
         } catch (error) {
           result.textContent = `로그인 실패: ${error.message}`;
         }
       });
+
+      kakaoButton.addEventListener("click", async () => {
+        result.textContent = "카카오 로그인으로 이동합니다.";
+        try {
+          await window.PixelgomAuth.signInWithKakao("/login");
+        } catch (error) {
+          result.textContent = `카카오 로그인 실패: ${error.message}`;
+        }
+      });
+
+      (async () => {
+        const cfg = await window.PixelgomAuth.config();
+        window.PixelgomAuth.showAuthMode(document.querySelector("[data-auth-mode]"), cfg);
+        kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
+        const payload = await window.PixelgomAuth.accessPayload({});
+        if (payload.accessToken) {
+          result.textContent = "로그인 세션을 확인 중입니다.";
+          finishLogin(payload).catch(() => {});
+        }
+      })();
     </script>
   </body>
 </html>

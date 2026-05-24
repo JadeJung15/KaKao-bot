@@ -127,8 +127,18 @@ try {
   assert.match(health.json.features.join(","), /bridge-test-checklist/);
   assert.match(health.json.features.join(","), /admin-subscription-filters/);
   assert.match(health.json.features.join(","), /game-season-schedule/);
+  assert.match(health.json.features.join(","), /buyer-owner-console-split/);
+  assert.match(health.json.features.join(","), /supabase-auth-bridge/);
+  assert.match(health.json.features.join(","), /kakao-login-ready/);
+  assert.match(health.json.features.join(","), /kanana-ai-roadmap/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.adminConsoleEnabled, true);
+
+  const authConfig = await request("/api/auth/config");
+  assert.equal(authConfig.response.status, 200);
+  assert.equal(authConfig.json.auth.mode, "local");
+  assert.equal(authConfig.json.routes.ownerAdmin, "/admin");
+  assert.equal(authConfig.json.routes.buyerConsole, "/console");
 
   const home = await fetch(`${baseUrl}/`);
   assert.equal(home.status, 200);
@@ -157,6 +167,7 @@ try {
   assert.match(homeText, /주사위/);
   assert.match(homeText, /커스텀 명령어/);
   assert.match(homeText, /업데이트 기록/);
+  assert.match(homeText, /0\.4\.50/);
   assert.match(homeText, /0\.4\.49/);
   assert.match(homeText, /0\.4\.43/);
   assert.match(homeText, /0\.4\.44/);
@@ -168,8 +179,10 @@ try {
   assert.match(homeText, /data-site-search/);
   assert.match(homeText, /href="https:\/\/open\.kakao\.com\/o\/gu25P5vi"/);
   assert.match(homeText, /오픈채팅 문의/);
+  assert.match(homeText, /Kanana/);
+  assert.match(homeText, /AI 운영 도우미 후보/);
 
-  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup", "/apply"]) {
+  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup", "/apply", "/console", "/my-rooms", "/setup", "/license"]) {
     const page = await fetch(`${baseUrl}${pagePath}`);
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-type") || "", /text\/html/);
@@ -365,13 +378,25 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.49");
+  assert.equal(buyerGuideApproved.json.version, "0.4.50");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
   assert.match(buyerGuideApproved.json.rooms[0].bridgeConnectCode, /\./);
   assert.match(JSON.stringify(buyerGuideApproved.json.sections), /알림 접근 권한/);
   assert.match(JSON.stringify(buyerGuideApproved.json.sections), /화면 감지\/접근성 권한을 사용하지 않습니다/);
+
+  const buyerConsoleApproved = await request("/api/buyer/console", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: approvedLogin.json.guideToken })
+  });
+  assert.equal(buyerConsoleApproved.response.status, 200);
+  assert.equal(buyerConsoleApproved.json.ok, true);
+  assert.equal(buyerConsoleApproved.json.version, "0.4.50");
+  assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
+  assert.equal(buyerConsoleApproved.json.rooms.length, 1);
+  assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
 
   const bridgeConnect = await request("/api/bridge/connect", {
     method: "POST",
