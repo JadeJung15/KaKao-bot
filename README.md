@@ -259,18 +259,18 @@ https://pixgom.com/chat-event   안드로이드 브릿지 기본 API 주소
 /license     라이선스/요금/만료 안내
 ```
 
-초기 MVP에서는 로컬 계정과 구매자 세션 토큰을 같이 지원합니다. Supabase 환경변수를 설정하면 이메일/비밀번호 인증, 비밀번호 재설정, 카카오 OAuth 로그인 버튼이 활성화됩니다.
+초기 MVP에서는 로컬 계정과 구매자 세션 토큰을 같이 지원합니다. Supabase 환경변수를 설정하면 이메일/비밀번호 인증, 비밀번호 재설정, 카카오 로그인 버튼이 활성화됩니다.
 
 ## Supabase/Kakao 로그인 설정
 
 1. Supabase 프로젝트를 만들고 `SUPABASE_URL`, `SUPABASE_ANON_KEY`를 Vercel 환경변수로 설정합니다.
 2. Supabase Auth URL Configuration에 `https://pixgom.com/login`, `https://pixgom.com/console`, `https://pixgom.com/signup`, `https://pixgom.com/apply`, `https://pixgom.com/reset-password`를 허용 리다이렉트 URL로 추가합니다.
 3. Kakao Developers에서 웹 플랫폼 도메인 `https://pixgom.com`을 등록합니다.
-4. Kakao Login Redirect URI에는 Supabase 콜백 URL `https://프로젝트.ref.supabase.co/auth/v1/callback`을 등록합니다.
-5. Kakao REST API 키를 Supabase Auth Providers의 Kakao Client ID에 넣습니다. 카카오 앱에서 Client Secret을 켠 경우에만 Supabase에도 Secret을 넣습니다.
-6. 카카오 동의항목에는 기본 닉네임 제공 항목을 허용합니다. 픽셀곰 웹은 `profile_nickname`만 요청해 `KOE205 invalid_scope` 가능성을 줄입니다.
-7. Kakao provider 저장까지 끝난 뒤 Vercel의 `SUPABASE_KAKAO_ENABLED=true`를 설정합니다. provider가 준비되지 않은 상태에서는 `false`로 둡니다.
-8. 설정 후 `/api/auth/config`가 `mode: "supabase"`, Kakao provider 완료 후에는 `kakaoEnabled: true`를 반환하는지 확인합니다.
+4. Kakao Login Redirect URI에는 `https://pixgom.com/api/auth/kakao/callback`을 등록합니다. Supabase 기본 OAuth를 같이 유지할 때만 Supabase 콜백 URL `https://프로젝트.ref.supabase.co/auth/v1/callback`도 추가합니다.
+5. Kakao REST API 키를 Vercel `KAKAO_REST_API_KEY`에 넣습니다. 카카오 앱에서 Client Secret을 켠 경우 `KAKAO_CLIENT_SECRET`도 설정합니다.
+6. Kakao Login 일반 설정에서 OpenID Connect를 `ON`으로 켜고, 동의항목은 `profile_nickname`, `profile_image`만 허용합니다. `account_email` 권한이 없는 앱은 이메일 범위를 요청하지 않아야 `KOE205`를 피할 수 있습니다.
+7. Vercel의 `SUPABASE_KAKAO_ENABLED=true`, `KAKAO_OIDC_ENABLED=true`를 설정합니다. OIDC 환경변수가 없으면 Supabase 기본 OAuth로 폴백합니다.
+8. 설정 후 `/api/auth/config`가 `mode: "supabase"`, `kakaoEnabled: true`, `kakaoMode: "oidc"`를 반환하는지 확인합니다.
 
 이메일 인증 메일은 Supabase Auth Email Templates의 Confirm signup 템플릿에 `docs/supabase-email-confirmation-template.html` 내용을 붙여 넣어 사용합니다. 템플릿에는 픽셀곰 로고, `이메일 인증하기` 버튼, 24시간 유효 안내, 발신 전용 안내가 포함되어 있습니다.
 

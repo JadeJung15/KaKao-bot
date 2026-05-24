@@ -59,7 +59,7 @@
         result.textContent = [
           "로그인되었습니다.",
           `닉네임: ${json.account.nickname || "미입력"}`,
-          `계정: ${json.account.email}`,
+          `계정: ${json.account.email || json.account.authProvider || "카카오 계정"}`,
           json.ownerAccess ? "운영자 권한: 확인됨" : "운영자 권한: 없음",
           "",
           "신청 내역",

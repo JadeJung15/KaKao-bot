@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.53";
+export const APP_VERSION = "0.4.54";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -114,7 +114,8 @@ export const FEATURES = [
   "account-nickname-field",
   "additional-room-pricing",
   "simple-status-page",
-  "branded-email-template"
+  "branded-email-template",
+  "kakao-oidc-id-token-login"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -131,6 +132,11 @@ const PUBLIC_SITE_URL = normalizeText(process.env.PUBLIC_SITE_URL || process.env
 const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
 const SUPABASE_ANON_KEY = normalizeText(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 const SUPABASE_KAKAO_ENABLED = normalizeText(process.env.SUPABASE_KAKAO_ENABLED || "false") === "true";
+const KAKAO_REST_API_KEY = normalizeText(process.env.KAKAO_REST_API_KEY || process.env.KAKAO_CLIENT_ID || "");
+const KAKAO_CLIENT_SECRET = normalizeText(process.env.KAKAO_CLIENT_SECRET || "");
+const KAKAO_OIDC_ENABLED = normalizeText(process.env.KAKAO_OIDC_ENABLED || "true") !== "false";
+const KAKAO_OIDC_CALLBACK_PATH = "/api/auth/kakao/callback";
+const KAKAO_OIDC_SCOPE = "openid profile_nickname profile_image";
 
 const CHAT_POINT_REWARD = 2;
 const CHAT_EXP_REWARD = 1;
@@ -649,6 +655,7 @@ function supabaseEnabled() {
 }
 
 function authConfigPayload() {
+  const kakaoOidcEnabled = kakaoOidcConfigured();
   return {
     ok: true,
     version: APP_VERSION,
@@ -658,6 +665,9 @@ function authConfigPayload() {
       supabaseUrl: SUPABASE_URL,
       supabaseAnonKey: SUPABASE_ANON_KEY,
       kakaoEnabled: supabaseEnabled() && SUPABASE_KAKAO_ENABLED,
+      kakaoMode: kakaoOidcEnabled ? "oidc" : "supabase-oauth",
+      kakaoOidcEnabled,
+      kakaoOidcStartUrl: kakaoOidcEnabled ? "/api/auth/kakao/start" : "",
       loginRedirectUrl: `${PUBLIC_SITE_URL}/login`,
       consoleRedirectUrl: `${PUBLIC_SITE_URL}/console`
     },
@@ -677,6 +687,209 @@ function authConfigPayload() {
   };
 }
 
+function kakaoOidcConfigured() {
+  return Boolean(supabaseEnabled() && SUPABASE_KAKAO_ENABLED && KAKAO_OIDC_ENABLED && KAKAO_REST_API_KEY);
+}
+
+function kakaoOidcRedirectUri() {
+  return `${PUBLIC_SITE_URL}${KAKAO_OIDC_CALLBACK_PATH}`;
+}
+
+function authStateSecret() {
+  return ADMIN_CONSOLE_TOKEN || SUPABASE_ANON_KEY || STATE_ID;
+}
+
+function authStateEncode(value) {
+  return Buffer.from(value).toString("base64url");
+}
+
+function authStateDecode(value) {
+  return Buffer.from(String(value || ""), "base64url").toString("utf8");
+}
+
+function signAuthState(payload) {
+  return createHmac("sha256", authStateSecret()).update(payload).digest("base64url");
+}
+
+function sanitizeLocalRedirect(value, fallback = "/login") {
+  const redirect = normalizeText(value || fallback);
+  if (!redirect.startsWith("/") || redirect.startsWith("//") || redirect.includes("\\")) return fallback;
+  if (redirect.startsWith("/api/")) return fallback;
+  return redirect;
+}
+
+function createKakaoOidcState(redirectPath) {
+  const payload = authStateEncode(JSON.stringify({
+    redirectPath: sanitizeLocalRedirect(redirectPath),
+    exp: Date.now() + 10 * 60 * 1000
+  }));
+  return `${payload}.${signAuthState(payload)}`;
+}
+
+function verifyKakaoOidcState(stateValue) {
+  const [payload, signature] = normalizeText(stateValue).split(".");
+  if (!payload || !signature) return { ok: false, redirectPath: "/login" };
+  const expected = signAuthState(payload);
+  const expectedBuffer = Buffer.from(expected);
+  const signatureBuffer = Buffer.from(signature);
+  if (expectedBuffer.length !== signatureBuffer.length || !timingSafeEqual(expectedBuffer, signatureBuffer)) {
+    return { ok: false, redirectPath: "/login" };
+  }
+  try {
+    const parsed = JSON.parse(authStateDecode(payload));
+    if (Number(parsed.exp || 0) < Date.now()) return { ok: false, redirectPath: "/login" };
+    return { ok: true, redirectPath: sanitizeLocalRedirect(parsed.redirectPath) };
+  } catch {
+    return { ok: false, redirectPath: "/login" };
+  }
+}
+
+function htmlResponse(res, statusCode, html) {
+  res.writeHead(statusCode, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store"
+  });
+  res.end(html);
+}
+
+function redirectResponse(res, location) {
+  res.writeHead(302, {
+    location,
+    "cache-control": "no-store"
+  });
+  res.end();
+}
+
+function jsonForScript(value) {
+  return JSON.stringify(value).replace(/[<>&]/g, (char) => ({
+    "<": "\\u003c",
+    ">": "\\u003e",
+    "&": "\\u0026"
+  })[char]);
+}
+
+function kakaoCallbackErrorPage(message, redirectPath = "/login") {
+  return `<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>카카오 로그인 오류 | 픽셀곰</title>
+    <link rel="stylesheet" href="/styles.css?v=20260525-auth-pricing">
+  </head>
+  <body class="auth-page">
+    <main class="auth-shell">
+      <section class="auth-card">
+        <p class="section-kicker">Kakao Login</p>
+        <h1>카카오 로그인을 완료하지 못했습니다.</h1>
+        <p>${message}</p>
+        <a class="button button-primary" href="${sanitizeLocalRedirect(redirectPath)}">로그인으로 돌아가기</a>
+      </section>
+    </main>
+  </body>
+</html>`;
+}
+
+function kakaoOidcCallbackPage({ idToken, redirectPath }) {
+  const payload = {
+    supabaseUrl: SUPABASE_URL,
+    supabaseAnonKey: SUPABASE_ANON_KEY,
+    idToken,
+    redirectPath: sanitizeLocalRedirect(redirectPath)
+  };
+  return `<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>카카오 로그인 처리 중 | 픽셀곰</title>
+    <link rel="stylesheet" href="/styles.css?v=20260525-auth-pricing">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body class="auth-page">
+    <main class="auth-shell">
+      <section class="auth-card">
+        <p class="section-kicker">Kakao Login</p>
+        <h1>카카오 로그인 처리 중입니다.</h1>
+        <p>잠시만 기다려 주세요. 완료 후 픽셀곰으로 돌아갑니다.</p>
+        <pre class="form-status" data-kakao-oidc-status aria-live="polite">Supabase 세션을 생성하고 있습니다.</pre>
+      </section>
+    </main>
+    <script>
+      const payload = ${jsonForScript(payload)};
+      const statusBox = document.querySelector("[data-kakao-oidc-status]");
+      (async () => {
+        try {
+          const client = window.supabase.createClient(payload.supabaseUrl, payload.supabaseAnonKey);
+          const { error } = await client.auth.signInWithIdToken({
+            provider: "kakao",
+            token: payload.idToken
+          });
+          if (error) throw error;
+          statusBox.textContent = "로그인 세션 생성 완료. 이동합니다.";
+          window.location.replace(payload.redirectPath);
+        } catch (error) {
+          statusBox.textContent = "카카오 로그인 실패: " + (error?.message || "unknown_error");
+        }
+      })();
+    </script>
+  </body>
+</html>`;
+}
+
+async function handleKakaoOidcStart(res, url) {
+  const redirectPath = sanitizeLocalRedirect(url.searchParams.get("redirect") || "/login");
+  if (!kakaoOidcConfigured()) {
+    htmlResponse(res, 503, kakaoCallbackErrorPage("카카오 OIDC 로그인이 아직 서버에 설정되지 않았습니다.", redirectPath));
+    return;
+  }
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: KAKAO_REST_API_KEY,
+    redirect_uri: kakaoOidcRedirectUri(),
+    scope: KAKAO_OIDC_SCOPE,
+    state: createKakaoOidcState(redirectPath)
+  });
+  redirectResponse(res, `https://kauth.kakao.com/oauth/authorize?${params.toString()}`);
+}
+
+async function handleKakaoOidcCallback(res, url) {
+  const state = verifyKakaoOidcState(url.searchParams.get("state"));
+  const redirectPath = state.redirectPath || "/login";
+  if (!state.ok) {
+    htmlResponse(res, 400, kakaoCallbackErrorPage("로그인 요청 시간이 만료되었거나 올바르지 않습니다.", redirectPath));
+    return;
+  }
+  const error = normalizeText(url.searchParams.get("error"));
+  if (error) {
+    htmlResponse(res, 400, kakaoCallbackErrorPage(`카카오가 로그인을 취소했습니다: ${error}`, redirectPath));
+    return;
+  }
+  const code = normalizeText(url.searchParams.get("code"));
+  if (!code) {
+    htmlResponse(res, 400, kakaoCallbackErrorPage("카카오 인증 코드가 없습니다.", redirectPath));
+    return;
+  }
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    client_id: KAKAO_REST_API_KEY,
+    redirect_uri: kakaoOidcRedirectUri(),
+    code
+  });
+  if (KAKAO_CLIENT_SECRET) body.set("client_secret", KAKAO_CLIENT_SECRET);
+  const response = await fetch("https://kauth.kakao.com/oauth/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded;charset=utf-8" },
+    body
+  });
+  const tokenPayload = await response.json().catch(() => ({}));
+  if (!response.ok || !tokenPayload.id_token) {
+    htmlResponse(res, 502, kakaoCallbackErrorPage("카카오 ID 토큰을 발급받지 못했습니다. 관리자 설정을 확인해 주세요.", redirectPath));
+    return;
+  }
+  htmlResponse(res, 200, kakaoOidcCallbackPage({ idToken: tokenPayload.id_token, redirectPath }));
+}
+
 async function supabaseUserFromAccessToken(accessToken) {
   const token = normalizeText(accessToken);
   if (!token) return { ok: false, status: 401, error: "missing_access_token" };
@@ -690,13 +903,14 @@ async function supabaseUserFromAccessToken(accessToken) {
   if (!response.ok) return { ok: false, status: 401, error: "invalid_access_token" };
   const user = await response.json();
   const email = normalizeEmail(user.email || user.user_metadata?.email);
-  if (!user.id || !validEmail(email)) return { ok: false, status: 401, error: "invalid_supabase_user" };
+  if (!user.id) return { ok: false, status: 401, error: "invalid_supabase_user" };
+  const provider = normalizeText(user.app_metadata?.provider || user.identities?.[0]?.provider || "supabase");
   return {
     ok: true,
     user: {
       id: normalizeText(user.id),
-      email,
-      provider: normalizeText(user.app_metadata?.provider || user.identities?.[0]?.provider || "supabase"),
+      email: validEmail(email) ? email : "",
+      provider,
       providers: Array.isArray(user.app_metadata?.providers) ? user.app_metadata.providers : [],
       name: normalizeAccountNickname(user.user_metadata || {}),
       avatarUrl: normalizeText(user.user_metadata?.avatar_url || user.user_metadata?.picture || "")
@@ -710,12 +924,12 @@ function isOwnerEmail(email) {
 
 function ensureExternalAccount(state, externalUser = {}, payload = {}) {
   const provider = externalUser.provider || "supabase";
-  let account = findAccountByExternalUser(state, provider, externalUser.id) || findAccountByEmail(state, externalUser.email);
+  let account = findAccountByExternalUser(state, provider, externalUser.id) || (externalUser.email ? findAccountByEmail(state, externalUser.email) : null);
   if (!account) {
     const accountId = generateEntityId("acct");
     account = {
       id: accountId,
-      email: externalUser.email,
+      email: externalUser.email || "",
       status: "active",
       applicationIds: [],
       createdAt: nowIso()
@@ -730,7 +944,7 @@ function ensureExternalAccount(state, externalUser = {}, payload = {}) {
     avatarUrl: externalUser.avatarUrl || account.auth?.avatarUrl || "",
     linkedAt: account.auth?.linkedAt || nowIso()
   };
-  account.email = externalUser.email || account.email;
+  account.email = externalUser.email || account.email || "";
   applyAccountProfile(account, { nickname: normalizeAccountNickname(payload) || externalUser.name || account.nickname || "" });
   account.status ||= "active";
   account.applicationIds ||= [];
@@ -4815,6 +5029,14 @@ export async function requestHandler(req, res) {
     const url = new URL(req.url || "/", "http://localhost");
     const pathname = url.pathname;
     if (await staticResponse(req, res, pathname)) return;
+    if (req.method === "GET" && pathname === "/api/auth/kakao/start") {
+      await handleKakaoOidcStart(res, url);
+      return;
+    }
+    if (req.method === "GET" && pathname === KAKAO_OIDC_CALLBACK_PATH) {
+      await handleKakaoOidcCallback(res, url);
+      return;
+    }
 
     const isHealthPath = pathname === "/" || pathname === "/health" || pathname === "/api/health";
     const isSkillPath = pathname === "/skill" || pathname === "/api/skill";

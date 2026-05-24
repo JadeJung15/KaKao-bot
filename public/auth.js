@@ -1,7 +1,6 @@
 window.PixelgomAuth = (() => {
   let configPromise;
   let clientPromise;
-  const KAKAO_LOGIN_SCOPES = "profile_nickname";
 
   async function config() {
     if (!configPromise) {
@@ -76,12 +75,16 @@ window.PixelgomAuth = (() => {
 
   async function signInWithKakao(redirectPath = "/login") {
     const cfg = await config();
+    if (cfg.auth?.kakaoOidcEnabled && cfg.auth?.kakaoOidcStartUrl) {
+      window.location.href = `${cfg.auth.kakaoOidcStartUrl}?redirect=${encodeURIComponent(redirectPath)}`;
+      return;
+    }
     const supabaseClient = await client();
     if (!supabaseClient || !cfg.auth?.kakaoEnabled) throw new Error("kakao_login_not_configured");
     const redirectTo = `${window.location.origin}${redirectPath}`;
     const { error } = await supabaseClient.auth.signInWithOAuth({
       provider: "kakao",
-      options: { redirectTo, scopes: KAKAO_LOGIN_SCOPES }
+      options: { redirectTo }
     });
     if (error) throw error;
   }

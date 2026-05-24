@@ -99,7 +99,7 @@
           result.textContent = [
             json.created ? "회원가입이 완료되었습니다." : "이미 가입된 계정입니다.",
             `닉네임: ${json.account.nickname || payload.nickname}`,
-            `계정: ${json.account.email}`,
+            `계정: ${json.account.email || json.account.authProvider || "카카오 계정"}`,
             "",
             ...json.next,
             "",

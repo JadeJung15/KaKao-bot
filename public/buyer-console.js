@@ -135,7 +135,7 @@
       <section class="buyer-console-hero">
         <div>
           <p class="section-kicker">Buyer Console</p>
-          <h1>${escapeHtml(data.account.email)} 콘솔</h1>
+          <h1>${escapeHtml(data.account.email || data.account.nickname || "카카오 계정")} 콘솔</h1>
           <p>구매자는 이 화면에서 자기 방, 연결코드, 라이선스, 설치 순서만 확인합니다. 전체 운영 관리는 판매자 어드민에서만 처리합니다.</p>
         </div>
         <img src="/assets/pixgom-guardian.png" alt="">
