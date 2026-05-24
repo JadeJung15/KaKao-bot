@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.39";
+export const APP_VERSION = "0.4.40";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -77,7 +77,12 @@ export const FEATURES = [
   "commercial-bridge-mode",
   "commercial-subscription-gate",
   "license-key-guard",
-  "admin-console-api"
+  "admin-console-api",
+  "room-feature-toggles",
+  "subscription-reminders",
+  "admin-diagnostics-api",
+  "admin-backup-restore",
+  "chat-mini-games"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -95,10 +100,31 @@ const CHEER_POINT_COST = 50;
 const MAX_CHEER_MESSAGE_LENGTH = 80;
 const LUCKY_DRAW_POINT_COST = 100;
 const TRANSFER_FEE_RATE = 0.1;
+const DICE_REWARD = 30;
+const FISHING_REWARD = 40;
+const EXPLORE_REWARD = 50;
 const REENTRY_CANDIDATE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const SYSTEM_EVENT_DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
 const JOIN_SIGNAL_WINDOW_MS = 30 * 60 * 1000;
 const DEFAULT_JOIN_PHRASE = process.env.DEFAULT_JOIN_PHRASE || "입장확인";
+const DEFAULT_ROOM_FEATURES = Object.freeze({
+  attendance: true,
+  points: true,
+  rankings: true,
+  history: true,
+  profiles: true,
+  localJs: true,
+  games: false
+});
+const FEATURE_LABELS = Object.freeze({
+  attendance: "출석",
+  points: "포인트",
+  rankings: "랭킹",
+  history: "히스토리",
+  profiles: "프로필",
+  localJs: "JS 자동응답",
+  games: "게임"
+});
 const LUCKY_DRAW_OUTCOMES = [
   { threshold: 0.05, label: "대박", reward: 500, chance: "5%" },
   { threshold: 0.20, label: "성공", reward: 200, chance: "15%" },
@@ -396,6 +422,7 @@ function ensureRoom(state, room) {
   roomState.settings.roomIds ||= [];
   roomState.settings.roomLinks ||= [];
   roomState.settings.joinPhrase ||= DEFAULT_JOIN_PHRASE;
+  roomState.settings.features = normalizeFeatureSettings(roomState.settings.features || {});
   roomState.settings.subscription ||= {};
   roomState.settings.subscription.monthlyPriceKrw = Number(roomState.settings.subscription.monthlyPriceKrw || MONTHLY_PRICE_KRW);
   roomState.pendingEntries ||= [];
@@ -423,6 +450,120 @@ function generateLicenseKey(roomState) {
   const roomId = openChatRoomId(roomState?.settings?.roomIds?.[0] || "");
   const roomPart = (roomId || roomKey(roomState?.name || "room")).replace(/[^A-Za-z0-9]/g, "").slice(0, 8).toUpperCase() || "ROOM";
   return `PXG-${roomPart}-${randomBytes(3).toString("hex").toUpperCase()}`;
+}
+
+function booleanSetting(value, fallback = true) {
+  if (value === true || value === false) return value;
+  if (typeof value === "string") {
+    const text = value.trim().toLowerCase();
+    if (["true", "1", "on", "yes", "enabled", "켜짐"].includes(text)) return true;
+    if (["false", "0", "off", "no", "disabled", "꺼짐"].includes(text)) return false;
+  }
+  return fallback;
+}
+
+function normalizeFeatureSettings(value = {}) {
+  const features = {};
+  for (const [key, defaultValue] of Object.entries(DEFAULT_ROOM_FEATURES)) {
+    features[key] = booleanSetting(value[key], defaultValue);
+  }
+  return features;
+}
+
+function roomFeatures(roomState) {
+  roomState.settings ||= {};
+  roomState.settings.features = normalizeFeatureSettings(roomState.settings.features || {});
+  return roomState.settings.features;
+}
+
+function featureEnabled(roomState, key) {
+  return roomFeatures(roomState)[key] !== false;
+}
+
+function featureLabel(key) {
+  return FEATURE_LABELS[key] || key;
+}
+
+function featureKeyFromText(value) {
+  const text = compactSpaces(value).toLowerCase();
+  const aliases = {
+    attendance: ["attendance", "attend", "출석", "출첵", "출석체크"],
+    points: ["point", "points", "포인트", "좋아요", "응원", "뽑기", "홀짝", "이체"],
+    rankings: ["ranking", "rankings", "rank", "랭킹", "순위"],
+    history: ["history", "histories", "히스토리", "닉이력", "입퇴장", "최근이벤트"],
+    profiles: ["profile", "profiles", "프로필"],
+    localJs: ["js", "javascript", "자동응답", "js자동응답", "localjs"],
+    games: ["game", "games", "게임", "미니게임", "주사위", "낚시", "탐험"]
+  };
+  for (const [key, names] of Object.entries(aliases)) {
+    if (names.includes(text)) return key;
+  }
+  return "";
+}
+
+function applyFeatureSettingsFromPayload(roomState, payload = {}) {
+  const current = roomFeatures(roomState);
+  const incoming = payload.features && typeof payload.features === "object" && !Array.isArray(payload.features)
+    ? payload.features
+    : {};
+  const direct = {
+    attendance: payload.attendanceEnabled,
+    points: payload.pointsEnabled,
+    rankings: payload.rankingsEnabled || payload.rankingEnabled,
+    history: payload.historyEnabled,
+    profiles: payload.profilesEnabled || payload.profileEnabled,
+    localJs: payload.localJsEnabled || payload.jsAutoReplyEnabled || payload.scriptEnabled,
+    games: payload.gamesEnabled || payload.gameEnabled
+  };
+  let changed = false;
+  for (const key of Object.keys(DEFAULT_ROOM_FEATURES)) {
+    const value = Object.hasOwn(incoming, key) ? incoming[key] : direct[key];
+    if (value === undefined || value === null || value === "") continue;
+    const next = booleanSetting(value, current[key]);
+    if (current[key] !== next) changed = true;
+    current[key] = next;
+  }
+  return changed;
+}
+
+function featureLines(roomState) {
+  const features = roomFeatures(roomState);
+  return Object.entries(FEATURE_LABELS).map(([key, label]) => `• ${label}: ${features[key] ? "켜짐" : "꺼짐"}`);
+}
+
+function featureSettingsCommand(roomState) {
+  return [
+    "방별 기능 설정",
+    "",
+    ...featureLines(roomState),
+    "",
+    "관리자 명령",
+    "/기능켜기 출석",
+    "/기능끄기 게임"
+  ].join("\n");
+}
+
+function featureUpdateCommand(roomState, sender, text, enabled) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const body = normalizeText(text.replace(/^\/(?:기능켜기|기능끄기|기능설정)\s*/i, ""));
+  const key = featureKeyFromText(body);
+  if (!key) return "형식: /기능켜기 출석 또는 /기능끄기 게임";
+  const features = roomFeatures(roomState);
+  features[key] = enabled;
+  recordRoomEvent(roomState, { type: "feature_updated", feature: key, enabled, by: sender });
+  return [
+    `${featureLabel(key)} 기능이 ${enabled ? "켜졌습니다" : "꺼졌습니다"}.`,
+    "",
+    ...featureLines(roomState)
+  ].join("\n");
+}
+
+function featureDisabledText(key) {
+  return [
+    `${featureLabel(key)} 기능은 이 방에서 꺼져 있습니다.`,
+    "관리자에게 /기능켜기 명령 또는 관리 콘솔 설정을 요청하세요."
+  ].join("\n");
 }
 
 function addDaysIso(sourceDate, days) {
@@ -1141,7 +1282,7 @@ function adminListCommand(roomState) {
 }
 
 function roomRegistrationCommand(text) {
-  return /^\/(?:방등록|방설정|입장문구|방정보|방목록|방삭제|구독상태|구독연장|구독만료)(?:\s|$)/i.test(normalizeText(text));
+  return /^\/(?:방등록|방설정|입장문구|방정보|방목록|방삭제|구독상태|구독연장|구독만료|기능|기능목록|기능켜기|기능끄기|기능설정)(?:\s|$)/i.test(normalizeText(text));
 }
 
 function subscriptionSettings(roomState) {
@@ -1170,7 +1311,7 @@ function isSubscriptionExpired(roomState) {
 }
 
 function subscriptionBypassCommand(text) {
-  return /^\/(?:구독상태|구독연장|구독만료|방정보|방등록|방설정|입장문구|방목록|도움말|help|\?)(?:\s|$)/i.test(normalizeText(text));
+  return /^\/(?:구독상태|구독연장|구독만료|방정보|방등록|방설정|입장문구|방목록|기능|기능목록|기능켜기|기능끄기|도움말|help|\?)(?:\s|$)/i.test(normalizeText(text));
 }
 
 function subscriptionExpiredText(roomState) {
@@ -1200,6 +1341,32 @@ function subscriptionLines(roomState) {
 
 function subscriptionStatusCommand(roomState) {
   return subscriptionLines(roomState).join("\n");
+}
+
+function subscriptionReminder(roomState, sender, text) {
+  if (!isAdmin(roomState, sender)) return "";
+  if (/^\/(?:구독상태|구독연장|구독만료)(?:\s|$)/i.test(normalizeText(text))) return "";
+  const subscription = updateSubscriptionStatus(roomState);
+  const days = remainingDays(subscription.expiresAt);
+  if (![7, 3, 1, 0].includes(days)) return "";
+  subscription.reminders ||= {};
+  const key = `${kstDateKey()}:${days}`;
+  if (subscription.reminders[key]) return "";
+  subscription.reminders[key] = nowIso();
+  recordRoomEvent(roomState, { type: "subscription_reminder", days, by: "system" });
+  const label = days === 0 ? "오늘 만료" : `${days}일 후 만료`;
+  return [
+    "구독 만료 알림",
+    `${roomState.name || "현재방"} 이용기간이 ${label}됩니다.`,
+    `만료일: ${formatSubscriptionDate(subscription.expiresAt)}`,
+    "필요 시 /구독연장 1 을 실행하세요."
+  ].join("\n");
+}
+
+function appendOperationalNotice(roomState, sender, text, reply) {
+  if (!reply) return reply;
+  const reminder = subscriptionReminder(roomState, sender, text);
+  return reminder ? `${reminder}\n\n${reply}` : reply;
 }
 
 function licenseSettings(roomState) {
@@ -1316,7 +1483,9 @@ function roomSettingsLines(roomState) {
     `이용기간 만료: ${formatSubscriptionDate(subscription.expiresAt)}`,
     `구독 상태: ${subscription.status === "expired" ? "만료" : subscription.status === "active" ? "정상" : "미설정"}`,
     `라이선스: ${maskedLicenseKey(license.key)}`,
-    "게임 기능: 준비 중"
+    "",
+    "방별 기능",
+    ...featureLines(roomState)
   ];
 }
 
@@ -1373,6 +1542,7 @@ function roomRegisterCommand(roomState, sender, text, payload = {}) {
   if (!hasAnyAdmin(roomState)) addUnique(roomState.admins, sender);
   applyLicenseFromPayload(roomState, payload);
   applySubscriptionFromPayload(roomState, payload);
+  applyFeatureSettingsFromPayload(roomState, payload);
   recordRoomEvent(roomState, { type: "room_registered", by: sender, joinPhrase: phrase });
 
   return [
@@ -1898,7 +2068,7 @@ function recordActivity(roomState, sender, identityId = "", options = {}) {
   const dateKey = kstDateKey();
   const weekKey = kstWeekKey();
   person.lastSeenAt = nowIso();
-  person.points += CHAT_POINT_REWARD;
+  if (featureEnabled(roomState, "points")) person.points += CHAT_POINT_REWARD;
   person.chats.total += 1;
   person.chats.byDate[dateKey] = (person.chats.byDate[dateKey] || 0) + 1;
   person.chats.byWeek[weekKey] = (person.chats.byWeek[weekKey] || 0) + 1;
@@ -2164,6 +2334,75 @@ function transferCommand(roomState, sender, text) {
     `• 수취인 : ${receiver.currentName}${alias}`,
     `• 포인트 : ${formatPoint(parsed.amount)}`,
     `• 수수료 : ${formatPoint(fee)}`
+  ].join("\n");
+}
+
+function diceGameCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const roll = Math.floor(Math.random() * 6) + 1;
+  const reward = roll * DICE_REWARD;
+  person.points += reward;
+  recordRoomEvent(roomState, { type: "game_dice", name: person.currentName, roll, reward });
+  return [
+    "주사위 게임",
+    "",
+    `${person.currentName}님 결과: ${roll}`,
+    `획득: ${formatPoint(reward)}`,
+    `보유: ${formatPoint(person.points)}`
+  ].join("\n");
+}
+
+function fishingGameCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const outcomes = [
+    { name: "작은 물고기", reward: FISHING_REWARD },
+    { name: "반짝이는 조개", reward: FISHING_REWARD * 2 },
+    { name: "빈 낚싯줄", reward: 0 },
+    { name: "황금 물고기", reward: FISHING_REWARD * 5 }
+  ];
+  const item = outcomes[Math.floor(Math.random() * outcomes.length)];
+  person.points += item.reward;
+  recordRoomEvent(roomState, { type: "game_fishing", name: person.currentName, item: item.name, reward: item.reward });
+  return [
+    "낚시 결과",
+    "",
+    `${person.currentName}님이 ${item.name}을(를) 낚았습니다.`,
+    `획득: ${formatPoint(item.reward)}`,
+    `보유: ${formatPoint(person.points)}`
+  ].join("\n");
+}
+
+function exploreGameCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const outcomes = [
+    { name: "숲길 산책", reward: EXPLORE_REWARD },
+    { name: "숨은 보물상자", reward: EXPLORE_REWARD * 3 },
+    { name: "미끄러운 언덕", reward: 0 },
+    { name: "픽셀곰 표식", reward: EXPLORE_REWARD * 2 }
+  ];
+  const item = outcomes[Math.floor(Math.random() * outcomes.length)];
+  person.points += item.reward;
+  recordRoomEvent(roomState, { type: "game_explore", name: person.currentName, item: item.name, reward: item.reward });
+  return [
+    "탐험 결과",
+    "",
+    `${person.currentName}님: ${item.name}`,
+    `획득: ${formatPoint(item.reward)}`,
+    `보유: ${formatPoint(person.points)}`
+  ].join("\n");
+}
+
+function gameHelpText(roomState) {
+  const enabled = featureEnabled(roomState, "games");
+  return [
+    "픽셀곰 미니게임",
+    "",
+    `상태: ${enabled ? "켜짐" : "꺼짐"}`,
+    "/주사위 - 1~6 결과에 따라 포인트 획득",
+    "/낚시 - 랜덤 보상 획득",
+    "/탐험 - 랜덤 보상 획득",
+    "",
+    enabled ? "게임 보상은 가상 포인트로만 지급됩니다." : "관리자가 /기능켜기 게임 을 실행하면 사용할 수 있습니다."
   ].join("\n");
 }
 
@@ -2623,6 +2862,18 @@ function bridgeJsServerText() {
   ].join("\n");
 }
 
+function commandFeatureKey(command) {
+  if (/^\/(?:출석|출석체크|출첵)$/.test(command)) return "attendance";
+  if (/^\/(?:포인트안내|포인트규칙)$/.test(command)) return "points";
+  if (/^\/포인트\s*순위$|^\/포인트순위$|^\/좋아요\s*순위$|^\/좋아요순위$|^\/레벨\s*순위$|^\/레벨순위$/.test(command)) return "rankings";
+  if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
+  if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
+  if (/^\/(?:프로필|프로칠|프로필등록|프로필삭제|별명등록|별명삭제)(?:\s|$)/.test(command)) return "profiles";
+  if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|확률뽑기|뽑기|홀짝|홀|짝|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
+  if (/^\/(?:게임|주사위|낚시|탐험)(?:\s|$)/.test(command)) return "games";
+  return "";
+}
+
 export function healthPayload() {
   return {
     ok: true,
@@ -2630,7 +2881,7 @@ export function healthPayload() {
     version: APP_VERSION,
     mode: "operations",
     storage: process.env.DATABASE_URL ? "postgres" : "local-json",
-    gamesEnabled: false,
+    gamesEnabled: true,
     gameRoadmapEnabled: true,
     monthlyPriceKrw: MONTHLY_PRICE_KRW,
     defaultSubscriptionDays: DEFAULT_SUBSCRIPTION_DAYS,
@@ -2665,6 +2916,10 @@ function helpText(isAdminUser = false) {
     "/포인트순위, /좋아요순위, /레벨순위",
     "/채팅오늘, /채팅금주",
     "",
+    "게임",
+    "/게임 - 미니게임 안내",
+    "/주사위, /낚시, /탐험",
+    "",
     "프로필",
     "/프로필 닉네임",
     "",
@@ -2691,6 +2946,7 @@ function helpText(isAdminUser = false) {
       "/방등록 입장확인문구",
       "/입장문구 입장확인문구",
       "/방정보, /방목록, /방삭제",
+      "/기능목록, /기능켜기 출석, /기능끄기 게임",
       "/구독상태, /구독연장 1, /구독만료 2026-06-30",
       "/고유값초기화 닉네임 - 이름 섞임 방지",
       "/포인트지급 닉네임 포인트",
@@ -2700,7 +2956,7 @@ function helpText(isAdminUser = false) {
     );
   }
 
-  lines.push(`월 이용금액은 ${formatKrw(MONTHLY_PRICE_KRW)} 기준이며, 실제 금전/상점/아이템 게임 기능은 아직 사용하지 않습니다.`);
+  lines.push(`월 이용금액은 ${formatKrw(MONTHLY_PRICE_KRW)} 기준이며, 모든 보상은 채팅방 가상 포인트로만 사용합니다.`);
   return lines.join("\n");
 }
 
@@ -2745,12 +3001,43 @@ function roomAdminView(roomState) {
     joinPhrase: settings.joinPhrase || DEFAULT_JOIN_PHRASE,
     admins: roomState.admins || [],
     licenseKey: license.key || "",
+    features: roomFeatures(roomState),
     subscription: {
       status: subscription.status || "unset",
       monthlyPriceKrw: subscription.monthlyPriceKrw || MONTHLY_PRICE_KRW,
       startedAt: subscription.startedAt || "",
-      expiresAt: subscription.expiresAt || ""
-    }
+      expiresAt: subscription.expiresAt || "",
+      remainingDays: remainingDays(subscription.expiresAt)
+    },
+    diagnostics: roomDiagnostics(roomState)
+  };
+}
+
+function roomDiagnostics(roomState) {
+  const subscription = updateSubscriptionStatus(roomState);
+  const license = licenseSettings(roomState);
+  const features = roomFeatures(roomState);
+  const rawEvents = roomState.rawEvents || [];
+  const events = roomState.events || [];
+  const problems = [];
+  if (!roomState.settings?.registered) problems.push("방 미등록");
+  if (roomState.settings?.enabled === false) problems.push("방 비활성화");
+  if (!license.key) problems.push("라이선스 없음");
+  if (subscription.status === "expired") problems.push("구독 만료");
+  if (!subscription.expiresAt) problems.push("구독 만료일 미설정");
+  if (!Object.values(features).some(Boolean)) problems.push("모든 기능 꺼짐");
+  return {
+    ok: problems.length === 0,
+    problems,
+    peopleCount: Object.keys(roomState.people || {}).length,
+    adminsCount: (roomState.admins || []).length,
+    rawEventCount: rawEvents.length,
+    eventCount: events.length,
+    lastRawEventAt: rawEvents.at(-1)?.at || "",
+    lastEventAt: events.at(-1)?.at || "",
+    subscriptionStatus: subscription.status || "unset",
+    subscriptionRemainingDays: remainingDays(subscription.expiresAt),
+    licenseStatus: license.key ? license.status || "active" : "missing"
   };
 }
 
@@ -2763,6 +3050,11 @@ function adminRoomsPayload(state) {
     version: APP_VERSION,
     monthlyPriceKrw: MONTHLY_PRICE_KRW,
     defaultSubscriptionDays: DEFAULT_SUBSCRIPTION_DAYS,
+    summary: {
+      rooms: rooms.length,
+      activeRooms: rooms.filter((room) => room.enabled && room.registered).length,
+      expiredRooms: rooms.filter((room) => room.subscription.status === "expired").length
+    },
     rooms
   };
 }
@@ -2791,6 +3083,7 @@ function adminUpsertRoom(state, payload = {}) {
   license.key = normalizeLicenseKey(payload.licenseKey) || license.key || generateLicenseKey(roomState);
   license.status = payload.licenseStatus === "paused" ? "paused" : "active";
   license.updatedAt = nowIso();
+  applyFeatureSettingsFromPayload(roomState, payload);
 
   const subscription = subscriptionSettings(roomState);
   subscription.monthlyPriceKrw = Number(payload.monthlyPriceKrw || MONTHLY_PRICE_KRW);
@@ -2804,12 +3097,61 @@ function adminUpsertRoom(state, payload = {}) {
   return { ok: true, room: roomAdminView(roomState) };
 }
 
+function restoreRoomFromAdminPayload(state, roomPayload = {}) {
+  const result = adminUpsertRoom(state, {
+    room: roomPayload.name || roomPayload.room,
+    roomId: roomPayload.roomIds?.[0] || roomPayload.roomId,
+    roomLink: roomPayload.roomLinks?.[0] || roomPayload.roomLink,
+    joinPhrase: roomPayload.joinPhrase,
+    roomAdmins: roomPayload.admins || roomPayload.roomAdmins,
+    licenseKey: roomPayload.licenseKey,
+    monthlyPriceKrw: roomPayload.subscription?.monthlyPriceKrw || roomPayload.monthlyPriceKrw,
+    subscriptionStartedAt: roomPayload.subscription?.startedAt || roomPayload.subscriptionStartedAt,
+    subscriptionExpiresAt: roomPayload.subscription?.expiresAt || roomPayload.subscriptionExpiresAt,
+    registered: roomPayload.registered,
+    enabled: roomPayload.enabled,
+    features: roomPayload.features
+  });
+  if (result.ok && Array.isArray(roomPayload.roomIds)) {
+    for (const id of roomPayload.roomIds) addUnique(ensureRoom(state, result.room.name).settings.roomIds, id);
+  }
+  if (result.ok && Array.isArray(roomPayload.roomLinks)) {
+    for (const link of roomPayload.roomLinks) addUnique(ensureRoom(state, result.room.name).settings.roomLinks, link);
+  }
+  return result;
+}
+
 async function handleAdminApi(req, url) {
   if (req.method === "GET" && url.pathname === "/api/admin/rooms") {
     const auth = requireAdminConsole(req, url);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     return { status: 200, body: adminRoomsPayload(state) };
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/diagnostics") {
+    const auth = requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        version: APP_VERSION,
+        generatedAt: nowIso(),
+        rooms: Object.values(state.rooms || {}).map((roomState) => ({
+          name: roomState.name,
+          diagnostics: roomDiagnostics(roomState)
+        }))
+      }
+    };
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/backup") {
+    const auth = requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return { status: 200, body: { ok: true, version: APP_VERSION, exportedAt: nowIso(), state } };
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/rooms") {
@@ -2821,6 +3163,32 @@ async function handleAdminApi(req, url) {
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/restore") {
+    const body = await readBody(req);
+    const auth = requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    if (body.state?.rooms && typeof body.state.rooms === "object" && !Array.isArray(body.state.rooms)) {
+      state.rooms = body.state.rooms;
+      normalizeState(state);
+      await saveState(state);
+      return { status: 200, body: { ok: true, restored: Object.values(state.rooms).map((roomState) => roomState.name || "이름없음") } };
+    }
+    const rooms = Array.isArray(body.rooms)
+      ? body.rooms
+      : Array.isArray(body.state?.rooms)
+        ? body.state.rooms
+        : [];
+    if (!rooms.length) return { status: 400, body: { ok: false, error: "rooms_required" } };
+    const restored = [];
+    for (const roomPayload of rooms) {
+      const result = restoreRoomFromAdminPayload(state, roomPayload);
+      if (result.ok) restored.push(result.room.name);
+    }
+    await saveState(state);
+    return { status: 200, body: { ok: true, restored } };
   }
 
   return null;
@@ -2843,7 +3211,16 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/구독상태") return subscriptionStatusCommand(roomState);
   if (command.startsWith("/구독연장")) return subscriptionExtendCommand(roomState, sender, text);
   if (command.startsWith("/구독만료")) return subscriptionExpireCommand(roomState, sender, text);
+  if (command === "/기능" || command === "/기능목록") return featureSettingsCommand(roomState);
+  if (command.startsWith("/기능켜기 ")) return featureUpdateCommand(roomState, sender, text, true);
+  if (command.startsWith("/기능끄기 ")) return featureUpdateCommand(roomState, sender, text, false);
+  const requiredFeature = commandFeatureKey(command);
+  if (requiredFeature && !featureEnabled(roomState, requiredFeature)) return featureDisabledText(requiredFeature);
   if (command === "/" || command === "/도움말" || command === "/help" || command === "/?") return helpText(isAdmin(roomState, sender));
+  if (command === "/게임") return gameHelpText(roomState);
+  if (command === "/주사위") return diceGameCommand(roomState, sender);
+  if (command === "/낚시") return fishingGameCommand(roomState, sender);
+  if (command === "/탐험") return exploreGameCommand(roomState, sender);
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
   if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return recentEventsCommand(state, roomState, sender, text);
   if (/^\/(?:원본로그|원본이벤트)(?:\s|$)/.test(command)) return rawLogCommand(roomState, sender, text);
@@ -2915,7 +3292,10 @@ async function handleMessage(state, room, sender, message, identity = {}, detect
   if (roomJoinPhraseMessage(roomState, sender, message)) return recordJoinPhraseSignal(roomState, sender, message);
 
   const activityReply = recordActivity(roomState, sender, identity.senderId, { firstChatNotice: !isCommand });
-  if (isCommand) return handleCommand(state, room, sender, message, identity);
+  if (isCommand) {
+    const reply = await handleCommand(state, room, sender, message, identity);
+    return appendOperationalNotice(roomState, sender, text, reply);
+  }
 
   recordMentionMessages(roomState, sender, text);
   return unreadNoticeText(roomState, sender) || activityReply;
@@ -2956,6 +3336,7 @@ export async function handleChatEvent(payload) {
     await saveState(state);
     return licenseGuard;
   }
+  applyFeatureSettingsFromPayload(roomState, payload);
   recordRawEvent(roomState, payload, { room, sender, message, event });
 
   if (!message || isBotSender(sender)) {

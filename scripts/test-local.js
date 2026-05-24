@@ -73,7 +73,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.gamesEnabled, false);
+  assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
   assert.match(health.json.features.join(","), /profile-registry/);
   assert.match(health.json.features.join(","), /message-inbox/);
@@ -103,6 +103,11 @@ try {
   assert.match(health.json.features.join(","), /future-game-roadmap/);
   assert.match(health.json.features.join(","), /license-key-guard/);
   assert.match(health.json.features.join(","), /admin-console-api/);
+  assert.match(health.json.features.join(","), /room-feature-toggles/);
+  assert.match(health.json.features.join(","), /subscription-reminders/);
+  assert.match(health.json.features.join(","), /admin-diagnostics-api/);
+  assert.match(health.json.features.join(","), /admin-backup-restore/);
+  assert.match(health.json.features.join(","), /chat-mini-games/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.adminConsoleEnabled, true);
 
@@ -125,12 +130,17 @@ try {
   assert.match(homeText, /5,500원/);
   assert.match(homeText, /게임/);
   assert.match(homeText, /관리 콘솔/);
+  assert.match(homeText, /기능 ON\/OFF/);
+  assert.match(homeText, /주사위/);
   assert.match(homeText, /href="https:\/\/open\.kakao\.com\/o\/gu25P5vi"/);
   assert.match(homeText, />문의<\/a>/);
 
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
-  assert.match(await adminPage.text(), /픽셀곰 관리 콘솔/);
+  const adminPageText = await adminPage.text();
+  assert.match(adminPageText, /픽셀곰 관리 콘솔/);
+  assert.match(adminPageText, /방별 기능 ON\/OFF/);
+  assert.match(adminPageText, /백업 복구/);
 
   const adminUnauthorized = await request("/api/admin/rooms");
   assert.equal(adminUnauthorized.response.status, 401);
@@ -146,16 +156,37 @@ try {
       joinPhrase: "콘솔 입장확인",
       roomAdmins: ["콘솔관리자"],
       licenseKey: "PXG-CONSOLE-1234",
-      subscriptionExpiresAt: "2099-12-31"
+      subscriptionExpiresAt: "2099-12-31",
+      features: {
+        attendance: false,
+        points: true,
+        rankings: true,
+        history: true,
+        profiles: true,
+        localJs: true,
+        games: true
+      }
     })
   });
   assert.equal(adminRoom.response.status, 200);
   assert.equal(adminRoom.json.room.licenseKey, "PXG-CONSOLE-1234");
   assert.match(adminRoom.json.room.subscription.expiresAt, /2099/);
+  assert.equal(adminRoom.json.room.features.attendance, false);
+  assert.equal(adminRoom.json.room.features.games, true);
 
   const adminRooms = await request("/api/admin/rooms?token=test-admin-token");
   assert.equal(adminRooms.response.status, 200);
   assert.match(JSON.stringify(adminRooms.json.rooms), /콘솔방/);
+  assert.equal(adminRooms.json.summary.rooms >= 1, true);
+
+  const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
+  assert.equal(adminDiagnostics.response.status, 200);
+  assert.match(JSON.stringify(adminDiagnostics.json.rooms), /콘솔방/);
+
+  const adminBackup = await request("/api/admin/backup?token=test-admin-token");
+  assert.equal(adminBackup.response.status, 200);
+  assert.equal(adminBackup.json.ok, true);
+  assert.ok(adminBackup.json.state.rooms);
 
   const missingLicense = await chatPayload({
     registeredRoom: false,
@@ -180,6 +211,28 @@ try {
   });
   assert.equal(licensedStatus.json.ignored, false);
   assert.match(licensedStatus.json.reply, /운영봇 서버 정상 연결/);
+
+  const disabledAttendance = await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/출석",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: "PXG-CONSOLE-1234"
+  });
+  assert.match(disabledAttendance.json.reply, /출석 기능은 이 방에서 꺼져/);
+
+  const gameReply = await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/주사위",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: "PXG-CONSOLE-1234"
+  });
+  assert.match(gameReply.json.reply, /주사위 게임/);
 
   const help = await request("/skill", {
     method: "POST",
@@ -213,7 +266,7 @@ try {
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /관리자재설정/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /원본로그/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /벤치마크|laggobot|라꼬봇/i);
-  assert.match(help.json.template.outputs[0].simpleText.text, /실제 금전.*사용하지 않습니다/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /가상 포인트/);
 
   const removedProfileForm = await chat("/공질", "관리자");
   assert.equal(removedProfileForm.response.status, 200);
@@ -972,8 +1025,8 @@ try {
   assert.match(slashHelp.json.reply, /운영봇 참여자 명령어/);
   assert.doesNotMatch(slashHelp.json.reply, /등록되지 않은 명령어/);
 
-  const removedGame = await chat("/낚시", "사용자");
-  assert.match(removedGame.json.reply, /아직 등록되지 않은 명령어/);
+  const disabledGame = await chat("/낚시", "사용자");
+  assert.match(disabledGame.json.reply, /게임 기능은 이 방에서 꺼져/);
 
   const chatGet = await request("/chat-event");
   assert.equal(chatGet.response.status, 405);

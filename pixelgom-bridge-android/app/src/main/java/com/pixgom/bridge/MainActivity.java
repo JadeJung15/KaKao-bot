@@ -1,6 +1,9 @@
 package com.pixgom.bridge;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -18,6 +21,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -38,6 +42,12 @@ public class MainActivity extends Activity {
     private EditText scriptSourceInput;
     private Switch enabledSwitch;
     private Switch scriptEnabledSwitch;
+    private Switch attendanceFeatureSwitch;
+    private Switch pointsFeatureSwitch;
+    private Switch rankingsFeatureSwitch;
+    private Switch historyFeatureSwitch;
+    private Switch profilesFeatureSwitch;
+    private Switch gamesFeatureSwitch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -98,6 +108,7 @@ public class MainActivity extends Activity {
         infoPanel.addView(labelValue("입장확인 문구", profile.joinPhrase));
         infoPanel.addView(labelValue("라이선스 키", TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey));
         infoPanel.addView(labelValue("월 이용금액", "5,500원 / 방 1개 / 30일"));
+        infoPanel.addView(labelValue("사용 기능", BridgeConfig.featureSummary(this)));
         infoPanel.addView(labelValue("관리 콘솔", WEBSITE_URL + "/admin"));
 
         LinearLayout stepsPanel = panel();
@@ -209,6 +220,23 @@ public class MainActivity extends Activity {
         roomHelp.setPadding(0, dp(10), 0, 0);
         panel.addView(roomHelp);
 
+        TextView featureTitle = text("방별 기능", 20, Color.rgb(58, 37, 24), true);
+        featureTitle.setPadding(0, dp(18), 0, 0);
+        panel.addView(featureTitle);
+
+        attendanceFeatureSwitch = settingSwitch("출석 보상", BridgeConfig.attendanceEnabled(this));
+        panel.addView(attendanceFeatureSwitch);
+        pointsFeatureSwitch = settingSwitch("포인트 기능", BridgeConfig.pointsEnabled(this));
+        panel.addView(pointsFeatureSwitch);
+        rankingsFeatureSwitch = settingSwitch("랭킹 기능", BridgeConfig.rankingsEnabled(this));
+        panel.addView(rankingsFeatureSwitch);
+        historyFeatureSwitch = settingSwitch("히스토리 기능", BridgeConfig.historyEnabled(this));
+        panel.addView(historyFeatureSwitch);
+        profilesFeatureSwitch = settingSwitch("프로필 기능", BridgeConfig.profilesEnabled(this));
+        panel.addView(profilesFeatureSwitch);
+        gamesFeatureSwitch = settingSwitch("게임 기능", BridgeConfig.gamesEnabled(this));
+        panel.addView(gamesFeatureSwitch);
+
         Button saveButton = primaryButton("설정 저장");
         saveButton.setOnClickListener(v -> saveSettings());
         panel.addView(saveButton);
@@ -216,6 +244,10 @@ public class MainActivity extends Activity {
         Button testButton = secondaryButton("서버 테스트 전송");
         testButton.setOnClickListener(v -> sendTestEvent());
         panel.addView(testButton);
+
+        Button diagnosisButton = secondaryButton("진단 내용 복사");
+        diagnosisButton.setOnClickListener(v -> copyDiagnosis());
+        panel.addView(diagnosisButton);
 
         Button privacyButton = secondaryButton("개인정보처리방침 열기");
         privacyButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/privacy"));
@@ -269,6 +301,14 @@ public class MainActivity extends Activity {
         refreshButton.setOnClickListener(v -> refreshLogs());
         root.addView(refreshButton);
 
+        Button copyLogButton = secondaryButton("로그 복사");
+        copyLogButton.setOnClickListener(v -> copyLogs());
+        root.addView(copyLogButton);
+
+        Button shareButton = secondaryButton("진단 공유");
+        shareButton.setOnClickListener(v -> shareDiagnosis());
+        root.addView(shareButton);
+
         Button clearButton = secondaryButton("로그 지우기");
         clearButton.setOnClickListener(v -> {
             BridgeConfig.clearLogs(this);
@@ -299,6 +339,12 @@ public class MainActivity extends Activity {
         scriptSourceInput = null;
         enabledSwitch = null;
         scriptEnabledSwitch = null;
+        attendanceFeatureSwitch = null;
+        pointsFeatureSwitch = null;
+        rankingsFeatureSwitch = null;
+        historyFeatureSwitch = null;
+        profilesFeatureSwitch = null;
+        gamesFeatureSwitch = null;
     }
 
     private void saveSettings() {
@@ -315,9 +361,15 @@ public class MainActivity extends Activity {
         );
         BridgeConfig.setAccessibilitySystemEventsEnabled(this, false);
         BridgeConfig.setAccessibilityAutoReplyEnabled(this, false);
+        BridgeConfig.setAttendanceEnabled(this, attendanceFeatureSwitch.isChecked());
+        BridgeConfig.setPointsEnabled(this, pointsFeatureSwitch.isChecked());
+        BridgeConfig.setRankingsEnabled(this, rankingsFeatureSwitch.isChecked());
+        BridgeConfig.setHistoryEnabled(this, historyFeatureSwitch.isChecked());
+        BridgeConfig.setProfilesEnabled(this, profilesFeatureSwitch.isChecked());
+        BridgeConfig.setGamesEnabled(this, gamesFeatureSwitch.isChecked());
         BridgeConfig.setScriptEnabled(this, scriptEnabledSwitch.isChecked());
         BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
-        BridgeConfig.appendLog(this, "설정 저장됨 room=" + BridgeConfig.roomName(this) + " id=" + BridgeConfig.roomId(this) + " js=" + BridgeConfig.scriptEnabled(this));
+        BridgeConfig.appendLog(this, "설정 저장됨 room=" + BridgeConfig.roomName(this) + " id=" + BridgeConfig.roomId(this) + " features=" + BridgeConfig.featureSummary(this));
         refreshStatus();
         refreshLogs();
     }
@@ -383,13 +435,56 @@ public class MainActivity extends Activity {
 
     private void refreshStatus() {
         boolean permission = notificationPermissionEnabled();
-        permissionStatus.setText(permission ? "알림 접근 권한: 허용됨" : "알림 접근 권한: 필요");
+        permissionStatus.setText((permission ? "알림 접근 권한: 허용됨" : "알림 접근 권한: 필요")
+                + "\n브릿지: " + (BridgeConfig.isEnabled(this) ? "켜짐" : "꺼짐")
+                + "\n등록 방: " + BridgeConfig.roomName(this)
+                + "\n사용 기능: " + BridgeConfig.featureSummary(this));
         permissionStatus.setTextColor(permission ? Color.rgb(30, 104, 58) : Color.rgb(184, 74, 43));
     }
 
     private void refreshLogs() {
         String logs = BridgeConfig.logs(this);
         logView.setText(TextUtils.isEmpty(logs) ? "아직 전송 로그가 없습니다." : logs);
+    }
+
+    private void copyDiagnosis() {
+        copyText("픽셀곰 진단", diagnosisText());
+    }
+
+    private void copyLogs() {
+        String logs = BridgeConfig.logs(this);
+        copyText("픽셀곰 로그", TextUtils.isEmpty(logs) ? "아직 전송 로그가 없습니다." : logs);
+    }
+
+    private void shareDiagnosis() {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TEXT, diagnosisText());
+        startActivity(Intent.createChooser(intent, "픽셀곰 진단 공유"));
+    }
+
+    private void copyText(String label, String value) {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard != null) {
+            clipboard.setPrimaryClip(ClipData.newPlainText(label, value));
+            Toast.makeText(this, "복사되었습니다.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private String diagnosisText() {
+        BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
+        return "픽셀곰 브릿지 진단\n"
+                + "버전: " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")\n"
+                + "브릿지: " + (BridgeConfig.isEnabled(this) ? "켜짐" : "꺼짐") + "\n"
+                + "알림 권한: " + (notificationPermissionEnabled() ? "허용됨" : "필요") + "\n"
+                + "서버: " + BridgeConfig.serverUrl(this) + "\n"
+                + "대표 방: " + profile.name + "\n"
+                + "roomId: " + profile.roomId + "\n"
+                + "입장확인: " + profile.joinPhrase + "\n"
+                + "라이선스: " + (TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey) + "\n"
+                + "방별 설정: " + BridgeConfig.roomProfileCount(this) + "개\n"
+                + "기능: " + BridgeConfig.featureSummary(this) + "\n"
+                + "화면 감지: 사용 안 함";
     }
 
     private boolean notificationPermissionEnabled() {
@@ -477,6 +572,18 @@ public class MainActivity extends Activity {
         body.setPadding(dp(10), 0, 0, 0);
         layout.addView(body, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         return layout;
+    }
+
+    private Switch settingSwitch(String label, boolean checked) {
+        Switch sw = new Switch(this);
+        sw.setText(label);
+        sw.setTextSize(15);
+        sw.setTextColor(Color.rgb(58, 37, 24));
+        sw.setChecked(checked);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(8), 0, 0);
+        sw.setLayoutParams(params);
+        return sw;
     }
 
     private EditText scriptInput(String value) {

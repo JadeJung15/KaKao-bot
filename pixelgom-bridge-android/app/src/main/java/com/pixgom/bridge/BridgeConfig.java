@@ -31,6 +31,12 @@ final class BridgeConfig {
     private static final String KEY_DEVICE_LICENSE = "device_license";
     private static final String KEY_SCRIPT_ENABLED = "script_enabled";
     private static final String KEY_SCRIPT_SOURCE = "script_source";
+    private static final String KEY_FEATURE_ATTENDANCE = "feature_attendance";
+    private static final String KEY_FEATURE_POINTS = "feature_points";
+    private static final String KEY_FEATURE_RANKINGS = "feature_rankings";
+    private static final String KEY_FEATURE_HISTORY = "feature_history";
+    private static final String KEY_FEATURE_PROFILES = "feature_profiles";
+    private static final String KEY_FEATURE_GAMES = "feature_games";
     private static final String KEY_ACCESSIBILITY_SYSTEM_EVENTS = "accessibility_system_events";
     private static final String KEY_ACCESSIBILITY_AUTO_REPLY = "accessibility_auto_reply";
     private static final String KEY_RECORD_ONLY_MIGRATION = "record_only_migration_v8";
@@ -198,6 +204,66 @@ final class BridgeConfig {
 
     static void setScriptSource(Context context, String value) {
         prefs(context).edit().putString(KEY_SCRIPT_SOURCE, textOrDefault(value, DEFAULT_SCRIPT_SOURCE)).apply();
+    }
+
+    static boolean attendanceEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_FEATURE_ATTENDANCE, true);
+    }
+
+    static void setAttendanceEnabled(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_FEATURE_ATTENDANCE, enabled).apply();
+    }
+
+    static boolean pointsEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_FEATURE_POINTS, true);
+    }
+
+    static void setPointsEnabled(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_FEATURE_POINTS, enabled).apply();
+    }
+
+    static boolean rankingsEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_FEATURE_RANKINGS, true);
+    }
+
+    static void setRankingsEnabled(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_FEATURE_RANKINGS, enabled).apply();
+    }
+
+    static boolean historyEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_FEATURE_HISTORY, true);
+    }
+
+    static void setHistoryEnabled(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_FEATURE_HISTORY, enabled).apply();
+    }
+
+    static boolean profilesEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_FEATURE_PROFILES, true);
+    }
+
+    static void setProfilesEnabled(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_FEATURE_PROFILES, enabled).apply();
+    }
+
+    static boolean gamesEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_FEATURE_GAMES, false);
+    }
+
+    static void setGamesEnabled(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_FEATURE_GAMES, enabled).apply();
+    }
+
+    static String featureSummary(Context context) {
+        List<String> enabled = new ArrayList<>();
+        if (attendanceEnabled(context)) enabled.add("출석");
+        if (pointsEnabled(context)) enabled.add("포인트");
+        if (rankingsEnabled(context)) enabled.add("랭킹");
+        if (historyEnabled(context)) enabled.add("히스토리");
+        if (profilesEnabled(context)) enabled.add("프로필");
+        if (scriptEnabled(context)) enabled.add("JS");
+        if (gamesEnabled(context)) enabled.add("게임");
+        return enabled.isEmpty() ? "모두 꺼짐" : TextUtils.join(", ", enabled);
     }
 
     static String defaultScriptSource() {

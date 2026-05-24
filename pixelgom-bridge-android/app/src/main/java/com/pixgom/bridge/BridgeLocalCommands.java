@@ -16,6 +16,9 @@ final class BridgeLocalCommands {
         if (command.equals("/로컬상태") || command.equals("/localstatus")) {
             return localStatus(context, event);
         }
+        if (command.equals("/진단") || command.equals("/diagnosis")) {
+            return diagnosis(context, event);
+        }
         return "";
     }
 
@@ -29,7 +32,7 @@ final class BridgeLocalCommands {
                 "방별 설정: " + BridgeConfig.roomProfileCount(context) + "개\n" +
                 "라이선스: " + safe(event.licenseKey) + "\n" +
                 "월 이용금액: 5,500원\n" +
-                "게임 기능: 준비 중\n" +
+                "방별 기능: " + BridgeConfig.featureSummary(context) + "\n" +
                 "알림 감지: 켜짐(카카오 알림이 있을 때)\n" +
                 "화면 감지: 사용 안 함\n" +
                 "JS 자동응답: " + (BridgeConfig.scriptEnabled(context) ? "켜짐" : "꺼짐") + "\n" +
@@ -66,10 +69,24 @@ final class BridgeLocalCommands {
                 "방별 설정: " + BridgeConfig.roomProfileCount(context) + "개\n" +
                 "라이선스: " + safe(event.licenseKey) + "\n" +
                 "월 이용금액: 5,500원\n" +
-                "게임 기능: 준비 중\n" +
+                "방별 기능: " + BridgeConfig.featureSummary(context) + "\n" +
                 "알림 감지: 켜짐(카카오 알림이 있을 때)\n" +
                 "화면 감지: 사용 안 함\n" +
                 "JS 자동응답: " + (BridgeConfig.scriptEnabled(context) ? "켜짐" : "꺼짐");
+    }
+
+    private static String diagnosis(Context context, BridgeEvent event) {
+        return "픽셀곰 브릿지 진단\n" +
+                "버전: " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")\n" +
+                "브릿지: " + (BridgeConfig.isEnabled(context) ? "켜짐" : "꺼짐") + "\n" +
+                "방: " + safe(event.room) + "\n" +
+                "raw 방: " + safe(event.rawRoom) + "\n" +
+                "roomId: " + safe(event.roomId) + "\n" +
+                "라이선스: " + safe(event.licenseKey) + "\n" +
+                "방별 설정: " + BridgeConfig.roomProfileCount(context) + "개\n" +
+                "기능: " + BridgeConfig.featureSummary(context) + "\n" +
+                "화면 감지: 사용 안 함\n" +
+                "서버: " + BridgeConfig.serverUrl(context);
     }
 
     private static String safe(String value) {

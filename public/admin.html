@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>픽셀곰 관리 콘솔</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260524-admin">
+    <link rel="stylesheet" href="/styles.css?v=20260524-admin2">
   </head>
   <body class="admin-page">
     <header class="site-header" aria-label="관리 콘솔 메뉴">
@@ -22,74 +22,196 @@
     <main class="admin-main">
       <section class="admin-hero">
         <div>
-          <p class="section-kicker">Admin</p>
-          <h1>방, 구독, 라이선스를 한 번에 관리합니다</h1>
-          <p>운영 토큰을 입력한 뒤 방 정보를 저장하면 서버에 방별 설정이 반영됩니다.</p>
+          <p class="section-kicker">Commercial Ops</p>
+          <h1>방별 설정, 구독, 라이선스, 기능 상태를 한 화면에서 관리합니다</h1>
+          <p>판매 운영 기준으로 방 등록부터 만료일, 관리자, 기능 ON/OFF, 백업까지 처리합니다.</p>
         </div>
         <img src="/assets/pixgom-guardian.png" alt="픽셀곰 관리 콘솔 이미지">
       </section>
 
-      <section class="admin-grid">
+      <section class="admin-toolbar" aria-label="관리 도구">
+        <label>
+          운영 토큰
+          <input data-token type="password" autocomplete="off" placeholder="ADMIN_CONSOLE_TOKEN">
+        </label>
+        <button class="button button-primary" type="button" data-load-rooms>등록 방 불러오기</button>
+        <button class="button button-secondary" type="button" data-diagnostics>진단 새로고침</button>
+        <button class="button button-secondary" type="button" data-backup>백업 JSON 받기</button>
+      </section>
+
+      <section class="admin-summary" data-summary>
+        <article><strong>-</strong><span>전체 방</span></article>
+        <article><strong>-</strong><span>활성 방</span></article>
+        <article><strong>-</strong><span>만료 방</span></article>
+      </section>
+
+      <section class="admin-grid admin-grid-wide">
         <form class="admin-form" data-admin-form>
-          <label>
-            운영 토큰
-            <input name="token" type="password" autocomplete="off" placeholder="ADMIN_CONSOLE_TOKEN">
-          </label>
-          <label>
-            방 이름
-            <input name="room" required placeholder="픽셀곰 RPG 놀이터">
-          </label>
-          <label>
-            roomId
-            <input name="roomId" placeholder="gu25P5vi">
-          </label>
-          <label>
-            오픈채팅 링크
-            <input name="roomLink" placeholder="https://open.kakao.com/o/gu25P5vi">
-          </label>
-          <label>
-            입장확인 문구
-            <input name="joinPhrase" placeholder="픽셀곰 입장확인">
-          </label>
-          <label>
-            관리자 닉네임
-            <input name="roomAdmins" placeholder="관리자1,관리자2">
-          </label>
-          <label>
-            라이선스 키
-            <input name="licenseKey" placeholder="비우면 서버가 생성">
-          </label>
-          <label>
-            구독 만료일
-            <input name="subscriptionExpiresAt" type="date">
-          </label>
-          <button class="button button-primary" type="submit">방 설정 저장</button>
-          <button class="button button-secondary" type="button" data-load-rooms>등록 방 불러오기</button>
+          <h2>방 설정 저장</h2>
+          <div class="admin-form-grid">
+            <label>
+              방 이름
+              <input name="room" required placeholder="픽셀곰 RPG 놀이터">
+            </label>
+            <label>
+              roomId
+              <input name="roomId" placeholder="gu25P5vi">
+            </label>
+            <label>
+              오픈채팅 링크
+              <input name="roomLink" placeholder="https://open.kakao.com/o/gu25P5vi">
+            </label>
+            <label>
+              입장확인 문구
+              <input name="joinPhrase" placeholder="픽셀곰 입장확인">
+            </label>
+            <label>
+              관리자 닉네임
+              <input name="roomAdmins" placeholder="관리자1,관리자2">
+            </label>
+            <label>
+              라이선스 키
+              <input name="licenseKey" placeholder="비우면 서버가 생성">
+            </label>
+            <label>
+              월 이용금액
+              <input name="monthlyPriceKrw" inputmode="numeric" value="5500">
+            </label>
+            <label>
+              구독 만료일
+              <input name="subscriptionExpiresAt" type="date">
+            </label>
+          </div>
+
+          <fieldset class="feature-fieldset">
+            <legend>방별 기능 ON/OFF</legend>
+            <label><input type="checkbox" name="feature_attendance" checked> 출석</label>
+            <label><input type="checkbox" name="feature_points" checked> 포인트</label>
+            <label><input type="checkbox" name="feature_rankings" checked> 랭킹</label>
+            <label><input type="checkbox" name="feature_history" checked> 히스토리</label>
+            <label><input type="checkbox" name="feature_profiles" checked> 프로필</label>
+            <label><input type="checkbox" name="feature_localJs" checked> JS 자동응답</label>
+            <label><input type="checkbox" name="feature_games"> 게임</label>
+          </fieldset>
+
+          <div class="admin-actions">
+            <button class="button button-primary" type="submit">방 설정 저장</button>
+            <button class="button button-secondary" type="button" data-fill-selected>선택 방 불러오기</button>
+          </div>
         </form>
 
         <section class="admin-result" aria-live="polite">
-          <h2>등록 방</h2>
+          <h2>운영 상태</h2>
+          <div class="room-card-list" data-room-list></div>
           <pre data-admin-output>운영 토큰을 입력하고 등록 방 불러오기를 누르세요.</pre>
         </section>
+      </section>
+
+      <section class="admin-import">
+        <h2>백업 복구</h2>
+        <p>관리 콘솔에서 받은 백업 JSON을 붙여넣고 복구할 수 있습니다. 운영 토큰이 필요합니다.</p>
+        <textarea data-restore-json rows="8" placeholder='{"rooms":[...]}'></textarea>
+        <button class="button button-secondary" type="button" data-restore>백업 복구 실행</button>
       </section>
     </main>
 
     <script>
+      const tokenInput = document.querySelector("[data-token]");
       const form = document.querySelector("[data-admin-form]");
       const output = document.querySelector("[data-admin-output]");
-      const loadButton = document.querySelector("[data-load-rooms]");
+      const roomList = document.querySelector("[data-room-list]");
+      const summary = document.querySelector("[data-summary]");
+      const restoreInput = document.querySelector("[data-restore-json]");
+      let rooms = [];
+      let selectedRoom = null;
 
       function token() {
-        return form.elements.token.value.trim();
+        return tokenInput.value.trim();
       }
 
       function print(value) {
         output.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
       }
 
-      async function loadRooms() {
-        const response = await fetch(`/api/admin/rooms?token=${encodeURIComponent(token())}`);
+      function featuresFromForm() {
+        return {
+          attendance: form.elements.feature_attendance.checked,
+          points: form.elements.feature_points.checked,
+          rankings: form.elements.feature_rankings.checked,
+          history: form.elements.feature_history.checked,
+          profiles: form.elements.feature_profiles.checked,
+          localJs: form.elements.feature_localJs.checked,
+          games: form.elements.feature_games.checked
+        };
+      }
+
+      function setFeatureForm(features = {}) {
+        form.elements.feature_attendance.checked = features.attendance !== false;
+        form.elements.feature_points.checked = features.points !== false;
+        form.elements.feature_rankings.checked = features.rankings !== false;
+        form.elements.feature_history.checked = features.history !== false;
+        form.elements.feature_profiles.checked = features.profiles !== false;
+        form.elements.feature_localJs.checked = features.localJs !== false;
+        form.elements.feature_games.checked = features.games === true;
+      }
+
+      function fillForm(room) {
+        if (!room) return;
+        selectedRoom = room;
+        form.elements.room.value = room.name || "";
+        form.elements.roomId.value = room.roomIds?.[0] || "";
+        form.elements.roomLink.value = room.roomLinks?.[0] || "";
+        form.elements.joinPhrase.value = room.joinPhrase || "";
+        form.elements.roomAdmins.value = (room.admins || []).join(",");
+        form.elements.licenseKey.value = room.licenseKey || "";
+        form.elements.monthlyPriceKrw.value = room.subscription?.monthlyPriceKrw || 5500;
+        form.elements.subscriptionExpiresAt.value = room.subscription?.expiresAt ? room.subscription.expiresAt.slice(0, 10) : "";
+        setFeatureForm(room.features || {});
+      }
+
+      function renderSummary(data) {
+        const values = [
+          data.summary?.rooms ?? rooms.length,
+          data.summary?.activeRooms ?? rooms.filter((room) => room.enabled).length,
+          data.summary?.expiredRooms ?? rooms.filter((room) => room.subscription?.status === "expired").length
+        ];
+        summary.querySelectorAll("strong").forEach((item, index) => {
+          item.textContent = values[index];
+        });
+      }
+
+      function renderRooms(data) {
+        rooms = data.rooms || [];
+        renderSummary(data);
+        roomList.innerHTML = "";
+        if (!rooms.length) {
+          roomList.innerHTML = "<p>등록된 방이 없습니다.</p>";
+          return;
+        }
+        for (const room of rooms) {
+          const card = document.createElement("button");
+          card.type = "button";
+          card.className = "room-card";
+          card.innerHTML = `
+            <strong>${room.name || "이름 없음"}</strong>
+            <span>${room.enabled ? "활성" : "비활성"} · ${room.subscription?.status || "미설정"} · ${room.subscription?.remainingDays ?? "-"}일</span>
+            <small>${room.diagnostics?.ok ? "진단 정상" : (room.diagnostics?.problems || []).join(", ")}</small>
+          `;
+          card.addEventListener("click", () => fillForm(room));
+          roomList.appendChild(card);
+        }
+      }
+
+      async function requestJson(path, options = {}) {
+        const response = await fetch(path, options);
         const json = await response.json();
+        if (!response.ok || json.ok === false) throw new Error(json.error || response.statusText);
+        return json;
+      }
+
+      async function loadRooms() {
+        const json = await requestJson(`/api/admin/rooms?token=${encodeURIComponent(token())}`);
+        renderRooms(json);
         print(json);
       }
 
@@ -97,17 +219,56 @@
         event.preventDefault();
         const data = Object.fromEntries(new FormData(form).entries());
         data.roomAdmins = data.roomAdmins.split(",").map((item) => item.trim()).filter(Boolean);
-        const response = await fetch("/api/admin/rooms", {
+        data.monthlyPriceKrw = Number(data.monthlyPriceKrw || 5500);
+        data.features = featuresFromForm();
+        const json = await requestJson("/api/admin/rooms", {
           method: "POST",
           headers: { "content-type": "application/json", "x-admin-token": token() },
           body: JSON.stringify(data)
         });
-        const json = await response.json();
         print(json);
+        await loadRooms();
       });
 
-      loadButton.addEventListener("click", () => {
+      document.querySelector("[data-load-rooms]").addEventListener("click", () => {
         loadRooms().catch((error) => print(error.message));
+      });
+
+      document.querySelector("[data-diagnostics]").addEventListener("click", async () => {
+        try {
+          print(await requestJson(`/api/admin/diagnostics?token=${encodeURIComponent(token())}`));
+        } catch (error) {
+          print(error.message);
+        }
+      });
+
+      document.querySelector("[data-backup]").addEventListener("click", async () => {
+        try {
+          const json = await requestJson(`/api/admin/backup?token=${encodeURIComponent(token())}`);
+          restoreInput.value = JSON.stringify(json, null, 2);
+          print("백업 JSON을 아래 복구 입력칸에 준비했습니다.");
+        } catch (error) {
+          print(error.message);
+        }
+      });
+
+      document.querySelector("[data-restore]").addEventListener("click", async () => {
+        try {
+          const payload = JSON.parse(restoreInput.value);
+          payload.token = token();
+          print(await requestJson("/api/admin/restore", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-admin-token": token() },
+            body: JSON.stringify(payload)
+          }));
+          await loadRooms();
+        } catch (error) {
+          print(error.message);
+        }
+      });
+
+      document.querySelector("[data-fill-selected]").addEventListener("click", () => {
+        fillForm(selectedRoom || rooms[0]);
       });
     </script>
   </body>
