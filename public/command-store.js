@@ -12,12 +12,14 @@
   const installedPanel = document.querySelector("[data-installed-panel]");
   const installedList = document.querySelector("[data-installed-list]");
   const refreshInstalledButton = document.querySelector("[data-refresh-installed]");
+  const loadMoreButton = document.querySelector("[data-load-more]");
 
   let catalog = { templates: [], categories: [], summary: {}, total: 0 };
   let buyerToken = "";
   let buyerRooms = [];
   let currentMode = "featured";
   let currentTemplateId = "";
+  let visibleLimit = 24;
   const favorites = new Set(readList("pixgomCommandFavorites"));
   const cart = new Set(readList("pixgomCommandCart"));
 
@@ -117,7 +119,8 @@
   }
 
   function renderTemplates() {
-    const templates = catalog.templates.filter(templateMatches).slice(0, 72);
+    const matchedTemplates = catalog.templates.filter(templateMatches);
+    const templates = matchedTemplates.slice(0, visibleLimit);
     grid.innerHTML = templates.map((template) => `
       <article class="template-card ${template.id === currentTemplateId ? "is-selected" : ""}">
         <button class="template-select" type="button" data-select-template="${escapeHtml(template.id)}">
@@ -138,11 +141,22 @@
       </article>
     `).join("");
     if (!templates.length) grid.innerHTML = `<article class="buyer-empty"><h3>검색 결과 없음</h3><p>추천, 설치 가능, 게임 연결 같은 빠른 보기를 선택해 범위를 줄여보세요.</p></article>`;
-    statusBox.textContent = `현재 ${templates.length}개를 표시 중입니다. 검색과 빠른 보기로 전체 ${catalog.total}개 템플릿을 좁혀볼 수 있습니다.`;
+    if (loadMoreButton) {
+      loadMoreButton.hidden = matchedTemplates.length <= visibleLimit;
+      loadMoreButton.textContent = `더 보기 (${templates.length}/${matchedTemplates.length})`;
+    }
+    statusBox.textContent = `현재 ${templates.length}개를 표시 중입니다. 검색과 빠른 보기로 전체 ${catalog.total}개 템플릿을 좁혀볼 수 있습니다. /공지, 공지, !공지, .공지 는 각각 다른 명령어로 설치할 수 있습니다.`;
     renderSummary();
   }
 
   function renderEditor(template) {
+    const installDisabledReason = !template.installable
+      ? "고정 명령어는 설치할 수 없습니다."
+      : !buyerToken
+        ? "구매자 로그인 후 설치할 수 있습니다."
+        : !buyerRooms.length
+          ? "승인된 방이 있어야 설치할 수 있습니다."
+          : "";
     editor.innerHTML = `
       <div class="template-editor-head">
         <p class="section-kicker">Editor</p>
@@ -150,19 +164,19 @@
         <span>${escapeHtml(template.categoryTitle)} · ${escapeHtml(audienceLabel(template.audience))}</span>
       </div>
       <label class="wide-label">명령어
-        <input data-editor-trigger type="text" value="${escapeHtml(template.command)}" ${template.installable ? "" : "disabled"}>
+        <input id="editor-trigger" name="editorTrigger" data-editor-trigger type="text" value="${escapeHtml(template.command)}" placeholder="/공지, 공지, !공지, .공지" ${template.installable ? "" : "disabled"}>
       </label>
       <label class="wide-label">응답 문구
-        <textarea data-editor-response rows="9" ${template.installable ? "" : "disabled"}>${escapeHtml(template.response || "서버에 내장된 고정 기능입니다.")}</textarea>
+        <textarea id="editor-response" name="editorResponse" data-editor-response rows="9" ${template.installable ? "" : "disabled"}>${escapeHtml(template.response || "서버에 내장된 고정 기능입니다.")}</textarea>
       </label>
       <div class="template-editor-note">
-        ${template.proxyCommand ? `${escapeHtml(template.proxyCommand)} 미니게임 엔진에 연결됩니다.` : template.installable ? "설치 전 문구를 방 분위기에 맞게 수정할 수 있습니다." : "고정 명령어는 설치하거나 수정할 수 없습니다."}
+        ${escapeHtml(installDisabledReason || (template.proxyCommand ? `${template.proxyCommand} 미니게임 엔진에 연결됩니다.` : "설치 전 문구를 방 분위기에 맞게 수정할 수 있습니다. / 없이도 가능하고 /, !, . 같은 접두 문자도 구분합니다."))}
       </div>
       <div class="template-actions">
         <button class="button button-secondary" type="button" data-copy-current>복사</button>
         <button class="button button-secondary" type="button" data-favorite-current>${favorites.has(template.id) ? "즐겨찾기 해제" : "즐겨찾기"}</button>
         <button class="button button-secondary" type="button" data-cart-current>${cart.has(template.id) ? "장바구니 제거" : "장바구니"}</button>
-        <button class="button button-primary" type="button" data-install-current ${template.installable && buyerToken ? "" : "disabled"}>편집 내용 설치</button>
+        <button class="button button-primary" type="button" data-install-current ${template.installable && buyerToken && buyerRooms.length ? "" : "disabled"}>편집 내용 설치</button>
       </div>
     `;
   }
@@ -197,7 +211,11 @@
         installPanel.hidden = false;
         installedPanel.hidden = false;
         installRoomInput.innerHTML = buyerRooms.map((room) => `<option value="${escapeHtml(room.applicationId)}">${escapeHtml(room.roomName)}</option>`).join("");
+        const preferredRoom = new URLSearchParams(window.location.search).get("room");
+        if (preferredRoom && buyerRooms.some((room) => room.applicationId === preferredRoom)) installRoomInput.value = preferredRoom;
         await loadInstalledCommands();
+      } else {
+        statusBox.textContent = "로그인은 확인됐지만 승인된 방이 없어 설치 버튼을 사용할 수 없습니다.";
       }
     } catch {
       buyerToken = "";
@@ -210,6 +228,10 @@
     if (!template) return;
     if (!buyerToken) {
       statusBox.textContent = "구매자 로그인 후 설치할 수 있습니다.";
+      return;
+    }
+    if (!installRoomInput.value) {
+      statusBox.textContent = "설치할 방을 먼저 선택하세요. 승인된 방이 없다면 구매자 콘솔에서 신청/결제 상태를 확인해주세요.";
       return;
     }
     const trigger = editor.querySelector("[data-editor-trigger]")?.value || template.command;
@@ -324,17 +346,28 @@
     const button = event.target.closest("[data-filter-mode]");
     if (!button) return;
     currentMode = button.dataset.filterMode;
+    visibleLimit = 24;
     filterBar.querySelectorAll("button").forEach((item) => item.classList.toggle("is-active", item === button));
     renderTemplates();
   });
 
   [searchInput, categoryInput, audienceInput].forEach((input) => {
-    input.addEventListener("input", renderTemplates);
-    input.addEventListener("change", renderTemplates);
+    input.addEventListener("input", () => {
+      visibleLimit = 24;
+      renderTemplates();
+    });
+    input.addEventListener("change", () => {
+      visibleLimit = 24;
+      renderTemplates();
+    });
   });
 
   installRoomInput.addEventListener("change", loadInstalledCommands);
   refreshInstalledButton?.addEventListener("click", loadInstalledCommands);
+  loadMoreButton?.addEventListener("click", () => {
+    visibleLimit += 24;
+    renderTemplates();
+  });
 
   async function boot() {
     const response = await fetch("/api/command-templates");

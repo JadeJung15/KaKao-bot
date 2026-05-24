@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>운영자 어드민 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-admin-fix">
+    <link rel="stylesheet" href="/styles.css?v=20260525-room-custom">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="admin-page">
@@ -143,13 +143,13 @@
 
           <label class="wide-label">
             커스텀 명령어
-            <textarea name="customCommands" rows="7" placeholder="/공지=오늘 공지는 여기입니다.&#10;/규칙=두글자 닉네임 뒤에 성별을 붙여주세요."></textarea>
-            <small>한 줄에 하나씩 `/명령어=응답내용` 형식으로 입력합니다. 고정 명령어는 등록되지 않습니다.</small>
+            <textarea name="customCommands" rows="7" placeholder="/공지=오늘 공지는 여기입니다.&#10;공지=맛있어&#10;!공지=차가워&#10;/규칙=두글자 닉네임 뒤에 성별을 붙여주세요."></textarea>
+            <small>한 줄에 하나씩 명령어=응답내용 형식으로 입력합니다. 슬래시(/) 없이도 등록 가능하며 /공지, 공지, !공지, .공지는 서로 다른 명령어입니다.</small>
           </label>
           <div class="command-builder" aria-label="커스텀 명령어 제작">
             <label>
               명령어
-              <input data-command-trigger placeholder="/공지">
+              <input data-command-trigger placeholder="/공지, 공지, !공지">
             </label>
             <label>
               응답 내용
@@ -161,6 +161,7 @@
           <div class="admin-actions">
             <button class="button button-primary" type="submit">방 설정 저장</button>
             <button class="button button-secondary" type="button" data-fill-selected>선택 방 불러오기</button>
+            <button class="button button-secondary room-delete-button" type="button" data-delete-selected>선택 방 삭제</button>
           </div>
         </form>
 
@@ -181,7 +182,7 @@
       </section>
     </main>
 
-    <script src="/auth.js?v=20260525-admin-fix"></script>
+    <script src="/auth.js?v=20260525-room-custom"></script>
     <script>
       const ownerStatus = document.querySelector("[data-owner-status]");
       const form = document.querySelector("[data-admin-form]");
@@ -375,8 +376,8 @@
       }
 
       function normalizeCommandTrigger(value) {
-        const body = String(value || "").trim().replace(/^\/+/, "").split(/\s+/)[0] || "";
-        return body ? `/${body.replace(/[^\p{L}\p{N}_-]/gu, "").slice(0, 24)}` : "";
+        const body = String(value || "").trim().replace(/\s+/g, " ").split(/\s+/)[0] || "";
+        return body.replace(/[\u0000-\u001F\u007F=]/g, "").slice(0, 32);
       }
 
       function upsertCommandLine(trigger, response) {
@@ -391,7 +392,7 @@
         form.elements.customCommands.value = customCommandsToText(commands);
         commandTriggerInput.value = "";
         commandResponseInput.value = "";
-        print(`${normalizedTrigger} 커스텀 명령어를 편집 목록에 추가했습니다. 저장 버튼을 눌러 반영하세요.`);
+        print(`${normalizedTrigger} 커스텀 명령어를 현재 선택한 방의 편집 목록에 추가했습니다. 방 설정 저장을 눌러 반영하세요.`);
       }
 
       function setFeatureForm(features = {}) {
@@ -508,7 +509,14 @@
           applicationList.innerHTML = `<p>${term ? "검색 결과가 없습니다." : "신청 내역이 없습니다."}</p>`;
           return;
         }
-        for (const application of visibleApplications) {
+        const list = visibleApplications.slice(0, 30);
+        if (visibleApplications.length > list.length) {
+          const notice = document.createElement("p");
+          notice.className = "admin-list-notice";
+          notice.textContent = `최근/검색 결과 ${list.length}건만 표시합니다. 검색어로 더 좁혀주세요. 전체 ${visibleApplications.length}건`;
+          applicationList.appendChild(notice);
+        }
+        for (const application of list) {
           const card = document.createElement("article");
           card.className = "application-card";
           card.innerHTML = `
@@ -517,11 +525,62 @@
               <span>${escapeHtml(application.email)} · ${escapeHtml(application.statusLabel)} · ${escapeHtml(application.payment?.statusLabel || "결제 미확인")}</span>
               <small>${escapeHtml(application.adminName || "")} · ${escapeHtml(application.roomLink || "")}</small>
             </div>
-            <button class="button button-secondary" type="button" ${application.status === "approved" ? "disabled" : ""}>입금 승인</button>
+            <div class="application-card-actions">
+              <button class="button button-secondary" type="button" data-approve-application ${application.status === "approved" ? "disabled" : ""}>입금 승인</button>
+              <button class="button button-secondary room-delete-button" type="button" data-delete-application>기록 삭제</button>
+            </div>
           `;
-          card.querySelector("button").addEventListener("click", () => approveApplication(application.id));
+          card.querySelector("[data-approve-application]").addEventListener("click", () => approveApplication(application.id));
+          card.querySelector("[data-delete-application]").addEventListener("click", () => deleteApplication(application));
           applicationList.appendChild(card);
         }
+      }
+
+      function compactPrintPayload(value) {
+        if (!value || typeof value !== "object") return value;
+        if (Array.isArray(value.rooms)) {
+          return {
+            ok: value.ok,
+            version: value.version,
+            summary: value.summary,
+            roomsPreview: value.rooms.slice(0, 8).map((room) => ({
+              name: room.name,
+              roomIds: room.roomIds,
+              enabled: room.enabled,
+              subscription: room.subscription,
+              features: room.features,
+              customCommands: room.customCommands?.length || 0
+            })),
+            hiddenRooms: Math.max(0, value.rooms.length - 8)
+          };
+        }
+        if (Array.isArray(value.applications)) {
+          return {
+            ok: value.ok,
+            version: value.version,
+            summary: value.summary,
+            applicationsPreview: value.applications.slice(0, 10).map((application) => ({
+              id: application.id,
+              roomName: application.roomName,
+              email: application.email,
+              status: application.statusLabel,
+              payment: application.payment?.statusLabel,
+              amountKrw: application.payment?.amountKrw
+            })),
+            hiddenApplications: Math.max(0, value.applications.length - 10)
+          };
+        }
+        if (value.state) {
+          return {
+            ok: value.ok,
+            version: value.version,
+            exportedAt: value.exportedAt,
+            rooms: Object.keys(value.state.rooms || {}).length,
+            applications: Object.keys(value.state.applications || {}).length,
+            payments: Object.keys(value.state.payments || {}).length
+          };
+        }
+        return value;
       }
 
       async function requestJson(path, options = {}) {
@@ -539,13 +598,13 @@
       async function loadRooms() {
         const json = await requestJson("/api/admin/rooms");
         renderRooms(json);
-        print(json);
+        print(compactPrintPayload(json));
       }
 
       async function loadApplications() {
         const json = await requestJson("/api/admin/applications");
         renderApplications(json);
-        print(json);
+        print(compactPrintPayload(json));
       }
 
       async function approveApplication(applicationId) {
@@ -580,6 +639,24 @@
           }
           print(`등록방 삭제 완료: ${json.deletedRoom?.name || roomName}`);
           await loadRooms();
+        } catch (error) {
+          print(friendlyError(error));
+        }
+      }
+
+      async function deleteApplication(application) {
+        const applicationId = application?.id || "";
+        if (!applicationId) return;
+        const confirmed = window.confirm(`"${application.roomName}" 신청/결제 기록을 삭제할까요?\n방 등록 자체를 삭제하려면 등록 방 카드의 삭제를 사용하세요.`);
+        if (!confirmed) return;
+        try {
+          const json = await requestJson("/api/admin/applications", {
+            method: "DELETE",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ applicationId })
+          });
+          print(`신청/결제 기록 삭제 완료: ${json.deletedApplication?.roomName || application.roomName}`);
+          await loadApplications();
         } catch (error) {
           print(friendlyError(error));
         }
@@ -661,6 +738,10 @@
 
       document.querySelector("[data-fill-selected]").addEventListener("click", () => {
         fillForm(selectedRoom || rooms[0]);
+      });
+
+      document.querySelector("[data-delete-selected]").addEventListener("click", () => {
+        deleteRoom(selectedRoom).catch((error) => print(friendlyError(error)));
       });
 
       verifyOwnerSession().then((ok) => {

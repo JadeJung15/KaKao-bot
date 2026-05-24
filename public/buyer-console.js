@@ -74,13 +74,26 @@
           <div><dt>관리자</dt><dd>${escapeHtml((room.roomAdmins || []).join(", ") || room.adminName || "미등록")}</dd></div>
           <div><dt>라이선스 키</dt><dd><code>${escapeHtml(room.licenseKey || "승인 후 발급")}</code></dd></div>
           <div><dt>앱 연결코드</dt><dd><code>${escapeHtml(room.bridgeConnectCode || "승인 후 발급")}</code></dd></div>
+          <div><dt>커스텀 명령어</dt><dd>${escapeHtml(String((room.customCommands || []).length))}개 설치됨</dd></div>
         </dl>
+        ${renderRoomCommands(room)}
         <div class="buyer-card-actions">
           <button class="button button-secondary" type="button" data-copy="${escapeHtml(room.bridgeConnectCode || "")}">연결코드 복사</button>
           <button class="button button-secondary" type="button" data-copy="${escapeHtml(room.licenseKey || "")}">라이선스 복사</button>
+          <a class="button button-secondary" href="/command-store?room=${encodeURIComponent(room.applicationId || "")}">방별 명령어 관리</a>
         </div>
       </article>
     `).join("");
+  }
+
+  function renderRoomCommands(room) {
+    const commands = (room.customCommands || []).slice(0, 5);
+    if (!commands.length) return `<p class="buyer-room-note">아직 이 방에 설치된 커스텀 명령어가 없습니다.</p>`;
+    return `
+      <div class="buyer-command-preview">
+        ${commands.map((command) => `<span>${escapeHtml(command.trigger)} · ${escapeHtml((command.response || "").split(/\n/)[0].slice(0, 22))}</span>`).join("")}
+      </div>
+    `;
   }
 
   function renderSetup(rooms = []) {

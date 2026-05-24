@@ -1613,6 +1613,33 @@ a {
   overflow-wrap: anywhere;
 }
 
+.buyer-room-note,
+.buyer-command-preview {
+  margin: 12px 0 0;
+  padding: 11px 12px;
+  color: #2d6c51;
+  background: #eef8f4;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+.buyer-command-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.buyer-command-preview span {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 5px 8px;
+  background: #fff;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
 .buyer-room-card .button {
   margin-top: 14px;
 }
@@ -1826,7 +1853,7 @@ a {
 
 .command-store-workbench {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr) minmax(250px, 320px);
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
@@ -1838,6 +1865,16 @@ a {
   display: grid;
   gap: 14px;
   padding: 18px;
+}
+
+.installed-command-panel {
+  grid-column: 1;
+  position: static;
+}
+
+.command-store-workbench > section {
+  grid-column: 2;
+  grid-row: 1 / span 2;
 }
 
 .template-editor h2 {
@@ -1875,8 +1912,13 @@ a {
 
 .template-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 14px;
+}
+
+.command-load-more {
+  width: 100%;
+  margin-top: 14px;
 }
 
 .template-card {
@@ -2318,6 +2360,24 @@ a {
   border-radius: 8px;
 }
 
+.application-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.admin-list-notice {
+  margin: 0;
+  padding: 11px 12px;
+  color: #2d6c51;
+  background: #eef8f4;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+  font-weight: 800;
+}
+
 .application-card strong,
 .application-card span,
 .application-card small {
@@ -2478,6 +2538,12 @@ a {
     position: static;
   }
 
+  .command-store-workbench > section,
+  .installed-command-panel {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
   .status-dashboard,
   .pricing-breakdown {
     grid-template-columns: 1fr;
@@ -2492,6 +2558,10 @@ a {
   .command-builder,
   .application-card {
     grid-template-columns: 1fr;
+  }
+
+  .application-card-actions {
+    justify-content: stretch;
   }
 
   .command-section {

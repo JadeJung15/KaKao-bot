@@ -74,7 +74,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.58");
+  assert.equal(health.json.version, "0.4.59");
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
   assert.match(health.json.features.join(","), /profile-registry/);
@@ -152,6 +152,10 @@ try {
   assert.match(health.json.features.join(","), /command-template-cart-favorites/);
   assert.match(health.json.features.join(","), /buyer-custom-command-management/);
   assert.match(health.json.features.join(","), /game-template-engine-shortcuts/);
+  assert.match(health.json.features.join(","), /slashless-custom-command-triggers/);
+  assert.match(health.json.features.join(","), /room-scoped-command-management/);
+  assert.match(health.json.features.join(","), /admin-application-record-cleanup/);
+  assert.match(health.json.features.join(","), /command-store-pagination/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.additionalRoomPriceKrw, 2200);
   assert.equal(health.json.adminConsoleEnabled, true);
@@ -209,6 +213,7 @@ try {
   assert.match(homeText, /0\.4\.52/);
   assert.match(homeText, /0\.4\.57/);
   assert.match(homeText, /0\.4\.58/);
+  assert.match(homeText, /0\.4\.59/);
   assert.match(homeText, /MessengerBotR/);
   assert.match(homeText, /전용 브릿지 엔진/);
   assert.match(homeText, /400개 템플릿/);
@@ -228,6 +233,8 @@ try {
   assert.match(commandStoreText, /응답 문구/);
   assert.match(commandStoreText, /펫키우기/);
   assert.match(commandStoreText, /data-template-grid/);
+  assert.match(commandStoreText, /data-load-more/);
+  assert.match(commandStoreText, /슬래시\(\/\) 없이도 커스텀 명령어/);
 
   const checklistAsset = await fetch(`${baseUrl}/assets/pixgom-checklist.png`);
   assert.equal(checklistAsset.status, 200);
@@ -235,7 +242,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.58");
+  assert.equal(commandTemplates.json.version, "0.4.59");
   assert.equal(commandTemplates.json.total, 400);
   assert.equal(commandTemplates.json.templates.length, 400);
   assert.equal(commandTemplates.json.categories.some((category) => category.title === "펫키우기"), true);
@@ -261,6 +268,9 @@ try {
   assert.match(adminPageText, /신청\/결제/);
   assert.match(adminPageText, /명령어 추가\/수정/);
   assert.match(adminPageText, /게임 시즌\/보상 설정/);
+  assert.match(adminPageText, /선택 방 삭제/);
+  assert.match(adminPageText, /기록 삭제/);
+  assert.match(adminPageText, /슬래시\(\/\) 없이도 등록 가능/);
   assert.match(adminPageText, /만료 임박 7일/);
   assert.match(adminPageText, /시즌 시작일/);
   assert.match(adminPageText, /방, 관리자, 라이선스/);
@@ -539,6 +549,28 @@ try {
   assert.match(JSON.stringify(adminApplications.json.applications), /판매신청방/);
   assert.equal(adminApplications.json.summary.pending >= 1, true);
 
+  const cleanupApplication = await request("/api/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `tester-${process.pid}@pixgom.test`,
+      password: "password123",
+      roomName: "삭제신청방",
+      roomLink: "https://open.kakao.com/o/deleteApply1",
+      adminName: "신청관리자"
+    })
+  });
+  assert.equal(cleanupApplication.response.status, 200);
+  const deletedApplication = await request("/api/admin/applications", {
+    method: "DELETE",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({ applicationId: cleanupApplication.json.application.id })
+  });
+  assert.equal(deletedApplication.response.status, 200);
+  assert.equal(deletedApplication.json.deletedApplication.roomName, "삭제신청방");
+  const adminApplicationsAfterDelete = await request("/api/admin/applications?token=test-admin-token");
+  assert.doesNotMatch(JSON.stringify(adminApplicationsAfterDelete.json.applications), /삭제신청방/);
+
   const approvedApplication = await request("/api/admin/applications/approve", {
     method: "POST",
     headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
@@ -570,7 +602,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.58");
+  assert.equal(buyerGuideApproved.json.version, "0.4.59");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -585,7 +617,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.58");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.59");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -644,6 +676,92 @@ try {
   });
   assert.equal(installedTemplateReply.json.ignored, false);
   assert.match(installedTemplateReply.json.reply, /템플릿 번호/);
+
+  const slashlessTemplateInstall = await request("/api/buyer/command-templates/install", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      templateId: installableTemplate.id,
+      trigger: "공지",
+      response: "맛있어"
+    })
+  });
+  assert.equal(slashlessTemplateInstall.response.status, 200);
+  assert.equal(slashlessTemplateInstall.json.command.trigger, "공지");
+
+  const slashTemplateInstall = await request("/api/buyer/command-templates/install", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      templateId: installableTemplate.id,
+      trigger: "/공지",
+      response: "맛없어"
+    })
+  });
+  assert.equal(slashTemplateInstall.response.status, 200);
+  assert.equal(slashTemplateInstall.json.command.trigger, "/공지");
+
+  const bangTemplateInstall = await request("/api/buyer/command-templates/install", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      templateId: installableTemplate.id,
+      trigger: "!공지",
+      response: "차가워"
+    })
+  });
+  assert.equal(bangTemplateInstall.response.status, 200);
+  assert.equal(bangTemplateInstall.json.command.trigger, "!공지");
+
+  for (const [msg, expected] of [["공지", /맛있어/], ["/공지", /맛없어/], ["!공지", /차가워/]]) {
+    const reply = await chatPayload({
+      registeredRoom: false,
+      room: "판매신청방",
+      msg,
+      sender: "구매자",
+      roomId: "salesRoom1",
+      roomLink: "https://open.kakao.com/o/salesRoom1",
+      licenseKey: approvedApplication.json.room.licenseKey
+    });
+    assert.match(reply.json.reply, expected);
+  }
+
+  const disableCustomCommands = await request("/api/admin/rooms", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({
+      room: "판매신청방",
+      features: { customCommands: false }
+    })
+  });
+  assert.equal(disableCustomCommands.response.status, 200);
+  assert.equal(disableCustomCommands.json.room.features.customCommands, false);
+  const disabledCustomReply = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "공지",
+    sender: "구매자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.match(disabledCustomReply.json.reply, /커스텀 명령어 기능은 이 방에서 꺼져 있습니다/);
+  const enableCustomCommands = await request("/api/admin/rooms", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({
+      room: "판매신청방",
+      features: { customCommands: true }
+    })
+  });
+  assert.equal(enableCustomCommands.response.status, 200);
+  assert.equal(enableCustomCommands.json.room.features.customCommands, true);
 
   const diceTemplate = commandTemplates.json.templates.find((template) => template.proxyCommand === "/주사위");
   const diceInstall = await request("/api/buyer/command-templates/install", {
@@ -710,6 +828,15 @@ try {
   assert.equal(additionalRoomApply.response.status, 200);
   assert.equal(additionalRoomApply.json.application.plan.type, "additional_room");
   assert.equal(additionalRoomApply.json.payment.amountKrw, 2200);
+
+  const approvedAdditionalRoom = await request("/api/admin/applications/approve", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({ applicationId: additionalRoomApply.json.application.id, months: 1 })
+  });
+  assert.equal(approvedAdditionalRoom.response.status, 200);
+  assert.equal(approvedAdditionalRoom.json.payment.amountKrw, 2200);
+  assert.equal(approvedAdditionalRoom.json.room.subscription.monthlyPriceKrw, 2200);
 
   const bridgeConnect = await request("/api/bridge/connect", {
     method: "POST",

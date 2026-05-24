@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.58";
+export const APP_VERSION = "0.4.59";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -133,7 +133,11 @@ export const FEATURES = [
   "command-template-response-editor",
   "command-template-cart-favorites",
   "buyer-custom-command-management",
-  "game-template-engine-shortcuts"
+  "game-template-engine-shortcuts",
+  "slashless-custom-command-triggers",
+  "room-scoped-command-management",
+  "admin-application-record-cleanup",
+  "command-store-pagination"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -780,7 +784,7 @@ async function saveState(state) {
 
 function injectSessionNavScript(html) {
   if (!html.includes("</body>") || html.includes("/session-nav.js")) return html;
-  return html.replace("</body>", '    <script src="/session-nav.js?v=20260525-admin-fix" defer></script>\n  </body>');
+  return html.replace("</body>", '    <script src="/session-nav.js?v=20260525-room-custom" defer></script>\n  </body>');
 }
 
 async function replaceStateFile(tmpPath, targetPath) {
@@ -1719,9 +1723,12 @@ function applyGameSettingsFromPayload(roomState, payload = {}) {
 }
 
 function normalizeCustomCommandTrigger(value) {
-  const firstToken = compactSpaces(value).replace(/^\/+/, "").split(/\s+/)[0] || "";
-  const cleaned = firstToken.replace(/[^\p{L}\p{N}_-]/gu, "").slice(0, 24);
-  return cleaned ? `/${cleaned}` : "";
+  const firstToken = compactSpaces(value).split(/\s+/)[0] || "";
+  const cleaned = firstToken
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/[=]/g, "")
+    .slice(0, 32);
+  return cleaned;
 }
 
 function normalizeCustomCommandResponse(value) {
@@ -1769,7 +1776,8 @@ function fixedCommandCatalogText(isAdminUser = false) {
     "고정 명령어는 기본 운영과 향후 게임 연동을 위해 예약되어 있어 커스텀 명령어로 덮어쓸 수 없습니다.",
     "",
     ...groups.flatMap((group) => [group.title, group.commands.join(", "), ""]),
-    "커스텀 명령어는 /명령어등록 /공지 내용 형식으로 추가합니다."
+    "커스텀 명령어는 /명령어등록 /공지 내용, /명령어등록 공지 내용, /명령어등록 !공지 내용처럼 추가합니다.",
+    "/공지, 공지, !공지, .공지 는 서로 다른 명령어로 구분됩니다."
   ].join("\n").trim();
 }
 
@@ -1796,7 +1804,8 @@ function customCommandListText(roomState) {
   if (!commands.length) {
     return [
       "등록된 커스텀 명령어가 없습니다.",
-      "관리자는 /명령어등록 /공지 내용 형식으로 추가할 수 있습니다."
+      "관리자는 /명령어등록 /공지 내용 또는 /명령어등록 공지 내용 형식으로 추가할 수 있습니다.",
+      "/ 없이도 커스텀 가능하며 /, !, . 같은 접두 문자도 서로 구분합니다."
     ].join("\n");
   }
   return [
@@ -1866,7 +1875,7 @@ function customCommandDeleteCommand(roomState, sender, text) {
 function customCommandReply(roomState, command, sender) {
   const trigger = normalizeCustomCommandTrigger(command);
   if (!trigger) return "";
-  const item = customCommands(roomState).find((commandItem) => commandItem.trigger === trigger);
+  const item = customCommandMatch(roomState, command);
   if (!item) return "";
   if (!featureEnabled(roomState, "customCommands")) return featureDisabledText("customCommands");
   if (item.proxyCommand) {
@@ -1877,6 +1886,12 @@ function customCommandReply(roomState, command, sender) {
   }
   recordRoomEvent(roomState, { type: "custom_command_used", trigger });
   return item.response;
+}
+
+function customCommandMatch(roomState, command) {
+  const trigger = normalizeCustomCommandTrigger(command);
+  if (!trigger) return null;
+  return customCommands(roomState).find((commandItem) => commandItem.trigger === trigger) || null;
 }
 
 function roomFeatures(roomState) {
@@ -1925,7 +1940,8 @@ function applyFeatureSettingsFromPayload(roomState, payload = {}) {
     profiles: payload.profilesEnabled || payload.profileEnabled,
     localJs: payload.localJsEnabled || payload.jsAutoReplyEnabled || payload.scriptEnabled,
     games: payload.gamesEnabled || payload.gameEnabled,
-    shop: payload.shopEnabled || payload.storeEnabled || payload.inventoryEnabled
+    shop: payload.shopEnabled || payload.storeEnabled || payload.inventoryEnabled,
+    customCommands: payload.customCommandsEnabled || payload.customCommandEnabled
   };
   let changed = false;
   for (const key of Object.keys(DEFAULT_ROOM_FEATURES)) {
@@ -4847,6 +4863,30 @@ export function healthPayload() {
   };
 }
 
+function adminDeleteApplication(state, payload = {}) {
+  state.applications ||= {};
+  state.payments ||= {};
+  const applicationId = normalizeText(payload.applicationId || payload.id);
+  if (!applicationId) return { ok: false, status: 400, error: "application_id_required" };
+  const application = state.applications[applicationId];
+  if (!application) return { ok: false, status: 404, error: "application_not_found" };
+  const payment = state.payments[application.paymentId] || null;
+  if (application.accountId && state.accounts?.[application.accountId]) {
+    const account = state.accounts[application.accountId];
+    account.applicationIds = (account.applicationIds || []).filter((id) => id !== applicationId);
+    account.updatedAt = nowIso();
+  }
+  if (application.paymentId) delete state.payments[application.paymentId];
+  delete state.applications[applicationId];
+  return {
+    ok: true,
+    deletedApplication: publicApplicationView(application, { ...state, payments: { ...state.payments, ...(payment ? { [payment.id]: payment } : {}) } }),
+    summary: {
+      applications: Object.keys(state.applications).length
+    }
+  };
+}
+
 function helpText(isAdminUser = false) {
   const lines = [
     `${DEFAULT_BOT_NAME} ${isAdminUser ? "관리자 명령어" : "참여자 명령어"}`,
@@ -5728,7 +5768,7 @@ function adminApproveApplication(state, payload = {}, approvedBy = "admin_consol
     roomLink: application.roomLink,
     joinPhrase: payload.joinPhrase || DEFAULT_JOIN_PHRASE,
     roomAdmins: [application.adminName],
-    monthlyPriceKrw: MONTHLY_PRICE_KRW,
+    monthlyPriceKrw: Number(application.plan?.monthlyPriceKrw || state.payments?.[application.paymentId]?.amountKrw || MONTHLY_PRICE_KRW),
     subscriptionExpiresAt: expiresAt,
     registered: true,
     enabled: true,
@@ -5849,6 +5889,17 @@ async function handleAdminApi(req, url) {
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     const result = adminApproveApplication(state, body, "admin_console");
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if ((req.method === "DELETE" && url.pathname === "/api/admin/applications") || (req.method === "POST" && url.pathname === "/api/admin/applications/delete")) {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminDeleteApplication(state, body);
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -5993,7 +6044,8 @@ async function handleMessage(state, room, sender, message, identity = {}, detect
   const text = normalizeText(message);
   const event = detectedEvent || detectSystemEvent(message);
   const targetIdentity = identity.targetUserId || "";
-  const isCommand = text.startsWith("/") || compactSpaces(text) === "ㅊㅊ";
+  const isCustomCommand = Boolean(customCommandMatch(roomState, text));
+  const isCommand = text.startsWith("/") || compactSpaces(text) === "ㅊㅊ" || isCustomCommand;
   if (isSubscriptionExpired(roomState) && !subscriptionBypassCommand(text)) {
     return isCommand ? subscriptionExpiredText(roomState) : null;
   }
