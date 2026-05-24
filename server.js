@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.45";
+export const APP_VERSION = "0.4.46";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -95,7 +95,8 @@ export const FEATURES = [
   "buyer-session-token",
   "split-account-application-flow",
   "bridge-connect-code-api",
-  "buyer-room-auto-sync"
+  "buyer-room-auto-sync",
+  "bridge-multi-room-auto-sync"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];

@@ -30,6 +30,7 @@ final class BridgeLocalCommands {
                 "보낸사람: " + safe(event.sender) + "\n" +
                 "roomId: " + safe(event.roomId) + "\n" +
                 "방별 설정: " + BridgeConfig.roomProfileCount(context) + "개\n" +
+                "등록 방 목록:\n" + BridgeConfig.roomProfilesSummary(context) + "\n" +
                 "라이선스: " + safe(event.licenseKey) + "\n" +
                 "월 이용금액: 5,500원\n" +
                 "방별 기능: " + BridgeConfig.featureSummary(context) + "\n" +
@@ -67,6 +68,7 @@ final class BridgeLocalCommands {
                 "등록방: " + BridgeConfig.roomName(context) + "\n" +
                 "roomId: " + BridgeConfig.roomId(context) + "\n" +
                 "방별 설정: " + BridgeConfig.roomProfileCount(context) + "개\n" +
+                "등록 방 목록:\n" + BridgeConfig.roomProfilesSummary(context) + "\n" +
                 "라이선스: " + safe(event.licenseKey) + "\n" +
                 "월 이용금액: 5,500원\n" +
                 "방별 기능: " + BridgeConfig.featureSummary(context) + "\n" +
@@ -84,6 +86,7 @@ final class BridgeLocalCommands {
                 "roomId: " + safe(event.roomId) + "\n" +
                 "라이선스: " + safe(event.licenseKey) + "\n" +
                 "방별 설정: " + BridgeConfig.roomProfileCount(context) + "개\n" +
+                "등록 방 목록:\n" + BridgeConfig.roomProfilesSummary(context) + "\n" +
                 "기능: " + BridgeConfig.featureSummary(context) + "\n" +
                 "화면 감지: 사용 안 함\n" +
                 "서버: " + BridgeConfig.serverUrl(context);

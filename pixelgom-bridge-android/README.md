@@ -20,7 +20,7 @@
 | 월 이용금액 | `5,500원` |
 | targetSdk | 35 |
 | 배포 형식 | Android App Bundle `.aab` |
-| 현재 버전 | `1.0.13` / versionCode `14` |
+| 현재 버전 | `1.0.14` / versionCode `15` |
 
 ## 로컬 빌드
 

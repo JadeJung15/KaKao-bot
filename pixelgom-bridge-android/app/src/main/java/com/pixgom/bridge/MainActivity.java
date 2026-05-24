@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
     private EditText adminsInput;
     private EditText licenseKeyInput;
     private EditText scriptSourceInput;
+    private TextView roomProfilesSummaryView;
     private Switch enabledSwitch;
     private Switch scriptEnabledSwitch;
     private Switch attendanceFeatureSwitch;
@@ -105,7 +106,9 @@ public class MainActivity extends Activity {
 
         BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
         infoPanel.addView(statusRow("알림 권한", notificationPermissionEnabled() ? "허용됨" : "필요", notificationPermissionEnabled()));
-        infoPanel.addView(labelValue("등록 방", profile.name));
+        infoPanel.addView(labelValue("대표 방", profile.name));
+        infoPanel.addView(labelValue("등록 방 수", BridgeConfig.roomProfileCount(this) + "개"));
+        infoPanel.addView(labelValue("등록 방 목록", BridgeConfig.roomProfilesSummary(this)));
         infoPanel.addView(labelValue("입장확인 문구", profile.joinPhrase));
         infoPanel.addView(labelValue("라이선스 키", TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey));
         infoPanel.addView(labelValue("월 이용금액", "5,500원 / 방 1개 / 30일"));
@@ -203,20 +206,24 @@ public class MainActivity extends Activity {
         connectTitle.setPadding(0, dp(16), 0, 0);
         panel.addView(connectTitle);
 
-        TextView connectHelp = text("구매자 가이드에서 복사한 앱 연결코드를 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 입력됩니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView connectHelp = text("구매자 가이드에서 복사한 앱 연결코드를 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 추가됩니다. 같은 방은 갱신되고 새 방은 목록에 추가됩니다.", 13, Color.rgb(111, 78, 49), false);
         connectHelp.setPadding(0, dp(8), 0, 0);
         panel.addView(connectHelp);
 
         connectionCodeInput = input("앱 연결코드", "");
         panel.addView(connectionCodeInput);
 
-        Button connectButton = secondaryButton("연결코드로 자동 설정");
+        Button connectButton = secondaryButton("연결코드로 방 추가/갱신");
         connectButton.setOnClickListener(v -> connectWithCode());
         panel.addView(connectButton);
 
         TextView roomTitle = text("대표 방 설정", 20, Color.rgb(58, 37, 24), true);
         roomTitle.setPadding(0, dp(16), 0, 0);
         panel.addView(roomTitle);
+
+        roomProfilesSummaryView = text("등록 방 목록\n" + BridgeConfig.roomProfilesSummary(this), 13, Color.rgb(111, 78, 49), false);
+        roomProfilesSummaryView.setPadding(0, dp(8), 0, 0);
+        panel.addView(roomProfilesSummaryView);
 
         BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
         roomNameInput = input("카카오 방 이름", profile.name);
@@ -237,7 +244,7 @@ public class MainActivity extends Activity {
         licenseKeyInput = input("라이선스 키", TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey);
         panel.addView(licenseKeyInput);
 
-        TextView roomHelp = text("추가 방은 홈페이지 관리 콘솔에서 등록하고, 앱에는 실제 봇폰이 들어간 대표 방을 먼저 설정하세요.", 13, Color.rgb(111, 78, 49), false);
+        TextView roomHelp = text("대표 방 설정은 목록 첫 번째 방을 직접 수정할 때만 사용하세요. 여러 방은 구매자 가이드의 방별 연결코드를 차례대로 붙여넣으면 됩니다.", 13, Color.rgb(111, 78, 49), false);
         roomHelp.setPadding(0, dp(10), 0, 0);
         panel.addView(roomHelp);
 
@@ -363,6 +370,7 @@ public class MainActivity extends Activity {
         licenseKeyInput = null;
         connectionCodeInput = null;
         scriptSourceInput = null;
+        roomProfilesSummaryView = null;
         enabledSwitch = null;
         scriptEnabledSwitch = null;
         attendanceFeatureSwitch = null;
@@ -395,6 +403,7 @@ public class MainActivity extends Activity {
         BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
         BridgeConfig.appendLog(this, "설정 저장됨 room=" + BridgeConfig.roomName(this) + " id=" + BridgeConfig.roomId(this) + " features=" + BridgeConfig.featureSummary(this));
         refreshStatus();
+        refreshRoomProfilesSummary();
         refreshLogs();
     }
 
@@ -444,7 +453,7 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 if (result.ok()) {
                     BridgeConfig.setServerUrl(this, TextUtils.isEmpty(result.serverUrl) ? BridgeConfig.DEFAULT_SERVER_URL : result.serverUrl);
-                    BridgeConfig.setPrimaryRoomProfile(this, result.roomName, result.roomId, result.roomLink, result.joinPhrase, TextUtils.join(",", result.admins), result.licenseKey);
+                    BridgeConfig.addOrUpdateRoomProfile(this, result.roomName, result.roomId, result.roomLink, result.joinPhrase, TextUtils.join(",", result.admins), result.licenseKey);
                     BridgeConfig.setAttendanceEnabled(this, result.attendance);
                     BridgeConfig.setPointsEnabled(this, result.points);
                     BridgeConfig.setRankingsEnabled(this, result.rankings);
@@ -452,7 +461,7 @@ public class MainActivity extends Activity {
                     BridgeConfig.setProfilesEnabled(this, result.profiles);
                     BridgeConfig.setScriptEnabled(this, result.localJs);
                     BridgeConfig.setGamesEnabled(this, result.games);
-                    BridgeConfig.appendLog(this, "앱 자동 연결 완료: " + result.roomName + " / " + result.roomId);
+                    BridgeConfig.appendLog(this, "앱 자동 연결 완료: " + result.roomName + " / " + result.roomId + " / 등록방 " + BridgeConfig.roomProfileCount(this) + "개");
                     if (serverUrlInput != null) serverUrlInput.setText(BridgeConfig.serverUrl(this));
                     if (roomNameInput != null) roomNameInput.setText(result.roomName);
                     if (roomIdInput != null) roomIdInput.setText(result.roomId);
@@ -468,7 +477,8 @@ public class MainActivity extends Activity {
                     if (scriptEnabledSwitch != null) scriptEnabledSwitch.setChecked(result.localJs);
                     if (gamesFeatureSwitch != null) gamesFeatureSwitch.setChecked(result.games);
                     refreshStatus();
-                    Toast.makeText(this, "방 설정이 자동 적용되었습니다.", Toast.LENGTH_SHORT).show();
+                    refreshRoomProfilesSummary();
+                    Toast.makeText(this, "방 설정이 추가/갱신되었습니다.", Toast.LENGTH_SHORT).show();
                 } else {
                     BridgeConfig.appendLog(this, "앱 자동 연결 실패: " + result.error);
                     Toast.makeText(this, "연결코드를 확인하세요.", Toast.LENGTH_SHORT).show();
@@ -519,6 +529,12 @@ public class MainActivity extends Activity {
         logView.setText(TextUtils.isEmpty(logs) ? "아직 전송 로그가 없습니다." : logs);
     }
 
+    private void refreshRoomProfilesSummary() {
+        if (roomProfilesSummaryView != null) {
+            roomProfilesSummaryView.setText("등록 방 목록\n" + BridgeConfig.roomProfilesSummary(this));
+        }
+    }
+
     private void copyDiagnosis() {
         copyText("픽셀곰 진단", diagnosisText());
     }
@@ -555,6 +571,7 @@ public class MainActivity extends Activity {
                 + "입장확인: " + profile.joinPhrase + "\n"
                 + "라이선스: " + (TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey) + "\n"
                 + "방별 설정: " + BridgeConfig.roomProfileCount(this) + "개\n"
+                + "등록 방 목록:\n" + BridgeConfig.roomProfilesSummary(this) + "\n"
                 + "기능: " + BridgeConfig.featureSummary(this) + "\n"
                 + "화면 감지: 사용 안 함";
     }

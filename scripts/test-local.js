@@ -120,6 +120,7 @@ try {
   assert.match(health.json.features.join(","), /split-account-application-flow/);
   assert.match(health.json.features.join(","), /bridge-connect-code-api/);
   assert.match(health.json.features.join(","), /buyer-room-auto-sync/);
+  assert.match(health.json.features.join(","), /bridge-multi-room-auto-sync/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.adminConsoleEnabled, true);
 
@@ -339,7 +340,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.45");
+  assert.equal(buyerGuideApproved.json.version, "0.4.46");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
   assert.match(buyerGuideApproved.json.rooms[0].bridgeConnectCode, /\./);

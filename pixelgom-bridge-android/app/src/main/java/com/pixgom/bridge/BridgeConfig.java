@@ -137,6 +137,26 @@ final class BridgeConfig {
         prefs(context).edit().putString(KEY_ROOM_PROFILES, TextUtils.join("\n", lines)).apply();
     }
 
+    static void addOrUpdateRoomProfile(Context context, String name, String roomId, String roomLink, String joinPhrase, String admins, String licenseKey) {
+        List<RoomProfile> profiles = roomProfiles(context);
+        RoomProfile updated = new RoomProfile(name, roomId, roomLink, joinPhrase, adminList(admins), textOrDefault(licenseKey, deviceLicenseKey(context)));
+        List<RoomProfile> next = new ArrayList<>();
+        next.add(updated);
+
+        boolean replaceDefault = shouldReplaceDefaultProfile(profiles, updated);
+        for (RoomProfile profile : profiles) {
+            if (replaceDefault) continue;
+            if (sameRoomProfile(profile, updated)) continue;
+            next.add(profile);
+        }
+
+        List<String> lines = new ArrayList<>();
+        for (RoomProfile profile : next) {
+            lines.add(roomProfileLine(profile.name, profile.roomId, profile.roomLink, profile.joinPhrase, TextUtils.join(",", profile.admins), profile.licenseKey));
+        }
+        prefs(context).edit().putString(KEY_ROOM_PROFILES, TextUtils.join("\n", lines)).apply();
+    }
+
     static List<RoomProfile> roomProfiles(Context context) {
         return parseRoomProfiles(roomProfilesText(context));
     }
@@ -158,6 +178,16 @@ final class BridgeConfig {
             if (!TextUtils.isEmpty(profile.name)) names.add(profile.name);
         }
         return TextUtils.join(",", names);
+    }
+
+    static String roomProfilesSummary(Context context) {
+        List<String> rows = new ArrayList<>();
+        int index = 1;
+        for (RoomProfile profile : roomProfiles(context)) {
+            rows.add(index + ". " + profile.name + " / " + profile.roomId + " / " + profile.joinPhrase);
+            index++;
+        }
+        return rows.isEmpty() ? "등록된 방 없음" : TextUtils.join("\n", rows);
     }
 
     static RoomProfile matchingProfile(Context context, String rawRoom) {
@@ -341,6 +371,23 @@ final class BridgeConfig {
                 + textOrDefault(joinPhrase, DEFAULT_JOIN_PHRASE) + "|"
                 + textOrDefault(admins, DEFAULT_ROOM_NAME) + "|"
                 + textOrDefault(licenseKey, "");
+    }
+
+    private static boolean sameRoomProfile(RoomProfile left, RoomProfile right) {
+        if (left == null || right == null) return false;
+        String leftId = normalized(left.roomId);
+        String rightId = normalized(right.roomId);
+        if (!leftId.isEmpty() && !rightId.isEmpty() && leftId.equals(rightId)) return true;
+        return normalizedRoomName(left.name).equals(normalizedRoomName(right.name));
+    }
+
+    private static boolean shouldReplaceDefaultProfile(List<RoomProfile> profiles, RoomProfile incoming) {
+        if (profiles == null || profiles.size() != 1 || incoming == null) return false;
+        RoomProfile only = profiles.get(0);
+        if (!DEFAULT_ROOM_ID.equals(only.roomId)) return false;
+        if (!normalizedRoomName(DEFAULT_ROOM_NAME).equals(normalizedRoomName(only.name))) return false;
+        if (DEFAULT_ROOM_ID.equals(incoming.roomId)) return false;
+        return only.licenseKey == null || only.licenseKey.startsWith("PXG-" + DEFAULT_ROOM_ID.toUpperCase(Locale.ROOT) + "-");
     }
 
     static void appendLog(Context context, String line) {
