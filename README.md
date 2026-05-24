@@ -184,7 +184,7 @@ BUYER_TOKEN_SECRET=긴_구매자_세션_서명값
 PUBLIC_SITE_URL=https://pixgom.com
 SUPABASE_URL=https://프로젝트.ref.supabase.co
 SUPABASE_ANON_KEY=Supabase_anon_publishable_key
-SUPABASE_KAKAO_ENABLED=true
+SUPABASE_KAKAO_ENABLED=false
 ROOM_BRAND_NAME=픽셀곰
 REGISTERED_ROOM_IDS=gu25P5vi
 REGISTERED_ROOM_LINKS=https://open.kakao.com/o/gu25P5vi
@@ -258,7 +258,8 @@ https://pixgom.com/chat-event   안드로이드 브릿지 기본 API 주소
 3. Kakao Developers에서 웹 플랫폼 도메인 `https://pixgom.com`을 등록합니다.
 4. Kakao Login Redirect URI에는 Supabase 콜백 URL `https://프로젝트.ref.supabase.co/auth/v1/callback`을 등록합니다.
 5. Kakao REST API 키를 Supabase Auth Providers의 Kakao Client ID에 넣습니다. 카카오 앱에서 Client Secret을 켠 경우에만 Supabase에도 Secret을 넣습니다.
-6. 설정 후 `/api/auth/config`가 `mode: "supabase"`, `kakaoEnabled: true`를 반환하는지 확인합니다.
+6. Kakao provider 저장까지 끝난 뒤 Vercel의 `SUPABASE_KAKAO_ENABLED=true`를 설정합니다. provider가 준비되지 않은 상태에서는 `false`로 둡니다.
+7. 설정 후 `/api/auth/config`가 `mode: "supabase"`, Kakao provider 완료 후에는 `kakaoEnabled: true`를 반환하는지 확인합니다.
 
 ## Kanana AI 활용 후보
 
