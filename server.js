@@ -62,7 +62,6 @@ export const FEATURES = [
   "room-safe-bridge-defaults",
   "private-chat-guard",
   "registered-room-guard",
-  "no-games",
   "future-game-roadmap",
   "bridge-self-test-commands",
   "entry-reentry-candidate-history",
