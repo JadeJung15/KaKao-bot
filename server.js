@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.40";
+export const APP_VERSION = "0.4.41";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -1316,7 +1316,7 @@ function subscriptionBypassCommand(text) {
 function subscriptionExpiredText(roomState) {
   const subscription = updateSubscriptionStatus(roomState);
   return [
-    "픽셀곰 브릿지 이용기간이 만료되었습니다.",
+    "픽셀곰 이용기간이 만료되었습니다.",
     `월 이용금액: ${formatKrw(subscription.monthlyPriceKrw)}`,
     `이용기간 만료: ${formatSubscriptionDate(subscription.expiresAt)}`,
     "관리자에게 /구독연장 1 을 요청하세요."
@@ -1395,7 +1395,7 @@ function licenseGuardResult(roomState, payload = {}, message = "", registrationC
   return {
     ok: true,
     reply: isCommand ? [
-      "픽셀곰 브릿지 라이선스 확인이 필요합니다.",
+      "픽셀곰 라이선스 확인이 필요합니다.",
       `방: ${roomState.name || "미지정"}`,
       `라이선스: ${incoming ? "불일치" : "미전송"}`,
       "앱의 방 설정에서 라이선스 키를 확인하세요."

@@ -138,7 +138,7 @@ try {
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
   const adminPageText = await adminPage.text();
-  assert.match(adminPageText, /픽셀곰 관리 콘솔/);
+  assert.match(adminPageText, /픽셀곰 콘솔/);
   assert.match(adminPageText, /방별 기능 ON\/OFF/);
   assert.match(adminPageText, /백업 복구/);
 
