@@ -9,14 +9,14 @@
 | 패키지명 | com.pixgom.bridge |
 | 카테고리 | 도구 |
 | 배포 대상 | 픽셀곰 운영 관리자 |
-| 현재 버전 | 1.0.19 (20) |
+| 현재 버전 | 1.0.20 (21) |
 
 ## 2026-05-25 비공개 테스트 기준
 
 | 항목 | 상태 |
 |---|---|
 | 테스터 CSV | `픽셀곰 내부 테스트` 목록 29명 반영 |
-| AAB | `1.0.19 (20)` 비공개 테스트 업로드 대상 |
+| AAB | `1.0.20 (21)` 비공개 테스트 업로드 대상 |
 | 스토어 등록정보 | 설명, 앱 아이콘, 그래픽 이미지, 휴대전화/태블릿 스크린샷 저장 완료 |
 | 개인정보처리방침 | `https://pixgom.com/privacy` 저장 완료 |
 | 앱 액세스 | 제한 없이 검토 가능으로 저장 |
@@ -40,7 +40,7 @@ npm.cmd run android:bundle
 | 항목 | 기준 |
 |---|---|
 | track | `closed-testing` |
-| versionName | `1.0.19` |
+| versionName | `1.0.20` |
 | versionCode | `20` |
 | aabPath | `pixelgom-bridge-android/app/build/outputs/bundle/release/app-release.aab` |
 | sha256 | 비어 있지 않은 64자리 해시 |

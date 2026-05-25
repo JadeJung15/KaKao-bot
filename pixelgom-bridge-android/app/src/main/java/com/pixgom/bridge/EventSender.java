@@ -32,15 +32,6 @@ final class EventSender {
             payload.put("licenseKey", event.licenseKey == null ? "" : event.licenseKey);
             payload.put("monthlyPriceKrw", event.monthlyPriceKrw > 0 ? event.monthlyPriceKrw : BridgeConfig.MONTHLY_PRICE_KRW);
             payload.put("roomAdmins", new JSONArray(event.roomAdmins == null ? new String[0] : event.roomAdmins));
-            JSONObject features = new JSONObject();
-            features.put("attendance", BridgeConfig.attendanceEnabled(context));
-            features.put("points", BridgeConfig.pointsEnabled(context));
-            features.put("rankings", BridgeConfig.rankingsEnabled(context));
-            features.put("history", BridgeConfig.historyEnabled(context));
-            features.put("profiles", BridgeConfig.profilesEnabled(context));
-            features.put("localJs", BridgeConfig.scriptEnabled(context));
-            features.put("games", BridgeConfig.gamesEnabled(context));
-            payload.put("features", features);
             payload.put("isGroupChat", event.groupChat);
             payload.put("rawIsGroupChat", event.groupChat);
             payload.put("packageName", event.packageName);
