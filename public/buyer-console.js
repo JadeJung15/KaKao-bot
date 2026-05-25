@@ -2,6 +2,7 @@
   const form = document.querySelector("[data-console-login]");
   const statusBox = document.querySelector("[data-console-status]");
   const content = document.querySelector("[data-console-content]");
+  const gate = document.querySelector("[data-console-gate]");
   const kakaoButton = document.querySelector("[data-kakao-login]");
   const signOutButton = document.querySelector("[data-sign-out]");
   const initialView = document.body.dataset.consoleView || "overview";
@@ -151,6 +152,13 @@
   async function authPayloadFromForm() {
     const fallback = form ? Object.fromEntries(new FormData(form).entries()) : {};
     return window.PixelgomAuth ? window.PixelgomAuth.accessPayload(fallback) : fallback;
+  }
+
+  function showConsoleGate(message = "구매 승인된 계정으로 로그인하세요.") {
+    gate?.classList.remove("is-auth-checking");
+    gate?.removeAttribute("hidden");
+    if (form) form.hidden = false;
+    if (statusBox) statusBox.textContent = message;
   }
 
   function renderApplications(applications = []) {
@@ -409,7 +417,7 @@
         ${renderLicense(data)}
       </section>
     `;
-    document.querySelector("[data-console-gate]")?.setAttribute("hidden", "");
+    gate?.setAttribute("hidden", "");
     if (signOutButton) signOutButton.hidden = false;
     statusBox.textContent = "구매자 콘솔을 불러왔습니다.";
     content.querySelectorAll("[data-copy]").forEach((button) => {
@@ -437,16 +445,18 @@
     if (savedToken) {
       requestConsole({ token: savedToken }).catch((error) => {
         sessionStorage.removeItem("pixgomBuyerToken");
-        statusBox.innerHTML = `${escapeHtml(window.PixelgomAuth.friendlyError(error))} <a href="/login">로그인 화면</a>`;
+        showConsoleGate(window.PixelgomAuth.friendlyError(error));
       });
       return;
     }
     const payload = await window.PixelgomAuth.accessPayload({});
     if (payload.accessToken) {
       requestConsole(payload).catch((error) => {
-        statusBox.innerHTML = `콘솔 접근 실패: ${escapeHtml(window.PixelgomAuth.friendlyError(error))} <a href="/login">재로그인</a>`;
+        showConsoleGate(`콘솔 접근 실패: ${window.PixelgomAuth.friendlyError(error)}`);
       });
+      return;
     }
+    showConsoleGate();
   }
 
   form?.addEventListener("submit", async (event) => {

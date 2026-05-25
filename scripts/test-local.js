@@ -104,7 +104,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.79");
+  assert.equal(health.json.version, "0.4.80");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -212,6 +212,7 @@ try {
   assert.match(health.json.features.join(","), /command-store-filter-refinement/);
   assert.match(health.json.features.join(","), /command-store-mode-ux/);
   assert.match(health.json.features.join(","), /new-buyer-journey-ux/);
+  assert.match(health.json.features.join(","), /auth-session-gate/);
   assert.match(health.json.features.join(","), /subscription-expiry-guidance/);
   assert.match(health.json.features.join(","), /bridge-connect-expiry-gate/);
   assert.match(health.json.features.join(","), /license-error-user-guidance/);
@@ -306,6 +307,7 @@ try {
   assert.match(homeText, /대표 명령어 팩/);
   assert.match(homeText, /명령어 스토어/);
   assert.match(homeText, /0\.4\.70/);
+  assert.match(homeText, /0\.4\.80/);
   assert.match(homeText, /0\.4\.79/);
   assert.match(homeText, /처음 시작은 5단계/);
   assert.match(homeText, /계정 만들기/);
@@ -320,20 +322,27 @@ try {
   const noticePageText = await (await fetch(`${baseUrl}/notice`)).text();
   assert.match(noticePageText, /장애 대응 기준/);
   const updatesPageText = await (await fetch(`${baseUrl}/updates`)).text();
+  assert.match(updatesPageText, /픽셀곰 0\.4\.80/);
   assert.match(updatesPageText, /픽셀곰 0\.4\.79/);
   assert.match(updatesPageText, /픽셀곰 0\.4\.70/);
 
   const signupPageText = await (await fetch(`${baseUrl}/signup`)).text();
   assert.match(signupPageText, /처음 시작 5단계/);
+  assert.match(signupPageText, /auth-page auth-checking/);
+  assert.match(signupPageText, /로그인 세션을 확인 중입니다/);
   assert.match(signupPageText, /계정 만들기/);
   assert.match(signupPageText, /friendlyError/);
   const applyPageText = await (await fetch(`${baseUrl}/apply`)).text();
   assert.match(applyPageText, /처음 시작 5단계/);
+  assert.match(applyPageText, /auth-page auth-checking/);
+  assert.match(applyPageText, /로그인 세션을 확인 중입니다/);
   assert.match(applyPageText, /신청 전 확인/);
   assert.match(applyPageText, /https:\/\/open\.kakao\.com\/o\/abcd1234/);
   assert.match(applyPageText, /friendlyError/);
   const loginPageText = await (await fetch(`${baseUrl}/login`)).text();
   assert.match(loginPageText, /처음 시작 5단계/);
+  assert.match(loginPageText, /auth-page auth-checking/);
+  assert.match(loginPageText, /로그인 세션을 확인 중입니다/);
   assert.match(loginPageText, /다음 행동: 서비스 신청하기/);
 
   const commandStorePage = await fetch(`${baseUrl}/command-store`);
@@ -372,7 +381,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.79");
+  assert.equal(commandTemplates.json.version, "0.4.80");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -396,7 +405,7 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.4.79");
+  assert.equal(commandPacks.json.version, "0.4.80");
   assert.equal(commandPacks.json.total, 10);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.fixedCommands.includes("/상태") && pack.fixedCommands.includes("/운세")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.installCode === "pk.001" && pack.installCodeType === "pack"), true);
@@ -418,7 +427,9 @@ try {
 
   const consolePageText = await (await fetch(`${baseUrl}/console`)).text();
   assert.match(consolePageText, /구매자 콘솔/);
-  assert.match(consolePageText, /20260525-new-buyer-ux/);
+  assert.match(consolePageText, /20260525-auth-session-gate/);
+  assert.match(consolePageText, /buyer-gate is-auth-checking/);
+  assert.match(consolePageText, /로그인 세션을 확인 중입니다/);
   const buyerConsoleScriptText = await (await fetch(`${baseUrl}/buyer-console.js`)).text();
   assert.match(buyerConsoleScriptText, /buyer-onboarding/);
   assert.match(buyerConsoleScriptText, /처음 시작 체크리스트/);
@@ -427,6 +438,7 @@ try {
   assert.match(buyerConsoleScriptText, /\/api\/buyer\/room-commands/);
   assert.match(buyerConsoleScriptText, /명령어 검색/);
   assert.match(buyerConsoleScriptText, /장착된 명령어 팩/);
+  assert.match(buyerConsoleScriptText, /showConsoleGate/);
 
   const commandStorePageText = await (await fetch(`${baseUrl}/command-store`)).text();
   assert.match(commandStorePageText, /명령어 팩/);
@@ -475,7 +487,7 @@ try {
   assert.match(sessionNavText, /nav-logout/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.4.79");
+  assert.equal(packageJson.version, "0.4.80");
   assert.equal(packageJson.scripts["check:deploy"], "node scripts/predeploy-check.js");
   assert.equal(packageJson.scripts["smoke:local"], "node scripts/smoke-check.js");
   assert.equal(packageJson.scripts["smoke:prod"], "node scripts/smoke-check.js https://pixgom.com");
@@ -674,7 +686,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.4.79");
+  assert.equal(adminDiagnostics.json.version, "0.4.80");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -685,7 +697,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.4.79");
+  assert.equal(adminBackup.json.version, "0.4.80");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -873,7 +885,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.79");
+  assert.equal(buyerGuideApproved.json.version, "0.4.80");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -888,7 +900,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.79");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.80");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);

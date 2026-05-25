@@ -1257,6 +1257,15 @@ a {
     url("/assets/pixgom-quest-wide.png") center / cover no-repeat;
 }
 
+.auth-checking .auth-card form,
+.auth-checking .auth-links {
+  display: none;
+}
+
+.auth-checking .form-status {
+  min-height: 58px;
+}
+
 .auth-brand {
   justify-self: center;
   padding: 10px 12px;
@@ -1541,6 +1550,14 @@ a {
   grid-template-columns: minmax(260px, 0.9fr) minmax(300px, 1fr);
   gap: 18px;
   align-items: start;
+}
+
+.buyer-gate.is-auth-checking {
+  grid-template-columns: 1fr;
+}
+
+.buyer-gate.is-auth-checking form {
+  display: none;
 }
 
 .buyer-gate > div,

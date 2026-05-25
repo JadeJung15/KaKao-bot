@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>구매자 가이드 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260524-buyer-console">
+    <link rel="stylesheet" href="/styles.css?v=20260525-auth-session-gate">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="sub-page buyer-page">
@@ -26,7 +26,7 @@
         <p>승인된 구매자 계정으로 로그인하면 설치, 권한, 테스트, 문제 해결 안내가 열립니다.</p>
       </section>
 
-      <section class="buyer-gate" data-buyer-gate>
+      <section class="buyer-gate is-auth-checking" data-buyer-gate>
         <div>
           <h2>구매 인증</h2>
           <p>이 페이지의 상세 내용은 승인된 구매자에게만 서버에서 불러옵니다. 전체 구매자 화면은 <a href="/console">/console</a>에서 확인하세요.</p>
@@ -38,16 +38,17 @@
           <button class="button button-primary" type="submit">가이드 열기</button>
           <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인</button>
         </form>
-        <pre class="form-status" data-buyer-status aria-live="polite">구매 승인된 계정으로 로그인하세요.</pre>
+        <pre class="form-status" data-buyer-status aria-live="polite">로그인 세션을 확인 중입니다.</pre>
       </section>
 
       <section class="buyer-content" data-buyer-content hidden></section>
     </main>
-    <script src="/auth.js?v=20260524-buyer-console"></script>
+    <script src="/auth.js?v=20260525-auth-session-gate"></script>
     <script>
       const form = document.querySelector("[data-buyer-form]");
       const statusBox = document.querySelector("[data-buyer-status]");
       const content = document.querySelector("[data-buyer-content]");
+      const gate = document.querySelector("[data-buyer-gate]");
       const kakaoButton = document.querySelector("[data-kakao-login]");
 
       function escapeHtml(value) {
@@ -90,6 +91,7 @@
           <div class="buyer-room-grid">${roomCards}</div>
           <div class="buyer-guide-grid">${sections}</div>
         `;
+        gate.hidden = true;
         content.hidden = false;
         statusBox.textContent = "구매자 가이드를 불러왔습니다.";
         content.querySelectorAll("[data-copy-code]").forEach((button) => {
@@ -100,6 +102,13 @@
             statusBox.textContent = "앱 연결코드를 복사했습니다. 픽셀곰 브릿지 앱의 연결코드 자동 설정에 붙여넣으세요.";
           });
         });
+      }
+
+      function showBuyerGate(message = "구매 승인된 계정으로 로그인하세요.") {
+        gate.classList.remove("is-auth-checking");
+        gate.hidden = false;
+        form.hidden = false;
+        statusBox.textContent = message;
       }
 
       async function requestGuide(payload) {
@@ -124,8 +133,8 @@
           form.reset();
         } catch (error) {
           statusBox.textContent = error.message === "buyer_approval_required"
-            ? "구매 승인 후 이용할 수 있습니다."
-            : `가이드 접근 실패: ${error.message}`;
+            ? window.PixelgomAuth.friendlyError("buyer_approval_required")
+            : `가이드 접근 실패: ${window.PixelgomAuth.friendlyError(error)}`;
         }
       });
 
@@ -134,7 +143,7 @@
         try {
           await window.PixelgomAuth.signInWithKakao("/buyer-guide");
         } catch (error) {
-          statusBox.textContent = `카카오 로그인 실패: ${error.message}`;
+          statusBox.textContent = `카카오 로그인 실패: ${window.PixelgomAuth.friendlyError(error)}`;
         }
       });
 
@@ -144,11 +153,18 @@
         kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
         const savedToken = sessionStorage.getItem("pixgomBuyerToken");
         if (savedToken) {
-          requestGuide({ token: savedToken }).catch(() => sessionStorage.removeItem("pixgomBuyerToken"));
+          requestGuide({ token: savedToken }).catch((error) => {
+            sessionStorage.removeItem("pixgomBuyerToken");
+            showBuyerGate(window.PixelgomAuth.friendlyError(error));
+          });
           return;
         }
         const payload = await window.PixelgomAuth.accessPayload({});
-        if (payload.accessToken) requestGuide(payload).catch(() => {});
+        if (payload.accessToken) {
+          requestGuide(payload).catch((error) => showBuyerGate(`가이드 접근 실패: ${window.PixelgomAuth.friendlyError(error)}`));
+          return;
+        }
+        showBuyerGate();
       })();
     </script>
   </body>

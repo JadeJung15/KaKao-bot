@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>내 방 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-new-buyer-ux">
+    <link rel="stylesheet" href="/styles.css?v=20260525-auth-session-gate">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="sub-page buyer-console-page" data-console-view="rooms">
@@ -20,7 +20,7 @@
       </nav>
     </header>
     <main class="document-main buyer-console-main">
-      <section class="buyer-gate" data-console-gate>
+      <section class="buyer-gate is-auth-checking" data-console-gate>
         <div>
           <p class="section-kicker">Rooms</p>
           <h1>내 방</h1>
@@ -33,11 +33,11 @@
           <button class="button button-primary" type="submit">내 방 열기</button>
           <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인</button>
         </form>
-        <pre class="form-status" data-console-status aria-live="polite">구매 승인된 계정으로 로그인하세요.</pre>
+        <pre class="form-status" data-console-status aria-live="polite">로그인 세션을 확인 중입니다.</pre>
       </section>
       <section data-console-content hidden></section>
     </main>
-    <script src="/auth.js?v=20260525-new-buyer-ux"></script>
-    <script src="/buyer-console.js?v=20260525-new-buyer-ux"></script>
+    <script src="/auth.js?v=20260525-auth-session-gate"></script>
+    <script src="/buyer-console.js?v=20260525-auth-session-gate"></script>
   </body>
 </html>
