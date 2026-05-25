@@ -298,7 +298,8 @@ Android 비공개 테스트 AAB 기준:
 
 1. Play Console 업로드 트랙은 항상 비공개 테스트(Closed testing)입니다.
 2. `npm.cmd run android:bundle`로 release AAB를 생성하고 SHA256, 경로, versionName/versionCode를 확인합니다.
-3. 빌드만 검증하고 Play Console 약관 동의, 권한 승인, 실제 업로드는 운영자 계정에서 직접 확인합니다.
+3. Android 빌드 산출물과 업로드 키는 `.vercelignore`로 Vercel 배포에서 제외합니다.
+4. 빌드만 검증하고 Play Console 약관 동의, 권한 승인, 실제 업로드는 운영자 계정에서 직접 확인합니다.
 
 롤백 기준:
 

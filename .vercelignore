@@ -1,0 +1,7 @@
+pixelgom-bridge-android/.gradle/
+pixelgom-bridge-android/build/
+pixelgom-bridge-android/app/build/
+pixelgom-bridge-android/keystore/
+pixelgom-bridge-android/keystore.properties
+*.aab
+*.apk
