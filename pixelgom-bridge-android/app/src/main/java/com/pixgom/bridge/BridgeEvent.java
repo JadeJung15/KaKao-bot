@@ -1,5 +1,6 @@
 package com.pixgom.bridge;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 final class BridgeEvent {
@@ -45,43 +46,52 @@ final class BridgeEvent {
 
     JSONObject diagnosticPayloadV2() {
         JSONObject payload = new JSONObject();
-        payload.put("payloadVersion", "2-diagnostic");
-        payload.put("room", valueOrEmpty(room));
-        payload.put("rawRoom", valueOrEmpty(rawRoom));
-        payload.put("roomId", valueOrEmpty(roomId));
-        payload.put("sender", valueOrEmpty(sender));
-        payload.put("msgPreview", preview(message, 80));
-        payload.put("source", "pixelgom-android-bridge");
+        try {
+            payload.put("payloadVersion", "2-diagnostic");
+            payload.put("room", valueOrEmpty(room));
+            payload.put("rawRoom", valueOrEmpty(rawRoom));
+            payload.put("roomId", valueOrEmpty(roomId));
+            payload.put("sender", valueOrEmpty(sender));
+            payload.put("msgPreview", preview(message, 80));
+            payload.put("source", "pixelgom-android-bridge");
 
-        JSONObject identity = new JSONObject();
-        putNullable(identity, "senderPersonKeyHash", senderPersonKeyHash);
-        putNullable(identity, "senderPersonUriHash", senderPersonUriHash);
-        putNullable(identity, "messagingUserKeyHash", messagingUserKeyHash);
-        putNullable(identity, "messagingUserUriHash", messagingUserUriHash);
-        putNullable(identity, "senderId", senderId);
-        putNullable(identity, "profileHash", profileHash);
-        putNullable(identity, "authorHash", authorHash);
-        putNullable(identity, "notificationKeyHash", notificationKeyHash);
-        putNullable(identity, "notificationGroupKeyHash", notificationGroupKeyHash);
-        putNullable(identity, "senderPersonNameMasked", senderPersonNameMasked);
-        putNullable(identity, "messagingUserNameMasked", messagingUserNameMasked);
-        payload.put("identity", identity);
+            JSONObject identity = new JSONObject();
+            putNullable(identity, "senderPersonKeyHash", senderPersonKeyHash);
+            putNullable(identity, "senderPersonUriHash", senderPersonUriHash);
+            putNullable(identity, "messagingUserKeyHash", messagingUserKeyHash);
+            putNullable(identity, "messagingUserUriHash", messagingUserUriHash);
+            putNullable(identity, "senderId", senderId);
+            putNullable(identity, "profileHash", profileHash);
+            putNullable(identity, "authorHash", authorHash);
+            putNullable(identity, "notificationKeyHash", notificationKeyHash);
+            putNullable(identity, "notificationGroupKeyHash", notificationGroupKeyHash);
+            putNullable(identity, "senderPersonNameMasked", senderPersonNameMasked);
+            putNullable(identity, "messagingUserNameMasked", messagingUserNameMasked);
+            payload.put("identity", identity);
 
-        JSONObject identityMeta = new JSONObject();
-        identityMeta.put("hashAlgorithm", valueOrDefault(identityHashAlgorithm, "sha256"));
-        identityMeta.put("extractionVersion", valueOrDefault(identityExtractionVersion, "android-bridge-v2-diagnostic"));
-        identityMeta.put("senderPersonKeyPresent", senderPersonKeyPresent);
-        identityMeta.put("senderPersonUriPresent", senderPersonUriPresent);
-        identityMeta.put("messagingUserKeyPresent", messagingUserKeyPresent);
-        identityMeta.put("messagingUserUriPresent", messagingUserUriPresent);
-        identityMeta.put("notificationKeyPresent", notificationKeyPresent);
-        identityMeta.put("notificationGroupKeyPresent", notificationGroupKeyPresent);
-        identityMeta.put("senderIdSource", valueOrDefault(senderIdSource, "unknown"));
-        identityMeta.put("profileHashSource", hasText(profileHash) ? "profile_hash" : "none");
-        identityMeta.put("authorHashSource", hasText(authorHash) ? "room_sender_hash" : "none");
-        identityMeta.put("primaryCandidateField", valueOrDefault(identityPrimaryField, "none"));
-        identityMeta.put("fallbackUsed", "room_sender".equals(valueOrDefault(senderIdSource, "unknown")) || "nickname".equals(valueOrDefault(senderIdSource, "unknown")) || "unknown".equals(valueOrDefault(senderIdSource, "unknown")));
-        payload.put("identityMeta", identityMeta);
+            JSONObject identityMeta = new JSONObject();
+            identityMeta.put("hashAlgorithm", valueOrDefault(identityHashAlgorithm, "sha256"));
+            identityMeta.put("extractionVersion", valueOrDefault(identityExtractionVersion, "android-bridge-v2-diagnostic"));
+            identityMeta.put("senderPersonKeyPresent", senderPersonKeyPresent);
+            identityMeta.put("senderPersonUriPresent", senderPersonUriPresent);
+            identityMeta.put("messagingUserKeyPresent", messagingUserKeyPresent);
+            identityMeta.put("messagingUserUriPresent", messagingUserUriPresent);
+            identityMeta.put("notificationKeyPresent", notificationKeyPresent);
+            identityMeta.put("notificationGroupKeyPresent", notificationGroupKeyPresent);
+            identityMeta.put("senderIdSource", valueOrDefault(senderIdSource, "unknown"));
+            identityMeta.put("profileHashSource", hasText(profileHash) ? "profile_hash" : "none");
+            identityMeta.put("authorHashSource", hasText(authorHash) ? "room_sender_hash" : "none");
+            identityMeta.put("primaryCandidateField", valueOrDefault(identityPrimaryField, "none"));
+            identityMeta.put("fallbackUsed", "room_sender".equals(valueOrDefault(senderIdSource, "unknown")) || "nickname".equals(valueOrDefault(senderIdSource, "unknown")) || "unknown".equals(valueOrDefault(senderIdSource, "unknown")));
+            payload.put("identityMeta", identityMeta);
+        } catch (JSONException error) {
+            try {
+                payload.put("payloadVersion", "2-diagnostic");
+                payload.put("error", "diagnostic_payload_build_failed");
+            } catch (JSONException ignored) {
+                // Keep the diagnostic path non-fatal.
+            }
+        }
         return payload;
     }
 
@@ -113,7 +123,7 @@ final class BridgeEvent {
         return hasText(value) ? value : fallback;
     }
 
-    private static void putNullable(JSONObject object, String key, String value) {
+    private static void putNullable(JSONObject object, String key, String value) throws JSONException {
         object.put(key, hasText(value) ? value : JSONObject.NULL);
     }
 
