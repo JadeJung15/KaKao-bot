@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.83";
+export const APP_VERSION = "0.4.84";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -7120,6 +7120,7 @@ function buyerConsolePayload(state, account = {}) {
     },
     commandStore: commandTemplateCatalogPayload(),
     commandPacks: commandPackCatalogPayload(),
+    transfers: buyerRoomTransfersPayload(state, account),
     ownerAdminNotice: "/admin 은 판매자 운영자 전용입니다. 구매자는 /console, /my-rooms, /setup, /license 화면만 사용합니다."
   };
 }
@@ -7735,16 +7736,93 @@ async function buyerConsoleFromRequest(state, req, body = {}) {
 }
 
 function publicRoomTransferView(transfer = {}, options = {}) {
+  const status = roomTransferStatus(transfer);
   return {
     id: transfer.id || "",
     applicationId: transfer.applicationId || "",
     roomName: transfer.roomName || "",
-    status: transfer.status || "pending",
+    status,
+    statusLabel: ROOM_TRANSFER_STATUS_LABELS[status] || status,
     createdAt: transfer.createdAt || "",
     expiresAt: transfer.expiresAt || "",
     acceptedAt: transfer.acceptedAt || "",
     cancelledAt: transfer.cancelledAt || "",
     ...(options.code ? { code: options.code } : {})
+  };
+}
+
+const ROOM_TRANSFER_STATUS_LABELS = Object.freeze({
+  pending: "대기",
+  accepted: "이관 완료",
+  cancelled: "취소",
+  expired: "만료"
+});
+
+function roomTransferStatus(transfer = {}) {
+  if (transfer.status === "pending" && Date.parse(transfer.expiresAt || "") <= Date.now()) return "expired";
+  return ["pending", "accepted", "cancelled", "expired"].includes(transfer.status) ? transfer.status : "pending";
+}
+
+function transferAccountView(account = {}) {
+  if (!account) return { id: "", email: "", nickname: "" };
+  return {
+    id: account.id || "",
+    email: account.email || "",
+    nickname: account.nickname || account.auth?.name || "",
+    authProvider: account.auth?.provider || "password"
+  };
+}
+
+function publicBuyerRoomTransferView(state, transfer = {}, account = {}) {
+  const direction = transfer.fromAccountId === account.id ? "sent" : "received";
+  const otherAccount = direction === "sent"
+    ? state.accounts?.[transfer.toAccountId]
+    : state.accounts?.[transfer.fromAccountId];
+  return {
+    ...publicRoomTransferView(transfer),
+    direction,
+    counterpart: transferAccountView(otherAccount)
+  };
+}
+
+function buyerRoomTransfersPayload(state, account = {}) {
+  return Object.values(state.roomTransfers || {})
+    .filter((transfer) => transfer.fromAccountId === account.id || transfer.toAccountId === account.id)
+    .map((transfer) => publicBuyerRoomTransferView(state, transfer, account))
+    .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
+}
+
+function publicAdminRoomTransferView(state, transfer = {}) {
+  return {
+    ...publicRoomTransferView(transfer),
+    fromAccount: transferAccountView(state.accounts?.[transfer.fromAccountId]),
+    toAccount: transferAccountView(state.accounts?.[transfer.toAccountId]),
+    cancelReason: transfer.cancelReason || ""
+  };
+}
+
+function adminTransfersPayload(state, options = {}) {
+  const requestedStatus = normalizeText(options.status || "all");
+  const status = ["pending", "accepted", "cancelled", "expired", "all"].includes(requestedStatus) ? requestedStatus : "all";
+  const transfers = Object.values(state.roomTransfers || {})
+    .map((transfer) => publicAdminRoomTransferView(state, transfer))
+    .filter((transfer) => status === "all" || transfer.status === status)
+    .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
+  const allTransfers = Object.values(state.roomTransfers || {}).map((transfer) => publicRoomTransferView(transfer));
+  return {
+    ok: true,
+    version: APP_VERSION,
+    generatedAt: nowIso(),
+    filter: { status },
+    summary: {
+      total: allTransfers.length,
+      pending: allTransfers.filter((transfer) => transfer.status === "pending").length,
+      accepted: allTransfers.filter((transfer) => transfer.status === "accepted").length,
+      cancelled: allTransfers.filter((transfer) => transfer.status === "cancelled").length,
+      expired: allTransfers.filter((transfer) => transfer.status === "expired").length,
+      visible: transfers.length
+    },
+    transfers
   };
 }
 
@@ -8411,6 +8489,13 @@ async function handleAdminApi(req, url) {
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     return { status: 200, body: adminReportsPayload(state, Object.fromEntries(url.searchParams.entries())) };
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/transfers") {
+    const auth = await requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return { status: 200, body: adminTransfersPayload(state, Object.fromEntries(url.searchParams.entries())) };
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/rooms") {

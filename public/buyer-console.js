@@ -236,6 +236,31 @@
     `;
   }
 
+  function renderTransferHistory(transfers = []) {
+    if (!transfers.length) {
+      return `
+        <section class="buyer-panel buyer-transfer-history" aria-label="이관 내역">
+          <h2>이관 내역</h2>
+          <article class="buyer-empty"><h3>이관 내역 없음</h3><p>방을 넘기거나 받은 기록이 이곳에 표시됩니다.</p></article>
+        </section>
+      `;
+    }
+    return `
+      <section class="buyer-panel buyer-transfer-history" aria-label="이관 내역">
+        <h2>이관 내역</h2>
+        <div class="buyer-transfer-history-list">
+          ${transfers.slice(0, 8).map((transfer) => `
+            <article class="buyer-transfer-history-card" data-status="${escapeHtml(transfer.status || "pending")}">
+              <strong>${escapeHtml(transfer.roomName || "방 이름 없음")}</strong>
+              <span>${escapeHtml(transfer.direction === "received" ? "받은 이관" : "보낸 이관")} · ${escapeHtml(transfer.statusLabel || transfer.status || "대기")}</span>
+              <small>생성 ${escapeHtml(transfer.createdAt || "-")}${transfer.acceptedAt ? ` · 수락 ${escapeHtml(transfer.acceptedAt)}` : ""}${transfer.cancelledAt ? ` · 취소 ${escapeHtml(transfer.cancelledAt)}` : ""}</small>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
   function renderRooms(rooms = []) {
     if (!rooms.length) {
       return `<article class="buyer-empty"><h3>승인된 방이 없습니다</h3><p>운영자가 입금 확인 후 승인하면 이곳에 방별 라이선스와 연결코드가 표시됩니다.</p></article>`;
@@ -476,6 +501,7 @@
       ${renderNextAction(data)}
       ${renderOnboarding(data)}
       ${renderTransferAcceptPanel()}
+      ${renderTransferHistory(data.transfers || [])}
       <section class="${sectionClass("overview")}">
         <h2>신청 상태</h2>
         <div class="buyer-mini-grid">${renderApplications(data.applications || [])}</div>

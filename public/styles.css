@@ -2273,6 +2273,39 @@ a {
   margin-top: 0;
 }
 
+.buyer-transfer-history-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.buyer-transfer-history-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.buyer-transfer-history-card[data-status="accepted"] {
+  border-color: #cce4d8;
+  background: #f4fbf7;
+}
+
+.buyer-transfer-history-card strong,
+.buyer-transfer-history-card span,
+.buyer-transfer-history-card small {
+  overflow-wrap: anywhere;
+}
+
+.buyer-transfer-history-card span,
+.buyer-transfer-history-card small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .buyer-guide-section ol {
   margin: 0;
   padding-left: 22px;
@@ -3040,6 +3073,7 @@ a {
 .admin-toolbar,
 .admin-summary,
 .admin-report-panel,
+.admin-transfer-panel,
 .admin-import {
   margin: clamp(22px, 4vw, 42px) clamp(20px, 5vw, 72px) 0;
 }
@@ -3152,6 +3186,7 @@ a {
 .admin-form,
 .admin-result,
 .admin-report-panel,
+.admin-transfer-panel,
 .admin-import {
   min-width: 0;
   padding: 22px;
@@ -3281,6 +3316,11 @@ a {
   gap: 16px;
 }
 
+.admin-transfer-panel {
+  display: grid;
+  gap: 16px;
+}
+
 .admin-report-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
@@ -3318,7 +3358,8 @@ a {
 
 .room-card-list,
 .application-card-list,
-.report-card-list {
+.report-card-list,
+.transfer-card-list {
   display: grid;
   gap: 10px;
   margin-bottom: 14px;
@@ -3336,6 +3377,11 @@ a {
 
 .report-card-list {
   max-height: min(48vh, 560px);
+}
+
+.transfer-card-list {
+  max-height: min(48vh, 560px);
+  overflow: auto;
 }
 
 .application-card {
@@ -3631,6 +3677,7 @@ a {
   .buyer-transfer-panel,
   .buyer-transfer-form,
   .buyer-transfer-card,
+  .buyer-transfer-history-list,
   .template-grid {
     grid-template-columns: 1fr;
   }

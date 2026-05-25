@@ -52,6 +52,7 @@
         <button class="button button-primary" type="button" data-load-rooms>등록 방 불러오기</button>
         <button class="button button-secondary" type="button" data-load-applications>신청/결제 불러오기</button>
         <button class="button button-secondary" type="button" data-load-reports>신고 불러오기</button>
+        <button class="button button-secondary" type="button" data-load-transfers>이관 내역 불러오기</button>
         <button class="button button-secondary" type="button" data-diagnostics>진단 새로고침</button>
         <button class="button button-secondary" type="button" data-backup>백업 JSON 받기</button>
       </section>
@@ -83,6 +84,29 @@
         </div>
         <div class="report-card-list" data-report-list>
           <p>신고 불러오기를 누르면 접수된 신고가 표시됩니다.</p>
+        </div>
+      </section>
+
+      <section class="admin-transfer-panel" aria-label="이관 내역">
+        <div class="admin-report-head">
+          <div>
+            <p class="section-kicker">Transfers</p>
+            <h2>이관 내역</h2>
+            <p>구매자끼리 생성, 취소, 수락한 방 소유권 이관 기록을 확인합니다.</p>
+          </div>
+          <label>
+            상태
+            <select id="transfer-status-filter" name="transferStatusFilter" data-transfer-status-filter>
+              <option value="all">전체</option>
+              <option value="pending">대기</option>
+              <option value="accepted">이관 완료</option>
+              <option value="cancelled">취소</option>
+              <option value="expired">만료</option>
+            </select>
+          </label>
+        </div>
+        <div class="transfer-card-list" data-transfer-list>
+          <p>이관 내역 불러오기를 누르면 방 소유권 이관 기록이 표시됩니다.</p>
         </div>
       </section>
 
@@ -217,16 +241,19 @@
       const roomList = document.querySelector("[data-room-list]");
       const applicationList = document.querySelector("[data-application-list]");
       const reportList = document.querySelector("[data-report-list]");
+      const transferList = document.querySelector("[data-transfer-list]");
       const summary = document.querySelector("[data-summary]");
       const restoreInput = document.querySelector("[data-restore-json]");
       const searchInput = document.querySelector("[data-admin-search]");
       const roomStatusFilterInput = document.querySelector("[data-room-status-filter]");
       const reportStatusFilterInput = document.querySelector("[data-report-status-filter]");
+      const transferStatusFilterInput = document.querySelector("[data-transfer-status-filter]");
       const commandTriggerInput = document.querySelector("[data-command-trigger]");
       const commandResponseInput = document.querySelector("[data-command-response]");
       let rooms = [];
       let applications = [];
       let reports = [];
+      let transfers = [];
       let selectedRoom = null;
       let ownerToken = sessionStorage.getItem("pixgomOwnerToken") || "";
 
@@ -331,6 +358,24 @@
           report.reason,
           report.resolution,
           report.resolvedBy
+        ).includes(term);
+      }
+
+      function transferAccountText(account = {}) {
+        return account.email || account.nickname || account.id || "-";
+      }
+
+      function transferMatchesSearch(transfer, term) {
+        if (!term) return true;
+        return searchableText(
+          transfer.id,
+          transfer.roomName,
+          transfer.status,
+          transfer.statusLabel,
+          transfer.fromAccount?.email,
+          transfer.fromAccount?.nickname,
+          transfer.toAccount?.email,
+          transfer.toAccount?.nickname
         ).includes(term);
       }
 
@@ -643,6 +688,36 @@
         }
       }
 
+      function renderTransfers(data) {
+        if (Array.isArray(data.transfers)) transfers = data.transfers;
+        const term = searchTerm();
+        const visibleTransfers = transfers.filter((transfer) => transferMatchesSearch(transfer, term));
+        transferList.innerHTML = "";
+        if (!visibleTransfers.length) {
+          transferList.innerHTML = `<p>${term ? "검색 결과가 없습니다." : "표시할 이관 내역이 없습니다."}</p>`;
+          return;
+        }
+        for (const transfer of visibleTransfers.slice(0, 50)) {
+          const statusKind = transfer.status === "accepted" ? "ok" : transfer.status === "pending" ? "warn" : "muted";
+          const card = document.createElement("article");
+          card.className = "report-card transfer-card";
+          card.dataset.status = transfer.status || "pending";
+          card.innerHTML = `
+            <div class="report-card-body">
+              <div class="report-card-title">
+                <strong>${escapeHtml(transfer.roomName || "방 이름 없음")} · ${escapeHtml(transfer.id)}</strong>
+                ${statusBadge(transfer.statusLabel || transfer.status || "대기", statusKind)}
+              </div>
+              <span>보낸 계정 ${escapeHtml(transferAccountText(transfer.fromAccount))} · 받은 계정 ${escapeHtml(transferAccountText(transfer.toAccount))}</span>
+              <small>생성 ${escapeHtml(transfer.createdAt || "-")} · 만료 ${escapeHtml(transfer.expiresAt || "-")}</small>
+              ${transfer.acceptedAt ? `<small>수락 ${escapeHtml(transfer.acceptedAt)}</small>` : ""}
+              ${transfer.cancelledAt ? `<small>취소 ${escapeHtml(transfer.cancelledAt)}${transfer.cancelReason ? ` · ${escapeHtml(transfer.cancelReason)}` : ""}</small>` : ""}
+            </div>
+          `;
+          transferList.appendChild(card);
+        }
+      }
+
       function compactPrintPayload(value) {
         if (!value || typeof value !== "object") return value;
         if (Array.isArray(value.rooms)) {
@@ -675,6 +750,21 @@
               amountKrw: application.payment?.amountKrw
             })),
             hiddenApplications: Math.max(0, value.applications.length - 10)
+          };
+        }
+        if (Array.isArray(value.transfers)) {
+          return {
+            ok: value.ok,
+            version: value.version,
+            summary: value.summary,
+            transfersPreview: value.transfers.slice(0, 10).map((transfer) => ({
+              id: transfer.id,
+              roomName: transfer.roomName,
+              status: transfer.statusLabel || transfer.status,
+              from: transferAccountText(transfer.fromAccount),
+              to: transferAccountText(transfer.toAccount)
+            })),
+            hiddenTransfers: Math.max(0, value.transfers.length - 10)
           };
         }
         if (value.state) {
@@ -718,6 +808,13 @@
         const status = reportStatusFilterInput.value || "open";
         const json = await requestJson(`/api/admin/reports?status=${encodeURIComponent(status)}`);
         renderReports(json);
+        print(compactPrintPayload(json));
+      }
+
+      async function loadTransfers() {
+        const status = transferStatusFilterInput.value || "all";
+        const json = await requestJson(`/api/admin/transfers?status=${encodeURIComponent(status)}`);
+        renderTransfers(json);
         print(compactPrintPayload(json));
       }
 
@@ -828,6 +925,10 @@
         loadReports().catch((error) => print(friendlyError(error)));
       });
 
+      document.querySelector("[data-load-transfers]").addEventListener("click", () => {
+        loadTransfers().catch((error) => print(friendlyError(error)));
+      });
+
       document.querySelector("[data-add-command]").addEventListener("click", () => {
         upsertCommandLine(commandTriggerInput.value, commandResponseInput.value);
       });
@@ -836,6 +937,7 @@
         renderRooms({ rooms });
         renderApplications({ applications });
         renderReports({ reports });
+        renderTransfers({ transfers });
       });
 
       roomStatusFilterInput.addEventListener("change", () => {
@@ -844,6 +946,10 @@
 
       reportStatusFilterInput.addEventListener("change", () => {
         loadReports().catch((error) => print(friendlyError(error)));
+      });
+
+      transferStatusFilterInput.addEventListener("change", () => {
+        loadTransfers().catch((error) => print(friendlyError(error)));
       });
 
       document.querySelector("[data-diagnostics]").addEventListener("click", async () => {
