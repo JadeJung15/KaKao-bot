@@ -17,6 +17,7 @@
   const packPanel = document.querySelector("[data-command-pack-panel]");
   const packGrid = document.querySelector("[data-command-pack-grid]");
   const packCurrent = document.querySelector("[data-command-pack-current]");
+  const installedPackSummary = document.querySelector("[data-installed-pack-summary]");
   const loadMoreButton = document.querySelector("[data-load-more]");
   const cartPanel = document.querySelector("[data-cart-panel]");
   const templateSection = grid?.parentElement;
@@ -302,15 +303,21 @@
     packCurrent.textContent = installedTitles.length
       ? `장착됨: ${installedTitles.join(", ")}`
       : "아직 장착된 명령어 팩이 없습니다.";
+    renderInstalledPackSummary(packs, current);
     const visiblePacks = packs.filter(packMatches);
     packGrid.innerHTML = visiblePacks.map((pack) => {
       const actionLabel = pack.installed ? "팩 제거" : "장착";
       const installCommand = pack.installCode ? `/명령어설치 ${pack.installCode}` : "";
+      const statusLabel = pack.installed ? "장착됨" : packCart.has(pack.id) ? "장바구니" : "설치 가능";
       return `
         <article class="command-pack-card" data-installed="${pack.installed ? "true" : "false"}">
           <div>
             <span>${escapeHtml(pack.installed ? "장착됨" : packSlotLabel(pack.slot))} · ${escapeHtml(pack.tier)}</span>
             <strong>${escapeHtml(pack.title)}</strong>
+          </div>
+          <div class="command-pack-status">
+            <span>${escapeHtml(statusLabel)}</span>
+            <small>${escapeHtml(pack.installed ? "현재 방에 장착된 팩입니다." : "카톡 설치 명령어로 장착할 수 있습니다.")}</small>
           </div>
           <p>${escapeHtml(pack.description)}</p>
           <small>${escapeHtml(pack.installCode ? `${pack.installCode} · ${packCommandText(pack)}` : packCommandText(pack))}</small>
@@ -332,12 +339,41 @@
           <details class="command-direct-install">
             <summary>고급: 사이트에서 바로 설치</summary>
             <button class="button button-secondary" type="button" data-apply-pack="${escapeHtml(pack.id)}" data-pack-action="${pack.installed ? "remove" : "apply"}" ${buyerToken && buyerRooms.length ? "" : "disabled"}>${escapeHtml(actionLabel)}</button>
-            ${pack.installed ? "<small>팩 제거 시 다른 팩이나 직접 추가 명령어와 겹치는 항목은 유지됩니다.</small>" : ""}
+            ${pack.installed ? "<small class=\"command-pack-remove-note\">팩 제거 시 다른 팩이나 직접 추가 명령어와 겹치는 항목은 유지됩니다.</small>" : ""}
           </details>
         </article>
       `;
     }).join("");
     if (!visiblePacks.length) packGrid.innerHTML = `<article class="buyer-empty"><h3>검색 결과 없음</h3><p>pk.001, 운영 기본팩, 게임 같은 단어로 다시 검색해보세요.</p></article>`;
+  }
+
+  function renderInstalledPackSummary(packs, current) {
+    if (!installedPackSummary) return;
+    const detailed = current.installedPackDetails || packs.filter((pack) => pack.installed);
+    if (!detailed.length) {
+      installedPackSummary.innerHTML = `
+        <div>
+          <strong>장착된 팩 없음</strong>
+          <span>처음이면 운영 기본팩 pk.001부터 설치해 주세요.</span>
+        </div>
+      `;
+      return;
+    }
+    installedPackSummary.innerHTML = detailed.map((pack) => {
+      const commands = pack.commandsDetailed || [];
+      return `
+        <details class="installed-pack-summary-card">
+          <summary>
+            <strong>${escapeHtml(pack.installCode || pack.id)} ${escapeHtml(pack.title)}</strong>
+            <span>${escapeHtml(pack.commandCount || commands.length)}개 명령어 · ${escapeHtml(pack.removeCommand || "/명령어팩제거 코드")}</span>
+          </summary>
+          <ul>
+            ${commands.map((item) => `<li><strong>${escapeHtml(item.command)}</strong><span>${escapeHtml(item.description || "채팅 명령어")}</span></li>`).join("")}
+          </ul>
+          <p class="command-pack-remove-note">팩 제거 시 다른 팩이나 직접 추가 명령어와 겹치는 항목은 유지됩니다.</p>
+        </details>
+      `;
+    }).join("");
   }
 
   function packMatches(pack) {

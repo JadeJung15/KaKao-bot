@@ -137,7 +137,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.89");
+  assert.equal(health.json.version, "0.4.90");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -484,7 +484,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.89");
+  assert.equal(commandTemplates.json.version, "0.4.90");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -513,7 +513,7 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.4.89");
+  assert.equal(commandPacks.json.version, "0.4.90");
   assert.equal(commandPacks.json.total, 13);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.fixedCommands.includes("/상태") && pack.fixedCommands.includes("/운세") && pack.fixedCommands.includes("/신고")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.installCode === "pk.001" && pack.installCodeType === "pack"), true);
@@ -530,6 +530,7 @@ try {
   assert.equal(petPack.removeCommand, "/명령어팩제거 pk.008");
   assert.equal(petPack.commandsDetailed.some((item) => item.command === "/펫상점" && item.registered === true && /펫/.test(item.description)), true);
   assert.equal(commandPacks.json.packs.flatMap((pack) => pack.commandsDetailed || []).every((item) => item.registered === true), true);
+  assert.equal(Array.isArray(commandPacks.json.current.installedPackDetails), true);
 
   const helpPetPageText = await (await fetch(`${baseUrl}/help/pet`)).text();
   assert.match(helpPetPageText, /펫키우기팩/);
@@ -542,6 +543,8 @@ try {
   const stylesText = await (await fetch(`${baseUrl}/styles.css`)).text();
   assert.match(stylesText, /\.help-command-list/);
   assert.match(stylesText, /\.command-pack-actions/);
+  assert.match(stylesText, /\.installed-pack-summary/);
+  assert.match(stylesText, /\.command-pack-remove-note/);
   assert.doesNotMatch(stylesText, /\.post-card span\s*\{/);
 
   const statusPage = await fetch(`${baseUrl}/status`);
@@ -583,8 +586,11 @@ try {
   assert.match(commandStorePageText, /명령어 팩/);
   assert.match(commandStorePageText, /장착/);
   assert.match(commandStorePageText, /교체/);
+  assert.match(commandStorePageText, /data-installed-pack-summary/);
   assert.match(commandStoreScriptText, /\/api\/command-packs/);
   assert.match(commandStoreScriptText, /\/api\/buyer\/command-packs\/apply/);
+  assert.match(commandStoreScriptText, /renderInstalledPackSummary/);
+  assert.match(commandStoreScriptText, /command-pack-remove-note/);
 
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
@@ -638,18 +644,19 @@ try {
   assert.match(sessionNavText, /nav-logout/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.4.89");
+  assert.equal(packageJson.version, "0.4.90");
   assert.equal(packageJson.scripts["check:deploy"], "node scripts/predeploy-check.js");
   assert.equal(packageJson.scripts["smoke:local"], "node scripts/smoke-check.js");
   assert.equal(packageJson.scripts["smoke:prod"], "node scripts/smoke-check.js https://pixgom.com");
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
   assert.equal(packageJson.scripts["android:release-report"], "node scripts/android-release-bundle.js --report-only");
   const androidGradle = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "build.gradle"), "utf8");
-  assert.match(androidGradle, /versionCode 21/);
-  assert.match(androidGradle, /versionName "1\.0\.20"/);
+  assert.match(androidGradle, /versionCode 22/);
+  assert.match(androidGradle, /versionName "1\.0\.21"/);
   const androidChecklist = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "PLAY_STORE_CHECKLIST.md"), "utf8");
   assert.match(androidChecklist, /비공개 테스트/);
   assert.match(androidChecklist, /1\.0\.20 \(21\)/);
+  assert.match(androidChecklist, /1\.0\.21 \(22\)/);
 
   const adminUnauthorized = await request("/api/admin/rooms");
   assert.equal(adminUnauthorized.response.status, 401);
@@ -837,7 +844,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.4.89");
+  assert.equal(adminDiagnostics.json.version, "0.4.90");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -848,7 +855,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.4.89");
+  assert.equal(adminBackup.json.version, "0.4.90");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -1099,7 +1106,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.89");
+  assert.equal(buyerGuideApproved.json.version, "0.4.90");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -1114,7 +1121,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.89");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.90");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -1255,6 +1262,20 @@ try {
   assert.match(packList.json.reply, /장착된 명령어 팩/);
   assert.match(packList.json.reply, /pk\.001 운영 기본팩/);
 
+  const packListDetailed = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "/명령어팩목록 자세히",
+    sender: "신청관리자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.match(packListDetailed.json.reply, /장착된 명령어 팩 상세/);
+  assert.match(packListDetailed.json.reply, /pk\.001 운영 기본팩/);
+  assert.match(packListDetailed.json.reply, /포함 명령어/);
+  assert.match(packListDetailed.json.reply, /\/상태/);
+
   const commandPackCatalogReply = await chatPayload({
     registeredRoom: false,
     room: "판매신청방",
@@ -1337,6 +1358,7 @@ try {
   assert.match(chatPackRemove.json.reply, /명령어팩 제거 완료/);
   assert.match(chatPackRemove.json.reply, /게임 확률팩/);
   assert.match(chatPackRemove.json.reply, /보존/);
+  assert.match(chatPackRemove.json.reply, /다른 팩 또는 직접 추가 명령어와 겹치면 유지/);
 
   const roomPackState = await request("/api/buyer/room-command-packs", {
     method: "POST",
@@ -1349,6 +1371,7 @@ try {
   assert.equal(roomPackState.response.status, 200);
   assert.equal(roomPackState.json.current.installedPackIds.includes("ops-core"), true);
   assert.equal(roomPackState.json.current.installedPackIds.includes("all-in-one-ops"), true);
+  assert.equal(roomPackState.json.current.installedPackDetails.some((pack) => pack.id === "ops-core" && pack.commandsDetailed.some((item) => item.command === "/상태")), true);
   assert.equal(roomPackState.json.packs.some((pack) => pack.id === "all-in-one-ops" && pack.installed === true), true);
 
   const proPackCommands = await request("/api/buyer/custom-commands", {

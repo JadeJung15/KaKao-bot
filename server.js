@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.89";
+export const APP_VERSION = "0.4.90";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -181,6 +181,8 @@ export const FEATURES = [
   "game-room-apply-ux",
   "compact-command-pack-actions",
   "help-command-list-style",
+  "installed-command-pack-summary",
+  "android-1021-release-prep",
   "compact-site-navigation",
   "why-pixgom-redesign",
   "subscription-expiry-guidance",
@@ -1753,7 +1755,7 @@ function commandPackCatalogPayload(current = {}) {
       legacy: COMMAND_PACKS.filter((pack) => pack.hidden).length,
       installed: visiblePacks.filter((pack) => publicCommandPack(pack, normalized).installed).length
     },
-    current: normalized,
+    current: commandPackStatePayload(normalized),
     packs: visiblePacks.map((pack) => publicCommandPack(pack, normalized))
   };
 }
@@ -1768,8 +1770,11 @@ function commandPackStatePayload(current = {}) {
     basePackTitle: basePack?.title || "",
     installedPackTitles: installedPacks.map((pack) => pack.title),
     installedPacks: installedPacks.map((pack) => ({ id: pack.id, title: pack.title, tier: pack.tier })),
+    installedPackDetails: installedPacks.map((pack) => publicCommandPack(pack, normalized)),
     addonPackTitles: addonPacks.map((pack) => pack.title),
-    addonPacks: addonPacks.map((pack) => ({ id: pack.id, title: pack.title, tier: pack.tier }))
+    addonPacks: addonPacks.map((pack) => ({ id: pack.id, title: pack.title, tier: pack.tier })),
+    addonPackDetails: addonPacks.map((pack) => publicCommandPack(pack, normalized)),
+    basePackDetail: basePack ? publicCommandPack(basePack, normalized) : null
   };
 }
 
@@ -9110,11 +9115,12 @@ function commandInstallListText(roomState, sender, identity = {}) {
   return lines.join("\n");
 }
 
-function commandPackListText(roomState, sender) {
+function commandPackListText(roomState, sender, parsed = {}) {
   const denied = requireAdmin(roomState, sender);
   if (denied) return denied;
   const packs = activeCommandPacks(roomState).filter((pack) => !pack.hidden);
-  const lines = ["장착된 명령어 팩"];
+  const detailed = ["자세히", "상세", "전체"].includes(normalizeText(parsed.args?.[0]));
+  const lines = [detailed ? "장착된 명령어 팩 상세" : "장착된 명령어 팩"];
   if (!packs.length) {
     lines.push("", "- 없음", "", "추천: /명령어설치 pk.001 로 운영 기본팩을 먼저 장착해 보세요.");
     return lines.join("\n");
@@ -9122,8 +9128,12 @@ function commandPackListText(roomState, sender) {
   lines.push("", ...packs.map((pack) => {
     const code = commandPackInstallCode(pack) || pack.id;
     const commandCount = (pack.fixedCommands || []).length + (pack.customCommands || []).length;
-    return `- ${code} ${pack.title} (${pack.id}, ${commandCount}개)`;
+    if (!detailed) return `- ${code} ${pack.title} (${pack.id}, ${commandCount}개)`;
+    const detail = publicCommandPack(pack, roomState.settings?.commandPacks || {});
+    const commands = detail.commandsDetailed.map((item) => item.command).join(", ") || "없음";
+    return `- ${code} ${pack.title} (${pack.id}, ${commandCount}개)\n  포함 명령어: ${commands}`;
   }));
+  if (!detailed) lines.push("", "자세히: /명령어팩목록 자세히");
   lines.push("", "제거: /명령어팩제거 pk.004 또는 /명령어팩제거 game-chance");
   return lines.join("\n");
 }
@@ -9211,6 +9221,7 @@ function commandPackRemoveCommand(roomState, sender, parsed) {
   ];
   lines.push(`- 제거 명령어 : ${result.removedCommands.length ? result.removedCommands.slice(0, 12).join(", ") : "없음"}`);
   lines.push(`- 보존 명령어 : ${result.keptCommands.length ? result.keptCommands.slice(0, 12).join(", ") : "없음"}`);
+  lines.push("- 보존 기준 : 다른 팩 또는 직접 추가 명령어와 겹치면 유지");
   return lines.join("\n");
 }
 
@@ -10298,7 +10309,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/설치취소") return commandInstallCancelCommand(roomState, sender, parsed, identity);
   if (command === "/명령어설치목록") return commandInstallListText(roomState, sender, identity);
   if (command === "/명령어팩" || command === "/팩목록") return commandPackInfoCommand(roomState, parsed);
-  if (command === "/명령어팩목록" || command === "/장착팩") return commandPackListText(roomState, sender);
+  if (command === "/명령어팩목록" || command === "/장착팩") return commandPackListText(roomState, sender, parsed);
   if (command === "/명령어팩제거" || command === "/팩제거") return commandPackRemoveCommand(roomState, sender, parsed);
   if (command === "/게임팩도움말") return gamePackHelpText(parsed.args.join(" "));
   const registryItem = resolveCommandRegistryItem(command, compactCommand);

@@ -9,7 +9,8 @@
 | 패키지명 | com.pixgom.bridge |
 | 카테고리 | 도구 |
 | 배포 대상 | 픽셀곰 운영 관리자 |
-| 현재 버전 | 1.0.20 (21) |
+| 현재 Play 등록 | 1.0.20 (21) |
+| 다음 준비 AAB | 1.0.21 (22) |
 
 ## 2026-05-25 비공개 테스트 기준
 
@@ -41,7 +42,7 @@
 | 프로덕션 액세스 조건 | 비공개 테스트 버전 게시 완료, 12명 이상 참여 선택 완료, 14일 이상 운영 대기 중 |
 | 현재 경과 | 12명 테스터가 1일 동안 참여 선택 |
 
-## AAB 생성/검증
+## 다음 AAB 생성/검증
 
 ```powershell
 npm.cmd run android:bundle
@@ -52,10 +53,12 @@ npm.cmd run android:bundle
 | 항목 | 기준 |
 |---|---|
 | track | `closed-testing` |
-| versionName | `1.0.20` |
-| versionCode | `21` |
+| versionName | `1.0.21` |
+| versionCode | `22` |
 | aabPath | `pixelgom-bridge-android/app/build/outputs/bundle/release/app-release.aab` |
 | sha256 | 비어 있지 않은 64자리 해시 |
+
+현재 Play Console 내부 테스트와 비공개 테스트 Alpha에 등록된 버전은 `1.0.20 (21)`입니다. `1.0.21 (22)`는 다음 업로드용 AAB 준비 상태로 관리합니다.
 
 Play Console 등록 대상은 **내부 테스트(Internal testing)** 및 **비공개 테스트(Closed testing / Alpha)** 트랙입니다. 프로덕션 트랙에는 14일 테스트 요건과 프로덕션 액세스 승인 전까지 업로드하지 않습니다.
 

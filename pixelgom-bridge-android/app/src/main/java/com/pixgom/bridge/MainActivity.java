@@ -133,7 +133,8 @@ public class MainActivity extends Activity {
         stepsPanel.addView(text("처음 설정 순서", 18, Color.rgb(58, 37, 24), true));
         stepsPanel.addView(stepText("1", "알림 접근 권한을 허용합니다."));
         stepsPanel.addView(stepText("2", "구매자 가이드에서 앱 연결코드를 복사해 자동 설정합니다."));
-        stepsPanel.addView(stepText("3", "서버 테스트 전송 후 카카오방에서 /브릿지를 확인합니다."));
+        stepsPanel.addView(stepText("3", "일반방+게임방은 같은 앱에서 방별 연결코드를 차례로 등록합니다."));
+        stepsPanel.addView(stepText("4", "서버 테스트 전송 후 각 카카오방에서 /브릿지를 확인합니다."));
 
         Button startButton = primaryButton("시작하기");
         startButton.setOnClickListener(v -> showMain());
@@ -206,12 +207,11 @@ public class MainActivity extends Activity {
         kakaoPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
         root.addView(kakaoPanel);
         kakaoPanel.addView(text("카카오방 테스트 순서", 20, Color.rgb(58, 37, 24), true));
-        kakaoPanel.addView(stepText("1", "/브릿지 - 앱 단독 응답, 등록 방 수, 라이선스, 화면 감지 미사용 확인"));
-        kakaoPanel.addView(stepText("2", "/상태 - 서버 연결과 서버 버전 확인"));
-        kakaoPanel.addView(stepText("3", "/js상태 - 로컬 JS 엔진 확인"));
-        kakaoPanel.addView(stepText("4", "/구독상태 - 5,500원/30일 구독 만료일 확인"));
-        kakaoPanel.addView(stepText("5", "/포인트, /출석 - 기본 운영 기능 확인"));
-        kakaoPanel.addView(stepText("6", "/게임, /주사위 - 게임 기능과 방별 보상 설정 확인"));
+        kakaoPanel.addView(stepText("1", "일반방에서 /브릿지, /상태, /js상태를 확인합니다."));
+        kakaoPanel.addView(stepText("2", "게임방이 있으면 같은 순서로 /브릿지, /상태, /js상태를 확인합니다."));
+        kakaoPanel.addView(stepText("3", "/구독상태 - 5,500원/30일 구독 만료일 확인"));
+        kakaoPanel.addView(stepText("4", "/포인트, /출석 - 기본 운영 기능 확인"));
+        kakaoPanel.addView(stepText("5", "/게임, /주사위 - 게임 기능과 방별 보상 설정 확인"));
 
         LinearLayout troublePanel = panel();
         troublePanel.setPadding(dp(14), dp(14), dp(14), dp(14));
@@ -297,7 +297,7 @@ public class MainActivity extends Activity {
         connectTitle.setPadding(0, dp(16), 0, 0);
         panel.addView(connectTitle);
 
-        TextView connectHelp = text("구매자 가이드에서 복사한 앱 연결코드를 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 추가됩니다. 같은 방은 갱신되고 새 방은 목록에 추가됩니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView connectHelp = text("구매자 가이드에서 복사한 앱 연결코드를 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 추가됩니다. 일반방+게임방은 같은 앱에서 방별 연결코드를 차례로 붙여넣으면 함께 등록됩니다.", 13, Color.rgb(111, 78, 49), false);
         connectHelp.setPadding(0, dp(8), 0, 0);
         panel.addView(connectHelp);
 
@@ -736,14 +736,11 @@ public class MainActivity extends Activity {
                 + "라이선스: " + maskLicense(TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey) + "\n"
                 + "등록 방 목록:\n" + BridgeConfig.roomProfilesSummary(this) + "\n\n"
                 + "카카오방 테스트 순서\n"
-                + "1. /브릿지\n"
-                + "2. /상태\n"
-                + "3. /js상태\n"
-                + "4. /구독상태\n"
-                + "5. /포인트\n"
-                + "6. /출석\n"
-                + "7. /게임\n"
-                + "8. /주사위\n\n"
+                + "1. 일반방 /브릿지, /상태, /js상태\n"
+                + "2. 게임방 /브릿지, /상태, /js상태\n"
+                + "3. /구독상태\n"
+                + "4. /포인트, /출석\n"
+                + "5. /게임, /주사위\n\n"
                 + "문제 해결\n"
                 + "- 응답 없음: 알림 접근 권한, 카카오톡 알림 표시, 서버 URL 확인\n"
                 + "- 방 불일치: 구매자 가이드의 방별 연결코드 재적용\n"

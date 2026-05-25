@@ -2711,6 +2711,56 @@ a {
   gap: 12px;
 }
 
+.installed-pack-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.installed-pack-summary > div,
+.installed-pack-summary-card {
+  padding: 12px;
+  border: 1px solid rgba(45, 127, 92, 0.22);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.installed-pack-summary-card summary {
+  display: grid;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.installed-pack-summary-card summary strong,
+.installed-pack-summary-card summary span {
+  display: block;
+}
+
+.installed-pack-summary-card summary span {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.installed-pack-summary-card ul {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.installed-pack-summary-card li {
+  display: grid;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.installed-pack-summary-card li span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .command-pack-card {
   display: grid;
   gap: 12px;
@@ -2722,6 +2772,31 @@ a {
 .command-pack-card[data-installed="true"] {
   border-color: rgba(45, 127, 92, 0.45);
   background: #f4fbf7;
+}
+
+.command-pack-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.command-pack-status span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid rgba(31, 41, 55, 0.15);
+  border-radius: 999px;
+  color: #174b38;
+  background: #e7f7f0;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.command-pack-status small {
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .command-pack-card strong,
@@ -2811,6 +2886,13 @@ a {
   padding: 7px 6px;
   border-width: 1px;
   box-shadow: 2px 2px 0 var(--ink);
+  font-size: 0.82rem;
+}
+
+.command-pack-remove-note {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
   font-size: 0.82rem;
 }
 
