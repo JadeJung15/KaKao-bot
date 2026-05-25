@@ -51,6 +51,10 @@
       .replaceAll("'", "&#039;");
   }
 
+  async function copyText(value) {
+    await navigator.clipboard.writeText(value);
+  }
+
   function audienceLabel(value) {
     return value === "admin" ? "관리자용" : "참여자용";
   }
@@ -110,12 +114,55 @@
     return `${fixed + custom}개 명령어${fixed ? ` · 고정 ${fixed}개` : ""}${custom ? ` · 커스텀 ${custom}개` : ""}`;
   }
 
+  function compactInstallCodes(codes) {
+    let lastType = "";
+    return codes.map((code) => {
+      const match = String(code).match(/^(pk|no|st)\.(\d{3})$/);
+      if (!match) return code;
+      const [, type, number] = match;
+      const value = type === lastType ? number : code;
+      lastType = type;
+      return value;
+    });
+  }
+
+  function cartInstallItems() {
+    const packItems = [...packCart]
+      .map((id) => packById(id))
+      .filter((pack) => pack?.installCode)
+      .map((pack) => ({ code: pack.installCode, title: pack.title, type: "팩" }));
+    const templateItems = [...cart]
+      .map((id) => templateById(id))
+      .filter((template) => template?.installCode)
+      .map((template) => ({ code: template.installCode, title: template.title, type: template.installCodeType === "set" ? "세트" : "명령어" }));
+    return [...packItems, ...templateItems];
+  }
+
+  function cartInstallCommandText() {
+    const codes = compactInstallCodes(cartInstallItems().map((item) => item.code));
+    return codes.length ? `/명령어설치 ${codes.join(" ")}` : "";
+  }
+
   function renderSummary() {
+    const installCommand = cartInstallCommandText();
     summary.innerHTML = `
       <article><strong>${catalog.total}</strong><span>전체 템플릿</span></article>
       <article><strong>${catalog.summary?.installable || 0}</strong><span>설치 가능</span></article>
       <article><strong>${cart.size + packCart.size}</strong><span>장바구니</span></article>
       <article><strong>${favorites.size}</strong><span>즐겨찾기</span></article>
+      ${installCommand ? `
+        <article class="command-cart-copy">
+          <strong>카톡 설치</strong>
+          <span data-cart-install-preview>${escapeHtml(installCommand)}</span>
+          <button class="button button-secondary" type="button" data-copy-cart-install>카톡 설치 명령어 복사</button>
+          <button class="button button-secondary" type="button" data-clear-cart>장바구니 비우기</button>
+        </article>
+      ` : `
+        <article class="command-cart-copy">
+          <strong>카톡 설치</strong>
+          <span>장바구니에 담으면 한 번에 붙여넣을 설치 명령어가 만들어집니다.</span>
+        </article>
+      `}
     `;
   }
 
@@ -163,7 +210,7 @@
             <strong>${escapeHtml(pack.title)}</strong>
           </div>
           <p>${escapeHtml(pack.description)}</p>
-          <small>${escapeHtml(packCommandText(pack))}</small>
+          <small>${escapeHtml(pack.installCode ? `${pack.installCode} · ${packCommandText(pack)}` : packCommandText(pack))}</small>
           <div class="template-badges">
             ${(pack.fixedCommands || []).slice(0, 4).map((command) => `<span>${escapeHtml(command)}</span>`).join("")}
             ${(pack.customCommands || []).slice(0, 4).map((command) => `<span>${escapeHtml(command.trigger)}</span>`).join("")}
@@ -219,6 +266,7 @@
         </button>
         <p>${escapeHtml(template.description)}</p>
         <div class="template-badges">
+          ${template.installCode ? `<span>${escapeHtml(template.installCode)}</span>` : ""}
           <span>${escapeHtml(audienceLabel(template.audience))}</span>
           <span>${escapeHtml(kindLabel(template.kind))}</span>
           <span>${escapeHtml(templateInstallBadge(template))}</span>
@@ -284,7 +332,8 @@
         <div data-preview-list></div>
       </div>
       <div class="template-actions">
-        <button class="button button-secondary" type="button" data-copy-current>복사</button>
+        <button class="button button-secondary" type="button" data-copy-current>응답 문구 복사</button>
+        <button class="button button-secondary" type="button" data-copy-install-current ${template.installCode ? "" : "disabled"}>설치 명령어 복사</button>
         <button class="button button-secondary" type="button" data-favorite-current>${favorites.has(template.id) ? "즐겨찾기 해제" : "즐겨찾기"}</button>
         <button class="button button-secondary" type="button" data-cart-current>${cart.has(template.id) ? "장바구니 제거" : "장바구니"}</button>
         <button class="button button-primary" type="button" data-install-current ${template.installable && buyerToken && buyerRooms.length ? "" : "disabled"}>${isBundle ? "세트 설치" : "편집 내용 설치"}</button>
@@ -317,6 +366,15 @@
     renderTemplates();
     const template = templateById(currentTemplateId);
     if (template) renderEditor(template);
+  }
+
+  function clearCart() {
+    cart.clear();
+    packCart.clear();
+    writeSet("pixgomCommandCart", cart);
+    writeSet("pixgomCommandPackCart", packCart);
+    renderSummary();
+    renderTemplates();
   }
 
   async function loadCommandPacks() {
@@ -573,13 +631,32 @@
     if (applyButton) await applyCommandPack(applyButton.dataset.applyPack, applyButton.dataset.packAction || "apply");
   });
 
+  summary.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-copy-cart-install]")) {
+      const command = cartInstallCommandText();
+      if (!command) return;
+      await copyText(command);
+      const items = cartInstallItems();
+      statusBox.textContent = `${items.length}개 항목의 카톡 설치 명령어를 복사했습니다. 채팅방에 붙여넣은 뒤 /설치확인 코드로 완료하세요.`;
+    }
+    if (event.target.closest("[data-clear-cart]")) {
+      clearCart();
+      statusBox.textContent = "장바구니를 비웠습니다.";
+    }
+  });
+
   editor.addEventListener("click", async (event) => {
     if (!currentTemplateId) return;
     const template = templateById(currentTemplateId);
     if (!template) return;
     if (event.target.closest("[data-copy-current]")) {
-      await navigator.clipboard.writeText(editorClipboardText(template));
-      statusBox.textContent = `${template.title} 템플릿을 복사했습니다.`;
+      await copyText(editorClipboardText(template));
+      statusBox.textContent = `${template.title} 응답 문구를 복사했습니다.`;
+    }
+    if (event.target.closest("[data-copy-install-current]")) {
+      if (!template.installCode) return;
+      await copyText(`/명령어설치 ${template.installCode}`);
+      statusBox.textContent = `${template.installCode} 설치 명령어를 복사했습니다. 채팅방에 붙여넣어 미리보기를 확인하세요.`;
     }
     if (event.target.closest("[data-favorite-current]")) toggleSet(favorites, currentTemplateId, "pixgomCommandFavorites");
     if (event.target.closest("[data-cart-current]")) toggleSet(cart, currentTemplateId, "pixgomCommandCart");

@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.76";
+export const APP_VERSION = "0.4.77";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -153,6 +153,7 @@ export const FEATURES = [
   "admin-feature-summary-cards",
   "command-store-installed-search",
   "command-pack-install-swap",
+  "chat-command-install-copy",
   "command-store-kakao-preview",
   "command-store-filter-refinement",
   "subscription-expiry-guidance",
@@ -337,6 +338,8 @@ const LUCKY_DRAW_OUTCOMES = [
 ];
 const MAX_LIKE_AMOUNT = 999;
 const STORE_TEMPLATE_VERSION = 2;
+const COMMAND_INSTALL_DRAFT_TTL_MS = 10 * 60 * 1000;
+const COMMAND_INSTALL_MAX_CODES = 20;
 
 const COMMAND_TEMPLATE_CATEGORY_CONFIGS = Object.freeze([
   {
@@ -515,7 +518,7 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "shop-inventory": ["/상점", "/구매", "/가방", "/사용", "/가방선물", "/구매내역"],
   "custom-command": ["/명령어목록", "/커스텀명령어", "/고정명령어", "/명령어등록", "/명령어수정", "/명령어삭제", "/커스텀등록", "/커스텀수정", "/커스텀삭제"],
   "profile-history": ["/프로필", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
-  "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그"],
+  "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록"],
   "event-engagement": ["/출석", "/좋아요", "/응원", "/운세", "/날씨", "/채팅오늘", "/채팅금주", "/포인트순위"]
 });
 const ALL_IN_ONE_PACK_COMMANDS = Object.freeze([...new Set(Object.values(COMMAND_PACK_COMMANDS).flat())]);
@@ -1110,8 +1113,11 @@ function publicCommandTemplate(template) {
     response: command.response,
     proxyCommand: command.proxyCommand || ""
   }));
+  const installCode = commandTemplateInstallCode(template);
   return {
     id: template.id,
+    installCode,
+    installCodeType: commandTemplateInstallCodeType(template),
     categoryId: template.categoryId,
     categoryTitle: template.categoryTitle,
     title: template.title,
@@ -1156,6 +1162,57 @@ function commandTemplateById(id) {
   return COMMAND_TEMPLATES.find((template) => template.id === templateId) || null;
 }
 
+function visibleCommandPacks() {
+  return COMMAND_PACKS.filter((pack) => !pack.hidden && pack.slot === "pack");
+}
+
+function paddedInstallNumber(value) {
+  return String(value).padStart(3, "0");
+}
+
+function commandPackInstallCode(pack) {
+  const index = visibleCommandPacks().findIndex((item) => item.id === pack?.id);
+  return index >= 0 ? `pk.${paddedInstallNumber(index + 1)}` : "";
+}
+
+function commandTemplateInstallCodeType(template) {
+  if (!template?.installable) return "";
+  return (template.commands || []).length > 1 ? "set" : "command";
+}
+
+function installableSetTemplates() {
+  return COMMAND_TEMPLATES.filter((template) => template.installable && (template.commands || []).length > 1);
+}
+
+function installableSingleTemplates() {
+  return COMMAND_TEMPLATES.filter((template) => template.installable && (template.commands || []).length <= 1);
+}
+
+function commandTemplateInstallCode(template) {
+  if (!template?.installable) return "";
+  if ((template.commands || []).length > 1) {
+    const index = installableSetTemplates().findIndex((item) => item.id === template.id);
+    return index >= 0 ? `st.${paddedInstallNumber(index + 1)}` : "";
+  }
+  const index = installableSingleTemplates().findIndex((item) => item.id === template.id);
+  return index >= 0 ? `no.${paddedInstallNumber(index + 100)}` : "";
+}
+
+function commandPackByInstallCode(code) {
+  const match = normalizeText(code).toLowerCase().match(/^pk\.(\d{3})$/);
+  if (!match) return null;
+  return visibleCommandPacks()[Number(match[1]) - 1] || null;
+}
+
+function commandTemplateByInstallCode(code) {
+  const value = normalizeText(code).toLowerCase();
+  const setMatch = value.match(/^st\.(\d{3})$/);
+  if (setMatch) return installableSetTemplates()[Number(setMatch[1]) - 1] || null;
+  const singleMatch = value.match(/^no\.(\d{3})$/);
+  if (!singleMatch) return null;
+  return installableSingleTemplates()[Number(singleMatch[1]) - 100] || null;
+}
+
 function commandPackById(id) {
   const packId = normalizeText(id);
   return COMMAND_PACKS.find((pack) => pack.id === packId) || null;
@@ -1197,6 +1254,8 @@ function publicCommandPack(pack, current = {}) {
         : current.basePackId === pack.basePackId && (pack.addonPackIds || []).every((id) => (current.addonPackIds || []).includes(id));
   return {
     id: pack.id,
+    installCode: commandPackInstallCode(pack),
+    installCodeType: "pack",
     slot: pack.slot,
     version: pack.version,
     title: pack.title,
@@ -2312,6 +2371,7 @@ function ensureRoom(state, room) {
     admins: [],
     inbox: {},
     commandRouting: {},
+    commandInstallDrafts: {},
     unreadNoticeStates: {},
     events: [],
     rawEvents: [],
@@ -2329,6 +2389,7 @@ function ensureRoom(state, room) {
   roomState.admins ||= [];
   roomState.inbox ||= {};
   roomState.commandRouting ||= {};
+  roomState.commandInstallDrafts ||= {};
   roomState.commandRouting.unknownNotices ||= { byUser: {}, byRoom: {} };
   roomState.commandRouting.unknownNotices.byUser ||= {};
   roomState.commandRouting.unknownNotices.byRoom ||= {};
@@ -5941,6 +6002,11 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/탐험", "게임", "탐험 보상 게임", { requiresFeature: "games" }),
   registryEntry("/명령어목록", "커스텀", "방별 커스텀 명령어 확인", { aliases: ["/커스텀명령어"], requiresFeature: "customCommands" }),
   registryEntry("/고정명령어", "커스텀", "예약된 기본 명령어 확인", { requiresFeature: "customCommands" }),
+  registryEntry("/명령어검색", "스토어", "설치 가능한 명령어 코드 검색", { visibility: "admin", requiresRole: "admin", searchableKeywords: ["스토어", "장바구니", "설치코드"] }),
+  registryEntry("/명령어설치", "스토어", "명령어 코드 설치 미리보기", { visibility: "admin", requiresRole: "admin", examples: ["/명령어설치 pk.001 no.100"], searchableKeywords: ["스토어", "장바구니", "설치"] }),
+  registryEntry("/설치확인", "스토어", "명령어 설치 최종 확인", { visibility: "admin", requiresRole: "admin", examples: ["/설치확인 4821"], searchableKeywords: ["스토어", "설치"] }),
+  registryEntry("/설치취소", "스토어", "명령어 설치 대기 취소", { visibility: "admin", requiresRole: "admin", examples: ["/설치취소 4821"], searchableKeywords: ["스토어", "설치"] }),
+  registryEntry("/명령어설치목록", "스토어", "설치된 명령어 팩과 커스텀 명령어 확인", { visibility: "admin", requiresRole: "admin", searchableKeywords: ["스토어", "설치목록"] }),
   registryEntry("/프로필", "프로필", "프로필 조회", { aliases: ["/프로칠"], examples: ["/프로필 닉네임"], requiresFeature: "profiles" }),
   registryEntry("/입퇴장현황", "히스토리", "입퇴장과 닉네임 이력 조회", { aliases: ["/닉이력"], examples: ["/닉이력 닉네임"], requiresFeature: "history" }),
   registryEntry("/원본로그", "관리자", "최신 원본 JSON 확인", { aliases: ["/원본이벤트"], visibility: "admin", requiresRole: "admin", requiresFeature: "history" }),
@@ -6027,7 +6093,7 @@ function roomUsesExplicitCommandPacks(roomState) {
 
 function commandInstalledInRoom(item, roomState) {
   if (!roomState || !roomUsesExplicitCommandPacks(roomState)) return true;
-  if (["/상태", "/도움말", "/방등록"].includes(item.command)) return true;
+  if (["/상태", "/도움말", "/방등록", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록"].includes(item.command)) return true;
   const activePacks = activeCommandPacks(roomState);
   if ((item.packIds || []).some((id) => activePacks.some((pack) => pack.id === id))) return true;
   const commands = [item.command, ...(item.aliases || [])];
@@ -7083,6 +7149,318 @@ function installCommandTemplateForBuyer(state, account = {}, body = {}) {
   };
 }
 
+function normalizeInstallCodeToken(token, fallbackType = "") {
+  const value = normalizeText(token).toLowerCase();
+  const full = value.match(/^(pk|no|st)\.(\d{1,3})$/);
+  if (full) return { code: `${full[1]}.${paddedInstallNumber(full[2])}`, type: full[1] };
+  const shorthand = value.match(/^\d{1,3}$/);
+  if (shorthand && fallbackType) return { code: `${fallbackType}.${paddedInstallNumber(shorthand[0])}`, type: fallbackType };
+  return { code: "", type: fallbackType };
+}
+
+function parseCommandInstallCodes(args = []) {
+  const tokens = (Array.isArray(args) ? args.join(" ") : normalizeText(args)).split(/[\s,]+/).map(normalizeText).filter(Boolean);
+  const entries = [];
+  const invalid = [];
+  const seen = new Set();
+  let currentType = "";
+  for (const token of tokens) {
+    const parsed = normalizeInstallCodeToken(token, currentType);
+    if (!parsed.code) {
+      invalid.push(token);
+      continue;
+    }
+    currentType = parsed.type;
+    if (seen.has(parsed.code)) continue;
+    seen.add(parsed.code);
+    entries.push(parsed.code);
+  }
+  return {
+    entries,
+    invalid,
+    tooMany: entries.length > COMMAND_INSTALL_MAX_CODES
+  };
+}
+
+function commandInstallCatalogItems() {
+  const packs = visibleCommandPacks().map((pack) => ({
+    type: "pack",
+    code: commandPackInstallCode(pack),
+    id: pack.id,
+    title: pack.title,
+    description: pack.description,
+    commands: pack.fixedCommands || [],
+    search: [pack.title, pack.description, pack.categoryTitle, pack.tier, pack.id, ...(pack.tags || []), ...(pack.fixedCommands || [])]
+  }));
+  const templates = COMMAND_TEMPLATES
+    .filter((template) => template.installable)
+    .map((template) => ({
+      type: commandTemplateInstallCodeType(template),
+      code: commandTemplateInstallCode(template),
+      id: template.id,
+      title: template.title,
+      description: template.description,
+      commands: templateInstallItems(template).map((item) => item.trigger),
+      search: [
+        template.title,
+        template.description,
+        template.categoryTitle,
+        template.kind,
+        template.command,
+        template.trigger,
+        ...(template.tags || []),
+        ...(template.commands || []).flatMap((command) => [command.trigger, command.response, command.proxyCommand])
+      ]
+    }));
+  return [...packs, ...templates].filter((item) => item.code);
+}
+
+function commandInstallCatalogItemByCode(code) {
+  const normalized = normalizeText(code).toLowerCase();
+  if (normalized.startsWith("pk.")) {
+    const pack = commandPackByInstallCode(normalized);
+    return pack ? { type: "pack", code: commandPackInstallCode(pack), id: pack.id, pack } : null;
+  }
+  const template = commandTemplateByInstallCode(normalized);
+  return template ? { type: commandTemplateInstallCodeType(template), code: commandTemplateInstallCode(template), id: template.id, template } : null;
+}
+
+function commandInstallDraftKey(roomState, sender, identity = {}) {
+  return normalizeIdentityId(identity.senderId) || `${roomKey(roomState.name)}:${personKey(sender)}`;
+}
+
+function cleanupCommandInstallDrafts(roomState, now = Date.now()) {
+  roomState.commandInstallDrafts ||= {};
+  for (const [key, draft] of Object.entries(roomState.commandInstallDrafts)) {
+    if (!draft?.expiresAt || Date.parse(draft.expiresAt) <= now) delete roomState.commandInstallDrafts[key];
+  }
+}
+
+function createInstallConfirmCode() {
+  return String((Number.parseInt(randomBytes(2).toString("hex"), 16) % 9000) + 1000);
+}
+
+function buildCommandInstallPlan(roomState, codes = []) {
+  const entries = codes.map((code) => commandInstallCatalogItemByCode(code)).filter(Boolean);
+  const invalid = codes.filter((code) => !commandInstallCatalogItemByCode(code));
+  const currentPacks = normalizeCommandPackState(roomState.settings?.commandPacks || {});
+  const installedPackIds = new Set([...(currentPacks.installedPackIds || []), currentPacks.basePackId, ...(currentPacks.addonPackIds || [])].filter(Boolean));
+  const existingCommands = new Map(customCommands(roomState).map((command) => [command.trigger, command]));
+  const plannedTriggers = new Set();
+  const packs = [];
+  const templates = [];
+  const plannedCommands = [];
+  const already = [];
+  const skipped = [];
+
+  for (const entry of entries) {
+    if (entry.type === "pack") {
+      if (installedPackIds.has(entry.pack.id)) already.push(`${entry.code} ${entry.pack.title}`);
+      else packs.push(entry);
+      continue;
+    }
+    const installItems = templateInstallItems(entry.template).filter((item) => item.trigger && item.response);
+    const templatePlanned = [];
+    for (const item of installItems) {
+      if (RESERVED_CUSTOM_COMMANDS.has(item.trigger)) {
+        skipped.push(`${item.trigger}: 고정 명령어와 충돌`);
+        continue;
+      }
+      if (existingCommands.has(item.trigger)) {
+        skipped.push(`${item.trigger}: 기존 명령어 보존`);
+        continue;
+      }
+      if (plannedTriggers.has(item.trigger)) {
+        skipped.push(`${item.trigger}: 같은 설치 요청 안에서 중복`);
+        continue;
+      }
+      plannedTriggers.add(item.trigger);
+      const planned = {
+        ...item,
+        sourceTemplateId: entry.template.id,
+        sourceTemplateKind: entry.template.kind
+      };
+      templatePlanned.push(planned);
+      plannedCommands.push(planned);
+    }
+    if (templatePlanned.length) templates.push({ ...entry, commandCount: templatePlanned.length });
+    else already.push(`${entry.code} ${entry.template.title}`);
+  }
+
+  const limitExceeded = customCommands(roomState).length + plannedCommands.length > CUSTOM_COMMAND_LIMIT;
+  return { entries, invalid, packs, templates, plannedCommands, already, skipped, limitExceeded };
+}
+
+function commandInstallRecommendations(roomState, plan) {
+  const current = normalizeCommandPackState(roomState.settings?.commandPacks || {});
+  const installed = new Set([...(current.installedPackIds || []), current.basePackId, ...(current.addonPackIds || [])].filter(Boolean));
+  const requested = new Set((plan.packs || []).map((entry) => entry.pack.id));
+  const commandText = [
+    ...(plan.plannedCommands || []).map((command) => command.trigger),
+    ...(plan.templates || []).map((entry) => entry.template.title),
+    ...(plan.packs || []).flatMap((entry) => [entry.pack.id, entry.pack.title])
+  ].join(" ");
+  const candidates = [];
+  if (/주사위|낚시|탐험|뽑기|홀짝|게임/u.test(commandText)) candidates.push("game-chance");
+  if (/상점|구매|가방|아이템|선물/u.test(commandText)) candidates.push("shop-inventory", "point-economy");
+  if (/공지|규칙|문의|프로필양식/u.test(commandText)) candidates.push("ops-core");
+  if (/출석|순위|랭킹|레벨/u.test(commandText)) candidates.push("attendance-growth");
+  return [...new Set(candidates)]
+    .map((id) => commandPackById(id))
+    .filter((pack) => pack && !installed.has(pack.id) && !requested.has(pack.id))
+    .slice(0, 3)
+    .map((pack) => `${commandPackInstallCode(pack)} ${pack.title}`);
+}
+
+function commandInstallPlanText(roomState, plan, confirmCode = "") {
+  const lines = ["명령어 설치 미리보기"];
+  if (plan.invalid.length) lines.push("", "찾을 수 없는 코드", ...plan.invalid.map((code) => `- ${code}`));
+  if (plan.packs.length) lines.push("", "설치 예정 팩", ...plan.packs.map((entry) => `- ${entry.code} ${entry.pack.title}`));
+  if (plan.templates.length) lines.push("", "설치 예정 명령어/세트", ...plan.templates.map((entry) => `- ${entry.code} ${entry.template.title} (${entry.commandCount}개)`));
+  if (plan.already.length) lines.push("", "이미 설치됨 또는 새로 설치할 항목 없음", ...plan.already.slice(0, 8).map((item) => `- ${item}`));
+  if (plan.skipped.length) lines.push("", "건너뜀", ...plan.skipped.slice(0, 8).map((item) => `- ${item}`));
+  const recommendations = commandInstallRecommendations(roomState, plan);
+  if (recommendations.length) lines.push("", "같이 쓰기 좋은 추천", ...recommendations.map((item) => `- ${item}`));
+  if (plan.limitExceeded) lines.push("", "커스텀 명령어 최대 개수를 초과하여 설치할 수 없습니다.");
+  else if (confirmCode) lines.push("", `설치하려면 /설치확인 ${confirmCode} 을 입력해 주세요.`, `취소하려면 /설치취소 ${confirmCode} 을 입력해 주세요.`);
+  else lines.push("", "새로 설치할 항목이 없습니다.");
+  return lines.join("\n");
+}
+
+function installPlannedTemplateCommands(roomState, sender, plan) {
+  const commands = customCommands(roomState);
+  const byTrigger = new Map(commands.map((item) => [item.trigger, item]));
+  const installedAt = nowIso();
+  const installed = [];
+  for (const item of plan.plannedCommands || []) {
+    if (byTrigger.has(item.trigger)) continue;
+    const command = {
+      trigger: item.trigger,
+      response: item.response,
+      updatedAt: installedAt,
+      updatedBy: sender,
+      sourceTemplateId: item.sourceTemplateId,
+      sourceTemplateKind: item.sourceTemplateKind,
+      proxyCommand: item.proxyCommand || ""
+    };
+    byTrigger.set(command.trigger, command);
+    installed.push(command);
+  }
+  roomState.settings.customCommands = normalizeCustomCommands([...byTrigger.values()]);
+  if (installed.length) {
+    recordRoomEvent(roomState, {
+      type: "chat_command_install_templates",
+      trigger: installed.map((item) => item.trigger).join(", "),
+      by: sender
+    });
+  }
+  return installed;
+}
+
+function commandInstallSearchText(query = "") {
+  const tokens = commandSearchTokens(query);
+  if (!tokens.length) {
+    return [
+      "검색어를 입력해 주세요.",
+      "예: /명령어검색 공지",
+      "예: /명령어설치 pk.001 no.100 102"
+    ].join("\n");
+  }
+  const items = commandInstallCatalogItems()
+    .filter((item) => {
+      const haystack = [item.code, item.title, item.description, item.type, ...(item.commands || []), ...(item.search || [])].join(" ").toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    })
+    .slice(0, 12);
+  if (!items.length) return "검색 결과가 없습니다. 다른 키워드로 다시 검색해 주세요.";
+  return [
+    "명령어 설치 코드 검색 결과",
+    ...items.map((item) => `- ${item.code} ${item.title} (${item.type === "pack" ? "팩" : item.type === "set" ? "세트" : "명령어"})`)
+  ].join("\n");
+}
+
+function commandInstallPreviewCommand(roomState, sender, parsed, identity = {}) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const parsedCodes = parseCommandInstallCodes(parsed.args);
+  if (parsedCodes.tooMany) return `한 번에 최대 ${COMMAND_INSTALL_MAX_CODES}개까지만 설치할 수 있습니다.`;
+  if (!parsedCodes.entries.length && parsedCodes.invalid.length) {
+    return commandInstallPlanText(roomState, { entries: [], invalid: parsedCodes.invalid, packs: [], templates: [], plannedCommands: [], already: [], skipped: [], limitExceeded: false });
+  }
+  if (!parsedCodes.entries.length) return "설치할 코드를 입력해 주세요.\n예: /명령어설치 pk.001 no.100 102 st.003";
+  const plan = buildCommandInstallPlan(roomState, parsedCodes.entries);
+  plan.invalid.push(...parsedCodes.invalid);
+  if (plan.limitExceeded || (!plan.packs.length && !plan.plannedCommands.length)) return commandInstallPlanText(roomState, plan);
+  cleanupCommandInstallDrafts(roomState);
+  const confirmCode = createInstallConfirmCode();
+  const key = commandInstallDraftKey(roomState, sender, identity);
+  const createdAtMs = Date.now();
+  roomState.commandInstallDrafts[key] = {
+    code: confirmCode,
+    entries: plan.entries.map((entry) => entry.code),
+    createdAt: new Date(createdAtMs).toISOString(),
+    expiresAt: new Date(createdAtMs + COMMAND_INSTALL_DRAFT_TTL_MS).toISOString(),
+    by: sender
+  };
+  return commandInstallPlanText(roomState, plan, confirmCode);
+}
+
+function commandInstallConfirmCommand(roomState, sender, parsed, identity = {}) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  cleanupCommandInstallDrafts(roomState);
+  const key = commandInstallDraftKey(roomState, sender, identity);
+  const draft = roomState.commandInstallDrafts?.[key];
+  const code = normalizeText(parsed.args?.[0]);
+  if (!draft) return "확인 대기 중인 설치 요청이 없습니다. /명령어설치 로 먼저 미리보기를 만들어 주세요.";
+  if (!code || draft.code !== code) return "설치확인 코드가 일치하지 않습니다.";
+  const plan = buildCommandInstallPlan(roomState, draft.entries || []);
+  if (plan.limitExceeded) return commandInstallPlanText(roomState, plan);
+  const installedPacks = [];
+  for (const entry of plan.packs) {
+    const result = applyCommandPacksToRoom(roomState, { nickname: sender }, { commandPackId: entry.pack.id, action: "apply" });
+    if (result.ok) installedPacks.push(`${entry.code} ${entry.pack.title}`);
+  }
+  const installedCommands = installPlannedTemplateCommands(roomState, sender, plan);
+  delete roomState.commandInstallDrafts[key];
+  const lines = ["명령어 설치가 완료되었습니다."];
+  if (installedPacks.length) lines.push("", "장착된 팩", ...installedPacks.map((item) => `- ${item}`));
+  if (installedCommands.length) lines.push("", "설치된 명령어", ...installedCommands.slice(0, 10).map((item) => `- ${item.trigger}`));
+  if (plan.skipped.length) lines.push("", "건너뜀", ...plan.skipped.slice(0, 8).map((item) => `- ${item}`));
+  const recommendations = commandInstallRecommendations(roomState, plan);
+  if (recommendations.length) lines.push("", "다음 추천", ...recommendations.map((item) => `- ${item}`));
+  return lines.join("\n");
+}
+
+function commandInstallCancelCommand(roomState, sender, parsed, identity = {}) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  cleanupCommandInstallDrafts(roomState);
+  const key = commandInstallDraftKey(roomState, sender, identity);
+  const draft = roomState.commandInstallDrafts?.[key];
+  const code = normalizeText(parsed.args?.[0]);
+  if (!draft) return "취소할 설치 요청이 없습니다.";
+  if (code && draft.code !== code) return "설치취소 코드가 일치하지 않습니다.";
+  delete roomState.commandInstallDrafts[key];
+  return "명령어 설치 요청을 취소했습니다.";
+}
+
+function commandInstallListText(roomState, sender, identity = {}) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  cleanupCommandInstallDrafts(roomState);
+  const current = normalizeCommandPackState(roomState.settings?.commandPacks || {});
+  const packs = activeCommandPacks(roomState).filter((pack) => !pack.hidden);
+  const commands = customCommands(roomState);
+  const draft = roomState.commandInstallDrafts?.[commandInstallDraftKey(roomState, sender, identity)];
+  const lines = ["명령어 설치 현황"];
+  lines.push("", "장착된 팩", ...(packs.length ? packs.map((pack) => `- ${commandPackInstallCode(pack) || pack.id} ${pack.title}`) : ["- 없음"]));
+  lines.push("", `커스텀 명령어 ${commands.length}개`, ...(commands.length ? commands.slice(0, 12).map((command) => `- ${command.trigger}`) : ["- 없음"]));
+  if (draft) lines.push("", `확인 대기: /설치확인 ${draft.code} (${draft.expiresAt.slice(11, 16)}까지)`);
+  if (!current.installedPackIds.length && !current.basePackId && !current.addonPackIds.length) lines.push("", "추천: /명령어설치 pk.001 로 운영 기본팩을 먼저 장착해 보세요.");
+  return lines.join("\n");
+}
+
 function buyerCustomCommandsForAccount(state, account = {}, body = {}) {
   const application = approvedApplicationForInstall(state, account, body);
   if (!application) return { ok: false, status: 404, error: "approved_room_not_found" };
@@ -7649,6 +8027,11 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/명령어목록" || command === "/커스텀명령어") return customCommandListText(roomState);
   if (/^\/(?:명령어등록|명령어수정|커스텀등록|커스텀수정)\s/.test(compactCommand)) return customCommandRegisterCommand(roomState, sender, text);
   if (/^\/(?:명령어삭제|커스텀삭제)\s/.test(compactCommand)) return customCommandDeleteCommand(roomState, sender, text);
+  if (command === "/명령어검색") return requireAdmin(roomState, sender) || commandInstallSearchText(parsed.args.join(" "));
+  if (command === "/명령어설치") return commandInstallPreviewCommand(roomState, sender, parsed, identity);
+  if (command === "/설치확인") return commandInstallConfirmCommand(roomState, sender, parsed, identity);
+  if (command === "/설치취소") return commandInstallCancelCommand(roomState, sender, parsed, identity);
+  if (command === "/명령어설치목록") return commandInstallListText(roomState, sender, identity);
   const registryItem = resolveCommandRegistryItem(command, compactCommand);
   if (registryItem && !commandInstalledInRoom(registryItem, roomState)) return "설치되지 않은 명령어입니다. 명령어 스토어에서 필요한 팩을 장착해 주세요.";
   const requiredFeature = commandFeatureKey(compactCommand);
