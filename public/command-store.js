@@ -11,12 +11,14 @@
   const editor = document.querySelector("[data-template-editor]");
   const installedPanel = document.querySelector("[data-installed-panel]");
   const installedList = document.querySelector("[data-installed-list]");
+  const installedSearchInput = document.querySelector("[data-installed-search]");
   const refreshInstalledButton = document.querySelector("[data-refresh-installed]");
   const loadMoreButton = document.querySelector("[data-load-more]");
 
   let catalog = { templates: [], categories: [], summary: {}, total: 0 };
   let buyerToken = "";
   let buyerRooms = [];
+  let installedCommandsCache = [];
   let currentMode = "featured";
   let currentTemplateId = "";
   let visibleLimit = 24;
@@ -110,7 +112,8 @@
     if (currentMode === "featured") return template.installable && template.kind !== "fixed";
     if (currentMode === "bundle") return isBundleTemplate(template);
     if (currentMode === "installable") return template.installable;
-    if (currentMode === "game") return template.kind === "game-template";
+    if (currentMode === "game") return template.kind === "game-template" || template.categoryId === "bundle-game" || (template.commands || []).some((command) => command.proxyCommand);
+    if (currentMode === "participant") return template.audience === "participant";
     if (currentMode === "admin") return template.audience === "admin";
     if (currentMode === "favorite") return favorites.has(template.id);
     if (currentMode === "cart") return cart.has(template.id);
@@ -130,6 +133,8 @@
       template.command,
       template.categoryTitle,
       template.description,
+      template.kind,
+      templateInstallBadge(template),
       ...(template.commands || []).flatMap((command) => [command.trigger, command.response]),
       ...(template.tags || [])
     ].join(" ").toLowerCase();
@@ -216,6 +221,10 @@
       <div class="template-editor-note">
         ${escapeHtml(installDisabledReason || (isBundle ? "세트 안의 명령어와 응답문구를 각각 수정한 뒤 한 번에 설치합니다." : template.proxyCommand ? `${template.proxyCommand} 미니게임 엔진에 연결됩니다.` : "응답문구는 바로 채팅방에서 사용할 수 있는 문장으로 준비되어 있습니다. / 없이도 가능하고 /, !, . 같은 접두 문자도 구분합니다."))}
       </div>
+      <div class="template-install-preview" data-install-preview>
+        <strong>설치 전 카카오 응답 미리보기</strong>
+        <div data-preview-list></div>
+      </div>
       <div class="template-actions">
         <button class="button button-secondary" type="button" data-copy-current>복사</button>
         <button class="button button-secondary" type="button" data-favorite-current>${favorites.has(template.id) ? "즐겨찾기 해제" : "즐겨찾기"}</button>
@@ -223,6 +232,23 @@
         <button class="button button-primary" type="button" data-install-current ${template.installable && buyerToken && buyerRooms.length ? "" : "disabled"}>${isBundle ? "세트 설치" : "편집 내용 설치"}</button>
       </div>
     `;
+    editor.querySelectorAll("input, textarea").forEach((input) => {
+      input.addEventListener("input", () => renderInstallPreview(template));
+    });
+    renderInstallPreview(template);
+  }
+
+  function renderInstallPreview(template) {
+    const previewList = editor.querySelector("[data-preview-list]");
+    if (!previewList) return;
+    const rows = readEditorCommands(template).filter((command) => command.trigger || command.response);
+    previewList.innerHTML = rows.map((command) => `
+      <article class="preview-command-card">
+        <span>사용자가 ${escapeHtml(command.trigger || "명령어")} 입력</span>
+        <p>${escapeHtml(command.response || "응답 문구를 입력해 주세요.")}</p>
+        ${command.proxyCommand ? `<small>${escapeHtml(command.proxyCommand)} 게임 엔진으로 연결됩니다.</small>` : ""}
+      </article>
+    `).join("");
   }
 
   function toggleSet(set, key, storageKey) {
@@ -348,22 +374,56 @@
       installedList.innerHTML = `<p>설치된 명령어를 불러오지 못했습니다.</p>`;
       return;
     }
-    renderInstalledCommands(data.commands || []);
+    installedCommandsCache = data.commands || [];
+    renderInstalledCommands(installedCommandsCache);
   }
 
   function renderInstalledCommands(commands) {
-    if (!commands.length) {
+    const term = (installedSearchInput?.value || "").trim().toLowerCase();
+    const filtered = term
+      ? commands.filter((command) => [command.trigger, command.response, command.proxyCommand, command.sourceTemplateKind].join(" ").toLowerCase().includes(term))
+      : commands;
+    if (!filtered.length) {
       installedList.innerHTML = `<article class="installed-command-empty">아직 설치된 커스텀 명령어가 없습니다.</article>`;
       return;
     }
-    installedList.innerHTML = commands.map((command) => `
+    installedList.innerHTML = filtered.map((command) => `
       <article class="installed-command-card">
         <strong>${escapeHtml(command.trigger)}</strong>
         <p>${escapeHtml(command.response.split(/\n/)[0] || "응답 문구 없음")}</p>
         <span>${command.proxyCommand ? `${escapeHtml(command.proxyCommand)} 게임 연결` : "문구형"}</span>
+        <small>${escapeHtml(command.updatedAt ? `수정 ${command.updatedAt.slice(0, 10)}` : "수정일 미기록")}</small>
+        <button class="button button-secondary" type="button" data-edit-command="${escapeHtml(command.trigger)}">편집</button>
         <button class="button button-secondary" type="button" data-delete-command="${escapeHtml(command.trigger)}">삭제</button>
       </article>
     `).join("");
+  }
+
+  function editInstalledCommand(trigger) {
+    const command = installedCommandsCache.find((item) => item.trigger === trigger);
+    if (!command) return;
+    const template = templateById(command.sourceTemplateId) || catalog.templates.find((item) => item.installable && !isBundleTemplate(item));
+    if (!template) {
+      statusBox.textContent = `${trigger} 명령어를 편집할 템플릿을 찾지 못했습니다.`;
+      return;
+    }
+    selectTemplate(template.id);
+    const rows = [...editor.querySelectorAll("[data-editor-command-row]")];
+    if (rows.length) {
+      const row = rows.find((item) => item.querySelector("[data-editor-command-trigger]")?.value === command.trigger) || rows[0];
+      const triggerInput = row.querySelector("[data-editor-command-trigger]");
+      const responseInput = row.querySelector("[data-editor-command-response]");
+      if (triggerInput) triggerInput.value = command.trigger;
+      if (responseInput) responseInput.value = command.response;
+    } else {
+      const triggerInput = editor.querySelector("[data-editor-trigger]");
+      const responseInput = editor.querySelector("[data-editor-response]");
+      if (triggerInput) triggerInput.value = command.trigger;
+      if (responseInput) responseInput.value = command.response;
+    }
+    renderInstallPreview(template);
+    editor.scrollIntoView({ behavior: "smooth", block: "start" });
+    statusBox.textContent = `${trigger} 명령어를 Editor로 불러왔습니다. 응답을 수정한 뒤 다시 설치하면 업데이트됩니다.`;
   }
 
   async function deleteInstalledCommand(trigger) {
@@ -406,7 +466,9 @@
   });
 
   installedList.addEventListener("click", async (event) => {
+    const editButton = event.target.closest("[data-edit-command]");
     const button = event.target.closest("[data-delete-command]");
+    if (editButton) editInstalledCommand(editButton.dataset.editCommand);
     if (button) await deleteInstalledCommand(button.dataset.deleteCommand);
   });
 
@@ -431,6 +493,7 @@
   });
 
   installRoomInput.addEventListener("change", loadInstalledCommands);
+  installedSearchInput?.addEventListener("input", () => renderInstalledCommands(installedCommandsCache));
   refreshInstalledButton?.addEventListener("click", loadInstalledCommands);
   loadMoreButton?.addEventListener("click", () => {
     visibleLimit += 24;

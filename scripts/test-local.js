@@ -74,7 +74,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.64");
+  assert.equal(health.json.version, "0.4.65");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -176,6 +176,9 @@ try {
   assert.match(health.json.features.join(","), /buyer-room-status-fields/);
   assert.match(health.json.features.join(","), /admin-room-status-badges/);
   assert.match(health.json.features.join(","), /admin-feature-summary-cards/);
+  assert.match(health.json.features.join(","), /command-store-installed-search/);
+  assert.match(health.json.features.join(","), /command-store-kakao-preview/);
+  assert.match(health.json.features.join(","), /command-store-filter-refinement/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.additionalRoomPriceKrw, 2200);
   assert.equal(health.json.adminConsoleEnabled, true);
@@ -220,6 +223,7 @@ try {
   assert.match(homeText, /커스텀 명령어/);
   assert.match(homeText, /업데이트 기록/);
   assert.match(homeText, /0\.4\.64/);
+  assert.match(homeText, /0\.4\.65/);
   assert.match(homeText, /0\.4\.63/);
   assert.match(homeText, /0\.4\.62/);
   assert.match(homeText, /0\.4\.61/);
@@ -266,6 +270,13 @@ try {
   assert.match(commandStoreText, /슬래시\(\/\) 없이도 커스텀 명령어/);
   assert.match(commandStoreText, /세트 명령어/);
   assert.match(commandStoreText, /data-filter-mode="bundle"/);
+  assert.match(commandStoreText, /data-filter-mode="participant"/);
+  assert.match(commandStoreText, /설치된 명령어 검색/);
+  assert.match(commandStoreText, /data-installed-search/);
+  const commandStoreScriptText = await (await fetch(`${baseUrl}/command-store.js`)).text();
+  assert.match(commandStoreScriptText, /template-install-preview/);
+  assert.match(commandStoreScriptText, /설치 전 카카오 응답 미리보기/);
+  assert.match(commandStoreScriptText, /data-edit-command/);
 
   const checklistAsset = await fetch(`${baseUrl}/assets/pixgom-checklist.png`);
   assert.equal(checklistAsset.status, 200);
@@ -273,7 +284,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.64");
+  assert.equal(commandTemplates.json.version, "0.4.65");
   assert.equal(commandTemplates.json.total, 400);
   assert.equal(commandTemplates.json.templates.length, 400);
   assert.equal(commandTemplates.json.categories.some((category) => category.title === "펫키우기"), true);
@@ -653,7 +664,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.64");
+  assert.equal(buyerGuideApproved.json.version, "0.4.65");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -668,7 +679,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.64");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.65");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -719,6 +730,7 @@ try {
   assert.equal(buyerCommands.response.status, 200);
   assert.equal(buyerCommands.json.ok, true);
   assert.equal(buyerCommands.json.commands.some((command) => command.trigger === installableTemplate.trigger), true);
+  assert.equal(buyerCommands.json.commands.some((command) => command.sourceTemplateId === installableTemplate.id), true);
 
   const installedTemplateReply = await chatPayload({
     registeredRoom: false,

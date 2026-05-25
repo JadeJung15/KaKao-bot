@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.64";
+export const APP_VERSION = "0.4.65";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -148,7 +148,10 @@ export const FEATURES = [
   "buyer-console-onboarding",
   "buyer-room-status-fields",
   "admin-room-status-badges",
-  "admin-feature-summary-cards"
+  "admin-feature-summary-cards",
+  "command-store-installed-search",
+  "command-store-kakao-preview",
+  "command-store-filter-refinement"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];

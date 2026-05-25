@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>명령어 스토어 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-command-sets">
+    <link rel="stylesheet" href="/styles.css?v=20260525-command-quality">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="sub-page command-store-page">
@@ -55,6 +55,7 @@
         <button type="button" data-filter-mode="bundle">세트</button>
         <button type="button" data-filter-mode="installable">설치 가능</button>
         <button type="button" data-filter-mode="game">게임 연결</button>
+        <button type="button" data-filter-mode="participant">참여자용</button>
         <button type="button" data-filter-mode="admin">관리자용</button>
         <button type="button" data-filter-mode="favorite">즐겨찾기</button>
         <button type="button" data-filter-mode="cart">장바구니</button>
@@ -85,12 +86,15 @@
             <strong>설치된 명령어 관리</strong>
             <button class="button button-secondary" type="button" data-refresh-installed>새로고침</button>
           </div>
+          <label class="installed-command-search">설치된 명령어 검색
+            <input id="installed-command-search" name="installedCommandSearch" type="search" data-installed-search placeholder="/공지, 공지, !공지, 응답 문구 검색">
+          </label>
           <div data-installed-list></div>
         </aside>
       </section>
       <pre class="form-status" data-template-status>명령어 템플릿을 불러오는 중입니다.</pre>
     </main>
-    <script src="/auth.js?v=20260525-command-sets"></script>
-    <script src="/command-store.js?v=20260525-command-sets"></script>
+    <script src="/auth.js?v=20260525-command-quality"></script>
+    <script src="/command-store.js?v=20260525-command-quality"></script>
   </body>
 </html>

@@ -2051,6 +2051,43 @@ a {
   line-height: 1.5;
 }
 
+.template-install-preview {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: #fff8ec;
+  border: 1px solid #e2d1bd;
+  border-radius: 8px;
+}
+
+.template-install-preview strong {
+  color: #2f4d42;
+  font-size: 14px;
+}
+
+.preview-command-card {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #ead7bd;
+  border-radius: 8px;
+}
+
+.preview-command-card span,
+.preview-command-card small {
+  color: #2d6c51;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.preview-command-card p {
+  margin: 0;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .template-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -2152,6 +2189,23 @@ a {
   justify-content: space-between;
 }
 
+.installed-command-search {
+  display: grid;
+  gap: 7px;
+  font-weight: 900;
+}
+
+.installed-command-search input {
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: #fffdf8;
+  border: 1px solid #d8c8b4;
+  border-radius: 8px;
+  font: inherit;
+}
+
 .installed-command-card,
 .installed-command-empty {
   display: grid;
@@ -2173,6 +2227,11 @@ a {
   color: #2d6c51;
   font-size: 12px;
   font-weight: 900;
+}
+
+.installed-command-card small {
+  color: var(--muted);
+  font-weight: 800;
 }
 
 .wide-label {
