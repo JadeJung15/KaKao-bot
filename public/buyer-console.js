@@ -181,6 +181,24 @@
     return window.PixelgomAuth ? window.PixelgomAuth.accessPayload(fallback) : fallback;
   }
 
+  function buyerTokenPayload() {
+    const token = sessionStorage.getItem("pixgomBuyerToken") || "";
+    if (!token) throw new Error("buyer_approval_required");
+    return { token };
+  }
+
+  async function requestBuyerAction(path, payload = {}) {
+    const response = await fetch(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...buyerTokenPayload(), ...payload })
+    });
+    const json = await response.json();
+    if (!response.ok || json.ok === false) throw new Error(json.error || "buyer_action_failed");
+    if (json.guideToken) sessionStorage.setItem("pixgomBuyerToken", json.guideToken);
+    return json;
+  }
+
   function showConsoleGate(message = "구매 승인된 계정으로 로그인하세요.") {
     authGate?.finish(message);
     gate?.classList.remove("is-auth-checking");
@@ -200,6 +218,22 @@
         <small>${formatKrw(application.payment?.amountKrw)} / ${escapeHtml(application.createdAt || "-")}</small>
       </article>
     `).join("");
+  }
+
+  function renderTransferAcceptPanel() {
+    return `
+      <section class="buyer-panel buyer-transfer-panel" data-transfer-accept-panel>
+        <div>
+          <p class="section-kicker">Transfer</p>
+          <h2>방 소유권 이관</h2>
+          <p>서비스 신청과 입금승인이 완료된 계정만 방을 받을 수 있습니다.</p>
+        </div>
+        <form class="buyer-transfer-form" data-transfer-accept-form>
+          <label>이관 코드<input name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="6자리 숫자"></label>
+          <button class="button button-primary" type="submit">이관 코드 입력</button>
+        </form>
+      </section>
+    `;
   }
 
   function renderRooms(rooms = []) {
@@ -242,6 +276,17 @@
         ${renderRoomCommandSearch(room)}
         <div class="buyer-card-actions">
           <button class="button button-secondary" type="button" data-copy="${escapeHtml(room.licenseKey || "")}" data-copy-label="라이선스 키">라이선스 복사</button>
+        </div>
+        <div class="buyer-transfer-card" data-room-transfer-card data-application-id="${escapeHtml(room.applicationId || "")}" data-room-name="${escapeHtml(room.roomName || "")}">
+          <div>
+            <strong>방 소유권 이관</strong>
+            <span>6자리 코드를 만들어 받을 사람에게 전달하세요. 받는 사람은 입금승인이 완료된 계정이어야 합니다.</span>
+          </div>
+          <div class="buyer-transfer-actions">
+            <button class="button button-secondary" type="button" data-transfer-create>이관 코드 생성</button>
+            <button class="button button-secondary" type="button" data-transfer-cancel hidden>코드 취소</button>
+          </div>
+          <p data-transfer-output></p>
         </div>
       </article>
     `;
@@ -430,6 +475,7 @@
       </nav>
       ${renderNextAction(data)}
       ${renderOnboarding(data)}
+      ${renderTransferAcceptPanel()}
       <section class="${sectionClass("overview")}">
         <h2>신청 상태</h2>
         <div class="buyer-mini-grid">${renderApplications(data.applications || [])}</div>
@@ -464,6 +510,56 @@
       if (!button) return;
       await navigator.clipboard.writeText(button.dataset.copyCommand || "");
       statusBox.textContent = "명령어 예시를 복사했습니다.";
+    });
+    content.querySelectorAll("[data-transfer-create]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const card = button.closest("[data-room-transfer-card]");
+        const output = card.querySelector("[data-transfer-output]");
+        try {
+          output.textContent = "이관 코드를 생성하는 중입니다.";
+          const json = await requestBuyerAction("/api/buyer/room-transfer/create", {
+            applicationId: card.dataset.applicationId,
+            confirmRoomName: card.dataset.roomName
+          });
+          card.dataset.transferId = json.transfer.id || "";
+          const cancelButton = card.querySelector("[data-transfer-cancel]");
+          if (cancelButton) cancelButton.hidden = false;
+          output.innerHTML = `이관 코드 <code>${escapeHtml(json.transfer.code)}</code> · ${escapeHtml(json.transfer.expiresAt || "")}까지 유효`;
+          statusBox.textContent = "이관 코드를 생성했습니다. 받는 사람에게 6자리 코드만 전달하세요.";
+        } catch (error) {
+          output.textContent = window.PixelgomAuth.friendlyError(error);
+          statusBox.textContent = output.textContent;
+        }
+      });
+    });
+    content.querySelectorAll("[data-transfer-cancel]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const card = button.closest("[data-room-transfer-card]");
+        const output = card.querySelector("[data-transfer-output]");
+        try {
+          await requestBuyerAction("/api/buyer/room-transfer/cancel", { transferId: card.dataset.transferId || "" });
+          button.hidden = true;
+          output.textContent = "이관 코드를 취소했습니다.";
+          statusBox.textContent = "이관 코드가 취소되었습니다.";
+        } catch (error) {
+          output.textContent = window.PixelgomAuth.friendlyError(error);
+          statusBox.textContent = output.textContent;
+        }
+      });
+    });
+    content.querySelector("[data-transfer-accept-form]")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const acceptForm = event.currentTarget;
+      const code = new FormData(acceptForm).get("code");
+      try {
+        statusBox.textContent = "방 소유권 이관을 확인하는 중입니다.";
+        await requestBuyerAction("/api/buyer/room-transfer/accept", { code });
+        statusBox.textContent = "방 소유권 이관이 완료되었습니다.";
+        acceptForm.reset();
+        await requestConsole(buyerTokenPayload());
+      } catch (error) {
+        statusBox.textContent = window.PixelgomAuth.friendlyError(error);
+      }
     });
     bindRoomCommandSearch();
   }

@@ -193,6 +193,12 @@ window.PixelgomAuth = (() => {
       signup_failed: "회원가입 정보를 다시 확인해 주세요.",
       apply_failed: "신청 정보를 다시 확인해 주세요.",
       buyer_approval_required: "아직 구매 승인 전입니다. 신청/입금 상태를 먼저 확인해 주세요.",
+      receiver_approval_required: "서비스 신청과 입금승인이 완료된 계정만 받을 수 있습니다.",
+      transfer_code_required: "6자리 이관 코드를 입력해 주세요.",
+      transfer_code_not_found: "유효한 이관 코드를 찾지 못했습니다.",
+      transfer_code_expired: "이관 코드가 만료되었습니다. 보내는 사람에게 새 코드를 요청해 주세요.",
+      transfer_code_used: "이미 사용된 이관 코드입니다.",
+      self_transfer_not_allowed: "같은 계정으로는 방을 이관할 수 없습니다.",
       email_already_registered: "이미 가입된 이메일입니다. 로그인 후 서비스 신청을 진행해 주세요.",
       kakao_login_not_configured: "카카오 로그인이 아직 설정되지 않았습니다. 이메일 로그인을 이용해 주세요.",
       password_reset_requires_supabase: "비밀번호 재설정은 이메일 인증 모드에서 사용할 수 있습니다."

@@ -1934,6 +1934,43 @@ a {
   font-size: clamp(24px, 4vw, 34px);
 }
 
+.buyer-transfer-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  gap: 16px;
+  align-items: end;
+}
+
+.buyer-transfer-panel p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.buyer-transfer-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.buyer-transfer-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 900;
+  color: var(--muted);
+}
+
+.buyer-transfer-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  letter-spacing: 0;
+}
+
 .buyer-mini-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2190,6 +2227,49 @@ a {
 }
 
 .buyer-card-actions .button {
+  margin-top: 0;
+}
+
+.buyer-transfer-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #d8c8b4;
+  border-radius: 8px;
+  background: #fffaf2;
+}
+
+.buyer-transfer-card strong,
+.buyer-transfer-card span,
+.buyer-transfer-card p {
+  display: block;
+}
+
+.buyer-transfer-card span,
+.buyer-transfer-card p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.buyer-transfer-card code {
+  color: #174b38;
+  background: #eef8f4;
+  border-color: #cce4d8;
+}
+
+.buyer-transfer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.buyer-transfer-actions .button {
   margin-top: 0;
 }
 
@@ -3548,6 +3628,9 @@ a {
   .command-pack-grid,
   .buyer-pack-summary,
   .buyer-room-action-strip,
+  .buyer-transfer-panel,
+  .buyer-transfer-form,
+  .buyer-transfer-card,
   .template-grid {
     grid-template-columns: 1fr;
   }
@@ -3712,6 +3795,7 @@ a {
   }
 
   .buyer-room-action-strip .button,
+  .buyer-transfer-form .button,
   .buyer-next-buttons .button {
     width: 100%;
   }
@@ -3732,7 +3816,8 @@ a {
   }
 
   .buyer-room-head,
-  .buyer-card-actions {
+  .buyer-card-actions,
+  .buyer-transfer-actions {
     flex-direction: column;
     align-items: stretch;
   }

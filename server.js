@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.82";
+export const APP_VERSION = "0.4.83";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -149,6 +149,7 @@ export const FEATURES = [
   "bridge-log-share-action",
   "buyer-console-onboarding",
   "buyer-room-status-fields",
+  "buyer-room-transfer",
   "admin-room-status-badges",
   "admin-feature-summary-cards",
   "command-store-installed-search",
@@ -294,6 +295,7 @@ const SIGNUP_PASSWORD_MIN_LENGTH = 8;
 const LEGAL_CONSENT_VERSION = "2026-05-25";
 const BUYER_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const OWNER_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+const ROOM_TRANSFER_CODE_TTL_MS = 30 * 60 * 1000;
 const APPLICATION_STATUS_LABELS = Object.freeze({
   pending_payment: "결제 대기",
   approved: "승인 완료",
@@ -1627,6 +1629,7 @@ function normalizeState(state) {
   state.accounts ||= {};
   state.applications ||= {};
   state.payments ||= {};
+  state.roomTransfers ||= {};
   return state;
 }
 
@@ -2222,6 +2225,10 @@ function bridgeConnectCodeForApplication(account = {}, application = {}) {
     room: application.roomName,
     exp: Date.now() + BUYER_TOKEN_TTL_MS
   });
+}
+
+function roomTransferCodeHash(code) {
+  return createHmac("sha256", buyerTokenSecret()).update(normalizeText(code)).digest("hex");
 }
 
 function tokenFromRequest(req, body = {}) {
@@ -7727,6 +7734,193 @@ async function buyerConsoleFromRequest(state, req, body = {}) {
   return { ...buyerConsolePayload(state, auth.account), guideToken: buyerTokenForAccount(auth.account) };
 }
 
+function publicRoomTransferView(transfer = {}, options = {}) {
+  return {
+    id: transfer.id || "",
+    applicationId: transfer.applicationId || "",
+    roomName: transfer.roomName || "",
+    status: transfer.status || "pending",
+    createdAt: transfer.createdAt || "",
+    expiresAt: transfer.expiresAt || "",
+    acceptedAt: transfer.acceptedAt || "",
+    cancelledAt: transfer.cancelledAt || "",
+    ...(options.code ? { code: options.code } : {})
+  };
+}
+
+function generateRoomTransferCode(state) {
+  state.roomTransfers ||= {};
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const code = String(randomBytes(4).readUInt32BE(0) % 1000000).padStart(6, "0");
+    const codeHash = roomTransferCodeHash(code);
+    const duplicate = Object.values(state.roomTransfers).some((transfer) => (
+      transfer.codeHash === codeHash
+      && transfer.status === "pending"
+      && Date.parse(transfer.expiresAt || "") > Date.now()
+    ));
+    if (!duplicate) return { code, codeHash };
+  }
+  const fallback = String(Date.now() % 1000000).padStart(6, "0");
+  return { code: fallback, codeHash: roomTransferCodeHash(fallback) };
+}
+
+function cancelPendingRoomTransfersForApplication(state, applicationId, reason = "superseded") {
+  state.roomTransfers ||= {};
+  const now = nowIso();
+  for (const transfer of Object.values(state.roomTransfers)) {
+    if (transfer.applicationId === applicationId && transfer.status === "pending") {
+      transfer.status = "cancelled";
+      transfer.cancelledAt = now;
+      transfer.cancelReason = reason;
+    }
+  }
+}
+
+function roomTransferByCode(state, code) {
+  const codeHash = roomTransferCodeHash(code);
+  return Object.values(state.roomTransfers || {}).find((transfer) => transfer.codeHash === codeHash) || null;
+}
+
+async function buyerRoomTransferCreateFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const account = auth.account;
+  const applicationId = normalizeText(body.applicationId || body.appId);
+  const confirmRoomName = normalizeText(body.confirmRoomName || body.roomName || body.room);
+  if (!applicationId) return { ok: false, status: 400, error: "application_id_required" };
+  if (!confirmRoomName) return { ok: false, status: 400, error: "room_name_confirm_required" };
+  const application = state.applications?.[applicationId];
+  if (!application || application.accountId !== account.id) {
+    return { ok: false, status: 404, error: "application_not_found" };
+  }
+  if (keyFor(application.roomName) !== keyFor(confirmRoomName)) {
+    return { ok: false, status: 400, error: "room_name_mismatch" };
+  }
+  if (application.status !== "approved" || state.payments?.[application.paymentId]?.status !== "paid") {
+    return { ok: false, status: 403, error: "transfer_room_not_approved" };
+  }
+  state.roomTransfers ||= {};
+  cancelPendingRoomTransfersForApplication(state, application.id);
+  const { code, codeHash } = generateRoomTransferCode(state);
+  const transferId = generateEntityId("trf");
+  const transfer = {
+    id: transferId,
+    applicationId: application.id,
+    roomName: application.roomName,
+    codeHash,
+    status: "pending",
+    fromAccountId: account.id,
+    toAccountId: "",
+    createdAt: nowIso(),
+    expiresAt: new Date(Date.now() + ROOM_TRANSFER_CODE_TTL_MS).toISOString(),
+    acceptedAt: "",
+    cancelledAt: ""
+  };
+  state.roomTransfers[transferId] = transfer;
+  return {
+    ok: true,
+    version: APP_VERSION,
+    transfer: publicRoomTransferView(transfer, { code }),
+    message: "이관 코드는 30분 동안 유효합니다. 받는 사람에게 6자리 코드만 전달하세요."
+  };
+}
+
+async function buyerRoomTransferAcceptFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const receiver = auth.account;
+  const code = normalizeText(body.code || body.transferCode).replace(/\D/g, "");
+  if (!/^\d{6}$/.test(code)) return { ok: false, status: 400, error: "transfer_code_required" };
+  const transfer = roomTransferByCode(state, code);
+  if (!transfer || transfer.status === "cancelled") {
+    return { ok: false, status: 404, error: "transfer_code_not_found" };
+  }
+  if (transfer.status === "accepted") {
+    return { ok: false, status: 409, error: "transfer_code_used" };
+  }
+  if (Date.parse(transfer.expiresAt || "") <= Date.now()) {
+    transfer.status = "expired";
+    transfer.expiredAt = nowIso();
+    return { ok: false, status: 410, error: "transfer_code_expired" };
+  }
+  if (!approvedBuyerApplications(state, receiver).length) {
+    return {
+      ok: false,
+      status: 403,
+      error: "receiver_approval_required",
+      message: "서비스 신청과 입금승인이 완료된 계정만 받을 수 있습니다."
+    };
+  }
+  if (transfer.fromAccountId === receiver.id) {
+    return { ok: false, status: 400, error: "self_transfer_not_allowed" };
+  }
+  const application = state.applications?.[transfer.applicationId];
+  const sender = state.accounts?.[transfer.fromAccountId];
+  if (!application || !sender || application.accountId !== sender.id) {
+    return { ok: false, status: 404, error: "transfer_target_not_found" };
+  }
+  if (application.status !== "approved" || state.payments?.[application.paymentId]?.status !== "paid") {
+    return { ok: false, status: 403, error: "transfer_room_not_approved" };
+  }
+  const payment = state.payments?.[application.paymentId];
+  sender.applicationIds = (sender.applicationIds || []).filter((id) => id !== application.id);
+  receiver.applicationIds ||= [];
+  addUnique(receiver.applicationIds, application.id);
+  application.transferHistory ||= [];
+  const acceptedAt = nowIso();
+  application.transferHistory.push({
+    transferId: transfer.id,
+    fromAccountId: sender.id,
+    toAccountId: receiver.id,
+    at: acceptedAt,
+    method: "buyer_code"
+  });
+  application.accountId = receiver.id;
+  application.email = receiver.email || application.email || "";
+  application.updatedAt = acceptedAt;
+  if (payment) {
+    payment.accountId = receiver.id;
+    payment.updatedAt = acceptedAt;
+  }
+  sender.updatedAt = acceptedAt;
+  receiver.updatedAt = acceptedAt;
+  transfer.status = "accepted";
+  transfer.toAccountId = receiver.id;
+  transfer.acceptedAt = acceptedAt;
+  return {
+    ok: true,
+    version: APP_VERSION,
+    transfer: publicRoomTransferView(transfer),
+    account: publicAccountView(receiver),
+    room: applicationRoomPayload(state, receiver, application),
+    guideToken: buyerTokenForAccount(receiver),
+    message: "방 소유권 이관이 완료되었습니다."
+  };
+}
+
+async function buyerRoomTransferCancelFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const transferId = normalizeText(body.transferId || body.id);
+  const code = normalizeText(body.code || body.transferCode).replace(/\D/g, "");
+  const transfer = transferId
+    ? state.roomTransfers?.[transferId]
+    : code
+      ? roomTransferByCode(state, code)
+      : null;
+  if (!transfer || transfer.fromAccountId !== auth.account.id || transfer.status !== "pending") {
+    return { ok: false, status: 404, error: "transfer_code_not_found" };
+  }
+  transfer.status = "cancelled";
+  transfer.cancelledAt = nowIso();
+  transfer.cancelReason = "sender_cancelled";
+  return {
+    ok: true,
+    version: APP_VERSION,
+    transfer: publicRoomTransferView(transfer)
+  };
+}
+
 async function buyerCommandTemplateInstallFromRequest(state, req, body = {}) {
   const auth = await accountFromBuyerRequest(state, req, body);
   if (!auth.ok) return auth;
@@ -7890,6 +8084,33 @@ async function handlePublicAccountApi(req, url) {
     const result = await buyerConsoleFromRequest(state, req, body);
     if (!result.ok) return { status: result.status || 401, body: result };
     await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/room-transfer/create") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerRoomTransferCreateFromRequest(state, req, body);
+    await saveState(state);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/room-transfer/accept") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerRoomTransferAcceptFromRequest(state, req, body);
+    await saveState(state);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/room-transfer/cancel") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerRoomTransferCancelFromRequest(state, req, body);
+    await saveState(state);
+    if (!result.ok) return { status: result.status || 400, body: result };
     return { status: 200, body: result };
   }
 
@@ -8512,6 +8733,9 @@ export async function requestHandler(req, res) {
       || pathname === "/api/login"
       || pathname === "/api/buyer/guide"
       || pathname === "/api/buyer/console"
+      || pathname === "/api/buyer/room-transfer/create"
+      || pathname === "/api/buyer/room-transfer/accept"
+      || pathname === "/api/buyer/room-transfer/cancel"
       || pathname === "/api/buyer/command-templates/install"
       || pathname === "/api/buyer/command-packs/apply"
       || pathname === "/api/buyer/room-command-packs"
