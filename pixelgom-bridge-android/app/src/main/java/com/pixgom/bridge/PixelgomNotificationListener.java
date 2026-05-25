@@ -53,6 +53,8 @@ public class PixelgomNotificationListener extends NotificationListenerService {
             BridgeConfig.appendLog(this, "무시: 필수값 부족 sender=" + event.sender + " msg=" + event.message);
             return;
         }
+        BridgeConfig.appendLog(this, "진단: " + event.diagnosticSummaryLine());
+        BridgeConfig.appendLog(this, "진단 payload v2 후보: " + event.diagnosticPayloadV2().toString());
         if (shouldIgnoreEchoOrPassiveNotice(event)) {
             BridgeConfig.appendLog(this, "무시: 픽셀곰 답장/수동 알림 에코 " + preview(event.message));
             return;
