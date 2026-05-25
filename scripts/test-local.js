@@ -74,7 +74,16 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.60");
+  assert.equal(health.json.version, "0.4.61");
+  assert.equal(health.json.dbStatus.ok, true);
+  assert.equal(health.json.dbStatus.type, "local-json");
+  assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(health.json.serverTimezone, "Asia/Seoul");
+  assert.equal(health.json.minAndroidVersion, "1.0.17");
+  assert.equal(health.json.latestAndroidVersion, "1.0.17");
+  assert.equal(health.json.minAndroidVersionCode, 18);
+  assert.equal(health.json.latestAndroidVersionCode, 18);
+  assert.equal(health.json.appUpdateRequired, false);
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
   assert.match(health.json.features.join(","), /profile-registry/);
@@ -159,9 +168,16 @@ try {
   assert.match(health.json.features.join(","), /command-template-bundles/);
   assert.match(health.json.features.join(","), /ready-to-use-command-responses/);
   assert.match(health.json.features.join(","), /command-store-set-editor/);
+  assert.match(health.json.features.join(","), /server-version-diagnostics/);
+  assert.match(health.json.features.join(","), /health-db-status-cards/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.additionalRoomPriceKrw, 2200);
   assert.equal(health.json.adminConsoleEnabled, true);
+
+  const outdatedHealth = await request("/health?versionCode=17");
+  assert.equal(outdatedHealth.response.status, 200);
+  assert.equal(outdatedHealth.json.appUpdateRequired, true);
+  assert.equal(outdatedHealth.json.clientAndroidVersionCode, 17);
 
   const authConfig = await request("/api/auth/config");
   assert.equal(authConfig.response.status, 200);
@@ -197,6 +213,7 @@ try {
   assert.match(homeText, /주사위/);
   assert.match(homeText, /커스텀 명령어/);
   assert.match(homeText, /업데이트 기록/);
+  assert.match(homeText, /0\.4\.61/);
   assert.match(homeText, /0\.4\.51/);
   assert.match(homeText, /0\.4\.50/);
   assert.match(homeText, /0\.4\.49/);
@@ -247,7 +264,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.60");
+  assert.equal(commandTemplates.json.version, "0.4.61");
   assert.equal(commandTemplates.json.total, 400);
   assert.equal(commandTemplates.json.templates.length, 400);
   assert.equal(commandTemplates.json.categories.some((category) => category.title === "펫키우기"), true);
@@ -265,6 +282,9 @@ try {
   const statusPageText = await statusPage.text();
   assert.match(statusPageText, /서버 상태/);
   assert.match(statusPageText, /연결 상태/);
+  assert.match(statusPageText, /서버\/앱 버전/);
+  assert.match(statusPageText, /저장소 상태/);
+  assert.match(statusPageText, /data-status-app-version/);
   assert.match(statusPageText, /추가 방/);
   assert.doesNotMatch(statusPageText, /"features"/);
 
@@ -611,7 +631,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.60");
+  assert.equal(buyerGuideApproved.json.version, "0.4.61");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -626,7 +646,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.60");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.61");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);

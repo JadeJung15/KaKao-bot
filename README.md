@@ -8,6 +8,7 @@
 - 채팅방 봇 웹훅: `POST /chat-event`
 - 카카오 i 스킬 웹훅: `POST /skill`
 - 상태 확인: `GET /status`, 개발자용 원본 `GET /health`
+- 서버/앱 진단: `/health`에서 DB 상태, 서버 시간, 앱 최소/최신 버전, 업데이트 필요 여부 확인
 - 픽셀곰 기능 소개 홈페이지: `GET /`
 - 회원가입/서비스 신청/로그인: `GET /signup`, `GET /apply`, `GET /login`
 - 구매자 전용 가이드/콘솔: `GET /buyer-guide`, `GET /console`, `GET /my-rooms`, `GET /setup`, `GET /license`, `GET /command-store`, `POST /api/buyer/guide`, `POST /api/buyer/console`
@@ -249,7 +250,7 @@ Vercel 배포 기준입니다.
 /skill
 ```
 
-`vercel.json`에서 `/`는 픽셀곰 기능 소개 홈페이지로, `/health`는 서버 상태 확인 API로 연결됩니다.
+`vercel.json`에서 `/`는 픽셀곰 기능 소개 홈페이지로, `/health`는 서버 상태 확인 API로 연결됩니다. `/status`는 구매자·운영자가 보기 쉬운 정상/주의/오류 카드 화면이고, `/health?versionCode=앱버전코드`는 브릿지 앱 업데이트 필요 여부까지 확인합니다.
 
 도메인 역할:
 

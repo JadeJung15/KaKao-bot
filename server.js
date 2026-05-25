@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.60";
+export const APP_VERSION = "0.4.61";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -140,7 +140,9 @@ export const FEATURES = [
   "command-store-pagination",
   "command-template-bundles",
   "ready-to-use-command-responses",
-  "command-store-set-editor"
+  "command-store-set-editor",
+  "server-version-diagnostics",
+  "health-db-status-cards"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -154,6 +156,10 @@ const OWNER_ADMIN_EMAILS = (process.env.OWNER_ADMIN_EMAILS || process.env.ADMIN_
   .filter(Boolean);
 const PLAY_INTERNAL_TEST_URL = "https://play.google.com/apps/internaltest/4700397680875890998";
 const PUBLIC_SITE_URL = normalizeText(process.env.PUBLIC_SITE_URL || process.env.SITE_URL || "https://pixgom.com").replace(/\/+$/, "");
+const MIN_ANDROID_VERSION = normalizeText(process.env.MIN_ANDROID_VERSION || "1.0.17");
+const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.17");
+const MIN_ANDROID_VERSION_CODE = Math.max(1, Number(process.env.MIN_ANDROID_VERSION_CODE || 18));
+const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 18));
 const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
 const SUPABASE_ANON_KEY = normalizeText(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 const SUPABASE_KAKAO_ENABLED = normalizeText(process.env.SUPABASE_KAKAO_ENABLED || "false") === "true";
@@ -943,6 +949,63 @@ async function saveState(state) {
   const tmpPath = `${DB_PATH}.tmp`;
   await writeFile(tmpPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
   await replaceStateFile(tmpPath, DB_PATH);
+}
+
+async function storageHealthStatus() {
+  const checkedAt = nowIso();
+  if (process.env.DATABASE_URL) {
+    try {
+      const pool = await getPgPool();
+      await pool.query("SELECT 1 AS ok");
+      return {
+        ok: true,
+        status: "ok",
+        type: "postgres",
+        label: "운영 DB",
+        checkedAt
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        status: "error",
+        type: "postgres",
+        label: "운영 DB",
+        checkedAt,
+        message: "운영 DB 연결을 확인하지 못했습니다."
+      };
+    }
+  }
+
+  try {
+    const exists = existsSync(DB_PATH);
+    if (exists) await readFile(DB_PATH, "utf8");
+    return {
+      ok: true,
+      status: exists ? "ok" : "ready",
+      type: "local-json",
+      label: exists ? "로컬 저장소" : "로컬 저장소 준비",
+      checkedAt
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: "error",
+      type: "local-json",
+      label: "로컬 저장소",
+      checkedAt,
+      message: "로컬 저장소 파일을 읽지 못했습니다."
+    };
+  }
+}
+
+function versionCodeFromHealthOptions(options = {}) {
+  const raw = options.androidVersionCode
+    || options.appVersionCode
+    || options.versionCode
+    || options.clientVersionCode
+    || "";
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function injectSessionNavScript(html) {
@@ -5009,13 +5072,26 @@ function commandFeatureKey(command) {
   return "";
 }
 
-export function healthPayload() {
+export async function healthPayload(options = {}) {
+  const dbStatus = await storageHealthStatus();
+  const clientVersionCode = versionCodeFromHealthOptions(options);
+  const appUpdateRequired = clientVersionCode !== null && clientVersionCode < MIN_ANDROID_VERSION_CODE;
   return {
-    ok: true,
+    ok: dbStatus.ok,
     service: "kakao-room-ops-bot",
     version: APP_VERSION,
     mode: "operations",
     storage: process.env.DATABASE_URL ? "postgres" : "local-json",
+    dbStatus,
+    serverTime: nowIso(),
+    serverTimeKst: kstTimestamp(),
+    serverTimezone: "Asia/Seoul",
+    minAndroidVersion: MIN_ANDROID_VERSION,
+    latestAndroidVersion: LATEST_ANDROID_VERSION,
+    minAndroidVersionCode: MIN_ANDROID_VERSION_CODE,
+    latestAndroidVersionCode: LATEST_ANDROID_VERSION_CODE,
+    clientAndroidVersionCode: clientVersionCode,
+    appUpdateRequired,
     gamesEnabled: true,
     gameRoadmapEnabled: true,
     monthlyPriceKrw: MONTHLY_PRICE_KRW,
@@ -6362,7 +6438,7 @@ export async function requestHandler(req, res) {
 
     if (req.method === "GET") {
       if (isHealthPath) {
-        jsonResponse(res, 200, healthPayload());
+        jsonResponse(res, 200, await healthPayload(Object.fromEntries(url.searchParams.entries())));
         return;
       }
       if (isSkillPath || isChatEventPath) {

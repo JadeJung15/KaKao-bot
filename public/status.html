@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>서버 상태 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-auth-pricing">
+    <link rel="stylesheet" href="/styles.css?v=20260525-health-diagnostics">
   </head>
   <body class="sub-page">
     <header class="site-header" aria-label="주요 메뉴">
@@ -21,24 +21,28 @@
       <section class="document-hero">
         <p class="section-kicker">Status</p>
         <h1>서버 상태</h1>
-        <p>운영자가 빠르게 확인할 수 있게 핵심 상태만 표시합니다.</p>
+        <p>운영자가 빠르게 확인할 수 있게 서버, 저장소, 앱 버전 상태를 카드로 표시합니다.</p>
       </section>
       <section class="status-dashboard" aria-live="polite">
-        <article>
+        <article data-status-card="server">
           <span>연결 상태</span>
           <strong data-status-ok>확인 중</strong>
+          <small data-status-time>-</small>
         </article>
-        <article>
-          <span>서버 버전</span>
+        <article data-status-card="version">
+          <span>서버/앱 버전</span>
           <strong data-status-version>-</strong>
+          <small data-status-app-version>-</small>
         </article>
-        <article>
-          <span>저장소</span>
+        <article data-status-card="storage">
+          <span>저장소 상태</span>
           <strong data-status-storage>-</strong>
+          <small data-status-storage-detail>-</small>
         </article>
-        <article>
-          <span>요금</span>
+        <article data-status-card="price">
+          <span>운영 요금</span>
           <strong data-status-price>-</strong>
+          <small>기본 방 1개 기준</small>
         </article>
       </section>
       <section class="document-body status-note">
@@ -52,21 +56,35 @@
         const element = document.querySelector(selector);
         if (element) element.textContent = value;
       };
+      const setCardState = (selector, state) => {
+        const element = document.querySelector(selector);
+        if (element) element.dataset.state = state;
+      };
 
       fetch("/api/health", { cache: "no-store" })
         .then((response) => response.json())
         .then((health) => {
+          const dbOk = health.dbStatus?.ok !== false;
           setText("[data-status-ok]", health.ok ? "정상" : "점검 필요");
+          setText("[data-status-time]", health.serverTimeKst || health.serverTime || "-");
           setText("[data-status-version]", health.version || "-");
-          setText("[data-status-storage]", health.storage === "postgres" ? "운영 DB" : "로컬 저장소");
+          setText("[data-status-app-version]", `앱 최신 ${health.latestAndroidVersion || "-"} / 최소 ${health.minAndroidVersion || "-"}`);
+          setText("[data-status-storage]", health.dbStatus?.label || (health.storage === "postgres" ? "운영 DB" : "로컬 저장소"));
+          setText("[data-status-storage-detail]", dbOk ? "연결 확인됨" : (health.dbStatus?.message || "확인 필요"));
           setText(
             "[data-status-price]",
             `기본 ${Number(health.monthlyPriceKrw || 5500).toLocaleString("ko-KR")}원 / 추가 방 ${Number(health.additionalRoomPriceKrw || 2200).toLocaleString("ko-KR")}원`
           );
+          setCardState('[data-status-card="server"]', health.ok ? "ok" : "error");
+          setCardState('[data-status-card="storage"]', dbOk ? "ok" : "error");
+          setCardState('[data-status-card="version"]', health.appUpdateRequired ? "warn" : "ok");
+          setCardState('[data-status-card="price"]', "ok");
         })
         .catch(() => {
           setText("[data-status-ok]", "연결 실패");
+          setText("[data-status-time]", "네트워크 또는 서버 응답 없음");
           document.body.classList.add("status-error");
+          setCardState('[data-status-card="server"]', "error");
         });
     </script>
   </body>

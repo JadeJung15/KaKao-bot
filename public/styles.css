@@ -1175,8 +1175,24 @@ a {
   box-shadow: 0 12px 30px rgba(55, 38, 23, 0.08);
 }
 
+.status-dashboard article[data-state="ok"] {
+  border-color: rgba(61, 126, 99, 0.34);
+  background: #fbfff9;
+}
+
+.status-dashboard article[data-state="warn"] {
+  border-color: rgba(214, 142, 34, 0.42);
+  background: #fff9ea;
+}
+
+.status-dashboard article[data-state="error"] {
+  border-color: rgba(223, 91, 82, 0.5);
+  background: #fff4f1;
+}
+
 .status-dashboard span,
-.status-dashboard strong {
+.status-dashboard strong,
+.status-dashboard small {
   display: block;
 }
 
@@ -1190,6 +1206,20 @@ a {
   font-size: clamp(24px, 4vw, 38px);
   line-height: 1.1;
   overflow-wrap: anywhere;
+}
+
+.status-dashboard small {
+  color: var(--muted);
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.status-dashboard article[data-state="warn"] strong {
+  color: #9a6616;
+}
+
+.status-dashboard article[data-state="error"] strong {
+  color: var(--coral);
 }
 
 .status-error .status-dashboard strong {
