@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.72";
+export const APP_VERSION = "0.4.73";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -2721,6 +2721,10 @@ function unknownCommandNoticeText(roomState, sender, parsedCommand) {
   if (!slashTokenLooksLikeCommand(parsedCommand.command)) return null;
 
   roomState.commandRouting ||= {};
+  const noticeEnabled = roomState.commandRouting.unknownNoticeEnabled === true
+    || process.env.UNKNOWN_COMMAND_NOTICE_ENABLED === "true";
+  if (!noticeEnabled) return null;
+
   roomState.commandRouting.unknownNotices ||= { byUser: {}, byRoom: {} };
   const state = roomState.commandRouting.unknownNotices;
   state.byUser ||= {};
