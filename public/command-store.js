@@ -52,10 +52,34 @@
     const labels = {
       fixed: "기본 기능",
       custom: "문구형",
+      bundle: "세트",
       "game-template": "게임 연결",
       roadmap: "로드맵"
     };
     return labels[value] || value;
+  }
+
+  function isBundleTemplate(template) {
+    return (template.commands || []).length > 1;
+  }
+
+  function templateCommandRows(template) {
+    if (isBundleTemplate(template)) return template.commands;
+    return [{
+      trigger: template.command,
+      response: template.response || "",
+      proxyCommand: template.proxyCommand || ""
+    }];
+  }
+
+  function templateCardCommandText(template) {
+    return isBundleTemplate(template) ? `${template.commands.length}개 세트` : template.command;
+  }
+
+  function templateInstallBadge(template) {
+    if (isBundleTemplate(template)) return `${template.commands.length}개 세트 설치`;
+    if (template.proxyCommand) return `${template.proxyCommand} 연결`;
+    return template.installable ? "바로 사용" : "기본/예약";
   }
 
   function templateById(id) {
@@ -84,6 +108,7 @@
 
   function modeMatches(template) {
     if (currentMode === "featured") return template.installable && template.kind !== "fixed";
+    if (currentMode === "bundle") return isBundleTemplate(template);
     if (currentMode === "installable") return template.installable;
     if (currentMode === "game") return template.kind === "game-template";
     if (currentMode === "admin") return template.audience === "admin";
@@ -105,6 +130,7 @@
       template.command,
       template.categoryTitle,
       template.description,
+      ...(template.commands || []).flatMap((command) => [command.trigger, command.response]),
       ...(template.tags || [])
     ].join(" ").toLowerCase();
     return haystack.includes(term);
@@ -125,14 +151,14 @@
       <article class="template-card ${template.id === currentTemplateId ? "is-selected" : ""}">
         <button class="template-select" type="button" data-select-template="${escapeHtml(template.id)}">
           <span>${escapeHtml(template.categoryTitle)}</span>
-          <strong>${escapeHtml(template.command)}</strong>
+          <strong>${escapeHtml(templateCardCommandText(template))}</strong>
           <b>${escapeHtml(template.title)}</b>
         </button>
         <p>${escapeHtml(template.description)}</p>
         <div class="template-badges">
           <span>${escapeHtml(audienceLabel(template.audience))}</span>
           <span>${escapeHtml(kindLabel(template.kind))}</span>
-          <span>${template.proxyCommand ? `${escapeHtml(template.proxyCommand)} 연결` : template.installable ? "설치 가능" : "기본/예약"}</span>
+          <span>${escapeHtml(templateInstallBadge(template))}</span>
         </div>
         <div class="template-actions">
           <button class="button button-secondary" type="button" data-favorite-template="${escapeHtml(template.id)}">${favorites.has(template.id) ? "즐겨찾기 해제" : "즐겨찾기"}</button>
@@ -145,7 +171,7 @@
       loadMoreButton.hidden = matchedTemplates.length <= visibleLimit;
       loadMoreButton.textContent = `더 보기 (${templates.length}/${matchedTemplates.length})`;
     }
-    statusBox.textContent = `현재 ${templates.length}개를 표시 중입니다. 검색과 빠른 보기로 전체 ${catalog.total}개 템플릿을 좁혀볼 수 있습니다. /공지, 공지, !공지, .공지 는 각각 다른 명령어로 설치할 수 있습니다.`;
+    statusBox.textContent = `현재 ${templates.length}개를 표시 중입니다. 세트 템플릿은 꼭 같이 써야 하는 명령어를 한 번에 설치합니다. /공지, 공지, !공지, .공지 는 각각 다른 명령어입니다.`;
     renderSummary();
   }
 
@@ -157,26 +183,44 @@
         : !buyerRooms.length
           ? "승인된 방이 있어야 설치할 수 있습니다."
           : "";
+    const rows = templateCommandRows(template);
+    const isBundle = rows.length > 1;
+    const editorFields = isBundle
+      ? `<div class="template-set-editor">
+          ${rows.map((row, index) => `
+            <fieldset class="template-command-row" data-editor-command-row="${index}">
+              <legend>${index + 1}. ${escapeHtml(row.trigger)}</legend>
+              <label>명령어
+                <input id="editor-trigger-${index}" name="editorTrigger${index}" data-editor-command-trigger type="text" value="${escapeHtml(row.trigger)}" placeholder="/공지, 공지, !공지, .공지" ${template.installable ? "" : "disabled"}>
+              </label>
+              <label>응답 문구
+                <textarea id="editor-response-${index}" name="editorResponse${index}" data-editor-command-response rows="5" ${template.installable ? "" : "disabled"}>${escapeHtml(row.response || "")}</textarea>
+              </label>
+              ${row.proxyCommand ? `<span>${escapeHtml(row.proxyCommand)} 게임 엔진 연결</span>` : ""}
+            </fieldset>
+          `).join("")}
+        </div>`
+      : `<label class="wide-label">명령어
+          <input id="editor-trigger" name="editorTrigger" data-editor-trigger type="text" value="${escapeHtml(template.command)}" placeholder="/공지, 공지, !공지, .공지" ${template.installable ? "" : "disabled"}>
+        </label>
+        <label class="wide-label">응답 문구
+          <textarea id="editor-response" name="editorResponse" data-editor-response rows="9" ${template.installable ? "" : "disabled"}>${escapeHtml(template.response || "서버에 내장된 고정 기능입니다.")}</textarea>
+        </label>`;
     editor.innerHTML = `
       <div class="template-editor-head">
         <p class="section-kicker">Editor</p>
         <h2>${escapeHtml(template.title)}</h2>
-        <span>${escapeHtml(template.categoryTitle)} · ${escapeHtml(audienceLabel(template.audience))}</span>
+        <span>${escapeHtml(template.categoryTitle)} · ${escapeHtml(audienceLabel(template.audience))} · ${escapeHtml(templateInstallBadge(template))}</span>
       </div>
-      <label class="wide-label">명령어
-        <input id="editor-trigger" name="editorTrigger" data-editor-trigger type="text" value="${escapeHtml(template.command)}" placeholder="/공지, 공지, !공지, .공지" ${template.installable ? "" : "disabled"}>
-      </label>
-      <label class="wide-label">응답 문구
-        <textarea id="editor-response" name="editorResponse" data-editor-response rows="9" ${template.installable ? "" : "disabled"}>${escapeHtml(template.response || "서버에 내장된 고정 기능입니다.")}</textarea>
-      </label>
+      ${editorFields}
       <div class="template-editor-note">
-        ${escapeHtml(installDisabledReason || (template.proxyCommand ? `${template.proxyCommand} 미니게임 엔진에 연결됩니다.` : "설치 전 문구를 방 분위기에 맞게 수정할 수 있습니다. / 없이도 가능하고 /, !, . 같은 접두 문자도 구분합니다."))}
+        ${escapeHtml(installDisabledReason || (isBundle ? "세트 안의 명령어와 응답문구를 각각 수정한 뒤 한 번에 설치합니다." : template.proxyCommand ? `${template.proxyCommand} 미니게임 엔진에 연결됩니다.` : "응답문구는 바로 채팅방에서 사용할 수 있는 문장으로 준비되어 있습니다. / 없이도 가능하고 /, !, . 같은 접두 문자도 구분합니다."))}
       </div>
       <div class="template-actions">
         <button class="button button-secondary" type="button" data-copy-current>복사</button>
         <button class="button button-secondary" type="button" data-favorite-current>${favorites.has(template.id) ? "즐겨찾기 해제" : "즐겨찾기"}</button>
         <button class="button button-secondary" type="button" data-cart-current>${cart.has(template.id) ? "장바구니 제거" : "장바구니"}</button>
-        <button class="button button-primary" type="button" data-install-current ${template.installable && buyerToken && buyerRooms.length ? "" : "disabled"}>편집 내용 설치</button>
+        <button class="button button-primary" type="button" data-install-current ${template.installable && buyerToken && buyerRooms.length ? "" : "disabled"}>${isBundle ? "세트 설치" : "편집 내용 설치"}</button>
       </div>
     `;
   }
@@ -223,6 +267,29 @@
     }
   }
 
+  function readEditorCommands(template) {
+    const rows = [...editor.querySelectorAll("[data-editor-command-row]")];
+    if (rows.length) {
+      const fallbackRows = templateCommandRows(template);
+      return rows.map((row, index) => ({
+        trigger: row.querySelector("[data-editor-command-trigger]")?.value || fallbackRows[index]?.trigger || "",
+        response: row.querySelector("[data-editor-command-response]")?.value || fallbackRows[index]?.response || "",
+        proxyCommand: fallbackRows[index]?.proxyCommand || ""
+      }));
+    }
+    return [{
+      trigger: editor.querySelector("[data-editor-trigger]")?.value || template.command,
+      response: editor.querySelector("[data-editor-response]")?.value || template.response,
+      proxyCommand: template.proxyCommand || ""
+    }];
+  }
+
+  function editorClipboardText(template) {
+    return readEditorCommands(template)
+      .map((command) => `${command.trigger}\n${command.response}`)
+      .join("\n\n---\n\n");
+  }
+
   async function installTemplate(templateId) {
     const template = templateById(templateId);
     if (!template) return;
@@ -234,8 +301,8 @@
       statusBox.textContent = "설치할 방을 먼저 선택하세요. 승인된 방이 없다면 구매자 콘솔에서 신청/결제 상태를 확인해주세요.";
       return;
     }
-    const trigger = editor.querySelector("[data-editor-trigger]")?.value || template.command;
-    const responseText = editor.querySelector("[data-editor-response]")?.value || template.response;
+    const editedCommands = readEditorCommands(template);
+    const singleCommand = editedCommands[0] || {};
     const response = await fetch("/api/buyer/command-templates/install", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -243,8 +310,9 @@
         token: buyerToken,
         applicationId: installRoomInput.value,
         templateId,
-        trigger,
-        response: responseText
+        trigger: singleCommand.trigger,
+        response: singleCommand.response,
+        commands: editedCommands
       })
     });
     const data = await response.json();
@@ -258,7 +326,9 @@
     }
     cart.delete(templateId);
     writeSet("pixgomCommandCart", cart);
-    statusBox.textContent = `${data.command.trigger} 명령어를 ${data.room.roomName} 방에 담았습니다.`;
+    statusBox.textContent = data.installedCount > 1
+      ? `${data.installedCount}개 명령어 세트를 ${data.room.roomName} 방에 설치했습니다.`
+      : `${data.command.trigger} 명령어를 ${data.room.roomName} 방에 담았습니다.`;
     await loadInstalledCommands();
     renderTemplates();
   }
@@ -327,10 +397,8 @@
     const template = templateById(currentTemplateId);
     if (!template) return;
     if (event.target.closest("[data-copy-current]")) {
-      const trigger = editor.querySelector("[data-editor-trigger]")?.value || template.command;
-      const response = editor.querySelector("[data-editor-response]")?.value || template.response;
-      await navigator.clipboard.writeText(`${trigger}\n${response}`);
-      statusBox.textContent = `${trigger} 템플릿을 복사했습니다.`;
+      await navigator.clipboard.writeText(editorClipboardText(template));
+      statusBox.textContent = `${template.title} 템플릿을 복사했습니다.`;
     }
     if (event.target.closest("[data-favorite-current]")) toggleSet(favorites, currentTemplateId, "pixgomCommandFavorites");
     if (event.target.closest("[data-cart-current]")) toggleSet(cart, currentTemplateId, "pixgomCommandCart");

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>명령어 스토어 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-room-custom">
+    <link rel="stylesheet" href="/styles.css?v=20260525-command-sets">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="sub-page command-store-page">
@@ -24,14 +24,14 @@
         <div>
           <p class="section-kicker">Command Store</p>
           <h1>필요한 명령어를 고르고 방에 설치합니다</h1>
-          <p>추천, 관리자용, 게임, 펫키우기처럼 먼저 좁혀 보고, 필요한 템플릿만 편집해 장바구니에 담거나 바로 설치합니다. 슬래시(/) 없이도 커스텀 명령어를 만들 수 있습니다.</p>
+          <p>추천 세트, 관리자용, 게임, 펫키우기처럼 먼저 좁혀 보고, 필요한 템플릿만 편집해 장바구니에 담거나 바로 설치합니다. 세트 명령어는 같이 필요한 명령어를 한 번에 담고, 슬래시(/) 없이도 커스텀 명령어를 만들 수 있습니다.</p>
         </div>
         <img src="/assets/pixgom-checklist.png" alt="">
       </section>
 
       <section class="command-store-steps" aria-label="명령어 스토어 사용 흐름">
         <article><strong>1</strong><span>추천 필터로 줄이기</span></article>
-        <article><strong>2</strong><span>응답 문구 편집</span></article>
+        <article><strong>2</strong><span>세트/응답 편집</span></article>
         <article><strong>3</strong><span>즐겨찾기/장바구니</span></article>
         <article><strong>4</strong><span>내 방에 설치</span></article>
       </section>
@@ -52,6 +52,7 @@
 
       <section class="command-store-filters" data-template-filters aria-label="빠른 보기">
         <button class="is-active" type="button" data-filter-mode="featured">추천</button>
+        <button type="button" data-filter-mode="bundle">세트</button>
         <button type="button" data-filter-mode="installable">설치 가능</button>
         <button type="button" data-filter-mode="game">게임 연결</button>
         <button type="button" data-filter-mode="admin">관리자용</button>
@@ -89,7 +90,7 @@
       </section>
       <pre class="form-status" data-template-status>명령어 템플릿을 불러오는 중입니다.</pre>
     </main>
-    <script src="/auth.js?v=20260525-room-custom"></script>
-    <script src="/command-store.js?v=20260525-room-custom"></script>
+    <script src="/auth.js?v=20260525-command-sets"></script>
+    <script src="/command-store.js?v=20260525-command-sets"></script>
   </body>
 </html>

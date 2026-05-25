@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.59";
+export const APP_VERSION = "0.4.60";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -137,7 +137,10 @@ export const FEATURES = [
   "slashless-custom-command-triggers",
   "room-scoped-command-management",
   "admin-application-record-cleanup",
-  "command-store-pagination"
+  "command-store-pagination",
+  "command-template-bundles",
+  "ready-to-use-command-responses",
+  "command-store-set-editor"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -357,6 +360,113 @@ const COMMAND_TEMPLATE_CATEGORY_CONFIGS = Object.freeze([
   }
 ]);
 
+const COMMAND_TEMPLATE_BUNDLES = Object.freeze([
+  {
+    id: "bundle-ops-starter",
+    categoryId: "bundle-ops",
+    categoryTitle: "추천 세트",
+    title: "운영 기본 세트",
+    command: "4개 명령어 세트",
+    trigger: "운영기본세트",
+    audience: "participant",
+    kind: "bundle",
+    installable: true,
+    editable: true,
+    description: "공지, 규칙, 문의, 프로필양식을 한 번에 설치하는 기본 운영 세트입니다.",
+    response: "오픈채팅방 기본 운영에 필요한 안내 문구 4개를 한 번에 설치합니다.",
+    commands: [
+      { trigger: "/공지", response: "오늘 공지는 여기입니다.\n\n중요한 내용은 이 메시지 아래에 이어서 안내해 주세요." },
+      { trigger: "/규칙", response: "두글자 닉네임 뒤에 성별을 붙여주세요.\n예: 곰돌 남, 하늘 여" },
+      { trigger: "/문의", response: "문의는 운영진에게 남겨주세요.\n확인 후 순서대로 답변드리겠습니다." },
+      { trigger: "/프로필양식", response: "프로필 양식\n닉네임:\n성별:\n나이대:\n관심사:\n한마디:" }
+    ],
+    tags: ["세트", "운영", "공지", "규칙", "프로필", "추천"]
+  },
+  {
+    id: "bundle-prefix-samples",
+    categoryId: "bundle-ops",
+    categoryTitle: "추천 세트",
+    title: "접두어 구분 예시 세트",
+    command: "4개 명령어 세트",
+    trigger: "접두어예시세트",
+    audience: "participant",
+    kind: "bundle",
+    installable: true,
+    editable: true,
+    description: "/공지, 공지, !공지, .공지처럼 접두어가 다른 명령어를 각각 다르게 운영하는 예시입니다.",
+    response: "같은 단어라도 접두어에 따라 다른 응답을 줄 수 있는 예시 세트입니다.",
+    commands: [
+      { trigger: "/공지", response: "오늘 공지는 여기입니다." },
+      { trigger: "공지", response: "간단 공지입니다. 자세한 내용은 /공지 를 확인해 주세요." },
+      { trigger: "!공지", response: "긴급 공지입니다. 운영진 안내를 우선 확인해 주세요." },
+      { trigger: ".공지", response: "관리용 공지 메모입니다." }
+    ],
+    tags: ["세트", "접두어", "무슬래시", "공지", "예시"]
+  },
+  {
+    id: "bundle-event-season",
+    categoryId: "bundle-event",
+    categoryTitle: "이벤트 세트",
+    title: "이벤트 운영 세트",
+    command: "4개 명령어 세트",
+    trigger: "이벤트운영세트",
+    audience: "participant",
+    kind: "bundle",
+    installable: true,
+    editable: true,
+    description: "이벤트 안내, 기간, 보상, 결과 공지를 같이 운영할 수 있는 세트입니다.",
+    response: "이벤트 진행에 필요한 안내 문구 4개를 한 번에 설치합니다.",
+    commands: [
+      { trigger: "/이벤트", response: "진행 중인 이벤트 안내입니다.\n참여 방법과 기간을 확인해 주세요." },
+      { trigger: "/이벤트기간", response: "이벤트 기간은 운영진 공지 기준으로 진행됩니다." },
+      { trigger: "/이벤트보상", response: "이벤트 보상은 참여 조건 확인 후 순서대로 지급됩니다." },
+      { trigger: "/이벤트결과", response: "이벤트 결과는 집계 후 이 명령어로 안내됩니다." }
+    ],
+    tags: ["세트", "이벤트", "시즌", "보상", "결과"]
+  },
+  {
+    id: "bundle-shop-guide",
+    categoryId: "bundle-shop",
+    categoryTitle: "상점 세트",
+    title: "상점 안내 세트",
+    command: "4개 안내 세트",
+    trigger: "상점안내세트",
+    audience: "participant",
+    kind: "bundle",
+    installable: true,
+    editable: true,
+    description: "기본 상점/가방 명령어를 설명하는 안내용 커스텀 세트입니다. 고정 명령어 자체는 덮어쓰지 않습니다.",
+    response: "상점, 구매, 가방, 선물 사용법을 안내하는 문구 4개를 설치합니다.",
+    commands: [
+      { trigger: "/상점안내", response: "상점 이용 안내\n/상점 으로 상품을 확인하고 /구매 번호 로 구매할 수 있습니다." },
+      { trigger: "/구매안내", response: "구매 방법\n/구매 번호 형식으로 입력하면 포인트로 상품을 구매합니다." },
+      { trigger: "/가방안내", response: "가방 이용 안내\n/가방 으로 보유 아이템을 확인하고 /사용 번호 로 사용할 수 있습니다." },
+      { trigger: "/선물안내", response: "아이템 선물 안내\n/가방선물 닉네임 번호 수량 형식으로 선물할 수 있습니다." }
+    ],
+    tags: ["세트", "상점", "가방", "아이템", "안내"]
+  },
+  {
+    id: "bundle-mini-games",
+    categoryId: "bundle-game",
+    categoryTitle: "게임 세트",
+    title: "미니게임 연결 세트",
+    command: "3개 게임 세트",
+    trigger: "미니게임세트",
+    audience: "participant",
+    kind: "bundle",
+    installable: true,
+    editable: true,
+    description: "주사위, 낚시, 탐험을 방 분위기에 맞는 별도 명령어로 연결합니다.",
+    response: "현재 픽셀곰 미니게임 엔진에 바로 연결되는 명령어 3개를 설치합니다.",
+    commands: [
+      { trigger: "/운영주사위", response: "주사위 게임을 시작합니다.", proxyCommand: "/주사위" },
+      { trigger: "/운영낚시", response: "낚시 게임을 시작합니다.", proxyCommand: "/낚시" },
+      { trigger: "/운영탐험", response: "탐험 게임을 시작합니다.", proxyCommand: "/탐험" }
+    ],
+    tags: ["세트", "게임", "주사위", "낚시", "탐험", "연결"]
+  }
+]);
+
 const initialState = {
   rooms: {},
   accounts: {},
@@ -390,14 +500,27 @@ function commandTemplateSlug(value) {
 function commandTemplateResponse(category, word, action, serial) {
   const proxyCommand = gameTemplateProxyCommand(category, word);
   if (category.kind === "game-template") {
+    if (proxyCommand) {
+      const gameLabels = {
+        "/주사위": "주사위",
+        "/낚시": "낚시",
+        "/탐험": "탐험"
+      };
+      const label = gameLabels[proxyCommand] || word;
+      return [
+        `${label} 게임 안내`,
+        "",
+        `${proxyCommand} 명령어로 바로 참여할 수 있습니다.`,
+        "결과에 따라 포인트가 지급되며, 보상은 방 설정에 맞춰 운영됩니다.",
+        "무리한 반복 사용은 운영진 안내에 따라 제한될 수 있습니다."
+      ].join("\n");
+    }
     return [
       `${word} ${action}`,
       "",
-      proxyCommand
-        ? `${proxyCommand} 게임 엔진으로 연결할 수 있는 템플릿입니다.`
-        : "이 명령어는 게임 확장용 안내 템플릿입니다.",
-      "관리자가 보상, 쿨타임, 확률을 방 설정에 맞게 조정해 주세요.",
-      `템플릿 번호: ${serial}`
+      `${word} 관련 게임은 준비 중입니다.`,
+      "지금은 참여 방법, 보상표, 시즌 일정을 안내하는 문구로 사용할 수 있습니다.",
+      "정식 게임 연결 전까지는 이벤트 공지용으로 운영해 주세요."
     ].join("\n");
   }
   if (category.kind === "roadmap") {
@@ -405,16 +528,42 @@ function commandTemplateResponse(category, word, action, serial) {
       `${word} ${action}`,
       "",
       "AI 운영도우미 후보 템플릿입니다.",
-      "실제 AI 자동화 연결 전에는 개인정보와 운영 정책을 먼저 확인해 주세요.",
-      `템플릿 번호: ${serial}`
+      "실제 AI 자동화 연결 전에는 개인정보와 운영 정책을 먼저 확인해 주세요."
     ].join("\n");
+  }
+  if (category.id === "basic-ops") {
+    if (/공지/.test(word)) return "오늘 공지는 여기입니다.\n\n중요한 내용은 이 메시지 아래에 이어서 안내해 주세요.";
+    if (/규칙/.test(word)) return "두글자 닉네임 뒤에 성별을 붙여주세요.\n예: 곰돌 남, 하늘 여";
+    if (/문의/.test(word)) return "문의는 운영진에게 남겨주세요.\n확인 후 순서대로 답변드리겠습니다.";
+    if (/운영진/.test(word)) return "운영진 호출이 필요하면 닉네임과 내용을 함께 남겨주세요.";
+    if (/방소개/.test(word)) return "이 방은 함께 대화하고 이벤트를 즐기는 오픈채팅방입니다.\n처음 오신 분은 규칙을 먼저 확인해 주세요.";
+  }
+  if (category.id === "participant") {
+    if (/프로필/.test(word)) return "프로필 양식\n닉네임:\n성별:\n나이대:\n관심사:\n한마디:";
+    if (/닉네임/.test(word)) return "닉네임은 알아보기 쉽게 설정해 주세요.\n운영진이 확인하기 어려운 이름은 변경을 요청할 수 있습니다.";
+    if (/입장인사/.test(word)) return "처음 오신 분은 가볍게 인사부터 나눠주세요.\n반갑게 맞이하겠습니다.";
+  }
+  if (category.id === "admin") {
+    if (/경고/.test(word)) return "운영진 안내입니다.\n방 규칙 위반 내용이 확인되어 주의 안내드립니다.\n같은 상황이 반복되면 추가 조치가 있을 수 있습니다.";
+    if (/점검/.test(word)) return "운영 점검 안내입니다.\n일부 기능 응답이 잠시 지연될 수 있습니다.";
+    if (/랭킹보상/.test(word)) return "랭킹 보상 안내입니다.\n대상자와 지급 기준은 운영진 확인 후 공지됩니다.";
+  }
+  if (category.id === "shop-item") {
+    if (/상점|아이템/.test(word)) return "상점 이용 안내\n/상점 으로 상품을 확인하고 /구매 번호 로 구매할 수 있습니다.";
+    if (/가방/.test(word)) return "가방 이용 안내\n/가방 으로 보유 아이템을 확인하고 /사용 번호 로 사용할 수 있습니다.";
+    if (/선물/.test(word)) return "아이템 선물 안내\n/가방선물 닉네임 번호 수량 형식으로 선물할 수 있습니다.";
+  }
+  if (category.id === "event-season") {
+    return `${word} ${action}\n\n참여 기간과 보상 기준은 이 공지 아래에 이어서 안내해 주세요.\n참여 전 방 규칙을 먼저 확인해 주세요.`;
+  }
+  if (category.id === "community-fun") {
+    return `${word} ${action}\n\n가볍게 참여해 주세요.\n서로 불편하지 않은 선에서 즐겁게 대화해요.`;
   }
   return [
     `${word} ${action}`,
     "",
-    "[방이름] 운영 안내입니다.",
-    "필요한 문구를 구매자 콘솔에서 방 분위기에 맞게 수정해 주세요.",
-    `템플릿 번호: ${serial}`
+    "방 운영 안내입니다.",
+    "필요한 내용은 이 메시지 아래에 이어서 안내해 주세요."
   ].join("\n");
 }
 
@@ -452,8 +601,14 @@ function fixedCommandTemplates() {
 }
 
 function generatedCommandTemplates() {
-  const templates = fixedCommandTemplates();
-  const usedTriggers = new Set(templates.map((template) => template.trigger));
+  const templates = [
+    ...fixedCommandTemplates(),
+    ...COMMAND_TEMPLATE_BUNDLES
+  ];
+  const usedTriggers = new Set(templates.flatMap((template) => [
+    template.trigger,
+    ...(template.commands || []).map((command) => command.trigger)
+  ]));
   let serial = 1;
   for (const category of COMMAND_TEMPLATE_CATEGORY_CONFIGS) {
     for (const word of category.words) {
@@ -511,6 +666,11 @@ function commandTemplateCategories() {
 }
 
 function publicCommandTemplate(template) {
+  const commands = (template.commands || []).map((command) => ({
+    trigger: command.trigger,
+    response: command.response,
+    proxyCommand: command.proxyCommand || ""
+  }));
   return {
     id: template.id,
     categoryId: template.categoryId,
@@ -525,6 +685,8 @@ function publicCommandTemplate(template) {
     description: template.description,
     response: template.response,
     proxyCommand: template.proxyCommand || "",
+    commands,
+    bundleSize: commands.length,
     tags: template.tags
   };
 }
@@ -541,7 +703,8 @@ function commandTemplateCatalogPayload() {
       admin: COMMAND_TEMPLATES.filter((template) => template.audience === "admin").length,
       installable: COMMAND_TEMPLATES.filter((template) => template.installable).length,
       fixed: COMMAND_TEMPLATES.filter((template) => template.kind === "fixed").length,
-      games: COMMAND_TEMPLATES.filter((template) => template.kind === "game-template").length
+      games: COMMAND_TEMPLATES.filter((template) => template.kind === "game-template").length,
+      bundles: COMMAND_TEMPLATES.filter((template) => (template.commands || []).length > 1).length
     },
     templates: COMMAND_TEMPLATES.map(publicCommandTemplate)
   };
@@ -784,7 +947,7 @@ async function saveState(state) {
 
 function injectSessionNavScript(html) {
   if (!html.includes("</body>") || html.includes("/session-nav.js")) return html;
-  return html.replace("</body>", '    <script src="/session-nav.js?v=20260525-room-custom" defer></script>\n  </body>');
+  return html.replace("</body>", '    <script src="/session-nav.js?v=20260525-command-sets" defer></script>\n  </body>');
 }
 
 async function replaceStateFile(tmpPath, targetPath) {
@@ -5488,6 +5651,25 @@ function approvedApplicationForInstall(state, account = {}, body = {}) {
   return applications[0] || null;
 }
 
+function templateInstallItems(template, body = {}) {
+  if ((template.commands || []).length) {
+    const source = Array.isArray(body.commands) && body.commands.length ? body.commands : template.commands;
+    return source.map((item, index) => {
+      const fallback = template.commands[index] || {};
+      return {
+        trigger: normalizeCustomCommandTrigger(item?.trigger || item?.command || fallback.trigger),
+        response: normalizeCustomCommandResponse(item?.response || item?.reply || fallback.response),
+        proxyCommand: normalizeCustomCommandTrigger(item?.proxyCommand || fallback.proxyCommand || "")
+      };
+    });
+  }
+  return [{
+    trigger: normalizeCustomCommandTrigger(body.trigger || template.trigger),
+    response: normalizeCustomCommandResponse(body.response || template.response),
+    proxyCommand: normalizeCustomCommandTrigger(template.proxyCommand || "")
+  }];
+}
+
 function installCommandTemplateForBuyer(state, account = {}, body = {}) {
   const application = approvedApplicationForInstall(state, account, body);
   if (!application) return { ok: false, status: 404, error: "approved_room_not_found" };
@@ -5495,32 +5677,35 @@ function installCommandTemplateForBuyer(state, account = {}, body = {}) {
   if (!template) return { ok: false, status: 404, error: "template_not_found" };
   if (!template.installable) return { ok: false, status: 400, error: "template_not_installable" };
 
-  const trigger = normalizeCustomCommandTrigger(body.trigger || template.trigger);
-  const response = normalizeCustomCommandResponse(body.response || template.response);
-  if (!trigger || !response) return { ok: false, status: 400, error: "invalid_template_payload" };
-  if (RESERVED_CUSTOM_COMMANDS.has(trigger)) return { ok: false, status: 409, error: "reserved_command" };
+  const installItems = templateInstallItems(template, body)
+    .filter((item) => item.trigger && item.response);
+  if (!installItems.length) return { ok: false, status: 400, error: "invalid_template_payload" };
+  if (installItems.some((item) => RESERVED_CUSTOM_COMMANDS.has(item.trigger))) {
+    return { ok: false, status: 409, error: "reserved_command" };
+  }
 
   const roomState = ensureRoom(state, application.roomName);
   const commands = customCommands(roomState);
-  const existingIndex = commands.findIndex((item) => item.trigger === trigger);
-  if (existingIndex < 0 && commands.length >= CUSTOM_COMMAND_LIMIT) {
+  const byTrigger = new Map(commands.map((item) => [item.trigger, item]));
+  const newTriggerCount = installItems.filter((item) => !byTrigger.has(item.trigger)).length;
+  if (commands.length + newTriggerCount > CUSTOM_COMMAND_LIMIT) {
     return { ok: false, status: 400, error: "custom_command_limit" };
   }
-  const item = {
-    trigger,
-    response,
-    updatedAt: nowIso(),
+  const installedAt = nowIso();
+  const installedCommands = installItems.map((item) => ({
+    trigger: item.trigger,
+    response: item.response,
+    updatedAt: installedAt,
     updatedBy: account.email || account.nickname || "buyer_console",
     sourceTemplateId: template.id,
     sourceTemplateKind: template.kind,
-    proxyCommand: template.proxyCommand || ""
-  };
-  if (existingIndex >= 0) commands[existingIndex] = item;
-  else commands.push(item);
-  roomState.settings.customCommands = normalizeCustomCommands(commands);
+    proxyCommand: item.proxyCommand || ""
+  }));
+  for (const item of installedCommands) byTrigger.set(item.trigger, item);
+  roomState.settings.customCommands = normalizeCustomCommands([...byTrigger.values()]);
   recordRoomEvent(roomState, {
     type: "buyer_command_template_installed",
-    trigger,
+    trigger: installedCommands.map((item) => item.trigger).join(", "),
     templateId: template.id,
     by: account.email || account.nickname || "buyer_console"
   });
@@ -5529,7 +5714,9 @@ function installCommandTemplateForBuyer(state, account = {}, body = {}) {
     version: APP_VERSION,
     room: applicationRoomPayload(state, account, application),
     template: publicCommandTemplate(template),
-    command: item
+    command: installedCommands[0],
+    commands: installedCommands,
+    installedCount: installedCommands.length
   };
 }
 
