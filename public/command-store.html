@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>명령어 스토어 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-command-packs">
+    <link rel="stylesheet" href="/styles.css?v=20260525-store-ux">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="sub-page command-store-page">
@@ -23,21 +23,36 @@
       <section class="command-store-hero">
         <div>
           <p class="section-kicker">Command Store</p>
-          <h1>필요한 명령어를 고르고 방에 설치합니다</h1>
-          <p>중복 없는 대표 명령어와 10종 명령어 팩을 먼저 고르고, 필요한 문구형 템플릿만 편집해 방에 설치합니다. 기본 추천 명령어는 /공지처럼 슬래시 형식을 우선합니다.</p>
+          <h1>고르고 복사해서 카톡방에서 설치합니다</h1>
+          <p>10종 명령어 팩과 대표 명령어를 장바구니에 담으면 카톡방에 붙여넣을 /명령어설치 문구가 만들어집니다. 실제 설치는 채팅방에서 미리보기 후 /설치확인으로 완료합니다.</p>
         </div>
         <img src="/assets/pixgom-checklist.png" alt="">
       </section>
 
       <section class="command-store-steps" aria-label="명령어 스토어 사용 흐름">
-        <article><strong>1</strong><span>추천 필터로 줄이기</span></article>
-        <article><strong>2</strong><span>세트/응답 편집</span></article>
-        <article><strong>3</strong><span>즐겨찾기/장바구니</span></article>
-        <article><strong>4</strong><span>내 방에 설치</span></article>
+        <article><strong>1</strong><span>팩 또는 명령어 고르기</span></article>
+        <article><strong>2</strong><span>장바구니 담기</span></article>
+        <article><strong>3</strong><span>카톡 설치 명령어 복사</span></article>
+        <article><strong>4</strong><span>채팅방에서 /설치확인</span></article>
+      </section>
+
+      <section class="command-store-modes" data-store-mode-tabs aria-label="명령어 스토어 작업 모드">
+        <button class="is-active" type="button" data-store-mode="packs">
+          <strong>팩으로 시작</strong>
+          <span>10종 팩을 먼저 담기</span>
+        </button>
+        <button type="button" data-store-mode="find">
+          <strong>명령어 찾기</strong>
+          <span>대표 명령어와 세트 검색</span>
+        </button>
+        <button type="button" data-store-mode="cart">
+          <strong>내 장바구니</strong>
+          <span>복사 문구와 추천 확인</span>
+        </button>
       </section>
 
       <section class="command-store-toolbar" aria-label="명령어 검색">
-        <input id="template-search" name="templateSearch" type="search" data-template-search placeholder="명령어, 카테고리, 펫키우기, 확률게임 검색">
+        <input id="template-search" name="templateSearch" type="search" data-template-search placeholder="/공지, 공지, pk.001, no.100, st.001, 게임, 출석 성장 검색">
         <select id="template-category" name="templateCategory" data-template-category aria-label="카테고리 선택">
           <option value="all">전체 카테고리</option>
         </select>
@@ -52,14 +67,12 @@
 
       <section class="command-store-filters" data-template-filters aria-label="빠른 보기">
         <button class="is-active" type="button" data-filter-mode="featured">추천</button>
-        <button type="button" data-filter-mode="packs">명령어 팩</button>
         <button type="button" data-filter-mode="bundle">세트</button>
         <button type="button" data-filter-mode="installable">설치 가능</button>
         <button type="button" data-filter-mode="game">게임 연결</button>
         <button type="button" data-filter-mode="participant">참여자용</button>
         <button type="button" data-filter-mode="admin">관리자용</button>
         <button type="button" data-filter-mode="favorite">즐겨찾기</button>
-        <button type="button" data-filter-mode="cart">장바구니</button>
       </section>
 
       <section class="command-pack-panel" data-command-pack-panel hidden>
@@ -80,6 +93,8 @@
         </div>
         <select id="install-room" name="installRoom" data-install-room aria-label="설치할 방"></select>
       </section>
+
+      <section class="command-cart-panel" data-cart-panel hidden></section>
 
       <section class="command-store-workbench">
         <aside class="template-editor" data-template-editor>
@@ -107,6 +122,6 @@
       <pre class="form-status" data-template-status>명령어 템플릿을 불러오는 중입니다.</pre>
     </main>
     <script src="/auth.js?v=20260525-command-quality"></script>
-    <script src="/command-store.js?v=20260525-command-packs"></script>
+    <script src="/command-store.js?v=20260525-store-ux"></script>
   </body>
 </html>

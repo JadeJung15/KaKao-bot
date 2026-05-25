@@ -7,6 +7,7 @@
   const audienceInput = document.querySelector("[data-template-audience]");
   const installPanel = document.querySelector("[data-install-panel]");
   const installRoomInput = document.querySelector("[data-install-room]");
+  const modeBar = document.querySelector("[data-store-mode-tabs]");
   const filterBar = document.querySelector("[data-template-filters]");
   const editor = document.querySelector("[data-template-editor]");
   const installedPanel = document.querySelector("[data-installed-panel]");
@@ -17,12 +18,15 @@
   const packGrid = document.querySelector("[data-command-pack-grid]");
   const packCurrent = document.querySelector("[data-command-pack-current]");
   const loadMoreButton = document.querySelector("[data-load-more]");
+  const cartPanel = document.querySelector("[data-cart-panel]");
+  const templateSection = grid?.parentElement;
 
   let catalog = { templates: [], categories: [], summary: {}, total: 0 };
   let packCatalog = { packs: [], current: {}, summary: {} };
   let buyerToken = "";
   let buyerRooms = [];
   let installedCommandsCache = [];
+  let storeMode = "packs";
   let currentMode = "featured";
   let currentTemplateId = "";
   let visibleLimit = 24;
@@ -53,6 +57,21 @@
 
   async function copyText(value) {
     await navigator.clipboard.writeText(value);
+  }
+
+  function searchTokens() {
+    return (searchInput.value || "")
+      .toLowerCase()
+      .split(/[\s,]+/)
+      .map((token) => token.trim())
+      .filter(Boolean);
+  }
+
+  function matchesTokens(parts) {
+    const tokens = searchTokens();
+    if (!tokens.length) return true;
+    const haystack = parts.filter(Boolean).join(" ").toLowerCase();
+    return tokens.every((token) => haystack.includes(token));
   }
 
   function audienceLabel(value) {
@@ -143,12 +162,90 @@
     return codes.length ? `/명령어설치 ${codes.join(" ")}` : "";
   }
 
+  function cartSearchText() {
+    return cartInstallItems().map((item) => `${item.code} ${item.title} ${item.type}`).join(" ");
+  }
+
+  function installedPackIds() {
+    const current = packCatalog.current || {};
+    return new Set([...(current.installedPackIds || []), ...((packCatalog.packs || []).filter((pack) => pack.installed).map((pack) => pack.id))]);
+  }
+
+  function recommendedPacksForCart() {
+    const text = cartSearchText().toLowerCase();
+    if (!text) return [];
+    const candidates = [];
+    if (/게임|주사위|낚시|탐험|뽑기|홀짝|홀|짝/.test(text)) candidates.push("game-chance");
+    if (/상점|가방|아이템|구매|선물/.test(text)) candidates.push("shop-inventory", "point-economy");
+    if (/출석|랭킹|순위|레벨|포인트/.test(text)) candidates.push("attendance-growth");
+    if (/공지|규칙|문의|메시지|날씨|운세|운영/.test(text)) candidates.push("ops-core");
+    const installed = installedPackIds();
+    return [...new Set(candidates)]
+      .filter((id) => !packCart.has(id) && !installed.has(id))
+      .map((id) => packById(id))
+      .filter(Boolean)
+      .slice(0, 3);
+  }
+
+  function renderCartPanel() {
+    if (!cartPanel) return;
+    const items = cartInstallItems();
+    const installCommand = cartInstallCommandText();
+    const recommendations = recommendedPacksForCart();
+    if (!items.length) {
+      cartPanel.innerHTML = `
+        <div class="command-cart-empty">
+          <p class="section-kicker">Cart</p>
+          <h2>아직 장바구니가 비어 있습니다</h2>
+          <p>팩이나 대표 명령어를 담으면 카톡방에 붙여넣을 설치 명령어가 이곳에 만들어집니다.</p>
+        </div>
+      `;
+      return;
+    }
+    cartPanel.innerHTML = `
+      <div class="command-cart-head">
+        <div>
+          <p class="section-kicker">Cart</p>
+          <h2>카톡에 붙여넣을 설치 명령어</h2>
+        </div>
+        <span>${items.length}개 항목</span>
+      </div>
+      <pre class="command-cart-command" data-cart-install-preview>${escapeHtml(installCommand)}</pre>
+      <div class="template-actions">
+        <button class="button button-primary" type="button" data-copy-cart-install>카톡 설치 명령어 복사</button>
+        <button class="button button-secondary" type="button" data-clear-cart>장바구니 비우기</button>
+      </div>
+      <div class="command-cart-items">
+        ${items.map((item) => `
+          <article>
+            <strong>${escapeHtml(item.code)}</strong>
+            <span>${escapeHtml(item.type)} · ${escapeHtml(item.title)}</span>
+          </article>
+        `).join("")}
+      </div>
+      ${recommendations.length ? `
+        <div class="command-cart-recommend">
+          <strong>같이 쓰면 좋은 팩</strong>
+          <div class="template-actions">
+            ${recommendations.map((pack) => `<button class="button button-secondary" type="button" data-cart-pack="${escapeHtml(pack.id)}">${escapeHtml(pack.title)} 담기</button>`).join("")}
+          </div>
+        </div>
+      ` : ""}
+      <ol class="command-cart-steps">
+        <li>위 문구를 복사해 설치할 카카오톡 방에 붙여넣습니다.</li>
+        <li>봇이 설치 예정 항목과 충돌 항목을 먼저 보여줍니다.</li>
+        <li>문제가 없으면 안내된 코드로 /설치확인 코드를 입력합니다.</li>
+      </ol>
+    `;
+  }
+
   function renderSummary() {
     const installCommand = cartInstallCommandText();
+    const itemCount = cartInstallItems().length;
     summary.innerHTML = `
-      <article><strong>${catalog.total}</strong><span>전체 템플릿</span></article>
-      <article><strong>${catalog.summary?.installable || 0}</strong><span>설치 가능</span></article>
-      <article><strong>${cart.size + packCart.size}</strong><span>장바구니</span></article>
+      <article><strong>${(packCatalog.packs || []).length}</strong><span>명령어 팩</span></article>
+      <article><strong>${catalog.summary?.installable || 0}</strong><span>대표 명령어</span></article>
+      <article><strong>${itemCount}</strong><span>복사할 항목</span></article>
       <article><strong>${favorites.size}</strong><span>즐겨찾기</span></article>
       ${installCommand ? `
         <article class="command-cart-copy">
@@ -164,6 +261,7 @@
         </article>
       `}
     `;
+    renderCartPanel();
   }
 
   function renderCategoryOptions() {
@@ -194,15 +292,16 @@
     if (!packPanel || !packGrid) return;
     const current = packCatalog.current || {};
     const packs = packCatalog.packs || [];
-    packPanel.hidden = currentMode !== "packs" && !packs.some((pack) => pack.installed);
+    packPanel.hidden = storeMode !== "packs";
     if (packPanel.hidden) return;
     const installedTitles = packs.filter((pack) => (current.installedPackIds || []).includes(pack.id)).map((pack) => pack.title);
     packCurrent.textContent = installedTitles.length
       ? `현재 ${installedTitles.join(", ")}`
       : "아직 장착된 명령어 팩이 없습니다.";
-    const visiblePacks = currentMode === "packs" ? packs : packs.filter((pack) => pack.installed);
+    const visiblePacks = packs.filter(packMatches);
     packGrid.innerHTML = visiblePacks.map((pack) => {
       const actionLabel = pack.installed ? "해제" : "장착";
+      const installCommand = pack.installCode ? `/명령어설치 ${pack.installCode}` : "";
       return `
         <article class="command-pack-card" data-installed="${pack.installed ? "true" : "false"}">
           <div>
@@ -217,22 +316,42 @@
           </div>
           <div class="template-actions">
             <button class="button button-secondary" type="button" data-cart-pack="${escapeHtml(pack.id)}">${packCart.has(pack.id) ? "장바구니 제거" : "장바구니 담기"}</button>
-            <button class="button button-primary" type="button" data-apply-pack="${escapeHtml(pack.id)}" data-pack-action="${pack.installed ? "remove" : "apply"}" ${buyerToken && buyerRooms.length ? "" : "disabled"}>${escapeHtml(actionLabel)}</button>
+            <button class="button button-primary" type="button" data-copy-pack-install="${escapeHtml(pack.id)}" ${installCommand ? "" : "disabled"}>카톡 설치 명령어 복사</button>
           </div>
+          <details class="command-direct-install">
+            <summary>고급: 사이트에서 바로 설치</summary>
+            <button class="button button-secondary" type="button" data-apply-pack="${escapeHtml(pack.id)}" data-pack-action="${pack.installed ? "remove" : "apply"}" ${buyerToken && buyerRooms.length ? "" : "disabled"}>${escapeHtml(actionLabel)}</button>
+          </details>
         </article>
       `;
     }).join("");
+    if (!visiblePacks.length) packGrid.innerHTML = `<article class="buyer-empty"><h3>검색 결과 없음</h3><p>pk.001, 운영 기본팩, 게임 같은 단어로 다시 검색해보세요.</p></article>`;
+  }
+
+  function packMatches(pack) {
+    return matchesTokens([
+      pack.installCode,
+      pack.title,
+      pack.description,
+      pack.tier,
+      pack.slot,
+      packSlotLabel(pack.slot),
+      packCommandText(pack),
+      ...(pack.fixedCommands || []),
+      ...(pack.customCommands || []).flatMap((command) => [command.trigger, command.response]),
+      ...(pack.tags || [])
+    ]);
   }
 
   function templateMatches(template) {
-    const term = (searchInput.value || "").trim().toLowerCase();
     const category = categoryInput.value;
     const audience = audienceInput.value;
+    if (storeMode !== "find") return false;
     if (!modeMatches(template)) return false;
     if (category !== "all" && template.categoryId !== category) return false;
     if (audience !== "all" && template.audience !== audience) return false;
-    if (!term) return true;
-    const haystack = [
+    return matchesTokens([
+      template.installCode,
       template.title,
       template.command,
       template.categoryTitle,
@@ -241,19 +360,32 @@
       templateInstallBadge(template),
       ...(template.commands || []).flatMap((command) => [command.trigger, command.response]),
       ...(template.tags || [])
-    ].join(" ").toLowerCase();
-    return haystack.includes(term);
+    ]);
   }
 
   function selectTemplate(templateId) {
     currentTemplateId = templateId;
     const template = templateById(templateId);
     if (!template) return;
+    storeMode = "find";
     renderEditor(template);
     renderTemplates();
   }
 
+  function syncStoreMode() {
+    modeBar?.querySelectorAll("[data-store-mode]").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.storeMode === storeMode);
+    });
+    if (filterBar) filterBar.hidden = storeMode !== "find";
+    if (categoryInput) categoryInput.disabled = storeMode !== "find";
+    if (audienceInput) audienceInput.disabled = storeMode !== "find";
+    if (templateSection) templateSection.hidden = storeMode !== "find";
+    if (editor) editor.hidden = storeMode !== "find";
+    if (cartPanel) cartPanel.hidden = storeMode !== "cart";
+  }
+
   function renderTemplates() {
+    syncStoreMode();
     renderCommandPacks();
     const matchedTemplates = catalog.templates.filter(templateMatches);
     const templates = matchedTemplates.slice(0, visibleLimit);
@@ -274,6 +406,7 @@
         <div class="template-actions">
           <button class="button button-secondary" type="button" data-favorite-template="${escapeHtml(template.id)}">${favorites.has(template.id) ? "즐겨찾기 해제" : "즐겨찾기"}</button>
           <button class="button button-secondary" type="button" data-cart-template="${escapeHtml(template.id)}">${cart.has(template.id) ? "장바구니 제거" : "장바구니"}</button>
+          <button class="button button-primary" type="button" data-copy-template-install="${escapeHtml(template.id)}" ${template.installCode ? "" : "disabled"}>카톡 설치 명령어 복사</button>
         </div>
       </article>
     `).join("");
@@ -282,7 +415,13 @@
       loadMoreButton.hidden = matchedTemplates.length <= visibleLimit;
       loadMoreButton.textContent = `더 보기 (${templates.length}/${matchedTemplates.length})`;
     }
-    statusBox.textContent = `현재 ${templates.length}개를 표시 중입니다. 중복 템플릿은 대표 명령어 1개로 정리했고 기본 추천은 /공지 같은 슬래시 명령어를 우선합니다.`;
+    if (storeMode === "find") {
+      statusBox.textContent = `현재 ${templates.length}개를 표시 중입니다. 중복 템플릿은 대표 명령어 1개로 정리했고 기본 추천은 /공지 같은 슬래시 명령어를 우선합니다.`;
+    } else if (storeMode === "packs") {
+      statusBox.textContent = "명령어 팩을 장바구니에 담거나 카톡 설치 명령어를 바로 복사할 수 있습니다.";
+    } else {
+      statusBox.textContent = "장바구니에서 카톡 설치 명령어를 복사한 뒤 채팅방에서 /설치확인으로 완료합니다.";
+    }
     renderSummary();
   }
 
@@ -336,8 +475,11 @@
         <button class="button button-secondary" type="button" data-copy-install-current ${template.installCode ? "" : "disabled"}>설치 명령어 복사</button>
         <button class="button button-secondary" type="button" data-favorite-current>${favorites.has(template.id) ? "즐겨찾기 해제" : "즐겨찾기"}</button>
         <button class="button button-secondary" type="button" data-cart-current>${cart.has(template.id) ? "장바구니 제거" : "장바구니"}</button>
-        <button class="button button-primary" type="button" data-install-current ${template.installable && buyerToken && buyerRooms.length ? "" : "disabled"}>${isBundle ? "세트 설치" : "편집 내용 설치"}</button>
       </div>
+      <details class="command-direct-install">
+        <summary>고급: 사이트에서 바로 설치</summary>
+        <button class="button button-secondary" type="button" data-install-current ${template.installable && buyerToken && buyerRooms.length ? "" : "disabled"}>${isBundle ? "세트 설치" : "편집 내용 설치"}</button>
+      </details>
     `;
     editor.querySelectorAll("input, textarea").forEach((input) => {
       input.addEventListener("input", () => renderInstallPreview(template));
@@ -619,19 +761,36 @@
     const selectButton = event.target.closest("[data-select-template]");
     const favoriteButton = event.target.closest("[data-favorite-template]");
     const cartButton = event.target.closest("[data-cart-template]");
+    const copyButton = event.target.closest("[data-copy-template-install]");
     if (selectButton) selectTemplate(selectButton.dataset.selectTemplate);
     if (favoriteButton) toggleSet(favorites, favoriteButton.dataset.favoriteTemplate, "pixgomCommandFavorites");
     if (cartButton) toggleSet(cart, cartButton.dataset.cartTemplate, "pixgomCommandCart");
+    if (copyButton) {
+      const template = templateById(copyButton.dataset.copyTemplateInstall);
+      if (template?.installCode) {
+        copyText(`/명령어설치 ${template.installCode}`).then(() => {
+          statusBox.textContent = `${template.installCode} 설치 명령어를 복사했습니다.`;
+        });
+      }
+    }
   });
 
   packGrid?.addEventListener("click", async (event) => {
     const cartButton = event.target.closest("[data-cart-pack]");
     const applyButton = event.target.closest("[data-apply-pack]");
+    const copyButton = event.target.closest("[data-copy-pack-install]");
     if (cartButton) toggleSet(packCart, cartButton.dataset.cartPack, "pixgomCommandPackCart");
+    if (copyButton) {
+      const pack = packById(copyButton.dataset.copyPackInstall);
+      if (pack?.installCode) {
+        await copyText(`/명령어설치 ${pack.installCode}`);
+        statusBox.textContent = `${pack.installCode} 설치 명령어를 복사했습니다.`;
+      }
+    }
     if (applyButton) await applyCommandPack(applyButton.dataset.applyPack, applyButton.dataset.packAction || "apply");
   });
 
-  summary.addEventListener("click", async (event) => {
+  async function handleCartActions(event) {
     if (event.target.closest("[data-copy-cart-install]")) {
       const command = cartInstallCommandText();
       if (!command) return;
@@ -643,6 +802,27 @@
       clearCart();
       statusBox.textContent = "장바구니를 비웠습니다.";
     }
+    const recommendButton = event.target.closest("[data-cart-pack]");
+    if (recommendButton && !event.target.closest("[data-command-pack-grid]")) {
+      toggleSet(packCart, recommendButton.dataset.cartPack, "pixgomCommandPackCart");
+      statusBox.textContent = "추천 팩을 장바구니에 담았습니다.";
+    }
+  }
+
+  summary.addEventListener("click", handleCartActions);
+  cartPanel?.addEventListener("click", handleCartActions);
+
+  modeBar?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-store-mode]");
+    if (!button) return;
+    storeMode = button.dataset.storeMode;
+    visibleLimit = 24;
+    if (storeMode === "find" && !currentTemplateId) {
+      const first = catalog.templates.find((template) => template.installable && template.kind !== "fixed");
+      if (first) renderEditor(first);
+      if (first) currentTemplateId = first.id;
+    }
+    renderTemplates();
   });
 
   editor.addEventListener("click", async (event) => {
@@ -708,8 +888,6 @@
     renderSummary();
     await loadCommandPacks();
     await loadBuyerState();
-    const first = catalog.templates.find((template) => template.installable && template.kind !== "fixed");
-    if (first) selectTemplate(first.id);
     renderTemplates();
   }
 

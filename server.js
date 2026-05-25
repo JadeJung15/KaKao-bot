@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.77";
+export const APP_VERSION = "0.4.78";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -156,6 +156,7 @@ export const FEATURES = [
   "chat-command-install-copy",
   "command-store-kakao-preview",
   "command-store-filter-refinement",
+  "command-store-mode-ux",
   "subscription-expiry-guidance",
   "bridge-connect-expiry-gate",
   "license-error-user-guidance",

@@ -1953,6 +1953,46 @@ a {
   font-weight: 900;
 }
 
+.command-store-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 0;
+}
+
+.command-store-modes button {
+  min-height: 72px;
+  display: grid;
+  gap: 4px;
+  align-content: center;
+  padding: 14px 16px;
+  color: var(--ink);
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.command-store-modes button.is-active {
+  color: #fff;
+  background: #2f6d53;
+  border-color: #2f6d53;
+}
+
+.command-store-modes strong,
+.command-store-modes span {
+  display: block;
+}
+
+.command-store-modes span {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  opacity: 0.86;
+}
+
 .command-store-toolbar {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) minmax(170px, 240px) minmax(150px, 210px);
@@ -2003,6 +2043,9 @@ a {
 }
 
 .command-store-summary {
+  position: sticky;
+  top: 78px;
+  z-index: 5;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
@@ -2091,6 +2134,22 @@ a {
   font-weight: 800;
 }
 
+.command-cart-copy {
+  grid-column: 1 / -1;
+}
+
+.command-cart-copy span {
+  display: block;
+  padding: 10px 12px;
+  overflow-x: auto;
+  color: #174b38;
+  background: #eef8f4;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  white-space: nowrap;
+}
+
 .command-store-install {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) minmax(220px, 360px);
@@ -2109,6 +2168,109 @@ a {
   margin-top: 4px;
   color: var(--muted);
   line-height: 1.55;
+}
+
+.command-cart-panel {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 18px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(55, 38, 23, 0.08);
+}
+
+.command-cart-head {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  justify-content: space-between;
+}
+
+.command-cart-head h2,
+.command-cart-empty h2 {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.5vw, 2rem);
+}
+
+.command-cart-head span,
+.command-cart-empty p {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.command-cart-command {
+  margin: 0;
+  padding: 14px;
+  overflow-x: auto;
+  color: #174b38;
+  background: #eef8f4;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+  font: 900 15px/1.5 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  white-space: pre;
+}
+
+.command-cart-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.command-cart-items article,
+.command-cart-recommend,
+.command-cart-steps {
+  padding: 12px;
+  background: #fff8ec;
+  border: 1px solid #e2d1bd;
+  border-radius: 8px;
+}
+
+.command-cart-items strong,
+.command-cart-items span,
+.command-cart-recommend strong {
+  display: block;
+}
+
+.command-cart-items strong {
+  color: #2f6d53;
+}
+
+.command-cart-items span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.command-cart-recommend {
+  display: grid;
+  gap: 10px;
+}
+
+.command-cart-steps {
+  margin: 0;
+  padding-left: 30px;
+  color: var(--muted);
+  font-weight: 800;
+  line-height: 1.65;
+}
+
+.command-direct-install {
+  padding: 10px 12px;
+  background: #f7f5ef;
+  border: 1px solid #e2d1bd;
+  border-radius: 8px;
+}
+
+.command-direct-install summary {
+  color: var(--muted);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.command-direct-install .button {
+  margin-top: 10px;
 }
 
 .command-store-workbench {
@@ -2921,9 +3083,11 @@ a {
   .buyer-guide-grid,
   .command-store-hero,
   .command-store-steps,
+  .command-store-modes,
   .command-store-toolbar,
   .command-store-summary,
   .command-store-install,
+  .command-cart-items,
   .command-store-workbench,
   .command-pack-head,
   .command-pack-grid,
@@ -3001,9 +3165,18 @@ a {
     padding: 86px 14px 42px;
   }
 
+  .command-store-summary {
+    position: static;
+  }
+
+  .command-cart-head {
+    display: grid;
+  }
+
   .template-card,
   .command-store-summary article,
-  .command-store-install {
+  .command-store-install,
+  .command-cart-panel {
     padding: 15px;
   }
 
