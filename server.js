@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.87";
+export const APP_VERSION = "0.4.88";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -175,6 +175,9 @@ export const FEATURES = [
   "silent-auth-transition",
   "room-report-workflow",
   "command-store-action-cleanup",
+  "command-pack-detail-help",
+  "install-delete-code-ux",
+  "game-pack-help-pages",
   "compact-site-navigation",
   "why-pixgom-redesign",
   "subscription-expiry-guidance",
@@ -770,7 +773,7 @@ const ADMIN_MANAGEMENT_COMMANDS = Object.freeze([
 const COMMAND_PACK_ALWAYS_INSTALLED_COMMANDS = Object.freeze([
   "/상태", "/도움말", "/방등록", "/신고", "/신고목록", "/신고처리",
   "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록",
-  "/명령어팩목록", "/명령어팩제거",
+  "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말",
   ...ADMIN_MANAGEMENT_COMMANDS
 ]);
 
@@ -785,7 +788,7 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "shop-inventory": ["/상점", "/구매", "/가방", "/사용", "/가방선물", "/판매", "/구매내역"],
   "custom-command": ["/명령어목록", "/커스텀명령어", "/고정명령어", "/명령어등록", "/명령어수정", "/명령어삭제", "/커스텀등록", "/커스텀수정", "/커스텀삭제"],
   "profile-history": ["/프로필", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
-  "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그", "/신고목록", "/신고처리", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록", "/명령어팩목록", "/명령어팩제거", ...ADMIN_MANAGEMENT_COMMANDS],
+  "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그", "/신고목록", "/신고처리", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록", "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말", ...ADMIN_MANAGEMENT_COMMANDS],
   "event-engagement": ["/출석", "/좋아요", "/응원", "/운세", "/날씨", "/채팅오늘", "/채팅금주", "/포인트순위"]
 });
 const ALL_IN_ONE_PACK_COMMANDS = Object.freeze([...new Set(Object.values(COMMAND_PACK_COMMANDS).flat())]);
@@ -1067,6 +1070,112 @@ const COMMAND_PACKS = Object.freeze([
     hidden: true
   }
 ]);
+
+const COMMAND_PACK_HELP = Object.freeze({
+  "attendance-growth": "attendance",
+  "point-economy": "attendance",
+  "event-engagement": "ranking",
+  "game-chance": "games",
+  "shop-inventory": "shop",
+  "rpg-adventure": "rpg",
+  "pixel-monster-rpg": "monster",
+  "pet-raising": "pet"
+});
+
+const COMMAND_PACK_ALIASES = Object.freeze({
+  "pk.pet": "pet-raising",
+  pet: "pet-raising",
+  "펫": "pet-raising",
+  "펫키우기": "pet-raising",
+  "pk.rpg": "rpg-adventure",
+  rpg: "rpg-adventure",
+  "알피지": "rpg-adventure",
+  "모험": "rpg-adventure",
+  "pk.monster": "pixel-monster-rpg",
+  monster: "pixel-monster-rpg",
+  "몬스터": "pixel-monster-rpg",
+  "픽셀몬스터": "pixel-monster-rpg"
+});
+
+const GAME_PACK_HELP_TOPICS = Object.freeze({
+  pet: {
+    title: "펫키우기팩",
+    path: "/help/pet",
+    packIds: ["pet-raising"],
+    aliases: ["펫", "pet", "펫키우기"],
+    intro: "개인별 펫을 입양하고 먹이, 놀이, 씻기, 휴식, 훈련으로 성장시키는 게임팩입니다.",
+    firstSteps: ["/명령어설치 pk.008", "/기능켜기 게임", "/펫입양 이름", "/펫 으로 상태 확인"],
+    adminSetup: ["명령어팩 장착: /명령어설치 pk.008", "게임 기능 켜기: /기능켜기 게임", "설치 확인: /명령어설치목록"],
+    examples: ["/펫입양 뭉치", "/펫", "/펫먹이", "/펫놀기", "/펫상점"],
+    related: ["game-chance", "shop-inventory"]
+  },
+  rpg: {
+    title: "RPG 모험팩",
+    path: "/help/rpg",
+    packIds: ["rpg-adventure"],
+    aliases: ["rpg", "RPG", "모험", "던전"],
+    intro: "던전에서 재료를 얻고 대장간에서 무기를 제작해 장착하는 모험형 게임팩입니다.",
+    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/던전", "/대장간", "/제작 12001"],
+    adminSetup: ["명령어팩 장착: /명령어설치 pk.006", "게임 기능 켜기: /기능켜기 게임", "상점/가방 기능 확인: /기능목록"],
+    examples: ["/던전", "/던전 중급", "/대장간", "/제작 12001", "/장착 12001"],
+    related: ["shop-inventory", "pet-raising"]
+  },
+  monster: {
+    title: "픽셀몬스터 수집팩",
+    path: "/help/monster",
+    packIds: ["pixel-monster-rpg"],
+    aliases: ["monster", "몬스터", "픽셀몬스터"],
+    intro: "오리지널 픽셀몬스터를 발견, 포획, 훈련, 전투하는 수집형 RPG 팩입니다.",
+    firstSteps: ["/명령어설치 pk.007", "/기능켜기 게임", "/몬스터탐험", "/포획", "/몬스터목록"],
+    adminSetup: ["명령어팩 장착: /명령어설치 pk.007", "게임 기능 켜기: /기능켜기 게임", "설치 확인: /명령어설치목록"],
+    examples: ["/몬스터탐험", "/포획", "/몬스터목록", "/몬스터훈련", "/몬스터전투"],
+    related: ["rpg-adventure", "game-chance"]
+  },
+  attendance: {
+    title: "출석/포인트팩",
+    path: "/help/attendance",
+    packIds: ["attendance-growth", "point-economy"],
+    aliases: ["attendance", "출석", "포인트"],
+    intro: "출석, 포인트 확인, 이체, 좋아요, 응원으로 참여 보상을 운영하는 기본 성장 팩입니다.",
+    firstSteps: ["/명령어설치 pk.002", "/출석", "/포인트", "/포인트순위"],
+    adminSetup: ["출석 성장팩: /명령어설치 pk.002", "포인트 경제팩: /명령어설치 pk.003", "포인트 기능 확인: /기능목록"],
+    examples: ["/출석", "/포인트", "/좋아요 닉네임 10", "/이체 닉네임 100"],
+    related: ["event-engagement", "shop-inventory"]
+  },
+  ranking: {
+    title: "랭킹/경쟁형 팩",
+    path: "/help/ranking",
+    packIds: ["event-engagement", "attendance-growth"],
+    aliases: ["ranking", "랭킹", "순위"],
+    intro: "출석, 좋아요, 채팅 활동을 순위로 보여주는 경쟁형 운영 팩입니다.",
+    firstSteps: ["/명령어설치 pk.011", "/출석순위", "/좋아요순위", "/채팅오늘"],
+    adminSetup: ["이벤트 참여팩: /명령어설치 pk.011", "랭킹 기능 확인: /기능목록"],
+    examples: ["/출석순위", "/포인트순위", "/좋아요순위", "/채팅금주"],
+    related: ["attendance-growth", "point-economy"]
+  },
+  games: {
+    title: "미니게임 확률팩",
+    path: "/help/games",
+    packIds: ["game-chance"],
+    aliases: ["games", "game", "게임", "미니게임"],
+    intro: "주사위, 낚시, 탐험, 뽑기, 홀짝을 제공하는 채팅방 미니게임 팩입니다.",
+    firstSteps: ["/명령어설치 pk.004", "/기능켜기 게임", "/게임", "/주사위"],
+    adminSetup: ["게임 확률팩: /명령어설치 pk.004", "게임 기능 켜기: /기능켜기 게임"],
+    examples: ["/게임", "/주사위", "/미끼구매 3", "/낚시", "/홀 100"],
+    related: ["rpg-adventure", "pet-raising"]
+  },
+  shop: {
+    title: "상점/가방팩",
+    path: "/help/shop",
+    packIds: ["shop-inventory"],
+    aliases: ["shop", "상점", "가방"],
+    intro: "아이템 구매, 가방 확인, 사용, 선물, 판매 흐름을 제공하는 경제 팩입니다.",
+    firstSteps: ["/명령어설치 pk.005", "/상점", "/구매 1", "/가방"],
+    adminSetup: ["상점 가방팩: /명령어설치 pk.005", "상점 기능 확인: /기능목록", "상품 추가: /상점추가 상품명 가격 설명"],
+    examples: ["/상점", "/구매 1 10", "/가방", "/판매 번호 1"],
+    related: ["point-economy", "rpg-adventure"]
+  }
+});
 
 const initialState = {
   rooms: {},
@@ -1520,6 +1629,16 @@ function commandPackById(id) {
   return COMMAND_PACKS.find((pack) => pack.id === packId) || null;
 }
 
+function commandPackByCodeOrAlias(value = "") {
+  const key = normalizeText(value).toLowerCase();
+  if (!key) return null;
+  return commandPackByInstallCode(key)
+    || commandPackById(key)
+    || commandPackById(COMMAND_PACK_ALIASES[key])
+    || visibleCommandPacks().find((pack) => key === pack.title.toLowerCase())
+    || null;
+}
+
 function validCommandPackId(id, slot = "") {
   const pack = commandPackById(id);
   if (!pack) return "";
@@ -1545,6 +1664,38 @@ function normalizeCommandPackState(value = {}) {
   };
 }
 
+function helpPathForPack(pack) {
+  const slug = COMMAND_PACK_HELP[pack?.id || ""];
+  return slug ? `/help/${slug}` : "";
+}
+
+function installCommandForPack(pack) {
+  const code = commandPackInstallCode(pack);
+  return code ? `/명령어설치 ${code}` : "";
+}
+
+function removeCommandForPack(pack) {
+  const code = commandPackInstallCode(pack);
+  return code ? `/명령어팩제거 ${code}` : "";
+}
+
+function registryItemForCommandName(command) {
+  const token = normalizeCommandToken(command);
+  return COMMAND_REGISTRY.find((item) => item.command === token || (item.aliases || []).includes(token)) || null;
+}
+
+function commandDetailForPackCommand(command) {
+  const item = registryItemForCommandName(command);
+  return {
+    command,
+    description: item?.description || "채팅 명령어",
+    aliases: item?.aliases || [],
+    requiresRole: item?.requiresRole || "",
+    requiresFeature: item?.requiresFeature || "",
+    registered: Boolean(item)
+  };
+}
+
 function publicCommandPack(pack, current = {}) {
   const commandCount = (pack.customCommands || []).length + (pack.fixedCommands || []).length;
   const installed = pack.slot === "pack"
@@ -1566,11 +1717,16 @@ function publicCommandPack(pack, current = {}) {
     description: pack.description,
     commandCount,
     fixedCommands: pack.fixedCommands || [],
+    commandsDetailed: [...new Set(pack.fixedCommands || [])].map((command) => commandDetailForPackCommand(command)),
     customCommands: (pack.customCommands || []).map((command) => ({
       trigger: command.trigger,
       response: command.response,
       proxyCommand: command.proxyCommand || ""
     })),
+    helpPath: helpPathForPack(pack),
+    installCommand: installCommandForPack(pack),
+    removeCommand: removeCommandForPack(pack),
+    deleteHints: pack.slot === "pack" ? [removeCommandForPack(pack)].filter(Boolean) : [],
     features: pack.features || {},
     basePackId: pack.basePackId || "",
     addonPackIds: pack.addonPackIds || [],
@@ -3304,6 +3460,7 @@ function featureUpdateCommand(roomState, sender, text, enabled) {
 function featureDisabledText(key) {
   return [
     `${featureLabel(key)} 기능은 이 방에서 꺼져 있습니다.`,
+    "원인: 기능 꺼짐",
     "관리자에게 /기능켜기 명령 또는 관리 콘솔 설정을 요청하세요."
   ].join("\n");
 }
@@ -6649,6 +6806,15 @@ function petTrainCommand(roomState, sender) {
 function petShopCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
   const snack = systemProductById(PET_SNACK_ITEM_ID);
+  if (!snack) {
+    return [
+      "펫 상점 데이터 오류",
+      "",
+      "원인: 펫 간식 상품 데이터를 찾지 못했습니다.",
+      "잠시 후 다시 시도하고 반복되면 운영자에게 문의해 주세요.",
+      "도움말: /help/pet"
+    ].join("\n");
+  }
   return [
     "펫 상점",
     "",
@@ -7291,8 +7457,10 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/설치확인", "스토어", "명령어 설치 최종 확인", { visibility: "admin", requiresRole: "admin", examples: ["/설치확인 4821"], searchableKeywords: ["스토어", "설치"] }),
   registryEntry("/설치취소", "스토어", "명령어 설치 대기 취소", { visibility: "admin", requiresRole: "admin", examples: ["/설치취소 4821"], searchableKeywords: ["스토어", "설치"] }),
   registryEntry("/명령어설치목록", "스토어", "설치된 명령어 팩과 커스텀 명령어 확인", { visibility: "admin", requiresRole: "admin", searchableKeywords: ["스토어", "설치목록"] }),
+  registryEntry("/명령어팩", "스토어", "명령어팩 목록과 상세 확인", { aliases: ["/팩목록"], examples: ["/명령어팩", "/명령어팩 pk.001"], searchableKeywords: ["스토어", "팩", "상세"] }),
   registryEntry("/명령어팩목록", "스토어", "장착된 명령어 팩 확인", { aliases: ["/장착팩"], visibility: "admin", requiresRole: "admin", searchableKeywords: ["스토어", "팩", "장착"] }),
   registryEntry("/명령어팩제거", "스토어", "장착된 명령어 팩 제거", { aliases: ["/팩제거"], visibility: "admin", requiresRole: "admin", examples: ["/명령어팩제거 pk.004", "/팩제거 game-chance"], searchableKeywords: ["스토어", "팩", "제거"] }),
+  registryEntry("/게임팩도움말", "스토어", "게임팩 도움말 링크 확인", { aliases: ["/게임팩 도움말"], examples: ["/게임팩도움말 pet"], searchableKeywords: ["게임팩", "도움말", "펫", "RPG"] }),
   registryEntry("/프로필", "프로필", "프로필 조회", { aliases: ["/프로칠"], examples: ["/프로필 닉네임"], requiresFeature: "profiles" }),
   registryEntry("/입퇴장현황", "히스토리", "입퇴장과 닉네임 이력 조회", { aliases: ["/닉이력"], examples: ["/닉이력 닉네임"], requiresFeature: "history" }),
   registryEntry("/원본로그", "관리자", "최신 원본 JSON 확인", { aliases: ["/원본이벤트"], visibility: "admin", requiresRole: "admin", requiresFeature: "history" }),
@@ -7391,6 +7559,21 @@ function commandInstalledInRoom(item, roomState) {
 
 function commandPackForFixedCommand(roomState, command) {
   return activeCommandPacks(roomState).find((pack) => (pack.fixedCommands || []).includes(command)) || null;
+}
+
+function commandInstallRequiredText(item) {
+  const pack = (item.packIds || []).map((id) => commandPackById(id)).find((candidate) => candidate && !candidate.hidden && candidate.slot === "pack");
+  if (!pack) return "미설치 명령어입니다. /명령어팩 으로 사용 가능한 팩을 확인해 주세요.";
+  const detail = publicCommandPack(pack);
+  return [
+    "미설치 명령어입니다.",
+    "",
+    `${item.command} 명령어는 ${pack.title} 장착 후 사용할 수 있습니다.`,
+    `설치: ${detail.installCommand}`,
+    `도움말: ${detail.helpPath || "/command-store"}`,
+    "",
+    "팩 상세: /명령어팩 " + (detail.installCode || pack.id)
+  ].join("\n");
 }
 
 function commandCatalogItemFromRegistry(item, roomState, sender, options = {}) {
@@ -8797,10 +8980,58 @@ function commandInstallCancelCommand(roomState, sender, parsed, identity = {}) {
   const key = commandInstallDraftKey(roomState, sender, identity);
   const draft = roomState.commandInstallDrafts?.[key];
   const code = normalizeText(parsed.args?.[0]);
-  if (!draft) return "취소할 설치 요청이 없습니다.";
-  if (code && draft.code !== code) return "설치취소 코드가 일치하지 않습니다.";
-  delete roomState.commandInstallDrafts[key];
-  return "명령어 설치 요청을 취소했습니다.";
+  if (draft && (!code || draft.code === code)) {
+    delete roomState.commandInstallDrafts[key];
+    return "명령어 설치 요청을 취소했습니다.";
+  }
+  const deleteItem = customCommandDeleteItemByCode(roomState, code);
+  if (deleteItem) {
+    roomState.settings.customCommands = customCommands(roomState).filter((item) => item.trigger !== deleteItem.trigger);
+    recordRoomEvent(roomState, { type: "custom_command_deleted", trigger: deleteItem.trigger, by: sender });
+    return [
+      "설치 명령어를 삭제했습니다.",
+      "",
+      `- 명령어 : ${deleteItem.trigger}`,
+      `- 삭제 코드 : ${deleteItem.deleteCode}`,
+      "",
+      "/명령어설치목록 으로 남은 설치 항목을 확인하세요."
+    ].join("\n");
+  }
+  if (draft) return "설치취소 코드가 일치하지 않습니다. 설치된 명령어 삭제는 /명령어설치목록 의 삭제 코드를 확인해 주세요.";
+  return "삭제 코드를 확인할 수 없습니다. /명령어설치목록 에서 /설치취소 [삭제코드]를 확인해 주세요.";
+}
+
+function customCommandDeleteCode(command, index = 0) {
+  const seed = `${command.trigger}|${command.sourceTemplateId || ""}|${command.sourcePackId || ""}|${index}`;
+  return String((Number.parseInt(createHash("sha256").update(seed).digest("hex").slice(0, 8), 16) % 9000) + 1000);
+}
+
+function customCommandDeleteItems(roomState) {
+  const used = new Set();
+  return customCommands(roomState)
+    .filter((command) => !command.sourcePackId)
+    .map((command, index) => {
+      let deleteCode = customCommandDeleteCode(command, index);
+      let salt = index;
+      while (used.has(deleteCode)) {
+        salt += 1;
+        deleteCode = customCommandDeleteCode(command, salt);
+      }
+      used.add(deleteCode);
+      const template = command.sourceTemplateId ? commandTemplateById(command.sourceTemplateId) : null;
+      return {
+        ...command,
+        installCode: template ? commandTemplateInstallCode(template) : "",
+        deleteCode,
+        deleteCommand: `/설치취소 ${deleteCode}`
+      };
+    });
+}
+
+function customCommandDeleteItemByCode(roomState, code = "") {
+  const targetCode = normalizeText(code);
+  if (!/^\d{4}$/.test(targetCode)) return null;
+  return customCommandDeleteItems(roomState).find((item) => item.deleteCode === targetCode) || null;
 }
 
 function commandInstallListText(roomState, sender, identity = {}) {
@@ -8809,11 +9040,20 @@ function commandInstallListText(roomState, sender, identity = {}) {
   cleanupCommandInstallDrafts(roomState);
   const current = normalizeCommandPackState(roomState.settings?.commandPacks || {});
   const packs = activeCommandPacks(roomState).filter((pack) => !pack.hidden);
-  const commands = customCommands(roomState);
+  const commands = customCommandDeleteItems(roomState);
   const draft = roomState.commandInstallDrafts?.[commandInstallDraftKey(roomState, sender, identity)];
   const lines = ["명령어 설치 현황"];
-  lines.push("", "장착된 팩", ...(packs.length ? packs.map((pack) => `- ${commandPackInstallCode(pack) || pack.id} ${pack.title}`) : ["- 없음"]));
-  lines.push("", `커스텀 명령어 ${commands.length}개`, ...(commands.length ? commands.slice(0, 12).map((command) => `- ${command.trigger}`) : ["- 없음"]));
+  lines.push("", "장착된 팩", ...(packs.length ? packs.map((pack) => {
+    const detail = publicCommandPack(pack, current);
+    const commandNames = detail.commandsDetailed.map((item) => item.command).join(", ");
+    return `- ${detail.installCode || pack.id} ${pack.title} · ${detail.commandCount}개\n  포함 명령어: ${commandNames}`;
+  }) : ["- 없음"]));
+  lines.push("", `커스텀 명령어 ${commands.length}개`, ...(commands.length ? commands.slice(0, 12).map((command) => [
+    `- ${command.trigger}`,
+    `  설치 코드 : ${command.installCode || "직접등록"}`,
+    `  삭제 코드 : ${command.deleteCode}`,
+    `  예: ${command.deleteCommand}`
+  ].join("\n")) : ["- 없음"]));
   if (draft) lines.push("", `확인 대기: /설치확인 ${draft.code} (${draft.expiresAt.slice(11, 16)}까지)`);
   if (!current.installedPackIds.length && !current.basePackId && !current.addonPackIds.length) lines.push("", "추천: /명령어설치 pk.001 로 운영 기본팩을 먼저 장착해 보세요.");
   return lines.join("\n");
@@ -8835,6 +9075,63 @@ function commandPackListText(roomState, sender) {
   }));
   lines.push("", "제거: /명령어팩제거 pk.004 또는 /명령어팩제거 game-chance");
   return lines.join("\n");
+}
+
+function commandPackCatalogText() {
+  const packs = visibleCommandPacks();
+  return [
+    "사용 가능한 명령어팩",
+    "",
+    ...packs.map((pack) => {
+      const detail = publicCommandPack(pack);
+      return `- ${detail.installCode} ${pack.title} · ${detail.commandCount}개`;
+    }),
+    "",
+    "상세: /명령어팩 pk.001",
+    "설치: /명령어설치 pk.001",
+    "제거: /명령어팩제거 pk.001"
+  ].join("\n");
+}
+
+function commandPackDetailText(pack, roomState = null) {
+  const detail = publicCommandPack(pack, roomState?.settings?.commandPacks || {});
+  const commands = detail.commandsDetailed.map((item) => {
+    const featureText = item.requiresFeature ? ` / 기능:${featureLabel(item.requiresFeature)}` : "";
+    const roleText = item.requiresRole === "admin" ? " / 관리자" : "";
+    return `- ${item.command} - ${item.description}${roleText}${featureText}`;
+  });
+  return [
+    `${detail.title}`,
+    "",
+    detail.description,
+    "",
+    `팩 코드: ${detail.installCode || detail.id}`,
+    `포함 명령어: ${detail.commandCount}개`,
+    `도움말: ${detail.helpPath || "/command-store"}`,
+    "",
+    "포함 명령어",
+    ...commands,
+    "",
+    `설치: ${detail.installCommand || "/명령어설치 코드"}`,
+    `제거: ${detail.removeCommand || "/명령어팩제거 코드"}`
+  ].join("\n");
+}
+
+function commandPackInfoCommand(roomState, parsed) {
+  const query = normalizeText(parsed.args?.[0]);
+  if (!query) return commandPackCatalogText();
+  const pack = commandPackByCodeOrAlias(query);
+  if (!pack || pack.hidden) {
+    return [
+      "찾을 수 없는 명령어팩입니다.",
+      "",
+      "사용 가능한 명령어팩",
+      ...visibleCommandPacks().map((item) => `- ${commandPackInstallCode(item)} ${item.title}`),
+      "",
+      "예: /명령어팩 pk.001"
+    ].join("\n");
+  }
+  return commandPackDetailText(pack, roomState);
 }
 
 function commandPackFromRemoveArg(value = "") {
@@ -8866,6 +9163,91 @@ function commandPackRemoveCommand(roomState, sender, parsed) {
   return lines.join("\n");
 }
 
+function gameHelpTopicByInput(value = "") {
+  const key = normalizeText(value).toLowerCase();
+  if (!key) return null;
+  return Object.entries(GAME_PACK_HELP_TOPICS).find(([slug, topic]) => (
+    slug === key
+    || topic.aliases.some((alias) => alias.toLowerCase() === key)
+    || topic.packIds.includes(key)
+  ))?.[0] || null;
+}
+
+function gamePackHelpPayload(topicKey = "") {
+  const slug = gameHelpTopicByInput(topicKey);
+  if (!topicKey) {
+    return {
+      ok: true,
+      version: APP_VERSION,
+      topics: Object.entries(GAME_PACK_HELP_TOPICS).map(([key, topic]) => ({
+        key,
+        title: topic.title,
+        path: topic.path,
+        packIds: topic.packIds,
+        installCommands: topic.packIds.map((id) => installCommandForPack(commandPackById(id))).filter(Boolean)
+      }))
+    };
+  }
+  if (!slug) return { ok: false, status: 404, error: "help_topic_not_found", topics: gamePackHelpPayload().topics };
+  const topic = GAME_PACK_HELP_TOPICS[slug];
+  const packs = topic.packIds.map((id) => commandPackById(id)).filter(Boolean).map((pack) => publicCommandPack(pack));
+  return {
+    ok: true,
+    version: APP_VERSION,
+    key: slug,
+    title: topic.title,
+    path: topic.path,
+    intro: topic.intro,
+    packs,
+    commands: packs.flatMap((pack) => pack.commandsDetailed),
+    examples: topic.examples,
+    firstSteps: topic.firstSteps,
+    adminSetup: topic.adminSetup,
+    conditions: ["방 등록과 유효한 라이선스가 필요합니다.", "게임형 팩은 /기능켜기 게임 상태에서 실행됩니다.", "관리 명령어는 방 관리자만 사용할 수 있습니다."],
+    errors: ["미설치: /명령어설치 코드로 팩을 장착합니다.", "기능 꺼짐: /기능켜기 게임 또는 관리 콘솔을 확인합니다.", "데이터 없음: 먼저 입양/탐험/포획 같은 시작 명령어를 실행합니다.", "일시 오류: 잠시 후 재시도하고 반복되면 운영자에게 문의합니다."],
+    cancel: "커스텀 명령어는 /명령어설치목록의 삭제 코드로 /설치취소 [삭제코드]를 실행하고, 팩은 /명령어팩제거 [팩코드]로 제거합니다.",
+    related: topic.related.map((id) => commandPackById(id)).filter(Boolean).map((pack) => ({ id: pack.id, title: pack.title, code: commandPackInstallCode(pack), path: helpPathForPack(pack) }))
+  };
+}
+
+function gamePackHelpText(topicKey = "") {
+  const payload = gamePackHelpPayload(topicKey);
+  if (!topicKey) {
+    return [
+      "게임팩 도움말",
+      "",
+      ...payload.topics.map((topic) => `- ${topic.key}: ${topic.title} (${topic.path})`),
+      "",
+      "상세: /게임팩도움말 pet 또는 /도움말 RPG"
+    ].join("\n");
+  }
+  if (!payload.ok) {
+    return [
+      "찾을 수 없는 게임팩입니다.",
+      "",
+      "사용 가능한 게임팩",
+      ...payload.topics.map((topic) => `- ${topic.key}: ${topic.title}`),
+      "",
+      "예: /게임팩도움말 pet"
+    ].join("\n");
+  }
+  const installCommands = payload.packs.map((pack) => pack.installCommand).filter(Boolean);
+  return [
+    `${payload.title}`,
+    "",
+    payload.intro,
+    "",
+    `도움말: ${payload.path}`,
+    `설치: ${installCommands.join(", ") || "/명령어팩"}`,
+    "",
+    "대표 명령어",
+    ...payload.commands.slice(0, 8).map((item) => `- ${item.command} - ${item.description}`),
+    "",
+    "처음 순서",
+    ...payload.firstSteps.map((step) => `- ${step}`)
+  ].join("\n");
+}
+
 function buyerCustomCommandsForAccount(state, account = {}, body = {}) {
   const application = approvedApplicationForInstall(state, account, body);
   if (!application) return { ok: false, status: 404, error: "approved_room_not_found" };
@@ -8874,7 +9256,7 @@ function buyerCustomCommandsForAccount(state, account = {}, body = {}) {
     ok: true,
     version: APP_VERSION,
     room: applicationRoomPayload(state, account, application),
-    commands: customCommands(roomState).map((item) => ({
+    commands: customCommandDeleteItems(roomState).map((item) => ({
       trigger: item.trigger,
       response: item.response,
       updatedAt: item.updatedAt,
@@ -8885,7 +9267,10 @@ function buyerCustomCommandsForAccount(state, account = {}, body = {}) {
       sourcePackTitle: item.sourcePackId ? commandPackById(item.sourcePackId)?.title || "" : "",
       sourcePackSlot: item.sourcePackSlot || "",
       sourcePackVersion: item.sourcePackVersion || 0,
-      proxyCommand: item.proxyCommand || ""
+      proxyCommand: item.proxyCommand || "",
+      installCode: item.installCode || "",
+      deleteCode: item.deleteCode || "",
+      deleteCommand: item.deleteCommand || ""
     }))
   };
 }
@@ -9321,6 +9706,12 @@ async function handlePublicAccountApi(req, url) {
 
   if (req.method === "GET" && url.pathname === "/api/command-packs") {
     return { status: 200, body: commandPackCatalogPayload() };
+  }
+
+  if (req.method === "GET" && (url.pathname === "/api/game-pack-help" || url.pathname.startsWith("/api/game-pack-help/"))) {
+    const topic = url.pathname === "/api/game-pack-help" ? "" : decodeURIComponent(url.pathname.replace(/^\/api\/game-pack-help\/?/, ""));
+    const result = gamePackHelpPayload(topic);
+    return { status: result.status || 200, body: result };
   }
 
   if (req.method === "POST" && url.pathname === "/api/signup") {
@@ -9855,13 +10246,18 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/설치확인") return commandInstallConfirmCommand(roomState, sender, parsed, identity);
   if (command === "/설치취소") return commandInstallCancelCommand(roomState, sender, parsed, identity);
   if (command === "/명령어설치목록") return commandInstallListText(roomState, sender, identity);
+  if (command === "/명령어팩" || command === "/팩목록") return commandPackInfoCommand(roomState, parsed);
   if (command === "/명령어팩목록" || command === "/장착팩") return commandPackListText(roomState, sender);
   if (command === "/명령어팩제거" || command === "/팩제거") return commandPackRemoveCommand(roomState, sender, parsed);
+  if (command === "/게임팩도움말") return gamePackHelpText(parsed.args.join(" "));
   const registryItem = resolveCommandRegistryItem(command, compactCommand);
-  if (registryItem && !commandInstalledInRoom(registryItem, roomState)) return "설치되지 않은 명령어입니다. 명령어 스토어에서 필요한 팩을 장착해 주세요.";
+  if (registryItem && !commandInstalledInRoom(registryItem, roomState)) return commandInstallRequiredText(registryItem);
   const requiredFeature = commandFeatureKey(compactCommand);
   if (requiredFeature && !featureEnabled(roomState, requiredFeature)) return featureDisabledText(requiredFeature);
-  if (command === "/도움말" || command === "/help" || command === "/?") return helpText(roomState, sender);
+  if (command === "/도움말" || command === "/help" || command === "/?") {
+    const helpTopic = parsed.args.join(" ");
+    return helpTopic ? gamePackHelpText(helpTopic) : helpText(roomState, sender);
+  }
   if (command === "/게임") return gameHelpText(roomState);
   if (command === "/주사위") return diceGameCommand(roomState, sender);
   if (command === "/미끼상점") return baitShopCommand(roomState, sender);
@@ -10073,6 +10469,8 @@ export async function requestHandler(req, res) {
     const publicAccountApi = pathname === "/api/auth/config"
       || pathname === "/api/command-templates"
       || pathname === "/api/command-packs"
+      || pathname === "/api/game-pack-help"
+      || pathname.startsWith("/api/game-pack-help/")
       || pathname === "/api/signup"
       || pathname === "/api/apply"
       || pathname === "/api/login"

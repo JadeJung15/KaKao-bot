@@ -318,9 +318,16 @@
             ${(pack.fixedCommands || []).slice(0, 4).map((command) => `<span>${escapeHtml(command)}</span>`).join("")}
             ${(pack.customCommands || []).slice(0, 4).map((command) => `<span>${escapeHtml(command.trigger)}</span>`).join("")}
           </div>
+          <details class="command-pack-command-list">
+            <summary>포함 명령어 전체 보기</summary>
+            <ul>
+              ${(pack.commandsDetailed || []).map((item) => `<li><strong>${escapeHtml(item.command)}</strong><span>${escapeHtml(item.description || "채팅 명령어")}</span></li>`).join("")}
+            </ul>
+          </details>
           <div class="template-actions">
             <button class="button button-secondary" type="button" data-cart-pack="${escapeHtml(pack.id)}">${packCart.has(pack.id) ? "장바구니 제거" : "장바구니 담기"}</button>
             <button class="button button-primary" type="button" data-copy-pack-install="${escapeHtml(pack.id)}" ${installCommand ? "" : "disabled"}>카톡 설치 명령어 복사</button>
+            ${pack.helpPath ? `<a class="button button-secondary" href="${escapeHtml(pack.helpPath)}">도움말 보기</a>` : ""}
           </div>
           <details class="command-direct-install">
             <summary>고급: 사이트에서 바로 설치</summary>

@@ -137,7 +137,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.87");
+  assert.equal(health.json.version, "0.4.88");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -262,6 +262,9 @@ try {
   assert.match(health.json.features.join(","), /room-report-workflow/);
   assert.match(health.json.features.join(","), /buyer-room-transfer/);
   assert.match(health.json.features.join(","), /command-store-action-cleanup/);
+  assert.match(health.json.features.join(","), /command-pack-detail-help/);
+  assert.match(health.json.features.join(","), /install-delete-code-ux/);
+  assert.match(health.json.features.join(","), /game-pack-help-pages/);
   assert.match(health.json.features.join(","), /compact-site-navigation/);
   assert.match(health.json.features.join(","), /why-pixgom-redesign/);
   assert.match(health.json.features.join(","), /subscription-expiry-guidance/);
@@ -383,7 +386,7 @@ try {
   assert.match(homeText, /계정 만들기/);
   assert.match(homeText, /첫 명령어 설치/);
 
-  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup", "/forgot-password", "/reset-password", "/apply", "/console", "/my-rooms", "/setup", "/license", "/status", "/command-store"]) {
+  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup", "/forgot-password", "/reset-password", "/apply", "/console", "/my-rooms", "/setup", "/license", "/status", "/command-store", "/help/pet", "/help/rpg", "/help/monster", "/help/attendance", "/help/ranking", "/help/games", "/help/shop"]) {
     const page = await fetch(`${baseUrl}${pagePath}`);
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-type") || "", /text\/html/);
@@ -450,6 +453,9 @@ try {
   assert.match(commandStoreScriptText, /카톡 설치 명령어 복사/);
   assert.match(commandStoreScriptText, /data-copy-cart-install/);
   assert.match(commandStoreScriptText, /고급: 사이트에서 바로 설치/);
+  assert.match(commandStoreScriptText, /command-pack-command-list/);
+  assert.match(commandStoreScriptText, /commandsDetailed/);
+  assert.match(commandStoreScriptText, /도움말 보기/);
   assert.match(commandStoreScriptText, /recommendedPacksForCart/);
   assert.match(commandStoreScriptText, /matchesTokens/);
   assert.match(commandStoreScriptText, /data-edit-command/);
@@ -462,7 +468,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.87");
+  assert.equal(commandTemplates.json.version, "0.4.88");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -491,7 +497,7 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.4.87");
+  assert.equal(commandPacks.json.version, "0.4.88");
   assert.equal(commandPacks.json.total, 13);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.fixedCommands.includes("/상태") && pack.fixedCommands.includes("/운세") && pack.fixedCommands.includes("/신고")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.installCode === "pk.001" && pack.installCodeType === "pack"), true);
@@ -502,6 +508,19 @@ try {
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "pet-raising" && pack.fixedCommands.includes("/펫입양") && pack.fixedCommands.includes("/펫훈련")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "all-in-one-ops" && pack.fixedCommands.includes("/관리자등록") && pack.fixedCommands.includes("/신고처리") && pack.fixedCommands.includes("/상점")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "basic-ops"), false);
+  const petPack = commandPacks.json.packs.find((pack) => pack.id === "pet-raising");
+  assert.equal(petPack.helpPath, "/help/pet");
+  assert.equal(petPack.installCommand, "/명령어설치 pk.008");
+  assert.equal(petPack.removeCommand, "/명령어팩제거 pk.008");
+  assert.equal(petPack.commandsDetailed.some((item) => item.command === "/펫상점" && item.registered === true && /펫/.test(item.description)), true);
+  assert.equal(commandPacks.json.packs.flatMap((pack) => pack.commandsDetailed || []).every((item) => item.registered === true), true);
+
+  const helpPetPageText = await (await fetch(`${baseUrl}/help/pet`)).text();
+  assert.match(helpPetPageText, /펫키우기팩/);
+  assert.match(helpPetPageText, /설치 방법/);
+  assert.match(helpPetPageText, /기본 명령어/);
+  assert.match(helpPetPageText, /설치 취소/);
+  assert.match(helpPetPageText, /오류 발생 시 확인 항목/);
 
   const statusPage = await fetch(`${baseUrl}/status`);
   const statusPageText = await statusPage.text();
@@ -597,7 +616,7 @@ try {
   assert.match(sessionNavText, /nav-logout/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.4.87");
+  assert.equal(packageJson.version, "0.4.88");
   assert.equal(packageJson.scripts["check:deploy"], "node scripts/predeploy-check.js");
   assert.equal(packageJson.scripts["smoke:local"], "node scripts/smoke-check.js");
   assert.equal(packageJson.scripts["smoke:prod"], "node scripts/smoke-check.js https://pixgom.com");
@@ -796,7 +815,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.4.87");
+  assert.equal(adminDiagnostics.json.version, "0.4.88");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -807,7 +826,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.4.87");
+  assert.equal(adminBackup.json.version, "0.4.88");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -1058,7 +1077,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.87");
+  assert.equal(buyerGuideApproved.json.version, "0.4.88");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -1073,7 +1092,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.87");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.88");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -1208,6 +1227,46 @@ try {
   });
   assert.match(packList.json.reply, /장착된 명령어 팩/);
   assert.match(packList.json.reply, /pk\.001 운영 기본팩/);
+
+  const commandPackCatalogReply = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "/명령어팩",
+    sender: "신청관리자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.match(commandPackCatalogReply.json.reply, /사용 가능한 명령어팩/);
+  assert.match(commandPackCatalogReply.json.reply, /pk\.001 운영 기본팩/);
+  assert.match(commandPackCatalogReply.json.reply, /pk\.008 펫키우기팩/);
+
+  const commandPackDetailReply = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "/명령어팩 pk.001",
+    sender: "신청관리자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.match(commandPackDetailReply.json.reply, /운영 기본팩/);
+  assert.match(commandPackDetailReply.json.reply, /포함 명령어/);
+  assert.match(commandPackDetailReply.json.reply, /\/상태/);
+  assert.match(commandPackDetailReply.json.reply, /\/명령어설치 pk\.001/);
+
+  const commandPackPetAliasReply = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "/명령어팩 pk.pet",
+    sender: "신청관리자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.match(commandPackPetAliasReply.json.reply, /펫키우기팩/);
+  assert.match(commandPackPetAliasReply.json.reply, /\/펫상점/);
+  assert.match(commandPackPetAliasReply.json.reply, /\/help\/pet/);
 
   const allInOnePackApply = await request("/api/buyer/command-packs/apply", {
     method: "POST",
@@ -1865,6 +1924,59 @@ try {
   assert.match(commandInstallList.json.reply, /명령어 설치 현황/);
   assert.match(commandInstallList.json.reply, /pk\.001 운영 기본팩/);
   assert.match(commandInstallList.json.reply, /\/규칙/);
+  assert.match(commandInstallList.json.reply, /설치 코드 : no\.\d{3}/);
+  assert.match(commandInstallList.json.reply, /삭제 코드 : \d{4}/);
+  assert.match(commandInstallList.json.reply, /\/설치취소 \d{4}/);
+  const deleteCodeMatch = commandInstallList.json.reply.match(/\/규칙[\s\S]*?삭제 코드 : (\d{4})/);
+  assert.ok(deleteCodeMatch, "설치목록에서 /규칙 삭제 코드를 확인할 수 있어야 합니다.");
+  const invalidDeleteCode = deleteCodeMatch[1] === "9999" ? "9998" : "9999";
+
+  const wrongDeleteCode = await chatPayload({
+    registeredRoom: false,
+    room: "판매추가방",
+    msg: `/설치취소 ${invalidDeleteCode}`,
+    sender: "신청관리자",
+    roomId: "salesRoom2",
+    roomLink: "https://open.kakao.com/o/salesRoom2",
+    licenseKey: approvedAdditionalRoom.json.room.licenseKey
+  });
+  assert.match(wrongDeleteCode.json.reply, /삭제 코드를 확인/);
+
+  const commandDeleteByCode = await chatPayload({
+    registeredRoom: false,
+    room: "판매추가방",
+    msg: `/설치취소 ${deleteCodeMatch[1]}`,
+    sender: "신청관리자",
+    roomId: "salesRoom2",
+    roomLink: "https://open.kakao.com/o/salesRoom2",
+    licenseKey: approvedAdditionalRoom.json.room.licenseKey
+  });
+  assert.match(commandDeleteByCode.json.reply, /설치 명령어를 삭제했습니다/);
+  assert.match(commandDeleteByCode.json.reply, /\/규칙/);
+
+  const deletedRuleReply = await chatPayload({
+    registeredRoom: false,
+    room: "판매추가방",
+    msg: "/규칙",
+    sender: "구매자",
+    roomId: "salesRoom2",
+    roomLink: "https://open.kakao.com/o/salesRoom2",
+    licenseKey: approvedAdditionalRoom.json.room.licenseKey
+  });
+  assert.equal(deletedRuleReply.json.reply === null || /등록되지 않은 명령어/.test(deletedRuleReply.json.reply), true);
+
+  const missingPetPackReply = await chatPayload({
+    registeredRoom: false,
+    room: "판매추가방",
+    msg: "/펫상점",
+    sender: "구매자",
+    roomId: "salesRoom2",
+    roomLink: "https://open.kakao.com/o/salesRoom2",
+    licenseKey: approvedAdditionalRoom.json.room.licenseKey
+  });
+  assert.match(missingPetPackReply.json.reply, /미설치/);
+  assert.match(missingPetPackReply.json.reply, /\/명령어설치 pk\.008/);
+  assert.match(missingPetPackReply.json.reply, /\/help\/pet/);
 
   const bridgeConnect = await request("/api/bridge/connect", {
     method: "POST",
@@ -2344,6 +2456,56 @@ try {
   assert.match(gameHelp.json.reply, /콘솔 시즌/);
   assert.match(gameHelp.json.reply, /시즌 기간/);
   assert.match(gameHelp.json.reply, /주사위 기본 보상: 🅟7/);
+
+  const petHelp = await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/도움말 펫",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: "PXG-CONSOLE-1234"
+  });
+  assert.match(petHelp.json.reply, /펫키우기팩/);
+  assert.match(petHelp.json.reply, /\/help\/pet/);
+  assert.match(petHelp.json.reply, /\/명령어설치 pk\.008/);
+
+  const rpgHelp = await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/게임팩도움말 RPG",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: "PXG-CONSOLE-1234"
+  });
+  assert.match(rpgHelp.json.reply, /RPG 모험팩/);
+  assert.match(rpgHelp.json.reply, /\/help\/rpg/);
+
+  const gamePackHelpList = await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/게임팩도움말",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: "PXG-CONSOLE-1234"
+  });
+  assert.match(gamePackHelpList.json.reply, /게임팩 도움말/);
+  assert.match(gamePackHelpList.json.reply, /pet/);
+  assert.match(gamePackHelpList.json.reply, /rpg/);
+
+  const unknownGamePackHelp = await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/게임팩도움말 unknown",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: "PXG-CONSOLE-1234"
+  });
+  assert.match(unknownGamePackHelp.json.reply, /찾을 수 없는 게임팩/);
+  assert.match(unknownGamePackHelp.json.reply, /사용 가능한 게임팩/);
 
   const customConsoleReply = await chatPayload({
     registeredRoom: false,
