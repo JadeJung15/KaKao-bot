@@ -20,6 +20,7 @@
   }
 
   function roomStatus(room) {
+    if (room.subscriptionStatusLabel) return room.subscriptionStatusLabel;
     const remaining = Number(room.subscription?.remainingDays);
     if (!Number.isFinite(remaining)) return "구독 상태 확인 필요";
     if (remaining < 0) return "구독 만료";
@@ -142,7 +143,8 @@
           <div><dt>앱 연결코드</dt><dd><code>${escapeHtml(room.bridgeConnectCode || "승인 후 발급")}</code></dd></div>
           <div><dt>라이선스 상태</dt><dd>${escapeHtml(room.licenseStatus || "확인 필요")}</dd></div>
           <div><dt>브릿지 상태</dt><dd>${escapeHtml(room.bridgeStatus === "ready" ? "연결 준비 완료" : "앱 연결 필요")}</dd></div>
-          <div><dt>구독 상태</dt><dd>${escapeHtml(room.subscriptionStatus || room.subscription?.status || "확인 필요")}</dd></div>
+          <div><dt>구독 상태</dt><dd>${escapeHtml(roomStatus(room))}</dd></div>
+          <div><dt>구독 안내</dt><dd>${escapeHtml(room.subscriptionNotice || "상태 확인 후 필요 시 운영자에게 문의해 주세요.")}</dd></div>
           <div><dt>커스텀 명령어</dt><dd>${escapeHtml(String(room.commandCount ?? (room.customCommands || []).length))}개 설치됨</dd></div>
         </dl>
         ${renderRoomCommands(room)}

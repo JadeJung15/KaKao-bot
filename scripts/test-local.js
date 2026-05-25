@@ -74,7 +74,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.65");
+  assert.equal(health.json.version, "0.4.66");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -179,6 +179,9 @@ try {
   assert.match(health.json.features.join(","), /command-store-installed-search/);
   assert.match(health.json.features.join(","), /command-store-kakao-preview/);
   assert.match(health.json.features.join(","), /command-store-filter-refinement/);
+  assert.match(health.json.features.join(","), /subscription-expiry-guidance/);
+  assert.match(health.json.features.join(","), /bridge-connect-expiry-gate/);
+  assert.match(health.json.features.join(","), /license-error-user-guidance/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.additionalRoomPriceKrw, 2200);
   assert.equal(health.json.adminConsoleEnabled, true);
@@ -224,6 +227,7 @@ try {
   assert.match(homeText, /업데이트 기록/);
   assert.match(homeText, /0\.4\.64/);
   assert.match(homeText, /0\.4\.65/);
+  assert.match(homeText, /0\.4\.66/);
   assert.match(homeText, /0\.4\.63/);
   assert.match(homeText, /0\.4\.62/);
   assert.match(homeText, /0\.4\.61/);
@@ -284,7 +288,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.65");
+  assert.equal(commandTemplates.json.version, "0.4.66");
   assert.equal(commandTemplates.json.total, 400);
   assert.equal(commandTemplates.json.templates.length, 400);
   assert.equal(commandTemplates.json.categories.some((category) => category.title === "펫키우기"), true);
@@ -664,7 +668,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.65");
+  assert.equal(buyerGuideApproved.json.version, "0.4.66");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -679,7 +683,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.65");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.66");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -687,6 +691,8 @@ try {
   assert.equal(buyerConsoleApproved.json.commandStore.total, 400);
   assert.equal(buyerConsoleApproved.json.rooms[0].licenseStatus, "active");
   assert.equal(buyerConsoleApproved.json.rooms[0].subscriptionStatus, "active");
+  assert.equal(buyerConsoleApproved.json.rooms[0].subscriptionStatusLabel, "정상");
+  assert.match(buyerConsoleApproved.json.rooms[0].subscriptionNotice, /정상/);
   assert.equal(buyerConsoleApproved.json.rooms[0].bridgeStatus, "ready");
   assert.equal(buyerConsoleApproved.json.rooms[0].commandCount, 0);
 
@@ -933,6 +939,13 @@ try {
   assert.equal(approvedAdditionalRoom.response.status, 200);
   assert.equal(approvedAdditionalRoom.json.payment.amountKrw, 2200);
   assert.equal(approvedAdditionalRoom.json.room.subscription.monthlyPriceKrw, 2200);
+  const buyerConsoleWithAdditionalRoom = await request("/api/buyer/console", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: approvedLogin.json.guideToken })
+  });
+  const additionalRoomPayload = buyerConsoleWithAdditionalRoom.json.rooms.find((room) => room.roomName === "판매추가방");
+  assert.ok(additionalRoomPayload?.bridgeConnectCode);
 
   const bridgeConnect = await request("/api/bridge/connect", {
     method: "POST",
@@ -944,6 +957,32 @@ try {
   assert.equal(bridgeConnect.json.room.roomName, "판매신청방");
   assert.equal(bridgeConnect.json.room.roomId, "salesRoom1");
   assert.match(bridgeConnect.json.room.licenseKey, /^PXG-/);
+
+  const expiredAdditionalRoom = await request("/api/admin/rooms", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({
+      room: "판매추가방",
+      roomId: "salesRoom2",
+      roomLink: "https://open.kakao.com/o/salesRoom2",
+      roomAdmins: ["신청관리자"],
+      licenseKey: approvedAdditionalRoom.json.room.licenseKey,
+      subscriptionExpiresAt: "2020-01-01T00:00:00.000Z"
+    })
+  });
+  assert.equal(expiredAdditionalRoom.response.status, 200);
+  assert.equal(expiredAdditionalRoom.json.room.subscription.status, "expired");
+  assert.equal(expiredAdditionalRoom.json.room.subscription.statusLabel, "만료");
+
+  const expiredBridgeConnect = await request("/api/bridge/connect", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: additionalRoomPayload.bridgeConnectCode })
+  });
+  assert.equal(expiredBridgeConnect.response.status, 403);
+  assert.equal(expiredBridgeConnect.json.error, "subscription_expired");
+  assert.match(expiredBridgeConnect.json.message, /브릿지 연결이 중단/);
+  assert.doesNotMatch(expiredBridgeConnect.json.message, /PXG|5,500원|라이선스/);
 
   const approvedRoomStatus = await chatPayload({
     registeredRoom: false,
@@ -958,6 +997,60 @@ try {
   assert.match(approvedRoomStatus.json.reply, /구독 상태/);
   assert.match(approvedRoomStatus.json.reply, /상태: 정상/);
 
+  const unsetSubscriptionRoom = await request("/api/admin/rooms", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({
+      room: "미설정구독방",
+      roomId: "unsetSubscriptionRoom",
+      roomLink: "https://open.kakao.com/o/unsetSubscriptionRoom",
+      roomAdmins: ["미설정관리자"],
+      licenseKey: "PXG-UNSET-1234",
+      subscriptionExpiresAt: "unset"
+    })
+  });
+  assert.equal(unsetSubscriptionRoom.response.status, 200);
+  assert.equal(unsetSubscriptionRoom.json.room.subscription.status, "unset");
+  const unsetSubscriptionStatus = await chatPayload({
+    registeredRoom: false,
+    room: "미설정구독방",
+    msg: "/구독상태",
+    sender: "미설정관리자",
+    roomId: "unsetSubscriptionRoom",
+    roomLink: "https://open.kakao.com/o/unsetSubscriptionRoom",
+    licenseKey: "PXG-UNSET-1234"
+  });
+  assert.match(unsetSubscriptionStatus.json.reply, /상태: 미설정/);
+  assert.match(unsetSubscriptionStatus.json.reply, /구독 만료일을 설정/);
+
+  for (const days of [7, 3, 1]) {
+    const roomName = `만료임박${days}일방`;
+    const roomId = `expiringRoom${days}`;
+    const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
+    const expiringRegister = await chatPayload({
+      registeredRoom: false,
+      room: roomName,
+      msg: "/방등록 픽셀곰 입장확인",
+      sender: "임박관리자",
+      roomId,
+      roomLink: `https://open.kakao.com/o/${roomId}`,
+      licenseKey: `PXG-EXPIRING-${days}`,
+      subscriptionExpiresAt: expiresAt
+    });
+    assert.match(expiringRegister.json.reply, /방 등록 완료/);
+    const expiringStatus = await chatPayload({
+      registeredRoom: false,
+      room: roomName,
+      msg: "/구독상태",
+      sender: "임박관리자",
+      roomId,
+      roomLink: `https://open.kakao.com/o/${roomId}`,
+      licenseKey: `PXG-EXPIRING-${days}`
+    });
+    assert.match(expiringStatus.json.reply, new RegExp(`만료 임박 ${days}일`));
+    assert.match(expiringStatus.json.reply, new RegExp(`구독 만료 ${days}일 전`));
+  }
+
   const missingLicense = await chatPayload({
     registeredRoom: false,
     room: "콘솔방",
@@ -969,7 +1062,22 @@ try {
   assert.equal(missingLicense.json.ignored, true);
   assert.equal(missingLicense.json.reason, "missing_license");
   assert.match(missingLicense.json.reply, /연결 확인/);
+  assert.match(missingLicense.json.reply, /연결값이 비어/);
   assert.doesNotMatch(missingLicense.json.reply, /라이선스|PXG|5,500원|roomId/);
+
+  const invalidLicense = await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/상태",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: "PXG-WRONG-1234"
+  });
+  assert.equal(invalidLicense.json.ignored, true);
+  assert.equal(invalidLicense.json.reason, "invalid_license");
+  assert.match(invalidLicense.json.reply, /일치하지 않습니다/);
+  assert.doesNotMatch(invalidLicense.json.reply, /PXG|5,500원|roomId|등록된 키/);
 
   const licensedStatus = await chatPayload({
     registeredRoom: false,

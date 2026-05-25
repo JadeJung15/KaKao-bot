@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.65";
+export const APP_VERSION = "0.4.66";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -151,7 +151,10 @@ export const FEATURES = [
   "admin-feature-summary-cards",
   "command-store-installed-search",
   "command-store-kakao-preview",
-  "command-store-filter-refinement"
+  "command-store-filter-refinement",
+  "subscription-expiry-guidance",
+  "bridge-connect-expiry-gate",
+  "license-error-user-guidance"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -1666,6 +1669,11 @@ function applicationRoomPayload(state, account = {}, application = {}) {
   const customCommands = roomView?.customCommands || [];
   const bridgeConnectCode = bridgeConnectCodeForApplication(account, application);
   const subscriptionStatus = subscription.status || (application.status === "approved" ? "active" : "pending");
+  const subscriptionDays = Number.isFinite(Number(subscription.remainingDays))
+    ? Number(subscription.remainingDays)
+    : remainingDays(subscription.expiresAt);
+  const subscriptionLabel = subscription.statusLabel || subscriptionStatusLabel(subscriptionStatus, subscriptionDays);
+  const subscriptionNotice = subscription.notice || subscriptionNoticeText(subscriptionStatus, subscriptionDays);
   const licenseStatus = licenseKey ? roomView?.licenseStatus || "active" : "missing";
   const bridgeStatus = bridgeConnectCode && licenseKey && (application.roomId || roomView?.roomIds?.[0])
     ? "ready"
@@ -1680,6 +1688,8 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     licenseKey,
     licenseStatus,
     subscriptionStatus,
+    subscriptionStatusLabel: subscriptionLabel,
+    subscriptionNotice,
     bridgeStatus,
     roomAdmins: roomView?.admins?.length ? roomView.admins : [application.adminName].filter(Boolean),
     features: roomView?.features || DEFAULT_ROOM_FEATURES,
@@ -3000,9 +3010,15 @@ function updateSubscriptionStatus(roomState) {
   const subscription = subscriptionSettings(roomState);
   if (!subscription.expiresAt) {
     subscription.status = "unset";
+    subscription.remainingDays = null;
+    subscription.statusLabel = "미설정";
+    subscription.notice = "관리 콘솔에서 구독 만료일을 설정해 주세요.";
     return subscription;
   }
-  subscription.status = isSubscriptionExpired(roomState) ? "expired" : "active";
+  subscription.status = subscription.expiresAt ? (isSubscriptionExpired(roomState) ? "expired" : "active") : "unset";
+  subscription.remainingDays = remainingDays(subscription.expiresAt);
+  subscription.statusLabel = subscriptionStatusLabel(subscription.status, subscription.remainingDays);
+  subscription.notice = subscriptionNoticeText(subscription.status, subscription.remainingDays);
   return subscription;
 }
 
@@ -3017,24 +3033,40 @@ function subscriptionBypassCommand(text) {
   return /^\/(?:구독상태|구독연장|구독만료|방정보|방등록|방설정|입장문구|방목록|기능|기능목록|기능켜기|기능끄기|도움말|help|\?)(?:\s|$)/i.test(normalizeText(text));
 }
 
+function subscriptionStatusLabel(status, days) {
+  if (status === "expired") return "만료";
+  if (status === "unset") return "미설정";
+  if (days === 0) return "오늘 만료";
+  if ([7, 3, 1].includes(days)) return `만료 임박 ${days}일`;
+  return "정상";
+}
+
+function subscriptionNoticeText(status, days) {
+  if (status === "expired") return "구독이 만료되어 일반 명령어와 브릿지 연결이 차단됩니다.";
+  if (status === "unset") return "관리 콘솔에서 구독 만료일을 설정해야 합니다.";
+  if (days === 0) return "오늘 구독이 만료됩니다. 운영자에게 연장을 요청해 주세요.";
+  if ([7, 3, 1].includes(days)) return `구독 만료 ${days}일 전입니다. 운영자에게 연장을 요청해 주세요.`;
+  return "구독이 정상 상태입니다.";
+}
+
 function subscriptionExpiredText(roomState) {
   updateSubscriptionStatus(roomState);
   return [
     "픽셀곰 이용기간이 만료되어 일반 명령어 응답이 중단되었습니다.",
-    "방 관리자에게 문의해주세요."
+    "방 관리자에게 구독 연장을 요청해주세요."
   ].join("\n");
 }
 
 function subscriptionLines(roomState) {
   const subscription = updateSubscriptionStatus(roomState);
-  const days = remainingDays(subscription.expiresAt);
-  const status = subscription.status === "expired" ? "만료" : subscription.status === "active" ? "정상" : "미설정";
+  const days = subscription.remainingDays;
   return [
     "구독 상태",
     "",
-    `상태: ${status}`,
+    `상태: ${subscription.statusLabel}`,
     `이용기간 만료: ${formatSubscriptionDate(subscription.expiresAt)}`,
-    days === null ? "남은 기간: 미설정" : `남은 기간: ${Math.max(0, days)}일`,
+    days === null ? "남은 기간: 미설정" : days < 0 ? "남은 기간: 만료됨" : `남은 기간: ${days}일`,
+    `안내: ${subscription.notice}`,
     "상세 운영 정보는 관리 콘솔에서 확인하세요."
   ];
 }
@@ -3093,11 +3125,15 @@ function licenseGuardResult(roomState, payload = {}, message = "", registrationC
   const incoming = normalizeLicenseKey(payload.licenseKey || payload.roomLicenseKey || payload.bridgeLicenseKey);
   if (incoming && incoming === license.key) return null;
   const isCommand = normalizeText(message).startsWith("/");
+  const guidance = incoming
+    ? "브릿지 앱 연결값이 이 방과 일치하지 않습니다."
+    : "브릿지 앱 연결값이 비어 있습니다.";
   return {
     ok: true,
     reply: isCommand ? [
       "픽셀곰 연결 확인이 필요합니다.",
-      "방 관리자에게 앱 설정 확인을 요청해주세요."
+      guidance,
+      "구매자 콘솔에서 연결코드를 다시 적용해 주세요."
     ].join("\n") : null,
     ignored: true,
     reason: incoming ? "invalid_license" : "missing_license"
@@ -3135,7 +3171,7 @@ function subscriptionExpireCommand(roomState, sender, text) {
   const subscription = subscriptionSettings(roomState);
   subscription.startedAt ||= nowIso();
   subscription.expiresAt = expiresAt;
-  subscription.status = isSubscriptionExpired(roomState) ? "expired" : "active";
+  subscription.status = subscription.expiresAt ? (isSubscriptionExpired(roomState) ? "expired" : "active") : "unset";
   subscription.monthlyPriceKrw = MONTHLY_PRICE_KRW;
   recordRoomEvent(roomState, { type: "subscription_expiry_set", by: sender, expiresAt });
   return [
@@ -5316,11 +5352,12 @@ function roomAdminView(roomState) {
     gameSettings: gameSettings(roomState),
     subscription: {
       status: subscription.status || "unset",
-      statusLabel: subscription.status === "active" ? "정상" : subscription.status === "expired" ? "만료" : "미설정",
+      statusLabel: subscription.statusLabel || subscriptionStatusLabel(subscription.status || "unset", subscription.remainingDays),
       monthlyPriceKrw: subscription.monthlyPriceKrw || MONTHLY_PRICE_KRW,
       startedAt: subscription.startedAt || "",
       expiresAt: subscription.expiresAt || "",
-      remainingDays: remainingDays(subscription.expiresAt)
+      remainingDays: subscription.remainingDays,
+      notice: subscription.notice || subscriptionNoticeText(subscription.status || "unset", subscription.remainingDays)
     },
     diagnostics: roomDiagnostics(roomState)
   };
@@ -5438,9 +5475,14 @@ function adminUpsertRoom(state, payload = {}) {
   const subscription = subscriptionSettings(roomState);
   subscription.monthlyPriceKrw = Number(payload.monthlyPriceKrw || MONTHLY_PRICE_KRW);
   subscription.startedAt ||= parseSubscriptionDate(payload.subscriptionStartedAt || payload.subscriptionStartAt) || nowIso();
-  subscription.expiresAt = parseSubscriptionDate(payload.subscriptionExpiresAt || payload.subscriptionExpireAt || payload.subscriptionEndAt)
-    || subscription.expiresAt
-    || addDaysIso(new Date(), DEFAULT_SUBSCRIPTION_DAYS);
+  const subscriptionExpiryInput = normalizeText(payload.subscriptionExpiresAt || payload.subscriptionExpireAt || payload.subscriptionEndAt);
+  if (subscriptionExpiryInput.toLowerCase() === "unset") {
+    subscription.expiresAt = "";
+  } else {
+    subscription.expiresAt = parseSubscriptionDate(subscriptionExpiryInput)
+      || subscription.expiresAt
+      || addDaysIso(new Date(), DEFAULT_SUBSCRIPTION_DAYS);
+  }
   subscription.status = isSubscriptionExpired(roomState) ? "expired" : "active";
 
   recordRoomEvent(roomState, { type: "admin_console_room_saved", by: "admin_console", joinPhrase, licenseKey: maskedLicenseKey(license.key) });
@@ -5937,6 +5979,23 @@ function bridgeConnectFromRequest(state, body = {}) {
   }
   if (application.status !== "approved" || state.payments?.[application.paymentId]?.status !== "paid") {
     return { ok: false, status: 403, error: "buyer_approval_required" };
+  }
+  const roomState = ensureRoom(state, application.roomName);
+  const subscription = updateSubscriptionStatus(roomState);
+  if (subscription.status === "expired") {
+    return {
+      ok: false,
+      status: 403,
+      error: "subscription_expired",
+      message: "구독이 만료되어 브릿지 연결이 중단되었습니다. 구매자 콘솔에서 상태를 확인하고 운영자에게 연장을 요청해 주세요.",
+      subscription: {
+        status: subscription.status,
+        statusLabel: subscription.statusLabel,
+        expiresAt: subscription.expiresAt || "",
+        remainingDays: subscription.remainingDays,
+        notice: subscription.notice
+      }
+    };
   }
   return {
     ok: true,
