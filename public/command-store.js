@@ -300,16 +300,16 @@
     if (packPanel.hidden) return;
     const installedTitles = packs.filter((pack) => (current.installedPackIds || []).includes(pack.id)).map((pack) => pack.title);
     packCurrent.textContent = installedTitles.length
-      ? `현재 ${installedTitles.join(", ")}`
+      ? `장착됨: ${installedTitles.join(", ")}`
       : "아직 장착된 명령어 팩이 없습니다.";
     const visiblePacks = packs.filter(packMatches);
     packGrid.innerHTML = visiblePacks.map((pack) => {
-      const actionLabel = pack.installed ? "해제" : "장착";
+      const actionLabel = pack.installed ? "팩 제거" : "장착";
       const installCommand = pack.installCode ? `/명령어설치 ${pack.installCode}` : "";
       return `
         <article class="command-pack-card" data-installed="${pack.installed ? "true" : "false"}">
           <div>
-            <span>${escapeHtml(packSlotLabel(pack.slot))} · ${escapeHtml(pack.tier)}</span>
+            <span>${escapeHtml(pack.installed ? "장착됨" : packSlotLabel(pack.slot))} · ${escapeHtml(pack.tier)}</span>
             <strong>${escapeHtml(pack.title)}</strong>
           </div>
           <p>${escapeHtml(pack.description)}</p>
@@ -325,6 +325,7 @@
           <details class="command-direct-install">
             <summary>고급: 사이트에서 바로 설치</summary>
             <button class="button button-secondary" type="button" data-apply-pack="${escapeHtml(pack.id)}" data-pack-action="${pack.installed ? "remove" : "apply"}" ${buyerToken && buyerRooms.length ? "" : "disabled"}>${escapeHtml(actionLabel)}</button>
+            ${pack.installed ? "<small>팩 제거 시 다른 팩이나 직접 추가 명령어와 겹치는 항목은 유지됩니다.</small>" : ""}
           </details>
         </article>
       `;
@@ -663,7 +664,7 @@
     });
     const data = await response.json();
     if (!response.ok || data.ok === false) {
-      statusBox.textContent = `팩 장착 실패: ${data.error || "unknown_error"}`;
+      statusBox.textContent = `팩 ${action === "remove" ? "제거" : "장착"} 실패: ${data.error || "unknown_error"}`;
       return;
     }
     if (data.guideToken) {
@@ -672,7 +673,7 @@
     }
     packCart.delete(pack.id);
     writeSet("pixgomCommandPackCart", packCart);
-    statusBox.textContent = `${pack.title} ${action === "remove" ? "해제" : "장착"} 완료`;
+    statusBox.textContent = `${pack.title} ${action === "remove" ? "팩 제거" : "장착"} 완료`;
     await loadRoomCommandPacks();
     await loadInstalledCommands();
     renderTemplates();
