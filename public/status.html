@@ -47,7 +47,13 @@
       </section>
       <section class="document-body status-note">
         <h2>문제가 있을 때</h2>
-        <p>상태가 정상인데 카카오톡 응답이 없으면 브릿지 앱의 알림 접근 권한, 등록 방, 연결코드를 먼저 확인해 주세요.</p>
+        <p data-status-incident>상태가 정상인데 카카오톡 응답이 없으면 브릿지 앱의 알림 접근 권한, 등록 방, 연결코드를 먼저 확인해 주세요.</p>
+        <ul class="incident-list">
+          <li><strong>서버 오류</strong> 서버 처리 중 문제가 발생하면 잠시 후 재시도하고 반복 시 운영자에게 문의합니다.</li>
+          <li><strong>DB 오류</strong> 운영 DB 연결과 Vercel 환경변수를 확인합니다.</li>
+          <li><strong>권한 오류</strong> 로그인 세션과 운영자 권한을 다시 확인합니다.</li>
+          <li><strong>구독 만료</strong> 일반 명령어와 브릿지 연결이 차단되므로 방 관리자에게 연장을 요청합니다.</li>
+        </ul>
         <p>개발자용 원본 상태는 <a href="/api/health">/api/health</a>에서 확인할 수 있습니다.</p>
       </section>
     </main>
@@ -71,6 +77,7 @@
           setText("[data-status-app-version]", `앱 최신 ${health.latestAndroidVersion || "-"} / 최소 ${health.minAndroidVersion || "-"}`);
           setText("[data-status-storage]", health.dbStatus?.label || (health.storage === "postgres" ? "운영 DB" : "로컬 저장소"));
           setText("[data-status-storage-detail]", dbOk ? "연결 확인됨" : (health.dbStatus?.message || "확인 필요"));
+          setText("[data-status-incident]", dbOk ? "상태가 정상인데 카카오톡 응답이 없으면 브릿지 앱의 알림 접근 권한, 등록 방, 연결코드를 먼저 확인해 주세요." : (health.incidentMessages?.DB_ERROR?.message || "저장소 연결을 확인해 주세요."));
           setText(
             "[data-status-price]",
             `기본 ${Number(health.monthlyPriceKrw || 5500).toLocaleString("ko-KR")}원 / 추가 방 ${Number(health.additionalRoomPriceKrw || 2200).toLocaleString("ko-KR")}원`
@@ -83,6 +90,7 @@
         .catch(() => {
           setText("[data-status-ok]", "연결 실패");
           setText("[data-status-time]", "네트워크 또는 서버 응답 없음");
+          setText("[data-status-incident]", "서버 상태를 불러오지 못했습니다. 네트워크와 배포 상태를 확인해 주세요.");
           document.body.classList.add("status-error");
           setCardState('[data-status-card="server"]', "error");
         });

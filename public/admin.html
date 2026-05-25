@@ -60,6 +60,8 @@
         <article><strong>-</strong><span>활성 방</span></article>
         <article><strong>-</strong><span>만료 방</span></article>
         <article><strong>-</strong><span>만료 임박</span></article>
+        <article><strong>-</strong><span>문제 방</span></article>
+        <article><strong>-</strong><span>브릿지 확인</span></article>
       </section>
 
       <section class="admin-grid admin-grid-wide">
@@ -440,7 +442,9 @@
           data.summary?.rooms ?? rooms.length,
           data.summary?.activeRooms ?? rooms.filter((room) => room.enabled).length,
           data.summary?.expiredRooms ?? rooms.filter((room) => room.subscription?.status === "expired").length,
-          data.summary?.expiringRooms ?? rooms.filter((room) => roomIsExpiringSoon(room)).length
+          data.summary?.expiringRooms ?? rooms.filter((room) => roomIsExpiringSoon(room)).length,
+          data.summary?.problemRooms ?? rooms.filter((room) => room.diagnostics?.ok === false).length,
+          data.summary?.bridgeProblemRooms ?? rooms.filter((room) => room.diagnostics?.bridgeStatus !== "ready").length
         ];
         summary.querySelectorAll("strong").forEach((item, index) => {
           item.textContent = values[index];
@@ -482,7 +486,9 @@
             rooms: visibleRooms.length,
             activeRooms: visibleRooms.filter((room) => room.enabled && room.registered).length,
             expiredRooms: visibleRooms.filter((room) => room.subscription?.status === "expired").length,
-            expiringRooms: visibleRooms.filter((room) => roomIsExpiringSoon(room)).length
+            expiringRooms: visibleRooms.filter((room) => roomIsExpiringSoon(room)).length,
+            problemRooms: visibleRooms.filter((room) => room.diagnostics?.ok === false).length,
+            bridgeProblemRooms: visibleRooms.filter((room) => room.diagnostics?.bridgeStatus !== "ready").length
           }
         });
         roomList.innerHTML = "";
@@ -733,7 +739,9 @@
 
       document.querySelector("[data-diagnostics]").addEventListener("click", async () => {
         try {
-          print(await requestJson("/api/admin/diagnostics"));
+          const diagnostics = await requestJson("/api/admin/diagnostics");
+          renderSummary({ summary: diagnostics.summary });
+          print(diagnostics);
         } catch (error) {
           print(friendlyError(error));
         }

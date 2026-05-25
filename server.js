@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.69";
+export const APP_VERSION = "0.4.70";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -164,7 +164,10 @@ export const FEATURES = [
   "rollback-runbook",
   "android-release-report",
   "play-closed-testing-checklist",
-  "android-version-compatibility-guidance"
+  "android-version-compatibility-guidance",
+  "standardized-incident-messages",
+  "admin-diagnostics-summary",
+  "incident-history-cards"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -178,6 +181,28 @@ const OWNER_ADMIN_EMAILS = (process.env.OWNER_ADMIN_EMAILS || process.env.ADMIN_
   .filter(Boolean);
 const PLAY_INTERNAL_TEST_URL = "https://play.google.com/apps/internaltest/4700397680875890998";
 const PUBLIC_SITE_URL = normalizeText(process.env.PUBLIC_SITE_URL || process.env.SITE_URL || "https://pixgom.com").replace(/\/+$/, "");
+const INCIDENT_MESSAGES = Object.freeze({
+  SERVER_ERROR: {
+    code: "server_error",
+    title: "서버 오류",
+    message: "서버 처리 중 문제가 발생했습니다. 잠시 후 다시 시도하고, 반복되면 운영자에게 문의해 주세요."
+  },
+  DB_ERROR: {
+    code: "db_error",
+    title: "DB 오류",
+    message: "운영 DB 연결을 확인하지 못했습니다. 저장소 상태와 Vercel 환경변수를 확인해 주세요."
+  },
+  AUTH_ERROR: {
+    code: "auth_error",
+    title: "권한 오류",
+    message: "로그인 세션 또는 운영자 권한을 확인해 주세요."
+  },
+  SUBSCRIPTION_EXPIRED: {
+    code: "subscription_expired",
+    title: "구독 만료",
+    message: "이용기간이 만료되어 일반 명령어와 브릿지 연결이 차단됩니다. 방 관리자에게 연장을 요청해 주세요."
+  }
+});
 const MIN_ANDROID_VERSION = normalizeText(process.env.MIN_ANDROID_VERSION || "1.0.17");
 const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.19");
 const MIN_ANDROID_VERSION_CODE = Math.max(1, Number(process.env.MIN_ANDROID_VERSION_CODE || 18));
@@ -511,6 +536,14 @@ function normalizeText(value) {
 
 function compactSpaces(value) {
   return normalizeText(value).replace(/\s+/g, " ");
+}
+
+function incidentMessage(key) {
+  return INCIDENT_MESSAGES[key] || INCIDENT_MESSAGES.SERVER_ERROR;
+}
+
+function incidentMessagesPayload() {
+  return Object.fromEntries(Object.entries(INCIDENT_MESSAGES).map(([key, value]) => [key, { ...value }]));
 }
 
 function keyFor(value) {
@@ -3052,7 +3085,7 @@ function subscriptionStatusLabel(status, days) {
 }
 
 function subscriptionNoticeText(status, days) {
-  if (status === "expired") return "구독이 만료되어 일반 명령어와 브릿지 연결이 차단됩니다.";
+  if (status === "expired") return incidentMessage("SUBSCRIPTION_EXPIRED").message;
   if (status === "unset") return "관리 콘솔에서 구독 만료일을 설정해야 합니다.";
   if (days === 0) return "오늘 구독이 만료됩니다. 운영자에게 연장을 요청해 주세요.";
   if ([7, 3, 1].includes(days)) return `구독 만료 ${days}일 전입니다. 운영자에게 연장을 요청해 주세요.`;
@@ -3061,9 +3094,10 @@ function subscriptionNoticeText(status, days) {
 
 function subscriptionExpiredText(roomState) {
   updateSubscriptionStatus(roomState);
+  const issue = incidentMessage("SUBSCRIPTION_EXPIRED");
   return [
-    "픽셀곰 이용기간이 만료되어 일반 명령어 응답이 중단되었습니다.",
-    "방 관리자에게 구독 연장을 요청해주세요."
+    issue.title,
+    issue.message
   ].join("\n");
 }
 
@@ -5166,6 +5200,7 @@ export async function healthPayload(options = {}) {
     additionalRoomPriceKrw: ADDITIONAL_ROOM_PRICE_KRW,
     defaultSubscriptionDays: DEFAULT_SUBSCRIPTION_DAYS,
     adminConsoleEnabled: OWNER_ADMIN_EMAILS.length > 0,
+    incidentMessages: incidentMessagesPayload(),
     features: FEATURES
   };
 }
@@ -5377,18 +5412,27 @@ function roomDiagnostics(roomState) {
   const subscription = updateSubscriptionStatus(roomState);
   const license = licenseSettings(roomState);
   const features = roomFeatures(roomState);
+  const roomIds = roomState.settings?.roomIds || [];
   const rawEvents = roomState.rawEvents || [];
   const events = roomState.events || [];
   const problems = [];
+  const bridgeProblems = [];
   if (!roomState.settings?.registered) problems.push("방 미등록");
   if (roomState.settings?.enabled === false) problems.push("방 비활성화");
   if (!license.key) problems.push("라이선스 없음");
   if (subscription.status === "expired") problems.push("구독 만료");
   if (!subscription.expiresAt) problems.push("구독 만료일 미설정");
   if (!Object.values(features).some(Boolean)) problems.push("모든 기능 꺼짐");
+  if (!roomIds.length) bridgeProblems.push("roomId 없음");
+  if (!license.key) bridgeProblems.push("라이선스 없음");
+  if (!roomState.settings?.registered) bridgeProblems.push("등록 방 아님");
+  const lastActivityAt = rawEvents.at(-1)?.at || events.at(-1)?.at || "";
   return {
     ok: problems.length === 0,
     problems,
+    bridgeStatus: bridgeProblems.length ? "needs_setup" : "ready",
+    bridgeProblems,
+    connectionStatus: lastActivityAt ? "event_seen" : "no_events",
     peopleCount: Object.keys(roomState.people || {}).length,
     adminsCount: (roomState.admins || []).length,
     rawEventCount: rawEvents.length,
@@ -5398,6 +5442,23 @@ function roomDiagnostics(roomState) {
     subscriptionStatus: subscription.status || "unset",
     subscriptionRemainingDays: remainingDays(subscription.expiresAt),
     licenseStatus: license.key ? license.status || "active" : "missing"
+  };
+}
+
+function adminDiagnosticsSummary(diagnosticRooms = []) {
+  const problemRooms = diagnosticRooms.filter((room) => room.diagnostics?.ok === false);
+  const expiredRooms = diagnosticRooms.filter((room) => room.diagnostics?.subscriptionStatus === "expired");
+  const bridgeProblemRooms = diagnosticRooms.filter((room) => room.diagnostics?.bridgeStatus !== "ready");
+  const connectionIssueRooms = diagnosticRooms.filter((room) => room.diagnostics?.connectionStatus === "no_events");
+  return {
+    rooms: diagnosticRooms.length,
+    problemRooms: problemRooms.length,
+    expiredRooms: expiredRooms.length,
+    bridgeProblemRooms: bridgeProblemRooms.length,
+    connectionIssueRooms: connectionIssueRooms.length,
+    problemRoomNames: problemRooms.map((room) => room.name).slice(0, 10),
+    expiredRoomNames: expiredRooms.map((room) => room.name).slice(0, 10),
+    bridgeProblemRoomNames: bridgeProblemRooms.map((room) => room.name).slice(0, 10)
   };
 }
 
@@ -5421,7 +5482,9 @@ function adminRoomsPayload(state) {
       activeRooms: rooms.filter((room) => room.enabled && room.registered).length,
       expiredRooms: rooms.filter((room) => room.subscription.status === "expired").length,
       expiringRooms: rooms.filter((room) => roomViewExpiringSoon(room)).length,
-      problemRooms: rooms.filter((room) => !room.diagnostics?.ok).length
+      problemRooms: rooms.filter((room) => !room.diagnostics?.ok).length,
+      bridgeProblemRooms: rooms.filter((room) => room.diagnostics?.bridgeStatus !== "ready").length,
+      connectionIssueRooms: rooms.filter((room) => room.diagnostics?.connectionStatus === "no_events").length
     },
     rooms
   };
@@ -6087,11 +6150,13 @@ function bridgeConnectFromRequest(state, body = {}) {
   const roomState = ensureRoom(state, application.roomName);
   const subscription = updateSubscriptionStatus(roomState);
   if (subscription.status === "expired") {
+    const issue = incidentMessage("SUBSCRIPTION_EXPIRED");
     return {
       ok: false,
       status: 403,
       error: "subscription_expired",
-      message: "구독이 만료되어 브릿지 연결이 중단되었습니다. 구매자 콘솔에서 상태를 확인하고 운영자에게 연장을 요청해 주세요.",
+      issue,
+      message: issue.message,
       subscription: {
         status: subscription.status,
         statusLabel: subscription.statusLabel,
@@ -6294,16 +6359,19 @@ async function handleAdminApi(req, url) {
     const auth = await requireAdminConsole(req, url);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
+    const rooms = Object.values(state.rooms || {}).map((roomState) => ({
+      name: roomState.name,
+      diagnostics: roomDiagnostics(roomState)
+    }));
     return {
       status: 200,
       body: {
         ok: true,
         version: APP_VERSION,
         generatedAt: nowIso(),
-        rooms: Object.values(state.rooms || {}).map((roomState) => ({
-          name: roomState.name,
-          diagnostics: roomDiagnostics(roomState)
-        }))
+        summary: adminDiagnosticsSummary(rooms),
+        incidentMessages: incidentMessagesPayload(),
+        rooms
       }
     };
   }
@@ -6691,7 +6759,8 @@ export async function requestHandler(req, res) {
     jsonResponse(res, 404, { error: "not_found" });
   } catch (error) {
     console.error(error);
-    jsonResponse(res, 500, { ok: false, reply: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요." });
+    const issue = incidentMessage("SERVER_ERROR");
+    jsonResponse(res, 500, { ok: false, error: issue.code, issue, reply: issue.message });
   }
 }
 
