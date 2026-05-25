@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.85";
+export const APP_VERSION = "0.4.86";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -131,6 +131,11 @@ export const FEATURES = [
   "game-cooldowns",
   "fishing-bait-aquarium",
   "generated-fish-catalog",
+  "bulk-item-purchase",
+  "rpg-adventure-pack",
+  "pixel-monster-rpg-pack",
+  "pet-raising-pack",
+  "game-room-role-split",
   "chat-sensitive-info-redaction",
   "command-template-store",
   "representative-command-store",
@@ -250,6 +255,15 @@ const GAME_COOLDOWNS_MS = Object.freeze({
   dice: 10 * 1000,
   fishing: 30 * 1000,
   explore: 20 * 1000,
+  dungeon: 30 * 1000,
+  monsterExplore: 60 * 1000,
+  monsterTrain: 30 * 1000,
+  monsterBattle: 90 * 1000,
+  petFeed: 10 * 1000,
+  petPlay: 10 * 1000,
+  petClean: 10 * 1000,
+  petSleep: 10 * 1000,
+  petTrain: 30 * 1000,
   luckyDraw: 10 * 1000,
   oddEven: 5 * 1000
 });
@@ -257,6 +271,15 @@ const GAME_COOLDOWN_LABELS = Object.freeze({
   dice: "주사위는",
   fishing: "낚시는",
   explore: "탐험은",
+  dungeon: "던전은",
+  monsterExplore: "몬스터탐험은",
+  monsterTrain: "몬스터훈련은",
+  monsterBattle: "몬스터전투는",
+  petFeed: "펫먹이는",
+  petPlay: "펫놀기는",
+  petClean: "펫씻기는",
+  petSleep: "펫재우기는",
+  petTrain: "펫훈련은",
   luckyDraw: "뽑기는",
   oddEven: "홀짝은"
 });
@@ -269,10 +292,16 @@ const SHOP_TRANSACTION_LIMIT = 300;
 const SHOP_MAX_PRICE = 1000000;
 const SHOP_MAX_QUANTITY = 99;
 const BAIT_ITEM_ID = 9001;
+const CAPTURE_STONE_ITEM_ID = 9301;
+const PET_SNACK_ITEM_ID = 9302;
 const FISH_ITEM_ID_START = 10000;
 const FISH_SPECIES_COUNT = 60;
 const FISH_GRADE_COUNT = 5;
 const FISH_CATALOG_SIZE = FISH_SPECIES_COUNT * FISH_GRADE_COUNT;
+const RPG_ITEM_ID_START = 11000;
+const RPG_ITEM_CATALOG_SIZE = 500;
+const RPG_WEAPON_ITEM_ID_START = 12000;
+const PIXEL_MONSTER_SPECIES_COUNT = 150;
 const REENTRY_CANDIDATE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const SYSTEM_EVENT_DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
 const JOIN_SIGNAL_WINDOW_MS = 30 * 60 * 1000;
@@ -348,7 +377,13 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
   },
   {
     title: "게임/연동 예약",
-    commands: ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/픽셀곰게임", "/게임연동"]
+    commands: [
+      "/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/미끼상점", "/미끼구매", "/어항", "/수족관",
+      "/던전", "/던전목록", "/대장간", "/제작", "/장비", "/장착",
+      "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감",
+      "/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점",
+      "/픽셀곰게임", "/게임연동"
+    ]
   }
 ]);
 const RESERVED_CUSTOM_COMMANDS = new Set([
@@ -384,6 +419,96 @@ const FISH_SPECIES = Object.freeze([
   "상어", "가오리", "해마", "흰동가리", "나비고기", "엔젤피시", "구피", "베타", "금붕어", "열대어",
   "비단잉어", "플라워혼", "디스커스", "아로와나", "피라냐", "철갑상어", "개복치", "만타가오리", "심해어", "황금고래"
 ]);
+const RPG_MATERIAL_BASES = Object.freeze([
+  "철광석", "구리광석", "은광석", "금광석", "흑철광석", "미스릴 조각", "별빛 수정", "마력 가루", "고대 목재", "질긴 가죽",
+  "푸른 약초", "붉은 약초", "동굴 버섯", "수정 파편", "암염", "석탄", "화염석", "빙결석", "바람 깃털", "그림자 천",
+  "빛나는 모래", "황동 톱니", "낡은 룬", "작은 뼈", "단단한 껍질"
+]);
+const RPG_MATERIAL_PREFIXES = Object.freeze(["", "정제된", "빛나는", "단단한", "고대의"]);
+const RPG_MATERIAL_RARITIES = Object.freeze([
+  { id: "common", label: "일반", sellBase: 12, priceMultiplier: 2 },
+  { id: "uncommon", label: "고급", sellBase: 24, priceMultiplier: 2 },
+  { id: "rare", label: "희귀", sellBase: 48, priceMultiplier: 2 },
+  { id: "epic", label: "영웅", sellBase: 110, priceMultiplier: 2 },
+  { id: "legendary", label: "전설", sellBase: 260, priceMultiplier: 2 }
+]);
+function generatedRpgAdventureItems() {
+  return Array.from({ length: RPG_ITEM_CATALOG_SIZE }, (_, index) => {
+    const base = RPG_MATERIAL_BASES[index % RPG_MATERIAL_BASES.length];
+    const prefix = RPG_MATERIAL_PREFIXES[Math.floor(index / RPG_MATERIAL_BASES.length) % RPG_MATERIAL_PREFIXES.length];
+    const rarity = RPG_MATERIAL_RARITIES[Math.floor(index / 100)] || RPG_MATERIAL_RARITIES[0];
+    const name = index === 0 ? "철광석" : compactSpaces(`${prefix} ${base}`);
+    const sellPrice = rarity.sellBase + (index % 25);
+    return {
+      id: RPG_ITEM_ID_START + index,
+      name,
+      price: sellPrice * rarity.priceMultiplier,
+      sellPrice,
+      description: `${rarity.label} 등급 던전 재료`,
+      active: true,
+      system: true,
+      category: "rpg_material",
+      rarity: rarity.id,
+      gradeLabel: rarity.label
+    };
+  });
+}
+const RPG_ADVENTURE_ITEMS = Object.freeze(generatedRpgAdventureItems());
+const RPG_WEAPON_RECIPES = Object.freeze([
+  {
+    itemId: RPG_WEAPON_ITEM_ID_START + 1,
+    name: "수습 모험검",
+    materialId: RPG_ITEM_ID_START,
+    materialQty: 2,
+    pointCost: 50,
+    power: 5,
+    sellPrice: 120,
+    description: "철광석으로 제작하는 기본 모험 무기"
+  },
+  {
+    itemId: RPG_WEAPON_ITEM_ID_START + 2,
+    name: "광산 파쇄도끼",
+    materialId: RPG_ITEM_ID_START + 1,
+    materialQty: 3,
+    pointCost: 120,
+    power: 9,
+    sellPrice: 220,
+    description: "던전 채굴에 어울리는 고급 무기"
+  },
+  {
+    itemId: RPG_WEAPON_ITEM_ID_START + 3,
+    name: "별빛 룬소드",
+    materialId: RPG_ITEM_ID_START + 6,
+    materialQty: 2,
+    pointCost: 300,
+    power: 16,
+    sellPrice: 520,
+    description: "희귀 재료로 만드는 상급 무기"
+  }
+]);
+const PIXEL_MONSTER_ELEMENTS = Object.freeze(["숲", "바위", "물결", "불꽃", "바람", "빛", "그림자"]);
+const PIXEL_MONSTER_RARITIES = Object.freeze([
+  { id: "common", label: "일반", catchRate: 0.65 },
+  { id: "uncommon", label: "고급", catchRate: 0.45 },
+  { id: "rare", label: "희귀", catchRate: 0.30 },
+  { id: "epic", label: "영웅", catchRate: 0.18 }
+]);
+const PIXEL_MONSTER_NAME_PARTS = Object.freeze(["몽", "리프", "코어", "루미", "플레어", "아쿠", "윈디", "쉐도", "바니", "토리", "라온", "미루"]);
+const PIXEL_MONSTER_SPECIES = Object.freeze(Array.from({ length: PIXEL_MONSTER_SPECIES_COUNT }, (_, index) => {
+  const rarity = PIXEL_MONSTER_RARITIES[Math.min(PIXEL_MONSTER_RARITIES.length - 1, Math.floor(index / 45))];
+  const element = PIXEL_MONSTER_ELEMENTS[index % PIXEL_MONSTER_ELEMENTS.length];
+  const name = `픽셀${PIXEL_MONSTER_NAME_PARTS[index % PIXEL_MONSTER_NAME_PARTS.length]}${String(index + 1).padStart(3, "0")}`;
+  return {
+    speciesId: `pm${String(index + 1).padStart(3, "0")}`,
+    name,
+    element,
+    rarity: rarity.id,
+    rarityLabel: rarity.label,
+    catchRate: rarity.catchRate,
+    basePower: 8 + index
+  };
+}));
+const PET_SPECIES = Object.freeze(["몽실펫", "콩알펫", "루미펫", "토리펫"]);
 const EXPLORE_REWARD_ITEMS = Object.freeze([
   { id: 9101, name: "낡은 보물상자", sellPrice: 45, description: "탐험에서 발견한 작은 보물상자", category: "explore", rarity: "common" },
   { id: 9102, name: "반짝이는 수정", sellPrice: 75, description: "빛을 머금은 탐험 보상", category: "explore", rarity: "uncommon" },
@@ -402,11 +527,44 @@ const SYSTEM_PRODUCTS = Object.freeze([
     system: true,
     category: "bait"
   },
+  {
+    id: CAPTURE_STONE_ITEM_ID,
+    name: "기본 포획석",
+    price: 30,
+    sellPrice: 15,
+    description: "픽셀몬스터 포획에 사용하는 기본 도구",
+    active: true,
+    system: true,
+    category: "capture"
+  },
+  {
+    id: PET_SNACK_ITEM_ID,
+    name: "펫 간식",
+    price: 15,
+    sellPrice: 7,
+    description: "펫 친밀도를 올리는 간식",
+    active: true,
+    system: true,
+    category: "pet"
+  },
   ...EXPLORE_REWARD_ITEMS.map((item) => ({
     ...item,
     price: item.sellPrice * 2,
     active: true,
     system: true
+  })),
+  ...RPG_ADVENTURE_ITEMS,
+  ...RPG_WEAPON_RECIPES.map((recipe) => ({
+    id: recipe.itemId,
+    name: recipe.name,
+    price: recipe.sellPrice * 2,
+    sellPrice: recipe.sellPrice,
+    description: recipe.description,
+    active: true,
+    system: true,
+    category: "weapon",
+    rarity: recipe.power >= 15 ? "rare" : recipe.power >= 9 ? "uncommon" : "common",
+    power: recipe.power
   })),
   ...FISH_SPECIES.flatMap((species, speciesIndex) => FISH_GRADES.map((grade, gradeIndex) => {
     const id = FISH_ITEM_ID_START + (speciesIndex * FISH_GRADE_COUNT) + gradeIndex;
@@ -606,6 +764,9 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "attendance-growth": ["/출석", "/미출석", "/출석순위", "/포인트", "/내정보", "/포인트순위"],
   "point-economy": ["/포인트", "/내정보", "/좋아요", "/응원", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위"],
   "game-chance": ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/포인트"],
+  "rpg-adventure": ["/던전", "/던전목록", "/대장간", "/제작", "/장비", "/장착", "/가방", "/판매", "/포인트"],
+  "pixel-monster-rpg": ["/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감", "/포인트"],
+  "pet-raising": ["/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점", "/포인트"],
   "shop-inventory": ["/상점", "/구매", "/가방", "/사용", "/가방선물", "/판매", "/구매내역"],
   "custom-command": ["/명령어목록", "/커스텀명령어", "/고정명령어", "/명령어등록", "/명령어수정", "/명령어삭제", "/커스텀등록", "/커스텀수정", "/커스텀삭제"],
   "profile-history": ["/프로필", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
@@ -709,6 +870,45 @@ const COMMAND_PACKS = Object.freeze([
     fixedCommands: COMMAND_PACK_COMMANDS["shop-inventory"],
     customCommands: [],
     tags: ["상점", "가방", "아이템", "구매", "가상"]
+  },
+  {
+    id: "rpg-adventure",
+    slot: "pack",
+    version: 1,
+    title: "RPG 모험팩",
+    tier: "RPG",
+    categoryTitle: "게임 팩",
+    description: "던전, 재료 500종, 꽝 확률, 대장간 제작과 장비 장착을 제공합니다.",
+    features: { games: true, shop: true, points: true },
+    fixedCommands: COMMAND_PACK_COMMANDS["rpg-adventure"],
+    customCommands: [],
+    tags: ["RPG", "던전", "대장간", "장비", "재료"]
+  },
+  {
+    id: "pixel-monster-rpg",
+    slot: "pack",
+    version: 1,
+    title: "픽셀몬스터 수집팩",
+    tier: "Monster",
+    categoryTitle: "게임 팩",
+    description: "오리지널 픽셀몬스터 탐험, 포획, 훈련, 전투와 도감을 제공합니다.",
+    features: { games: true, points: true },
+    fixedCommands: COMMAND_PACK_COMMANDS["pixel-monster-rpg"],
+    customCommands: [],
+    tags: ["몬스터", "수집", "포획", "전투", "도감"]
+  },
+  {
+    id: "pet-raising",
+    slot: "pack",
+    version: 1,
+    title: "펫키우기팩",
+    tier: "Pet",
+    categoryTitle: "게임 팩",
+    description: "개인별 펫 입양, 먹이, 놀기, 씻기, 휴식, 훈련 성장 루프를 제공합니다.",
+    features: { games: true, points: true },
+    fixedCommands: COMMAND_PACK_COMMANDS["pet-raising"],
+    customCommands: [],
+    tags: ["펫", "키우기", "성장", "훈련", "개인"]
   },
   {
     id: "custom-command",
@@ -1040,7 +1240,10 @@ function gameTemplateProxyCommand(category, word) {
   if (category.kind !== "game-template") return "";
   if (/주사위/.test(word)) return "/주사위";
   if (/낚시/.test(word)) return "/낚시";
-  if (/탐험|던전|채집|광산|보스|퀘스트/.test(word)) return "/탐험";
+  if (/던전|채집|광산|보스|퀘스트/.test(word)) return "/던전";
+  if (/탐험/.test(word)) return "/탐험";
+  if (/펫/.test(word)) return "/펫입양";
+  if (/몬스터/.test(word)) return "/몬스터탐험";
   return "";
 }
 
@@ -1101,7 +1304,8 @@ const REPRESENTATIVE_COMMAND_TEMPLATES = Object.freeze([
   ["game-link", "게임 연결", "participant", "game-template", "/운영주사위", "운영 주사위", "주사위 게임을 시작합니다.", "설치하면 /주사위 미니게임 엔진으로 연결됩니다.", "/주사위"],
   ["game-link", "게임 연결", "participant", "game-template", "/운영낚시", "운영 낚시", "낚시 게임을 시작합니다.", "설치하면 /낚시 미니게임 엔진으로 연결됩니다.", "/낚시"],
   ["game-link", "게임 연결", "participant", "game-template", "/운영탐험", "운영 탐험", "탐험 게임을 시작합니다.", "설치하면 /탐험 미니게임 엔진으로 연결됩니다.", "/탐험"],
-  ["game-link", "게임 연결", "participant", "game-template", "/펫키우기", "펫키우기", "펫키우기 기능은 준비 중입니다.", "게임 확장 준비중 템플릿입니다. 현재는 설치할 수 없습니다.", ""],
+  ["game-link", "게임 연결", "participant", "game-template", "/펫입양", "펫키우기", "/펫입양 이름 으로 개인 펫을 입양합니다.", "설치하면 펫키우기 엔진으로 연결됩니다.", "/펫입양"],
+  ["game-link", "게임 연결", "participant", "game-template", "/게임후보", "게임 후보", "새 게임 후보는 준비 중입니다.", "추가 게임 확장 준비중 템플릿입니다. 현재는 설치할 수 없습니다.", ""],
   ["ai-helper", "AI 운영도우미 후보", "admin", "roadmap", "/공지초안", "공지 초안", "AI 공지 초안 기능은 준비 중입니다.", "AI 기능 후보 템플릿입니다. 실제 자동화 전에는 운영자 검토가 필요합니다.", ""]
 ]);
 
@@ -2203,7 +2407,17 @@ function billableApplicationCount(state, account = {}) {
     .length;
 }
 
-function applicationPlanForAccount(state, account = {}) {
+function applicationPlanForAccount(state, account = {}, options = {}) {
+  if (options.roomPurpose === "game_room") {
+    return {
+      type: "game_room",
+      label: "게임방 옵션",
+      monthlyPriceKrw: ADDITIONAL_ROOM_PRICE_KRW,
+      baseMonthlyPriceKrw: MONTHLY_PRICE_KRW,
+      additionalRoomPriceKrw: ADDITIONAL_ROOM_PRICE_KRW,
+      days: DEFAULT_SUBSCRIPTION_DAYS
+    };
+  }
   const additionalRoom = billableApplicationCount(state, account) > 0;
   return {
     type: additionalRoom ? "additional_room" : "base_room",
@@ -2227,6 +2441,8 @@ function publicApplicationView(application = {}, state = null) {
     adminName: application.adminName || "",
     contact: application.contact || "",
     memo: application.memo || "",
+    roomPurpose: application.roomPurpose || "general_room",
+    linkedApplicationId: application.linkedApplicationId || "",
     status: application.status || "pending_payment",
     statusLabel: APPLICATION_STATUS_LABELS[application.status] || application.status || "결제 대기",
     plan: application.plan || {
@@ -2360,6 +2576,10 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     roomId: application.roomId || roomView?.roomIds?.[0] || "",
     roomLink: application.roomLink || roomView?.roomLinks?.[0] || "",
     adminName: application.adminName || "",
+    roomPurpose: application.roomPurpose || "general_room",
+    linkedApplicationId: application.linkedApplicationId || "",
+    roomRole: roomView?.roomRole || "standard",
+    canonicalRoomName: roomView?.canonicalRoomName || "",
     joinPhrase: roomView?.joinPhrase || DEFAULT_JOIN_PHRASE,
     licenseKey,
     licenseStatus,
@@ -2458,6 +2678,13 @@ function roomTitle(room) {
   return normalizeText(room) || "기본방";
 }
 
+function normalizeRoomRole(value = "") {
+  const text = compactSpaces(value).toLowerCase().replace(/[\s-]+/g, "_");
+  if (["general", "general_room", "일반", "일반방"].includes(text)) return "general";
+  if (["game", "game_room", "게임", "게임방"].includes(text)) return "game";
+  return "standard";
+}
+
 function normalizeReportId(value) {
   return normalizeText(value).toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 20);
 }
@@ -2546,6 +2773,11 @@ function ensureRoom(state, room) {
   roomState.settings.registered ||= false;
   roomState.settings.roomIds ||= [];
   roomState.settings.roomLinks ||= [];
+  roomState.settings.roomRole = normalizeRoomRole(roomState.settings.roomRole);
+  roomState.settings.canonicalRoomKey = roomKey(roomState.settings.canonicalRoomKey || "") === roomKey("") ? "" : roomKey(roomState.settings.canonicalRoomKey || "");
+  roomState.settings.linkedGameRoomKeys = [...new Set((Array.isArray(roomState.settings.linkedGameRoomKeys) ? roomState.settings.linkedGameRoomKeys : [])
+    .map((key) => roomKey(key))
+    .filter((key) => key && key !== roomKey("")))];
   roomState.settings.joinPhrase ||= DEFAULT_JOIN_PHRASE;
   roomState.settings.features = normalizeFeatureSettings(roomState.settings.features || {});
   roomState.settings.customCommands = normalizeCustomCommands(roomState.settings.customCommands || {});
@@ -2555,6 +2787,12 @@ function ensureRoom(state, room) {
   roomState.pendingEntries ||= [];
   for (const person of Object.values(roomState.people)) normalizePersonState(person);
   return roomState;
+}
+
+function canonicalDataRoomState(state, roomState) {
+  const canonicalKey = normalizeText(roomState?.settings?.canonicalRoomKey || "");
+  if (!canonicalKey || !state.rooms?.[canonicalKey]) return roomState;
+  return ensureRoom(state, state.rooms[canonicalKey].name || canonicalKey);
 }
 
 function normalizeInventory(value = {}) {
@@ -2579,6 +2817,62 @@ function normalizeGameCooldowns(value = {}) {
     if (text && !Number.isNaN(Date.parse(text))) cooldowns[key] = text;
   }
   return cooldowns;
+}
+
+function normalizeEquipment(value = {}) {
+  const weapon = Math.max(0, Math.trunc(Number(value?.weapon || 0)));
+  return { weapon: weapon ? String(weapon) : "" };
+}
+
+function pixelMonsterSpeciesById(speciesId = "") {
+  const id = normalizeText(speciesId);
+  return PIXEL_MONSTER_SPECIES.find((species) => species.speciesId === id) || null;
+}
+
+function normalizeOwnedMonsters(value = []) {
+  return (Array.isArray(value) ? value : [])
+    .map((monster) => {
+      const species = pixelMonsterSpeciesById(monster?.speciesId);
+      if (!species) return null;
+      return {
+        id: normalizeText(monster.id) || randomBytes(4).toString("hex"),
+        speciesId: species.speciesId,
+        name: compactSpaces(monster.name || species.name).slice(0, 24) || species.name,
+        element: species.element,
+        rarity: species.rarity,
+        level: Math.max(1, Math.trunc(Number(monster.level || 1))),
+        exp: Math.max(0, Math.trunc(Number(monster.exp || 0))),
+        caughtAt: normalizeText(monster.caughtAt) || nowIso()
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 200);
+}
+
+function normalizePendingMonster(value = null) {
+  const species = pixelMonsterSpeciesById(value?.speciesId);
+  if (!species) return null;
+  return {
+    speciesId: species.speciesId,
+    discoveredAt: normalizeText(value.discoveredAt) || nowIso()
+  };
+}
+
+function normalizePetState(value = null) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    name: compactSpaces(value.name || "픽셀펫").slice(0, 24) || "픽셀펫",
+    species: PET_SPECIES.includes(value.species) ? value.species : PET_SPECIES[0],
+    hunger: Math.min(100, Math.max(0, Math.trunc(Number(value.hunger ?? 20)))),
+    happiness: Math.min(100, Math.max(0, Math.trunc(Number(value.happiness ?? 70)))),
+    energy: Math.min(100, Math.max(0, Math.trunc(Number(value.energy ?? 70)))),
+    cleanliness: Math.min(100, Math.max(0, Math.trunc(Number(value.cleanliness ?? 70)))),
+    health: Math.min(100, Math.max(0, Math.trunc(Number(value.health ?? 90)))),
+    level: Math.max(1, Math.trunc(Number(value.level || 1))),
+    exp: Math.max(0, Math.trunc(Number(value.exp || 0))),
+    bornAt: normalizeText(value.bornAt) || nowIso(),
+    updatedAt: normalizeText(value.updatedAt) || nowIso()
+  };
 }
 
 function normalizeShopState(value = {}) {
@@ -3245,6 +3539,10 @@ function normalizePersonState(person) {
   person.chats.byWeek ||= {};
   person.inventory = normalizeInventory(person.inventory || {});
   person.gameCooldowns = normalizeGameCooldowns(person.gameCooldowns || {});
+  person.equipment = normalizeEquipment(person.equipment || {});
+  person.monsters = normalizeOwnedMonsters(person.monsters || []);
+  person.pendingMonster = normalizePendingMonster(person.pendingMonster || null);
+  person.pet = normalizePetState(person.pet || null);
   person.identities ||= [];
   person.firstChatReentryNotices ||= [];
   cleanupReservedPersonHistory(person);
@@ -5267,34 +5565,37 @@ function shopListCommand(roomState, sender) {
     "",
     ...products.map(productLine),
     "",
-    "/구매 번호 로 구매합니다."
+    "/구매 번호 수량 으로 구매합니다. 수량을 생략하면 1개 구매합니다."
   ].join("\n");
 }
 
 function purchaseItemCommand(roomState, sender, text) {
-  const productId = parseProductIdFromCommand(text, /^\/구매\s*/i);
-  if (!productId) return "형식: /구매 번호";
+  const parsed = parseProductQuantityCommand(text, /^\/구매\s*/i);
+  const productId = parsed?.productId || 0;
+  const purchaseQuantity = parsed?.quantity || 0;
+  if (!productId || !purchaseQuantity) return "형식: /구매 번호 수량";
   const product = shopProductById(roomState, productId);
   if (!product || product.active === false) return "판매 중인 상품 번호가 아닙니다. /상점 으로 목록을 확인해주세요.";
   const buyer = ensurePerson(roomState, sender);
-  if (buyer.points < product.price) {
+  const totalPrice = product.price * purchaseQuantity;
+  if (buyer.points < totalPrice) {
     return [
       "포인트가 부족합니다.",
       "",
-      `• 필요 포인트 : ${formatPoint(product.price)}`,
+      `• 필요 포인트 : ${formatPoint(totalPrice)}`,
       `• 보유 포인트 : ${formatPoint(buyer.points)}`
     ].join("\n");
   }
-  buyer.points -= product.price;
-  buyer.spentPoints += product.price;
-  const quantity = addInventory(buyer, product.id, 1);
+  buyer.points -= totalPrice;
+  buyer.spentPoints += totalPrice;
+  const quantity = addInventory(buyer, product.id, purchaseQuantity);
   recordShopTransaction(roomState, {
     type: "purchase",
     productId: product.id,
     productName: product.name,
-    quantity: 1,
+    quantity: purchaseQuantity,
     unitPrice: product.price,
-    totalPrice: product.price,
+    totalPrice,
     from: buyer.currentName,
     to: buyer.currentName,
     by: buyer.currentName
@@ -5302,8 +5603,8 @@ function purchaseItemCommand(roomState, sender, text) {
   return [
     "구매 완료",
     "",
-    `• 상품 : ${product.name}`,
-    `• 사용 포인트 : ${formatPoint(product.price)}`,
+    `• 상품 : ${product.name} x ${purchaseQuantity}`,
+    `• 사용 포인트 : ${formatPoint(totalPrice)}`,
     `• 보유 수량 : ${quantity}개`,
     `• 남은 포인트 : ${formatPoint(buyer.points)}`
   ].join("\n");
@@ -5755,7 +6056,7 @@ function adminItemTransferCommand(roomState, sender, text, mode) {
   const parsed = parseAdminItemTransfer(text, commandPattern);
   const label = mode === "grant" ? "아이템지급" : "아이템회수";
   if (!parsed?.target || !parsed.productId || !parsed.quantity) return `형식: /${label} 닉네임 번호 수량`;
-  const product = shopProductById(roomState, parsed.productId);
+  const product = inventoryProductById(roomState, parsed.productId);
   if (!product) return "상품 번호를 찾을 수 없습니다.";
   const targetKey = existingPersonKey(roomState, parsed.target) || personKey(parsed.target);
   const person = roomState.people[targetKey] || ensurePerson(roomState, parsed.target);
@@ -5967,6 +6268,381 @@ function exploreGameCommand(roomState, sender) {
   ].join("\n");
 }
 
+const DUNGEON_CONFIGS = Object.freeze([
+  { key: "beginner", names: ["", "초급", "초급 광산", "광산"], title: "초급 광산", blankChance: 0.25, itemStart: 0, itemEnd: 119 },
+  { key: "middle", names: ["중급", "중급 유적", "유적"], title: "중급 유적", blankChance: 0.30, itemStart: 80, itemEnd: 299 },
+  { key: "advanced", names: ["상급", "상급 심연", "심연"], title: "상급 심연", blankChance: 0.35, itemStart: 240, itemEnd: 499 }
+]);
+
+function dungeonConfigFromText(text = "") {
+  const body = compactSpaces(text.replace(/^\/던전\s*/i, ""));
+  return DUNGEON_CONFIGS.find((config) => config.names.includes(body)) || DUNGEON_CONFIGS[0];
+}
+
+function dungeonListCommand() {
+  return [
+    "픽셀곰 던전 목록",
+    "",
+    ...DUNGEON_CONFIGS.map((config) => `• ${config.title}: 꽝 ${Math.round(config.blankChance * 100)}%, 재료 #${RPG_ITEM_ID_START + config.itemStart}~#${RPG_ITEM_ID_START + config.itemEnd}`),
+    "",
+    "/던전 또는 /던전 중급 으로 입장합니다.",
+    "/대장간 에서 재료 제작식을 확인할 수 있습니다."
+  ].join("\n");
+}
+
+function randomDungeonItem(config) {
+  if (Math.random() < config.blankChance) return null;
+  const span = Math.max(1, config.itemEnd - config.itemStart + 1);
+  const offset = config.itemStart + Math.floor(Math.random() * span);
+  return systemProductById(RPG_ITEM_ID_START + offset) || systemProductById(RPG_ITEM_ID_START);
+}
+
+function dungeonCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  const cooldown = gameCooldownText(person, "dungeon");
+  if (cooldown) return cooldown;
+  const config = dungeonConfigFromText(text);
+  const item = randomDungeonItem(config);
+  markGameCooldown(person, "dungeon");
+  if (!item) {
+    recordRoomEvent(roomState, { type: "dungeon_blank", name: person.currentName, dungeon: config.title });
+    return [
+      "던전 결과",
+      "",
+      `${person.currentName}님이 ${config.title}을(를) 탐험했습니다.`,
+      "결과: 꽝",
+      "아무것도 얻지 못했습니다."
+    ].join("\n");
+  }
+  const quantity = addInventory(person, item.id, 1);
+  recordShopTransaction(roomState, {
+    type: "dungeon_reward",
+    productId: item.id,
+    productName: item.name,
+    quantity: 1,
+    unitPrice: item.sellPrice,
+    totalPrice: item.sellPrice,
+    to: person.currentName,
+    by: person.currentName
+  });
+  recordRoomEvent(roomState, { type: "dungeon_reward", name: person.currentName, dungeon: config.title, itemId: item.id, item: item.name });
+  return [
+    "던전 결과",
+    "",
+    `${person.currentName}님이 ${config.title}에서 #${item.id} ${item.name}을(를) 획득했습니다.`,
+    `가방에 보관: ${item.name} x ${quantity}`,
+    `판매가 : ${formatPoint(item.sellPrice)}`
+  ].join("\n");
+}
+
+function blacksmithCommand() {
+  return [
+    "픽셀곰 대장간",
+    "",
+    ...RPG_WEAPON_RECIPES.map((recipe) => {
+      const material = systemProductById(recipe.materialId);
+      return `${recipe.itemId}. ${recipe.name} - ${material?.name || `#${recipe.materialId}`} x ${recipe.materialQty} + ${formatPoint(recipe.pointCost)} / 전투력 +${recipe.power}`;
+    }),
+    "",
+    "/제작 번호 로 무기를 제작하고 /장착 번호 로 장착합니다."
+  ].join("\n");
+}
+
+function craftWeaponCommand(roomState, sender, text) {
+  const recipeId = parseProductIdFromCommand(text, /^\/제작\s*/i);
+  const recipe = RPG_WEAPON_RECIPES.find((item) => item.itemId === recipeId);
+  if (!recipe) return "형식: /제작 12001";
+  const person = ensurePerson(roomState, sender);
+  if (inventoryQuantity(person, recipe.materialId) < recipe.materialQty) {
+    const material = systemProductById(recipe.materialId);
+    return `재료가 부족합니다. ${material?.name || `#${recipe.materialId}`} ${recipe.materialQty}개가 필요합니다.`;
+  }
+  if (person.points < recipe.pointCost) {
+    return [
+      "포인트가 부족합니다.",
+      "",
+      `• 필요 포인트 : ${formatPoint(recipe.pointCost)}`,
+      `• 보유 포인트 : ${formatPoint(person.points)}`
+    ].join("\n");
+  }
+  removeInventory(person, recipe.materialId, recipe.materialQty);
+  person.points -= recipe.pointCost;
+  person.spentPoints += recipe.pointCost;
+  const quantity = addInventory(person, recipe.itemId, 1);
+  recordShopTransaction(roomState, {
+    type: "weapon_crafted",
+    productId: recipe.itemId,
+    productName: recipe.name,
+    quantity: 1,
+    unitPrice: recipe.pointCost,
+    totalPrice: recipe.pointCost,
+    to: person.currentName,
+    by: person.currentName
+  });
+  return [
+    "제작 완료",
+    "",
+    `• 무기 : ${recipe.name}`,
+    `• 보유 수량 : ${quantity}개`,
+    `• 사용 포인트 : ${formatPoint(recipe.pointCost)}`
+  ].join("\n");
+}
+
+function equipmentCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const weapon = systemProductById(person.equipment?.weapon);
+  return [
+    `${person.currentName}님의 장비`,
+    "",
+    `• 무기 : ${weapon ? `${weapon.name} (#${weapon.id}, 전투력 +${weapon.power || 0})` : "미장착"}`,
+    "",
+    "/장착 번호 로 가방의 무기를 장착합니다."
+  ].join("\n");
+}
+
+function equipWeaponCommand(roomState, sender, text) {
+  const productId = parseProductIdFromCommand(text, /^\/장착\s*/i);
+  const product = systemProductById(productId);
+  if (!product || product.category !== "weapon") return "형식: /장착 12001";
+  const person = ensurePerson(roomState, sender);
+  if (inventoryQuantity(person, productId) <= 0) return "가방에 해당 무기가 없습니다.";
+  person.equipment.weapon = String(productId);
+  return [
+    "장착 완료",
+    "",
+    `• 무기 : ${product.name}`,
+    `• 전투력 : +${product.power || 0}`
+  ].join("\n");
+}
+
+function monsterDexCommand() {
+  const preview = PIXEL_MONSTER_SPECIES.slice(0, 10)
+    .map((species) => `${species.speciesId}. ${species.name} [${species.element}/${species.rarityLabel}]`)
+    .join("\n");
+  return [
+    "픽셀몬스터 도감",
+    "",
+    `총 ${PIXEL_MONSTER_SPECIES_COUNT}종`,
+    preview,
+    "",
+    "/몬스터탐험 으로 발견하고 /포획 으로 수집합니다."
+  ].join("\n");
+}
+
+function randomPixelMonsterSpecies() {
+  return PIXEL_MONSTER_SPECIES[Math.floor(Math.random() * PIXEL_MONSTER_SPECIES.length)] || PIXEL_MONSTER_SPECIES[0];
+}
+
+function monsterExploreCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const cooldown = gameCooldownText(person, "monsterExplore");
+  if (cooldown) return cooldown;
+  const species = randomPixelMonsterSpecies();
+  person.pendingMonster = { speciesId: species.speciesId, discoveredAt: nowIso() };
+  markGameCooldown(person, "monsterExplore");
+  return [
+    "몬스터 탐험",
+    "",
+    `${person.currentName}님이 ${species.name}을(를) 발견했습니다.`,
+    `속성: ${species.element} / 등급: ${species.rarityLabel}`,
+    "/포획 으로 포획을 시도하세요."
+  ].join("\n");
+}
+
+function monsterCaptureCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const pending = normalizePendingMonster(person.pendingMonster);
+  if (!pending) return "발견한 몬스터가 없습니다. /몬스터탐험 으로 먼저 찾아주세요.";
+  const species = pixelMonsterSpeciesById(pending.speciesId);
+  const firstMonsterBonus = person.monsters.length === 0;
+  const success = firstMonsterBonus || Math.random() < species.catchRate;
+  person.pendingMonster = null;
+  if (!success) {
+    return [
+      "포획 실패",
+      "",
+      `${species.name}이(가) 도망갔습니다.`,
+      "다시 /몬스터탐험 으로 도전해 주세요."
+    ].join("\n");
+  }
+  const monster = {
+    id: randomBytes(4).toString("hex"),
+    speciesId: species.speciesId,
+    name: species.name,
+    element: species.element,
+    rarity: species.rarity,
+    level: 1,
+    exp: 0,
+    caughtAt: nowIso()
+  };
+  person.monsters.push(monster);
+  return [
+    "포획 성공",
+    "",
+    `${person.currentName}님이 ${species.name}을(를) 동료로 맞이했습니다.`,
+    `보유 몬스터: ${person.monsters.length}마리`
+  ].join("\n");
+}
+
+function monsterListCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  if (!person.monsters.length) return `${person.currentName}님의 몬스터가 없습니다. /몬스터탐험 으로 시작해 주세요.`;
+  return [
+    `${person.currentName}님의 몬스터`,
+    "",
+    ...person.monsters.slice(0, 20).map((monster, index) => {
+      const species = pixelMonsterSpeciesById(monster.speciesId);
+      return `${index + 1}. ${monster.name} Lv.${monster.level} [${species?.element || monster.element}] EXP ${monster.exp}`;
+    })
+  ].join("\n");
+}
+
+function firstOwnedMonster(person) {
+  normalizePersonState(person);
+  return person.monsters[0] || null;
+}
+
+function monsterTrainCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const monster = firstOwnedMonster(person);
+  if (!monster) return "훈련할 몬스터가 없습니다. /몬스터탐험 과 /포획 을 먼저 진행해 주세요.";
+  const cooldown = gameCooldownText(person, "monsterTrain");
+  if (cooldown) return cooldown;
+  monster.exp += 25;
+  if (monster.exp >= monster.level * 50) {
+    monster.exp = 0;
+    monster.level += 1;
+  }
+  markGameCooldown(person, "monsterTrain");
+  return [
+    "몬스터 훈련",
+    "",
+    `${monster.name} 훈련 완료`,
+    `레벨: ${monster.level}`,
+    `경험치: ${monster.exp}`
+  ].join("\n");
+}
+
+function monsterBattleCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const monster = firstOwnedMonster(person);
+  if (!monster) return "전투할 몬스터가 없습니다. /몬스터탐험 과 /포획 을 먼저 진행해 주세요.";
+  const cooldown = gameCooldownText(person, "monsterBattle");
+  if (cooldown) return cooldown;
+  const species = pixelMonsterSpeciesById(monster.speciesId);
+  const power = (species?.basePower || 10) + monster.level * 3;
+  const reward = 20 + monster.level * 5;
+  monster.exp += 15;
+  person.points += reward;
+  markGameCooldown(person, "monsterBattle");
+  return [
+    "몬스터 전투",
+    "",
+    `${monster.name}이(가) 훈련용 상대와 전투했습니다.`,
+    `전투력: ${power}`,
+    `획득: ${formatPoint(reward)}`,
+    `보유 포인트: ${formatPoint(person.points)}`
+  ].join("\n");
+}
+
+function petAdoptCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  if (person.pet) return `${person.currentName}님은 이미 ${person.pet.name}을(를) 키우고 있습니다. /펫 으로 상태를 확인해 주세요.`;
+  const name = compactSpaces(text.replace(/^\/펫입양\s*/i, "")).slice(0, 24) || "픽셀펫";
+  const species = PET_SPECIES[Math.floor(Math.random() * PET_SPECIES.length)] || PET_SPECIES[0];
+  person.pet = normalizePetState({ name, species, hunger: 20, happiness: 70, energy: 70, cleanliness: 70, health: 90, level: 1, exp: 0, bornAt: nowIso(), updatedAt: nowIso() });
+  return [
+    "펫 입양 완료",
+    "",
+    `${person.currentName}님이 ${person.pet.name} (${person.pet.species})을(를) 입양했습니다.`,
+    "/펫 으로 상태를 확인해 주세요."
+  ].join("\n");
+}
+
+function petStatusCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  if (!person.pet) return "키우는 펫이 없습니다. /펫입양 이름 으로 입양해 주세요.";
+  const pet = person.pet;
+  return [
+    `${person.currentName}님의 펫`,
+    "",
+    `${pet.name} (${pet.species}) Lv.${pet.level}`,
+    `배고픔: ${pet.hunger}/100`,
+    `행복: ${pet.happiness}/100`,
+    `에너지: ${pet.energy}/100`,
+    `청결: ${pet.cleanliness}/100`,
+    `건강: ${pet.health}/100`,
+    `경험치: ${pet.exp}/${pet.level * 40}`
+  ].join("\n");
+}
+
+function ensurePetForCare(person) {
+  normalizePersonState(person);
+  return person.pet;
+}
+
+function boundedPetStat(value) {
+  return Math.min(100, Math.max(0, Math.trunc(Number(value || 0))));
+}
+
+function petCareCommand(roomState, sender, action) {
+  const person = ensurePerson(roomState, sender);
+  const pet = ensurePetForCare(person);
+  if (!pet) return "키우는 펫이 없습니다. /펫입양 이름 으로 입양해 주세요.";
+  const cooldown = gameCooldownText(person, action.cooldownKey);
+  if (cooldown) return cooldown;
+  pet.hunger = boundedPetStat(pet.hunger + (action.hunger || 0));
+  pet.happiness = boundedPetStat(pet.happiness + (action.happiness || 0));
+  pet.energy = boundedPetStat(pet.energy + (action.energy || 0));
+  pet.cleanliness = boundedPetStat(pet.cleanliness + (action.cleanliness || 0));
+  pet.health = boundedPetStat(pet.health + (action.health || 0));
+  pet.updatedAt = nowIso();
+  markGameCooldown(person, action.cooldownKey);
+  return [
+    action.title,
+    "",
+    `${pet.name} 상태가 좋아졌습니다.`,
+    `배고픔 ${pet.hunger}/100 · 행복 ${pet.happiness}/100 · 에너지 ${pet.energy}/100 · 청결 ${pet.cleanliness}/100`
+  ].join("\n");
+}
+
+function petTrainCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const pet = ensurePetForCare(person);
+  if (!pet) return "키우는 펫이 없습니다. /펫입양 이름 으로 입양해 주세요.";
+  const cooldown = gameCooldownText(person, "petTrain");
+  if (cooldown) return cooldown;
+  pet.exp += 20;
+  if (pet.exp >= pet.level * 40) {
+    pet.exp = 0;
+    pet.level += 1;
+    person.points += 30;
+  }
+  pet.energy = boundedPetStat(pet.energy - 10);
+  pet.happiness = boundedPetStat(pet.happiness + 5);
+  pet.updatedAt = nowIso();
+  markGameCooldown(person, "petTrain");
+  return [
+    "펫 훈련",
+    "",
+    `${pet.name} 훈련 완료`,
+    `레벨: ${pet.level}`,
+    `경험치: ${pet.exp}/${pet.level * 40}`
+  ].join("\n");
+}
+
+function petShopCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const snack = systemProductById(PET_SNACK_ITEM_ID);
+  return [
+    "펫 상점",
+    "",
+    `${snack.id}. ${snack.name} - ${formatPoint(snack.price)} / 판매가 ${formatPoint(snack.sellPrice)}`,
+    "v1에서는 /펫먹이, /펫놀기, /펫씻기, /펫재우기 를 바로 사용할 수 있습니다.",
+    `보유 포인트: ${formatPoint(person.points)}`
+  ].join("\n");
+}
+
 function gameHelpText(roomState) {
   const enabled = featureEnabled(roomState, "games");
   const settings = gameSettings(roomState);
@@ -5980,12 +6656,18 @@ function gameHelpText(roomState) {
     `주사위 기본 보상: ${formatPoint(settings.diceReward)} x 결과`,
     `낚시: 기본 미끼 1개로 300종 물고기 중 1개 획득`,
     `탐험: 판매 가능한 전리품 획득`,
+    `RPG: 던전 재료 ${RPG_ITEM_CATALOG_SIZE}종, 대장간 무기 제작`,
+    `픽셀몬스터: 오리지널 몬스터 ${PIXEL_MONSTER_SPECIES_COUNT}종 수집`,
+    "펫키우기: 개인별 펫 입양, 돌봄, 훈련",
     "",
     "/주사위 - 1~6 결과에 따라 포인트 획득, 10초 쿨타임",
     "/미끼상점, /미끼구매 수량 - 낚시 미끼 구매",
     "/낚시 - 물고기를 가방에 보관, 30초 쿨타임",
     "/어항 또는 /수족관 - 물고기 수집 현황",
     "/탐험 - 전리품을 가방에 보관, 20초 쿨타임",
+    "/던전, /대장간, /제작 번호, /장착 번호 - RPG 모험",
+    "/몬스터탐험, /포획, /몬스터목록, /몬스터훈련, /몬스터전투 - 수집 RPG",
+    "/펫입양, /펫, /펫먹이, /펫놀기, /펫씻기, /펫재우기, /펫훈련 - 펫키우기",
     `/뽑기 - 가상 포인트 뽑기 ${formatPoint(LUCKY_DRAW_POINT_COST)}, 10초 쿨타임`,
     "/뽑기목록 - 뽑기 확률과 보상 확인",
     "/홀 금액 또는 /짝 금액 - 홀짝 베팅, 5초 쿨타임",
@@ -6457,6 +7139,52 @@ function bridgeJsServerText() {
   ].join("\n");
 }
 
+const ACTIVE_GAME_ROOM_COMMANDS = new Set([
+  "/게임", "/게임명령어", "/주사위", "/낚시", "/탐험", "/뽑기", "/확률뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝",
+  "/미끼상점", "/미끼구매", "/어항", "/수족관",
+  "/던전", "/던전목록", "/대장간", "/제작", "/장비", "/장착",
+  "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감",
+  "/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점"
+]);
+const GAME_ROOM_ECONOMY_COMMANDS = new Set([
+  "/포인트", "/내포인트", "/내정보", "/레벨", "/정보", "/가방", "/판매", "/구매내역", "/상점", "/구매"
+]);
+
+function commandForRoomRole(command) {
+  const token = normalizeCommandToken(command);
+  if (token === "/확률뽑기") return "/뽑기";
+  return token;
+}
+
+function isActiveGameRoomCommand(command) {
+  return ACTIVE_GAME_ROOM_COMMANDS.has(commandForRoomRole(command));
+}
+
+function isGameRoomAllowedCommand(command, customItem = null) {
+  const token = commandForRoomRole(command);
+  if (ACTIVE_GAME_ROOM_COMMANDS.has(token) || GAME_ROOM_ECONOMY_COMMANDS.has(token)) return true;
+  return Boolean(customItem?.proxyCommand && ACTIVE_GAME_ROOM_COMMANDS.has(commandForRoomRole(customItem.proxyCommand)));
+}
+
+function roomRoleRestrictionText(physicalRoomState, dataRoomState, command, compactCommand = "") {
+  const role = normalizeRoomRole(physicalRoomState?.settings?.roomRole);
+  if (role === "standard") return "";
+  const customItem = customCommandMatch(dataRoomState, compactCommand);
+  if (role === "general" && (isActiveGameRoomCommand(command) || (customItem?.proxyCommand && isActiveGameRoomCommand(customItem.proxyCommand)))) {
+    return [
+      "일반방에서는 게임 실행 명령어를 사용할 수 없습니다.",
+      "연결된 게임방에서 게임을 진행해 주세요. /가방, /판매, /포인트는 일반방에서도 사용할 수 있습니다."
+    ].join("\n");
+  }
+  if (role === "game" && !isGameRoomAllowedCommand(command, customItem)) {
+    return [
+      "게임방에서는 게임 명령어만 사용할 수 있습니다.",
+      "운영 공지, 신고 처리, 관리자 명령은 일반방에서 진행해 주세요."
+    ].join("\n");
+  }
+  return "";
+}
+
 function commandFeatureKey(command) {
   if (/^\/(?:출석|출석체크|출첵|ㅊㅊ|미출석)$/.test(command)) return "attendance";
   if (/^\/(?:포인트안내|포인트규칙)$/.test(command)) return "points";
@@ -6464,7 +7192,7 @@ function commandFeatureKey(command) {
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
   if (/^\/(?:프로필|프로칠|프로필등록|프로필삭제|별명등록|별명삭제)(?:\s|$)/.test(command)) return "profiles";
-  if (/^\/(?:게임|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:게임|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|던전|던전목록|대장간|제작|장비|장착|몬스터탐험|포획|몬스터|몬스터목록|몬스터훈련|몬스터전투|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
   if (/^\/(?:상점|구매|구매내역|가방|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
@@ -6527,7 +7255,7 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/미끼구매", "게임", "포인트로 낚시 미끼 구매", { examples: ["/미끼구매 10"], requiresFeature: "games", searchableKeywords: ["낚시", "미끼", "구매"] }),
   registryEntry("/어항", "게임", "보유 물고기와 수집률 확인", { aliases: ["/수족관"], requiresFeature: "games", searchableKeywords: ["낚시", "물고기", "수집"] }),
   registryEntry("/상점", "상점/가방", "구매 가능한 아이템 확인", { requiresFeature: "shop" }),
-  registryEntry("/구매", "상점/가방", "포인트로 아이템 구매", { examples: ["/구매 1"], requiresFeature: "shop" }),
+  registryEntry("/구매", "상점/가방", "포인트로 아이템 구매", { examples: ["/구매 1", "/구매 1 10"], requiresFeature: "shop" }),
   registryEntry("/가방", "상점/가방", "내 아이템 확인", { requiresFeature: "shop" }),
   registryEntry("/사용", "상점/가방", "아이템 사용", { examples: ["/사용 1"], requiresFeature: "shop" }),
   registryEntry("/가방선물", "상점/가방", "아이템 선물", { examples: ["/가방선물 닉네임 1 1"], requiresFeature: "shop" }),
@@ -6537,6 +7265,10 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/주사위", "게임", "주사위 보상 게임", { requiresFeature: "games" }),
   registryEntry("/낚시", "게임", "낚시 보상 게임", { requiresFeature: "games" }),
   registryEntry("/탐험", "게임", "탐험 보상 게임", { requiresFeature: "games" }),
+  registryEntry("/던전", "RPG", "던전 탐험과 재료 획득", { aliases: ["/던전목록"], examples: ["/던전", "/던전 중급"], requiresFeature: "games", searchableKeywords: ["RPG", "모험", "재료"] }),
+  registryEntry("/대장간", "RPG", "무기 제작 레시피 확인", { aliases: ["/제작", "/장비", "/장착"], examples: ["/대장간", "/제작 12001"], requiresFeature: "games", searchableKeywords: ["무기", "제작", "장비"] }),
+  registryEntry("/몬스터탐험", "픽셀몬스터", "오리지널 몬스터 발견", { aliases: ["/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감"], requiresFeature: "games", searchableKeywords: ["몬스터", "수집", "도감"] }),
+  registryEntry("/펫입양", "펫키우기", "개인 펫 입양과 성장", { aliases: ["/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점"], requiresFeature: "games", searchableKeywords: ["펫", "키우기", "훈련"] }),
   registryEntry("/명령어목록", "커스텀", "방별 커스텀 명령어 확인", { aliases: ["/커스텀명령어"], requiresFeature: "customCommands" }),
   registryEntry("/고정명령어", "커스텀", "예약된 기본 명령어 확인", { requiresFeature: "customCommands" }),
   registryEntry("/명령어검색", "스토어", "설치 가능한 명령어 코드 검색", { visibility: "admin", requiresRole: "admin", searchableKeywords: ["스토어", "장바구니", "설치코드"] }),
@@ -6876,6 +7608,10 @@ function roomAdminView(roomState) {
     name: roomState.name || "",
     registered: Boolean(settings.registered),
     enabled: settings.enabled !== false,
+    roomRole: normalizeRoomRole(settings.roomRole),
+    canonicalRoomKey: settings.canonicalRoomKey || "",
+    canonicalRoomName: settings.canonicalRoomName || "",
+    linkedGameRoomKeys: settings.linkedGameRoomKeys || [],
     roomIds,
     roomLinks: settings.roomLinks || [],
     joinPhrase: settings.joinPhrase || DEFAULT_JOIN_PHRASE,
@@ -7025,6 +7761,9 @@ function adminUpsertRoom(state, payload = {}) {
 
   settings.registered = payload.registered === false ? false : true;
   settings.enabled = payload.enabled === false ? false : true;
+  if (payload.roomRole) settings.roomRole = normalizeRoomRole(payload.roomRole);
+  if (payload.canonicalRoomKey) settings.canonicalRoomKey = roomKey(payload.canonicalRoomKey);
+  if (payload.canonicalRoomName) settings.canonicalRoomName = normalizeText(payload.canonicalRoomName);
   settings.joinPhrase = joinPhrase;
   settings.registeredAt ||= nowIso();
   settings.registeredBy ||= "admin_console";
@@ -7224,6 +7963,18 @@ function validateApplicationFields(payload = {}, fallbackEmail = "", options = {
   };
 }
 
+function normalizeApplicationRoomPurpose(value = "") {
+  const text = compactSpaces(value).toLowerCase().replace(/[\s-]+/g, "_");
+  if (["game", "game_room", "gameRoom", "게임방", "게임"].includes(text)) return "game_room";
+  return "general_room";
+}
+
+function approvedApplicationByIdForAccount(state, account = {}, applicationId = "") {
+  const id = normalizeText(applicationId);
+  if (!id) return null;
+  return approvedBuyerApplications(state, account).find((application) => application.id === id) || null;
+}
+
 function createApplicationForAccount(state, account = {}, payload = {}, options = {}) {
   const accountEmail = normalizeEmail(account.email);
   const allowMissingEmail = Boolean(options.allowMissingEmail || !accountEmail);
@@ -7233,9 +7984,16 @@ function createApplicationForAccount(state, account = {}, payload = {}, options 
   });
   if (!validated.ok) return { ok: false, status: 400, error: validated.errors[0], errors: validated.errors };
   const value = validated.value;
+  const roomPurpose = normalizeApplicationRoomPurpose(payload.roomPurpose || payload.purpose || payload.roomRole);
+  const linkedApplication = roomPurpose === "game_room"
+    ? approvedApplicationByIdForAccount(state, account, payload.linkedApplicationId || payload.baseApplicationId || payload.parentApplicationId)
+    : null;
+  if (roomPurpose === "game_room" && !linkedApplication) {
+    return { ok: false, status: 403, error: "linked_room_approval_required" };
+  }
   const applicationId = generateEntityId("app");
   const paymentId = generateEntityId("pay");
-  const plan = applicationPlanForAccount(state, account);
+  const plan = applicationPlanForAccount(state, account, { roomPurpose });
   const application = {
     id: applicationId,
     accountId: account.id,
@@ -7246,6 +8004,8 @@ function createApplicationForAccount(state, account = {}, payload = {}, options 
     adminName: value.adminName,
     contact: value.contact,
     memo: value.memo,
+    roomPurpose,
+    linkedApplicationId: linkedApplication?.id || "",
     status: "pending_payment",
     plan,
     paymentId,
@@ -8695,6 +9455,31 @@ function adminResolveReport(state, payload = {}, resolvedBy = "admin_console") {
   };
 }
 
+function applyApprovedRoomPurposeSettings(state, application = {}) {
+  const roomState = ensureRoom(state, application.roomName);
+  const roomPurpose = normalizeApplicationRoomPurpose(application.roomPurpose);
+  if (roomPurpose !== "game_room") return roomState;
+  const baseApplication = state.applications?.[application.linkedApplicationId];
+  if (!baseApplication) return roomState;
+  const baseRoomState = ensureRoom(state, baseApplication.roomName);
+  const baseKey = roomKey(baseRoomState.name);
+  const gameKey = roomKey(roomState.name);
+  baseRoomState.settings.roomRole = "general";
+  baseRoomState.settings.features = normalizeFeatureSettings(baseRoomState.settings.features || {});
+  baseRoomState.settings.features.games = true;
+  baseRoomState.settings.linkedGameRoomKeys ||= [];
+  addUnique(baseRoomState.settings.linkedGameRoomKeys, gameKey);
+  roomState.settings.roomRole = "game";
+  roomState.settings.canonicalRoomKey = baseKey;
+  roomState.settings.canonicalRoomName = baseRoomState.name;
+  roomState.settings.features = normalizeFeatureSettings(roomState.settings.features || {});
+  roomState.settings.features.games = true;
+  roomState.settings.features.points = true;
+  roomState.settings.features.shop = true;
+  roomState.settings.features.customCommands = false;
+  return roomState;
+}
+
 function adminApproveApplication(state, payload = {}, approvedBy = "admin_console") {
   const applicationId = normalizeText(payload.applicationId || payload.id);
   if (!applicationId) return { ok: false, status: 400, error: "application_id_required" };
@@ -8736,14 +9521,16 @@ function adminApproveApplication(state, payload = {}, approvedBy = "admin_consol
   application.status = "approved";
   application.approvedAt = nowIso();
   application.approvedBy = approvedBy;
-  application.licenseKey = result.room.licenseKey;
-  application.roomId = result.room.roomIds?.[0] || application.roomId;
+  const approvedRoomState = applyApprovedRoomPurposeSettings(state, application);
+  const approvedRoom = roomAdminView(approvedRoomState);
+  application.licenseKey = approvedRoom.licenseKey;
+  application.roomId = approvedRoom.roomIds?.[0] || application.roomId;
   application.updatedAt = nowIso();
   return {
     ok: true,
     application: publicApplicationView(application, state),
     payment: publicPaymentView(payment),
-    room: result.room
+    room: approvedRoom
   };
 }
 
@@ -8940,12 +9727,15 @@ async function handleAdminApi(req, url) {
 }
 
 async function handleCommand(state, room, sender, message, identity = {}) {
-  const roomState = ensureRoom(state, room);
+  const physicalRoomState = identity.physicalRoomState || ensureRoom(state, room);
+  const roomState = canonicalDataRoomState(state, physicalRoomState);
   const text = normalizeText(message);
   const parsed = parseBotCommand(text);
   const compactCommand = compactSpaces(text);
   const command = parsed.command || normalizeCustomCommandTrigger(compactCommand);
   if (!parsed.isCommandAttempt && !customCommandMatch(roomState, compactCommand)) return null;
+  const roleRestricted = roomRoleRestrictionText(physicalRoomState, roomState, command, compactCommand);
+  if (roleRestricted) return roleRestricted;
 
   if (command === "/상태" || command === "/status") return statusText(room);
   if (command === "/브릿지" || command === "/bridge") return bridgeServerText(room);
@@ -8984,6 +9774,26 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/낚시") return fishingGameCommand(roomState, sender);
   if (command === "/어항" || command === "/수족관") return aquariumCommand(roomState, sender, text);
   if (command === "/탐험") return exploreGameCommand(roomState, sender);
+  if (command === "/던전목록") return dungeonListCommand();
+  if (command === "/던전") return dungeonCommand(roomState, sender, text);
+  if (command === "/대장간") return blacksmithCommand(roomState, sender);
+  if (command === "/제작") return craftWeaponCommand(roomState, sender, text);
+  if (command === "/장비") return equipmentCommand(roomState, sender);
+  if (command === "/장착") return equipWeaponCommand(roomState, sender, text);
+  if (command === "/몬스터도감") return monsterDexCommand();
+  if (command === "/몬스터탐험") return monsterExploreCommand(roomState, sender);
+  if (command === "/포획") return monsterCaptureCommand(roomState, sender);
+  if (command === "/몬스터" || command === "/몬스터목록") return monsterListCommand(roomState, sender);
+  if (command === "/몬스터훈련") return monsterTrainCommand(roomState, sender);
+  if (command === "/몬스터전투") return monsterBattleCommand(roomState, sender);
+  if (command === "/펫입양") return petAdoptCommand(roomState, sender, text);
+  if (command === "/펫") return petStatusCommand(roomState, sender);
+  if (command === "/펫먹이") return petCareCommand(roomState, sender, { title: "펫 먹이 완료", cooldownKey: "petFeed", hunger: -20, happiness: 5, health: 2 });
+  if (command === "/펫놀기") return petCareCommand(roomState, sender, { title: "펫 놀기 완료", cooldownKey: "petPlay", happiness: 15, energy: -5 });
+  if (command === "/펫씻기") return petCareCommand(roomState, sender, { title: "펫 씻기 완료", cooldownKey: "petClean", cleanliness: 25, health: 3 });
+  if (command === "/펫재우기") return petCareCommand(roomState, sender, { title: "펫 휴식 완료", cooldownKey: "petSleep", energy: 25, hunger: 5 });
+  if (command === "/펫훈련") return petTrainCommand(roomState, sender);
+  if (command === "/펫상점") return petShopCommand(roomState, sender);
   if (command === "/날씨" || command === "/오늘날씨" || /^\/.+날씨$/u.test(command)) return weatherCommand(roomState, parsed);
   if (command === "/운세" || command === "/오늘운세") return fortuneCommand(roomState, sender, parsed, identity);
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
@@ -9058,7 +9868,8 @@ async function handleCommand(state, room, sender, message, identity = {}) {
 }
 
 async function handleMessage(state, room, sender, message, identity = {}, detectedEvent = null) {
-  const roomState = ensureRoom(state, room);
+  const physicalRoomState = identity.physicalRoomState || ensureRoom(state, room);
+  const roomState = canonicalDataRoomState(state, physicalRoomState);
   const text = normalizeText(message);
   const event = detectedEvent || detectSystemEvent(message);
   const targetIdentity = identity.targetUserId || "";
@@ -9129,7 +9940,7 @@ export async function handleChatEvent(payload) {
     return { ok: true, reply: null, ignored: true };
   }
 
-  const reply = await handleMessage(state, room, sender, message, { ...identity, payload }, event);
+  const reply = await handleMessage(state, room, sender, message, { ...identity, payload, physicalRoomState: roomState }, event);
   await saveState(state);
   return {
     ok: true,

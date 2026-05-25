@@ -137,7 +137,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.85");
+  assert.equal(health.json.version, "0.4.86");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -156,6 +156,11 @@ try {
   assert.match(health.json.features.join(","), /game-cooldowns/);
   assert.match(health.json.features.join(","), /fishing-bait-aquarium/);
   assert.match(health.json.features.join(","), /generated-fish-catalog/);
+  assert.match(health.json.features.join(","), /bulk-item-purchase/);
+  assert.match(health.json.features.join(","), /rpg-adventure-pack/);
+  assert.match(health.json.features.join(","), /pixel-monster-rpg-pack/);
+  assert.match(health.json.features.join(","), /pet-raising-pack/);
+  assert.match(health.json.features.join(","), /game-room-role-split/);
   assert.match(health.json.features.join(","), /detailed-member-history/);
   assert.match(health.json.features.join(","), /admin-commands/);
   assert.match(health.json.features.join(","), /point-ledger/);
@@ -454,7 +459,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.85");
+  assert.equal(commandTemplates.json.version, "0.4.86");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -483,11 +488,14 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.4.85");
-  assert.equal(commandPacks.json.total, 10);
+  assert.equal(commandPacks.json.version, "0.4.86");
+  assert.equal(commandPacks.json.total, 13);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.fixedCommands.includes("/상태") && pack.fixedCommands.includes("/운세") && pack.fixedCommands.includes("/신고")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.installCode === "pk.001" && pack.installCodeType === "pack"), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "game-chance" && pack.fixedCommands.includes("/뽑기") && pack.fixedCommands.includes("/홀짝")), true);
+  assert.equal(commandPacks.json.packs.some((pack) => pack.id === "rpg-adventure" && pack.fixedCommands.includes("/던전") && pack.fixedCommands.includes("/제작")), true);
+  assert.equal(commandPacks.json.packs.some((pack) => pack.id === "pixel-monster-rpg" && pack.fixedCommands.includes("/몬스터탐험") && pack.fixedCommands.includes("/포획")), true);
+  assert.equal(commandPacks.json.packs.some((pack) => pack.id === "pet-raising" && pack.fixedCommands.includes("/펫입양") && pack.fixedCommands.includes("/펫훈련")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "all-in-one-ops" && pack.fixedCommands.includes("/관리자등록") && pack.fixedCommands.includes("/신고처리") && pack.fixedCommands.includes("/상점")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "basic-ops"), false);
 
@@ -585,7 +593,7 @@ try {
   assert.match(sessionNavText, /nav-logout/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.4.85");
+  assert.equal(packageJson.version, "0.4.86");
   assert.equal(packageJson.scripts["check:deploy"], "node scripts/predeploy-check.js");
   assert.equal(packageJson.scripts["smoke:local"], "node scripts/smoke-check.js");
   assert.equal(packageJson.scripts["smoke:prod"], "node scripts/smoke-check.js https://pixgom.com");
@@ -784,7 +792,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.4.85");
+  assert.equal(adminDiagnostics.json.version, "0.4.86");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -795,7 +803,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.4.85");
+  assert.equal(adminBackup.json.version, "0.4.86");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -1046,7 +1054,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.85");
+  assert.equal(buyerGuideApproved.json.version, "0.4.86");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -1061,7 +1069,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.85");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.86");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -1244,11 +1252,105 @@ try {
     body: JSON.stringify({
       token: approvedLogin.json.guideToken,
       applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
-      q: "펫키우기"
+      q: "공지초안"
     })
   });
   assert.equal(buyerComingSoonSearch.response.status, 200);
   assert.equal(buyerComingSoonSearch.json.items.some((item) => item.status === "coming_soon" && item.available === false), true);
+
+  const gameRoomApply = await request("/api/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      roomPurpose: "game_room",
+      linkedApplicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      roomName: "판매게임방",
+      roomLink: "https://open.kakao.com/o/salesGame1",
+      adminName: "신청관리자",
+      contact: "game-contact"
+    })
+  });
+  assert.equal(gameRoomApply.response.status, 200);
+  assert.equal(gameRoomApply.json.application.plan.type, "game_room");
+  assert.equal(gameRoomApply.json.application.roomPurpose, "game_room");
+  assert.equal(gameRoomApply.json.application.linkedApplicationId, buyerConsoleApproved.json.rooms[0].applicationId);
+  assert.equal(gameRoomApply.json.payment.amountKrw, 2200);
+
+  const approvedGameRoom = await request("/api/admin/applications/approve", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({ applicationId: gameRoomApply.json.application.id, months: 1 })
+  });
+  assert.equal(approvedGameRoom.response.status, 200);
+  assert.equal(approvedGameRoom.json.room.roomRole, "game");
+  assert.equal(approvedGameRoom.json.room.canonicalRoomName, "판매신청방");
+
+  const generalRoomGameBlocked = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "/던전",
+    sender: "게임참여자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.match(generalRoomGameBlocked.json.reply, /일반방에서는 게임 실행 명령어를 사용할 수 없습니다/);
+
+  const gameRoomDice = await chatPayload({
+    registeredRoom: false,
+    room: "판매게임방",
+    msg: "/주사위",
+    sender: "게임참여자",
+    roomId: "salesGame1",
+    roomLink: "https://open.kakao.com/o/salesGame1",
+    licenseKey: approvedGameRoom.json.room.licenseKey
+  });
+  assert.match(gameRoomDice.json.reply, /주사위 게임/);
+
+  const generalRoomPointAfterGame = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "/포인트",
+    sender: "게임참여자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.match(generalRoomPointAfterGame.json.reply, /게임참여자님의 포인트 : 🅟/);
+
+  const gameRoomBag = await chatPayload({
+    registeredRoom: false,
+    room: "판매게임방",
+    msg: "/가방",
+    sender: "게임참여자",
+    roomId: "salesGame1",
+    roomLink: "https://open.kakao.com/o/salesGame1",
+    licenseKey: approvedGameRoom.json.room.licenseKey
+  });
+  assert.match(gameRoomBag.json.reply, /게임참여자님의 가방/);
+
+  const generalNoticeRegister = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "/명령어등록 /게임방공지 일반방 공지입니다.",
+    sender: "신청관리자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.match(generalNoticeRegister.json.reply, /커스텀 명령어가 저장되었습니다/);
+
+  const gameRoomOpsBlocked = await chatPayload({
+    registeredRoom: false,
+    room: "판매게임방",
+    msg: "/게임방공지",
+    sender: "게임참여자",
+    roomId: "salesGame1",
+    roomLink: "https://open.kakao.com/o/salesGame1",
+    licenseKey: approvedGameRoom.json.room.licenseKey
+  });
+  assert.match(gameRoomOpsBlocked.json.reply, /게임방에서는 게임 명령어만 사용할 수 있습니다/);
 
   const adminCommandSearch = await request("/api/admin/room-commands", {
     method: "POST",
@@ -1444,34 +1546,34 @@ try {
 
   const diceProxyReply = await chatPayload({
     registeredRoom: false,
-    room: "판매신청방",
+    room: "판매게임방",
     msg: "/운영주사위",
     sender: "구매자",
-    roomId: "salesRoom1",
-    roomLink: "https://open.kakao.com/o/salesRoom1",
-    licenseKey: approvedApplication.json.room.licenseKey
+    roomId: "salesGame1",
+    roomLink: "https://open.kakao.com/o/salesGame1",
+    licenseKey: approvedGameRoom.json.room.licenseKey
   });
   assert.match(diceProxyReply.json.reply, /주사위 게임/);
 
   const proxyBaitPurchase = await chatPayload({
     registeredRoom: false,
-    room: "판매신청방",
+    room: "판매게임방",
     msg: "/미끼구매 1",
     sender: "구매자",
-    roomId: "salesRoom1",
-    roomLink: "https://open.kakao.com/o/salesRoom1",
-    licenseKey: approvedApplication.json.room.licenseKey
+    roomId: "salesGame1",
+    roomLink: "https://open.kakao.com/o/salesGame1",
+    licenseKey: approvedGameRoom.json.room.licenseKey
   });
   assert.match(proxyBaitPurchase.json.reply, /미끼 구매 완료/);
 
   const fishingPackProxyReply = await chatPayload({
     registeredRoom: false,
-    room: "판매신청방",
+    room: "판매게임방",
     msg: "/운영낚시",
     sender: "구매자",
-    roomId: "salesRoom1",
-    roomLink: "https://open.kakao.com/o/salesRoom1",
-    licenseKey: approvedApplication.json.room.licenseKey
+    roomId: "salesGame1",
+    roomLink: "https://open.kakao.com/o/salesGame1",
+    licenseKey: approvedGameRoom.json.room.licenseKey
   });
   assert.match(fishingPackProxyReply.json.reply, /낚시 결과/);
 
@@ -2986,7 +3088,7 @@ try {
   const shortAttendance = await chat("ㅊㅊ", "초성출석 남");
   assert.match(shortAttendance.json.reply, /초성출석 남님 출석/);
 
-  const pointGrant = await chat("/포인트지급 포순이 여 1000", "관리자");
+  const pointGrant = await chat("/포인트지급 포순이 여 2500", "관리자");
   assert.match(pointGrant.json.reply, /포인트 지급 완료/);
   assert.match(pointGrant.json.reply, /포순이 여/);
 
@@ -3005,9 +3107,14 @@ try {
   assert.match(purchase.json.reply, /구매 완료/);
   assert.match(purchase.json.reply, /물약/);
 
+  const bulkPurchase = await chat("/구매 1 10", "포순이 여");
+  assert.match(bulkPurchase.json.reply, /구매 완료/);
+  assert.match(bulkPurchase.json.reply, /물약 x 10/);
+  assert.match(bulkPurchase.json.reply, /사용 포인트 : 🅟1,000/);
+
   const bag = await chat("/가방", "포순이 여");
   assert.match(bag.json.reply, /포순이 여님의 가방/);
-  assert.match(bag.json.reply, /1\. 물약 x 1/);
+  assert.match(bag.json.reply, /1\. 물약 x 11/);
 
   const itemGrant = await chat("/아이템지급 미미 여 1 2", "관리자");
   assert.match(itemGrant.json.reply, /아이템지급 완료/);
@@ -3059,6 +3166,87 @@ try {
   const drawCatalog = await chat("/뽑기목록", "포순이 여");
   assert.match(drawCatalog.json.reply, /뽑기 목록/);
   assert.match(drawCatalog.json.reply, /대박/);
+
+  const dungeonList = await chat("/던전목록", "모험가 여");
+  assert.match(dungeonList.json.reply, /픽셀곰 던전 목록/);
+  assert.match(dungeonList.json.reply, /초급 광산/);
+
+  const dungeonRun = await chat("/던전", "모험가 여");
+  assert.match(dungeonRun.json.reply, /던전 결과/);
+  assert.match(dungeonRun.json.reply, /(가방에 보관|꽝)/);
+
+  const dungeonCooldown = await chat("/던전", "모험가 여");
+  assert.match(dungeonCooldown.json.reply, /쿨타임/);
+  assert.match(dungeonCooldown.json.reply, /던전은/);
+
+  const materialGrant = await chat("/아이템지급 모험가 여 11000 2", "관리자");
+  assert.match(materialGrant.json.reply, /아이템지급 완료/);
+  assert.match(materialGrant.json.reply, /철광석/);
+
+  const craftPointGrant = await chat("/포인트지급 모험가 여 200", "관리자");
+  assert.match(craftPointGrant.json.reply, /포인트 지급 완료/);
+
+  const smith = await chat("/대장간", "모험가 여");
+  assert.match(smith.json.reply, /픽셀곰 대장간/);
+  assert.match(smith.json.reply, /12001/);
+
+  const craftWeapon = await chat("/제작 12001", "모험가 여");
+  assert.match(craftWeapon.json.reply, /제작 완료/);
+  assert.match(craftWeapon.json.reply, /수습 모험검/);
+
+  const equipWeapon = await chat("/장착 12001", "모험가 여");
+  assert.match(equipWeapon.json.reply, /장착 완료/);
+
+  const equipment = await chat("/장비", "모험가 여");
+  assert.match(equipment.json.reply, /모험가 여님의 장비/);
+  assert.match(equipment.json.reply, /수습 모험검/);
+
+  const monsterDex = await chat("/몬스터도감", "몬스터러 여");
+  assert.match(monsterDex.json.reply, /픽셀몬스터 도감/);
+  assert.match(monsterDex.json.reply, /150종/);
+
+  const monsterExplore = await chat("/몬스터탐험", "몬스터러 여");
+  assert.match(monsterExplore.json.reply, /몬스터 탐험/);
+  assert.match(monsterExplore.json.reply, /발견/);
+
+  const monsterCapture = await chat("/포획", "몬스터러 여");
+  assert.match(monsterCapture.json.reply, /포획 성공/);
+
+  const monsterList = await chat("/몬스터목록", "몬스터러 여");
+  assert.match(monsterList.json.reply, /몬스터러 여님의 몬스터/);
+  assert.match(monsterList.json.reply, /Lv\./);
+
+  const monsterTrain = await chat("/몬스터훈련", "몬스터러 여");
+  assert.match(monsterTrain.json.reply, /몬스터 훈련/);
+
+  const monsterBattle = await chat("/몬스터전투", "몬스터러 여");
+  assert.match(monsterBattle.json.reply, /몬스터 전투/);
+
+  const petAdopt = await chat("/펫입양 뭉치", "펫집사 여");
+  assert.match(petAdopt.json.reply, /펫 입양 완료/);
+  assert.match(petAdopt.json.reply, /뭉치/);
+
+  const petStatus = await chat("/펫", "펫집사 여");
+  assert.match(petStatus.json.reply, /펫집사 여님의 펫/);
+  assert.match(petStatus.json.reply, /배고픔/);
+
+  const petFeed = await chat("/펫먹이", "펫집사 여");
+  assert.match(petFeed.json.reply, /펫 먹이 완료/);
+
+  const petPlay = await chat("/펫놀기", "펫집사 여");
+  assert.match(petPlay.json.reply, /펫 놀기 완료/);
+
+  const petClean = await chat("/펫씻기", "펫집사 여");
+  assert.match(petClean.json.reply, /펫 씻기 완료/);
+
+  const petSleep = await chat("/펫재우기", "펫집사 여");
+  assert.match(petSleep.json.reply, /펫 휴식 완료/);
+
+  const petTrain = await chat("/펫훈련", "펫집사 여");
+  assert.match(petTrain.json.reply, /펫 훈련/);
+
+  const petShop = await chat("/펫상점", "펫집사 여");
+  assert.match(petShop.json.reply, /펫 상점/);
 
   const baitShop = await chat("/미끼상점", "낚시러 여");
   assert.match(baitShop.json.reply, /미끼 상점/);
