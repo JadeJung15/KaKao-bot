@@ -2596,6 +2596,49 @@ a {
   overflow-wrap: anywhere;
 }
 
+.admin-status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.admin-feature-badges {
+  margin-top: 10px;
+}
+
+.admin-status-badge {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 5px 8px;
+  color: #375044;
+  background: #fff8ec;
+  border: 1px solid #e2d1bd;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.admin-status-badge[data-state="ok"] {
+  color: #174b38;
+  background: #eef8f4;
+  border-color: #cce4d8;
+}
+
+.admin-status-badge[data-state="warn"] {
+  color: #775014;
+  background: #fff6d8;
+  border-color: #ead18a;
+}
+
+.admin-status-badge[data-state="error"] {
+  color: #8c2a19;
+  background: #fff4f1;
+  border-color: #e2b2a8;
+}
+
 .admin-result pre {
   min-height: 170px;
   max-height: 360px;

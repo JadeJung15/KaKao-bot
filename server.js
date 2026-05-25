@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.63";
+export const APP_VERSION = "0.4.64";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -146,7 +146,9 @@ export const FEATURES = [
   "bridge-home-diagnostics",
   "bridge-log-share-action",
   "buyer-console-onboarding",
-  "buyer-room-status-fields"
+  "buyer-room-status-fields",
+  "admin-room-status-badges",
+  "admin-feature-summary-cards"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -5285,20 +5287,33 @@ function roomAdminView(roomState) {
   const settings = roomState.settings || {};
   const subscription = updateSubscriptionStatus(roomState);
   const license = licenseSettings(roomState);
+  const features = roomFeatures(roomState);
+  const roomIds = settings.roomIds || [];
+  const customCommandsList = customCommands(roomState);
   return {
     name: roomState.name || "",
     registered: Boolean(settings.registered),
     enabled: settings.enabled !== false,
-    roomIds: settings.roomIds || [],
+    roomIds,
     roomLinks: settings.roomLinks || [],
     joinPhrase: settings.joinPhrase || DEFAULT_JOIN_PHRASE,
     admins: roomState.admins || [],
     licenseKey: license.key || "",
-    features: roomFeatures(roomState),
-    customCommands: customCommands(roomState),
+    licenseStatus: license.key ? license.status || "active" : "missing",
+    bridgeStatus: license.key && roomIds.length ? "ready" : "needs_setup",
+    features,
+    featureSummary: Object.entries(FEATURE_LABELS)
+      .filter(([key]) => features[key] !== false)
+      .map(([, label]) => label),
+    disabledFeatures: Object.entries(FEATURE_LABELS)
+      .filter(([key]) => features[key] === false)
+      .map(([, label]) => label),
+    customCommands: customCommandsList,
+    commandCount: customCommandsList.length,
     gameSettings: gameSettings(roomState),
     subscription: {
       status: subscription.status || "unset",
+      statusLabel: subscription.status === "active" ? "정상" : subscription.status === "expired" ? "만료" : "미설정",
       monthlyPriceKrw: subscription.monthlyPriceKrw || MONTHLY_PRICE_KRW,
       startedAt: subscription.startedAt || "",
       expiresAt: subscription.expiresAt || "",

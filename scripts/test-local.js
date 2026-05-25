@@ -74,7 +74,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.63");
+  assert.equal(health.json.version, "0.4.64");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -174,6 +174,8 @@ try {
   assert.match(health.json.features.join(","), /bridge-log-share-action/);
   assert.match(health.json.features.join(","), /buyer-console-onboarding/);
   assert.match(health.json.features.join(","), /buyer-room-status-fields/);
+  assert.match(health.json.features.join(","), /admin-room-status-badges/);
+  assert.match(health.json.features.join(","), /admin-feature-summary-cards/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.additionalRoomPriceKrw, 2200);
   assert.equal(health.json.adminConsoleEnabled, true);
@@ -217,6 +219,7 @@ try {
   assert.match(homeText, /주사위/);
   assert.match(homeText, /커스텀 명령어/);
   assert.match(homeText, /업데이트 기록/);
+  assert.match(homeText, /0\.4\.64/);
   assert.match(homeText, /0\.4\.63/);
   assert.match(homeText, /0\.4\.62/);
   assert.match(homeText, /0\.4\.61/);
@@ -270,7 +273,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.63");
+  assert.equal(commandTemplates.json.version, "0.4.64");
   assert.equal(commandTemplates.json.total, 400);
   assert.equal(commandTemplates.json.templates.length, 400);
   assert.equal(commandTemplates.json.categories.some((category) => category.title === "펫키우기"), true);
@@ -306,6 +309,7 @@ try {
   const adminPageText = await adminPage.text();
   assert.match(adminPageText, /픽셀곰 콘솔/);
   assert.match(adminPageText, /방별 기능 ON\/OFF/);
+  assert.match(adminPageText, /admin-status-badge/);
   assert.match(adminPageText, /백업 복구/);
   assert.match(adminPageText, /신청\/결제/);
   assert.match(adminPageText, /명령어 추가\/수정/);
@@ -455,6 +459,11 @@ try {
   assert.equal(adminRoom.json.room.features.attendance, false);
   assert.equal(adminRoom.json.room.features.games, true);
   assert.equal(adminRoom.json.room.features.customCommands, true);
+  assert.equal(adminRoom.json.room.licenseStatus, "active");
+  assert.equal(adminRoom.json.room.bridgeStatus, "ready");
+  assert.equal(adminRoom.json.room.commandCount, 1);
+  assert.equal(adminRoom.json.room.subscription.statusLabel, "정상");
+  assert.equal(adminRoom.json.room.disabledFeatures.includes("출석"), true);
   assert.equal(adminRoom.json.room.gameSettings.seasonName, "콘솔 시즌");
   assert.match(adminRoom.json.room.gameSettings.seasonStartsAt, /2026/);
   assert.match(adminRoom.json.room.gameSettings.seasonEndsAt, /2026/);
@@ -644,7 +653,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.63");
+  assert.equal(buyerGuideApproved.json.version, "0.4.64");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -659,7 +668,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.63");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.64");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
