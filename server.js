@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.84";
+export const APP_VERSION = "0.4.85";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -127,6 +127,10 @@ export const FEATURES = [
   "member-inventory",
   "item-gift",
   "shop-admin-commands",
+  "game-item-economy",
+  "game-cooldowns",
+  "fishing-bait-aquarium",
+  "generated-fish-catalog",
   "chat-sensitive-info-redaction",
   "command-template-store",
   "representative-command-store",
@@ -242,6 +246,20 @@ const TRANSFER_FEE_RATE = 0.1;
 const DICE_REWARD = 30;
 const FISHING_REWARD = 40;
 const EXPLORE_REWARD = 50;
+const GAME_COOLDOWNS_MS = Object.freeze({
+  dice: 10 * 1000,
+  fishing: 30 * 1000,
+  explore: 20 * 1000,
+  luckyDraw: 10 * 1000,
+  oddEven: 5 * 1000
+});
+const GAME_COOLDOWN_LABELS = Object.freeze({
+  dice: "주사위는",
+  fishing: "낚시는",
+  explore: "탐험은",
+  luckyDraw: "뽑기는",
+  oddEven: "홀짝은"
+});
 const GAME_REWARD_MAX = 1000000;
 const GAME_SEASON_NAME_LIMIT = 40;
 const SHOP_PRODUCT_LIMIT = 50;
@@ -250,6 +268,11 @@ const SHOP_PRODUCT_DESCRIPTION_LIMIT = 140;
 const SHOP_TRANSACTION_LIMIT = 300;
 const SHOP_MAX_PRICE = 1000000;
 const SHOP_MAX_QUANTITY = 99;
+const BAIT_ITEM_ID = 9001;
+const FISH_ITEM_ID_START = 10000;
+const FISH_SPECIES_COUNT = 60;
+const FISH_GRADE_COUNT = 5;
+const FISH_CATALOG_SIZE = FISH_SPECIES_COUNT * FISH_GRADE_COUNT;
 const REENTRY_CANDIDATE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const SYSTEM_EVENT_DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
 const JOIN_SIGNAL_WINDOW_MS = 30 * 60 * 1000;
@@ -317,7 +340,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
   },
   {
     title: "상점/가방",
-    commands: ["/상점", "/구매", "/구매내역", "/가방", "/사용", "/가방선물"]
+    commands: ["/상점", "/구매", "/구매내역", "/가방", "/사용", "/가방선물", "/판매"]
   },
   {
     title: "관리자",
@@ -325,7 +348,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
   },
   {
     title: "게임/연동 예약",
-    commands: ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/픽셀곰게임", "/게임연동"]
+    commands: ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/픽셀곰게임", "/게임연동"]
   }
 ]);
 const RESERVED_CUSTOM_COMMANDS = new Set([
@@ -346,6 +369,64 @@ const LUCKY_DRAW_OUTCOMES = [
   { threshold: 0.50, label: "본전", reward: 100, chance: "30%" },
   { threshold: 1, label: "꽝", reward: 0, chance: "50%" }
 ];
+const FISH_GRADES = Object.freeze([
+  { id: "common", label: "흔한", chance: 0.55, sellBase: 15, sellStep: 1 },
+  { id: "uncommon", label: "고급", chance: 0.25, sellBase: 35, sellStep: 2 },
+  { id: "rare", label: "희귀", chance: 0.12, sellBase: 80, sellStep: 3 },
+  { id: "epic", label: "영웅", chance: 0.06, sellBase: 180, sellStep: 4 },
+  { id: "legendary", label: "전설", chance: 0.02, sellBase: 500, sellStep: 5 }
+]);
+const FISH_SPECIES = Object.freeze([
+  "붕어", "잉어", "메기", "송어", "연어", "참돔", "농어", "우럭", "광어", "방어",
+  "고등어", "삼치", "갈치", "전어", "도미", "복어", "가자미", "민어", "쏘가리", "피라미",
+  "은어", "빙어", "미꾸라지", "장어", "문어", "오징어", "갑오징어", "해파리", "불가사리", "소라",
+  "가리비", "전복", "조개", "새우", "게", "바닷가재", "청새치", "황새치", "돛새치", "참치",
+  "상어", "가오리", "해마", "흰동가리", "나비고기", "엔젤피시", "구피", "베타", "금붕어", "열대어",
+  "비단잉어", "플라워혼", "디스커스", "아로와나", "피라냐", "철갑상어", "개복치", "만타가오리", "심해어", "황금고래"
+]);
+const EXPLORE_REWARD_ITEMS = Object.freeze([
+  { id: 9101, name: "낡은 보물상자", sellPrice: 45, description: "탐험에서 발견한 작은 보물상자", category: "explore", rarity: "common" },
+  { id: 9102, name: "반짝이는 수정", sellPrice: 75, description: "빛을 머금은 탐험 보상", category: "explore", rarity: "uncommon" },
+  { id: 9103, name: "픽셀곰 표식", sellPrice: 120, description: "픽셀곰 발자국이 새겨진 표식", category: "explore", rarity: "rare" },
+  { id: 9104, name: "고대 지도 조각", sellPrice: 220, description: "다음 모험을 암시하는 지도 조각", category: "explore", rarity: "epic" },
+  { id: 9105, name: "별빛 유물", sellPrice: 600, description: "희귀한 탐험 전리품", category: "explore", rarity: "legendary" }
+]);
+const SYSTEM_PRODUCTS = Object.freeze([
+  {
+    id: BAIT_ITEM_ID,
+    name: "기본 미끼",
+    price: 20,
+    sellPrice: 10,
+    description: "낚시에 사용하는 기본 미끼",
+    active: true,
+    system: true,
+    category: "bait"
+  },
+  ...EXPLORE_REWARD_ITEMS.map((item) => ({
+    ...item,
+    price: item.sellPrice * 2,
+    active: true,
+    system: true
+  })),
+  ...FISH_SPECIES.flatMap((species, speciesIndex) => FISH_GRADES.map((grade, gradeIndex) => {
+    const id = FISH_ITEM_ID_START + (speciesIndex * FISH_GRADE_COUNT) + gradeIndex;
+    const sellPrice = grade.sellBase + (speciesIndex * grade.sellStep);
+    return {
+      id,
+      name: `${grade.label} ${species}`,
+      price: sellPrice * 2,
+      sellPrice,
+      description: `${grade.label} 등급 낚시 물고기`,
+      active: true,
+      system: true,
+      category: "fish",
+      rarity: grade.id,
+      gradeLabel: grade.label,
+      species
+    };
+  }))
+]);
+const SYSTEM_PRODUCT_MAP = new Map(SYSTEM_PRODUCTS.map((product) => [String(product.id), product]));
 const MAX_LIKE_AMOUNT = 999;
 const STORE_TEMPLATE_VERSION = 2;
 const COMMAND_INSTALL_DRAFT_TTL_MS = 10 * 60 * 1000;
@@ -524,8 +605,8 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "ops-core": ["/상태", "/도움말", "/브릿지", "/js상태", "/메시지", "/날씨", "/운세", "/신고"],
   "attendance-growth": ["/출석", "/미출석", "/출석순위", "/포인트", "/내정보", "/포인트순위"],
   "point-economy": ["/포인트", "/내정보", "/좋아요", "/응원", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위"],
-  "game-chance": ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/포인트"],
-  "shop-inventory": ["/상점", "/구매", "/가방", "/사용", "/가방선물", "/구매내역"],
+  "game-chance": ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/포인트"],
+  "shop-inventory": ["/상점", "/구매", "/가방", "/사용", "/가방선물", "/판매", "/구매내역"],
   "custom-command": ["/명령어목록", "/커스텀명령어", "/고정명령어", "/명령어등록", "/명령어수정", "/명령어삭제", "/커스텀등록", "/커스텀수정", "/커스텀삭제"],
   "profile-history": ["/프로필", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
   "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그", "/신고목록", "/신고처리", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록"],
@@ -536,8 +617,8 @@ const ALL_IN_ONE_PACK_COMMANDS = Object.freeze([...new Set(Object.values(COMMAND
 const LEGACY_PACK_COMMANDS = Object.freeze({
   "basic-ops": ["/도움말", "/메시지", "/프로필"],
   "basic-ops-plus": ["/도움말", "/메시지", "/출석", "/ㅊㅊ", "/미출석", "/포인트", "/내정보", "/출석순위", "/포인트순위", "/레벨순위", "/프로필"],
-  "basic-ops-pro": ["/도움말", "/메시지", "/출석", "/ㅊㅊ", "/미출석", "/포인트", "/내정보", "/출석순위", "/포인트순위", "/레벨순위", "/상점", "/구매", "/구매내역", "/가방", "/사용", "/가방선물", "/프로필"],
-  "addon-mini-games-3": ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝"]
+  "basic-ops-pro": ["/도움말", "/메시지", "/출석", "/ㅊㅊ", "/미출석", "/포인트", "/내정보", "/출석순위", "/포인트순위", "/레벨순위", "/상점", "/구매", "/구매내역", "/가방", "/사용", "/가방선물", "/판매", "/프로필"],
+  "addon-mini-games-3": ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/미끼상점", "/미끼구매", "/어항", "/수족관"]
 });
 
 const LEGACY_OPERATING_CUSTOM_COMMANDS = Object.freeze([
@@ -2490,6 +2571,16 @@ function normalizeInventory(value = {}) {
   return inventory;
 }
 
+function normalizeGameCooldowns(value = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  const cooldowns = {};
+  for (const key of Object.keys(GAME_COOLDOWNS_MS)) {
+    const text = normalizeText(source[key]);
+    if (text && !Number.isNaN(Date.parse(text))) cooldowns[key] = text;
+  }
+  return cooldowns;
+}
+
 function normalizeShopState(value = {}) {
   const shop = value && typeof value === "object" ? value : {};
   const products = Array.isArray(shop.products) ? shop.products : [];
@@ -3153,6 +3244,7 @@ function normalizePersonState(person) {
   person.chats.byDate ||= {};
   person.chats.byWeek ||= {};
   person.inventory = normalizeInventory(person.inventory || {});
+  person.gameCooldowns = normalizeGameCooldowns(person.gameCooldowns || {});
   person.identities ||= [];
   person.firstChatReentryNotices ||= [];
   cleanupReservedPersonHistory(person);
@@ -4984,12 +5076,15 @@ function luckyDrawCommand(roomState, sender) {
       `• 보유 포인트 : ${formatPoint(person.points)}`
     ].join("\n");
   }
+  const cooldown = gameCooldownText(person, "luckyDraw");
+  if (cooldown) return cooldown;
 
   const roll = Math.random();
   const outcome = LUCKY_DRAW_OUTCOMES.find((item) => roll < item.threshold) || LUCKY_DRAW_OUTCOMES.at(-1);
   person.points -= LUCKY_DRAW_POINT_COST;
   person.spentPoints += LUCKY_DRAW_POINT_COST;
   if (outcome.reward > 0) person.points += outcome.reward;
+  markGameCooldown(person, "luckyDraw");
 
   recordRoomEvent(roomState, {
     type: "lucky_draw",
@@ -5030,6 +5125,72 @@ function shopProductById(roomState, productId) {
   const id = Math.max(0, Math.trunc(Number(productId || 0)));
   if (!id) return null;
   return shopState(roomState).products.find((product) => product.id === id) || null;
+}
+
+function systemProductById(productId) {
+  const id = Math.max(0, Math.trunc(Number(productId || 0)));
+  if (!id) return null;
+  return SYSTEM_PRODUCT_MAP.get(String(id)) || null;
+}
+
+function inventoryProductById(roomState, productId) {
+  return shopProductById(roomState, productId) || systemProductById(productId);
+}
+
+function productSellPrice(product) {
+  if (!product) return 0;
+  const explicit = Math.trunc(Number(product.sellPrice || 0));
+  if (explicit > 0) return Math.min(SHOP_MAX_PRICE, explicit);
+  return Math.max(1, Math.floor(Math.trunc(Number(product.price || 0)) * 0.5));
+}
+
+function isFishProductId(productId) {
+  const id = Math.trunc(Number(productId || 0));
+  return id >= FISH_ITEM_ID_START && id < FISH_ITEM_ID_START + FISH_CATALOG_SIZE;
+}
+
+function pickWeightedFishGrade() {
+  const roll = Math.random();
+  let cumulative = 0;
+  for (const grade of FISH_GRADES) {
+    cumulative += grade.chance;
+    if (roll <= cumulative) return grade;
+  }
+  return FISH_GRADES.at(-1);
+}
+
+function fishProductsByGrade(gradeId) {
+  return SYSTEM_PRODUCTS.filter((product) => product.category === "fish" && product.rarity === gradeId);
+}
+
+function randomFishProduct() {
+  const grade = pickWeightedFishGrade();
+  const candidates = fishProductsByGrade(grade.id);
+  return candidates[Math.floor(Math.random() * candidates.length)] || systemProductById(FISH_ITEM_ID_START);
+}
+
+function randomExploreProduct() {
+  const index = Math.floor(Math.random() * EXPLORE_REWARD_ITEMS.length);
+  return systemProductById(EXPLORE_REWARD_ITEMS[index]?.id) || systemProductById(EXPLORE_REWARD_ITEMS[0].id);
+}
+
+function gameCooldownText(person, gameKey) {
+  normalizePersonState(person);
+  const cooldownMs = GAME_COOLDOWNS_MS[gameKey] || 0;
+  if (!cooldownMs) return "";
+  const lastAt = Date.parse(person.gameCooldowns?.[gameKey] || "");
+  if (!Number.isFinite(lastAt)) return "";
+  const remainingMs = cooldownMs - (Date.now() - lastAt);
+  if (remainingMs <= 0) return "";
+  const label = GAME_COOLDOWN_LABELS[gameKey] || "게임은";
+  const seconds = Math.max(1, Math.ceil(remainingMs / 1000));
+  return `${label} ${Math.ceil(cooldownMs / 1000)}초 쿨타임입니다. ${seconds}초 후 다시 시도해주세요.`;
+}
+
+function markGameCooldown(person, gameKey) {
+  normalizePersonState(person);
+  if (!GAME_COOLDOWNS_MS[gameKey]) return;
+  person.gameCooldowns[gameKey] = nowIso();
 }
 
 function activeShopProducts(roomState) {
@@ -5148,16 +5309,119 @@ function purchaseItemCommand(roomState, sender, text) {
   ].join("\n");
 }
 
+function parseProductQuantityCommand(text, pattern) {
+  const body = compactSpaces(text.replace(pattern, ""));
+  if (!body) return null;
+  const match = body.match(/^([0-9]+)(?:\s+([0-9]+))?$/);
+  if (!match) return null;
+  return {
+    productId: Math.trunc(Number(match[1])),
+    quantity: Math.min(SHOP_MAX_QUANTITY, Math.max(1, Math.trunc(Number(match[2] || 1))))
+  };
+}
+
+function baitShopCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const bait = systemProductById(BAIT_ITEM_ID);
+  return [
+    "미끼 상점",
+    "",
+    `${bait.id}. ${bait.name} - ${formatPoint(bait.price)} / 판매가 ${formatPoint(bait.sellPrice)}`,
+    `   ${bait.description}`,
+    "",
+    `보유 포인트: ${formatPoint(person.points)}`,
+    `보유 미끼: ${inventoryQuantity(person, BAIT_ITEM_ID)}개`,
+    "",
+    "/미끼구매 수량 으로 구매합니다."
+  ].join("\n");
+}
+
+function baitPurchaseCommand(roomState, sender, text) {
+  const body = compactSpaces(text.replace(/^\/미끼구매\s*/i, ""));
+  const quantity = Math.min(SHOP_MAX_QUANTITY, Math.max(1, Math.trunc(Number(body || 1))));
+  if (!quantity || (body && String(quantity) !== body.replace(/,/g, ""))) return "형식: /미끼구매 수량";
+  const bait = systemProductById(BAIT_ITEM_ID);
+  const person = ensurePerson(roomState, sender);
+  const totalPrice = bait.price * quantity;
+  if (person.points < totalPrice) {
+    return [
+      "포인트가 부족합니다.",
+      "",
+      `• 필요 포인트 : ${formatPoint(totalPrice)}`,
+      `• 보유 포인트 : ${formatPoint(person.points)}`
+    ].join("\n");
+  }
+  person.points -= totalPrice;
+  person.spentPoints += totalPrice;
+  const currentQuantity = addInventory(person, BAIT_ITEM_ID, quantity);
+  recordShopTransaction(roomState, {
+    type: "bait_purchase",
+    productId: BAIT_ITEM_ID,
+    productName: bait.name,
+    quantity,
+    unitPrice: bait.price,
+    totalPrice,
+    from: person.currentName,
+    to: person.currentName,
+    by: person.currentName
+  });
+  return [
+    "미끼 구매 완료",
+    "",
+    `• 상품 : ${bait.name} x ${quantity}`,
+    `• 사용 포인트 : ${formatPoint(totalPrice)}`,
+    `• 보유 미끼 : ${currentQuantity}개`,
+    `• 남은 포인트 : ${formatPoint(person.points)}`
+  ].join("\n");
+}
+
+function sellItemCommand(roomState, sender, text) {
+  const parsed = parseProductQuantityCommand(text, /^\/판매\s*/i);
+  if (!parsed?.productId || !parsed.quantity) return "형식: /판매 번호 수량";
+  const product = inventoryProductById(roomState, parsed.productId);
+  if (!product) return "판매 가능한 아이템 번호가 아닙니다. /가방 으로 보유 아이템을 확인해주세요.";
+  const unitPrice = productSellPrice(product);
+  if (!unitPrice) return "판매할 수 없는 아이템입니다.";
+  const person = ensurePerson(roomState, sender);
+  const nextQuantity = removeInventory(person, parsed.productId, parsed.quantity);
+  if (nextQuantity < 0) return "판매할 아이템 수량이 부족합니다.";
+  const totalPrice = unitPrice * parsed.quantity;
+  person.points += totalPrice;
+  recordShopTransaction(roomState, {
+    type: "sell",
+    productId: parsed.productId,
+    productName: product.name || `상품 #${parsed.productId}`,
+    quantity: parsed.quantity,
+    unitPrice,
+    totalPrice,
+    from: person.currentName,
+    to: person.currentName,
+    by: person.currentName
+  });
+  return [
+    "판매 완료",
+    "",
+    `• 상품 : ${product.name || `상품 #${parsed.productId}`}`,
+    `• 수량 : ${parsed.quantity}개`,
+    `• 지급 포인트 : ${formatPoint(totalPrice)}`,
+    `• 남은 수량 : ${nextQuantity}개`,
+    `• 보유 포인트 : ${formatPoint(person.points)}`
+  ].join("\n");
+}
+
 function inventoryRows(roomState, person) {
   normalizePersonState(person);
   return Object.entries(person.inventory)
     .map(([productId, quantity]) => {
-      const product = shopProductById(roomState, productId);
+      const product = inventoryProductById(roomState, productId);
       return {
         productId: Number(productId),
         quantity,
         name: product?.name || `삭제된 상품 #${productId}`,
-        active: product?.active !== false
+        active: product?.active !== false,
+        sellPrice: productSellPrice(product),
+        category: product?.category || "shop",
+        rarity: product?.rarity || ""
       };
     })
     .filter((item) => item.quantity > 0)
@@ -5187,16 +5451,61 @@ function inventoryCommand(roomState, sender, text) {
   return [
     `${person.currentName}님의 가방`,
     "",
-    ...rows.map((item) => `${item.productId}. ${item.name} x ${item.quantity}`),
+    ...rows.map((item) => `${item.productId}. ${item.name} x ${item.quantity} / 판매가: ${formatPoint(item.sellPrice)}`),
     "",
-    "/사용 번호 로 아이템을 사용합니다."
+    "/사용 번호 로 아이템을 사용하거나 /판매 번호 수량 으로 판매합니다."
   ].join("\n");
+}
+
+function aquariumCommand(roomState, sender, text) {
+  const query = stripKakaoSuffix(text.replace(/^\/(?:어항|수족관)\s*/i, ""));
+  let target = sender;
+  if (query) {
+    const denied = requireAdmin(roomState, sender);
+    if (denied) return denied;
+    target = query;
+  }
+  const key = existingPersonKey(roomState, target) || (query ? "" : personKey(sender));
+  const person = key ? roomState.people[key] || ensurePerson(roomState, target) : null;
+  if (!person) return `"${target}" 사용자를 찾을 수 없습니다.`;
+  const fishRows = inventoryRows(roomState, person).filter((item) => isFishProductId(item.productId));
+  if (!fishRows.length) {
+    return [
+      `${person.currentName}님의 어항`,
+      "",
+      "보유한 물고기가 없습니다.",
+      "/미끼구매 후 /낚시 로 물고기를 모아보세요."
+    ].join("\n");
+  }
+  const totalQuantity = fishRows.reduce((sum, item) => sum + item.quantity, 0);
+  const totalSellPrice = fishRows.reduce((sum, item) => sum + (item.sellPrice * item.quantity), 0);
+  const gradeCounts = Object.fromEntries(FISH_GRADES.map((grade) => [grade.id, 0]));
+  for (const item of fishRows) {
+    const product = systemProductById(item.productId);
+    if (product?.rarity) gradeCounts[product.rarity] = (gradeCounts[product.rarity] || 0) + item.quantity;
+  }
+  const gradeLine = FISH_GRADES
+    .map((grade) => `${grade.label} ${gradeCounts[grade.id] || 0}`)
+    .join(" / ");
+  return [
+    `${person.currentName}님의 어항`,
+    "",
+    `수집: ${fishRows.length}/${FISH_CATALOG_SIZE}종`,
+    `보유 물고기: ${totalQuantity}마리`,
+    `총 판매가: ${formatPoint(totalSellPrice)}`,
+    `등급별: ${gradeLine}`,
+    "",
+    ...fishRows.slice(0, 20).map((item) => `${item.productId}. ${item.name} x ${item.quantity} / 판매가: ${formatPoint(item.sellPrice)}`),
+    fishRows.length > 20 ? `...외 ${fishRows.length - 20}종` : "",
+    "",
+    "/판매 번호 수량 으로 물고기를 포인트로 판매할 수 있습니다."
+  ].filter((line) => line !== "").join("\n");
 }
 
 function useItemCommand(roomState, sender, text) {
   const productId = parseProductIdFromCommand(text, /^\/사용\s*/i);
   if (!productId) return "형식: /사용 번호";
-  const product = shopProductById(roomState, productId);
+  const product = inventoryProductById(roomState, productId);
   const person = ensurePerson(roomState, sender);
   const nextQuantity = removeInventory(person, productId, 1);
   if (nextQuantity < 0) return "가방에 해당 아이템이 없습니다.";
@@ -5239,7 +5548,7 @@ function giftItemCommand(roomState, sender, text) {
   const receiver = roomState.people[targetKey];
   const nextGiverQuantity = removeInventory(giver, parsed.productId, parsed.quantity);
   if (nextGiverQuantity < 0) return "선물할 아이템 수량이 부족합니다.";
-  const product = shopProductById(roomState, parsed.productId);
+  const product = inventoryProductById(roomState, parsed.productId);
   const receiverQuantity = addInventory(receiver, parsed.productId, parsed.quantity);
   recordShopTransaction(roomState, {
     type: "gift",
@@ -5398,6 +5707,10 @@ function shopTransactionLabel(transaction) {
     purchase: "구매",
     use: "사용",
     gift: "선물",
+    sell: "판매",
+    bait_purchase: "미끼구매",
+    fishing_catch: "낚시획득",
+    game_reward: "게임보상",
     product_added: "상품추가",
     product_updated: "상품수정",
     product_deleted: "상품삭제",
@@ -5496,6 +5809,8 @@ function oddEvenCommand(roomState, sender, text) {
       `• 보유 포인트 : ${formatPoint(person.points)}`
     ].join("\n");
   }
+  const cooldown = gameCooldownText(person, "oddEven");
+  if (cooldown) return cooldown;
 
   const result = Math.random() < 0.5 ? "홀" : "짝";
   const isWin = bet.choice === result;
@@ -5503,6 +5818,7 @@ function oddEvenCommand(roomState, sender, text) {
   person.points -= bet.amount;
   person.spentPoints += bet.amount;
   if (reward > 0) person.points += reward;
+  markGameCooldown(person, "oddEven");
 
   recordRoomEvent(roomState, {
     type: "odd_even",
@@ -5565,10 +5881,13 @@ function transferCommand(roomState, sender, text) {
 
 function diceGameCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const cooldown = gameCooldownText(person, "dice");
+  if (cooldown) return cooldown;
   const settings = gameSettings(roomState);
   const roll = Math.floor(Math.random() * 6) + 1;
   const reward = roll * settings.diceReward;
   person.points += reward;
+  markGameCooldown(person, "dice");
   recordRoomEvent(roomState, { type: "game_dice", name: person.currentName, roll, reward, seasonName: settings.seasonName });
   return [
     "주사위 게임",
@@ -5583,44 +5902,68 @@ function diceGameCommand(roomState, sender) {
 function fishingGameCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
   const settings = gameSettings(roomState);
-  const outcomes = [
-    { name: "작은 물고기", reward: settings.fishingReward },
-    { name: "반짝이는 조개", reward: settings.fishingReward * 2 },
-    { name: "빈 낚싯줄", reward: 0 },
-    { name: "황금 물고기", reward: settings.fishingReward * 5 }
-  ];
-  const item = outcomes[Math.floor(Math.random() * outcomes.length)];
-  person.points += item.reward;
-  recordRoomEvent(roomState, { type: "game_fishing", name: person.currentName, item: item.name, reward: item.reward, seasonName: settings.seasonName });
+  const baitQuantity = inventoryQuantity(person, BAIT_ITEM_ID);
+  if (baitQuantity <= 0) {
+    return [
+      "미끼가 부족합니다.",
+      "",
+      "/미끼상점 에서 가격을 확인하고 /미끼구매 수량 으로 구매해 주세요."
+    ].join("\n");
+  }
+  const cooldown = gameCooldownText(person, "fishing");
+  if (cooldown) return cooldown;
+  removeInventory(person, BAIT_ITEM_ID, 1);
+  const item = randomFishProduct();
+  const itemQuantity = addInventory(person, item.id, 1);
+  markGameCooldown(person, "fishing");
+  recordRoomEvent(roomState, { type: "game_fishing", name: person.currentName, item: item.name, itemId: item.id, reward: item.sellPrice, seasonName: settings.seasonName });
+  recordShopTransaction(roomState, {
+    type: "fishing_catch",
+    productId: item.id,
+    productName: item.name,
+    quantity: 1,
+    unitPrice: item.sellPrice,
+    totalPrice: item.sellPrice,
+    to: person.currentName,
+    by: person.currentName
+  });
   return [
     "낚시 결과",
     `시즌: ${settings.seasonName}`,
     "",
-    `${person.currentName}님이 ${item.name}을(를) 낚았습니다.`,
-    `획득: ${formatPoint(item.reward)}`,
-    `보유: ${formatPoint(person.points)}`
+    `${person.currentName}님이 #${item.id} ${item.name}을(를) 낚았습니다.`,
+    `가방에 보관: ${item.name} x ${itemQuantity}`,
+    `판매가 : ${formatPoint(item.sellPrice)}`,
+    `남은 미끼 : ${inventoryQuantity(person, BAIT_ITEM_ID)}개`
   ].join("\n");
 }
 
 function exploreGameCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const cooldown = gameCooldownText(person, "explore");
+  if (cooldown) return cooldown;
   const settings = gameSettings(roomState);
-  const outcomes = [
-    { name: "숲길 산책", reward: settings.exploreReward },
-    { name: "숨은 보물상자", reward: settings.exploreReward * 3 },
-    { name: "미끄러운 언덕", reward: 0 },
-    { name: "픽셀곰 표식", reward: settings.exploreReward * 2 }
-  ];
-  const item = outcomes[Math.floor(Math.random() * outcomes.length)];
-  person.points += item.reward;
-  recordRoomEvent(roomState, { type: "game_explore", name: person.currentName, item: item.name, reward: item.reward, seasonName: settings.seasonName });
+  const item = randomExploreProduct();
+  const itemQuantity = addInventory(person, item.id, 1);
+  markGameCooldown(person, "explore");
+  recordRoomEvent(roomState, { type: "game_explore", name: person.currentName, item: item.name, itemId: item.id, reward: item.sellPrice, seasonName: settings.seasonName });
+  recordShopTransaction(roomState, {
+    type: "game_reward",
+    productId: item.id,
+    productName: item.name,
+    quantity: 1,
+    unitPrice: item.sellPrice,
+    totalPrice: item.sellPrice,
+    to: person.currentName,
+    by: person.currentName
+  });
   return [
     "탐험 결과",
     `시즌: ${settings.seasonName}`,
     "",
-    `${person.currentName}님: ${item.name}`,
-    `획득: ${formatPoint(item.reward)}`,
-    `보유: ${formatPoint(person.points)}`
+    `${person.currentName}님이 #${item.id} ${item.name}을(를) 발견했습니다.`,
+    `가방에 보관: ${item.name} x ${itemQuantity}`,
+    `판매가 : ${formatPoint(item.sellPrice)}`
   ].join("\n");
 }
 
@@ -5635,17 +5978,20 @@ function gameHelpText(roomState) {
     gameSeasonStatusText(settings),
     gameSeasonPeriodText(settings),
     `주사위 기본 보상: ${formatPoint(settings.diceReward)} x 결과`,
-    `낚시 기본 보상: ${formatPoint(settings.fishingReward)}`,
-    `탐험 기본 보상: ${formatPoint(settings.exploreReward)}`,
+    `낚시: 기본 미끼 1개로 300종 물고기 중 1개 획득`,
+    `탐험: 판매 가능한 전리품 획득`,
     "",
-    "/주사위 - 1~6 결과에 따라 포인트 획득",
-    "/낚시 - 랜덤 보상 획득",
-    "/탐험 - 랜덤 보상 획득",
-    `/뽑기 - 가상 포인트 뽑기 ${formatPoint(LUCKY_DRAW_POINT_COST)}`,
+    "/주사위 - 1~6 결과에 따라 포인트 획득, 10초 쿨타임",
+    "/미끼상점, /미끼구매 수량 - 낚시 미끼 구매",
+    "/낚시 - 물고기를 가방에 보관, 30초 쿨타임",
+    "/어항 또는 /수족관 - 물고기 수집 현황",
+    "/탐험 - 전리품을 가방에 보관, 20초 쿨타임",
+    `/뽑기 - 가상 포인트 뽑기 ${formatPoint(LUCKY_DRAW_POINT_COST)}, 10초 쿨타임`,
     "/뽑기목록 - 뽑기 확률과 보상 확인",
-    "/홀 금액 또는 /짝 금액 - 홀짝 베팅",
+    "/홀 금액 또는 /짝 금액 - 홀짝 베팅, 5초 쿨타임",
+    "/판매 번호 수량 - 가방 아이템을 포인트로 판매",
     "",
-    enabled ? "게임 보상은 가상 포인트로만 지급됩니다." : "관리자가 /기능켜기 게임 을 실행하면 사용할 수 있습니다."
+    enabled ? "게임 보상 아이템은 /가방 에 들어가며 /판매 로 포인트화할 수 있습니다." : "관리자가 /기능켜기 게임 을 실행하면 사용할 수 있습니다."
   ].join("\n");
 }
 
@@ -6118,9 +6464,9 @@ function commandFeatureKey(command) {
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
   if (/^\/(?:프로필|프로칠|프로필등록|프로필삭제|별명등록|별명삭제)(?:\s|$)/.test(command)) return "profiles";
-  if (/^\/(?:게임|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:게임|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
-  if (/^\/(?:상점|구매|구매내역|가방|사용|가방선물|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
+  if (/^\/(?:상점|구매|구매내역|가방|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
   return "";
 }
@@ -6177,11 +6523,15 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/홀", "게임", "홀짝 포인트 베팅", { aliases: ["/짝", "/홀짝"], examples: ["/홀 100", "/짝 100"], requiresFeature: "games", searchableKeywords: ["포인트", "베팅"] }),
   registryEntry("/이체", "포인트", "포인트 이체", { examples: ["/이체 닉네임 100"], requiresFeature: "points" }),
   registryEntry("/포인트순위", "랭킹", "방별 랭킹 확인", { aliases: ["/좋아요순위", "/레벨순위", "/채팅오늘", "/채팅금주"], requiresFeature: "rankings" }),
+  registryEntry("/미끼상점", "게임", "낚시용 미끼 가격 확인", { requiresFeature: "games", searchableKeywords: ["낚시", "미끼", "상점"] }),
+  registryEntry("/미끼구매", "게임", "포인트로 낚시 미끼 구매", { examples: ["/미끼구매 10"], requiresFeature: "games", searchableKeywords: ["낚시", "미끼", "구매"] }),
+  registryEntry("/어항", "게임", "보유 물고기와 수집률 확인", { aliases: ["/수족관"], requiresFeature: "games", searchableKeywords: ["낚시", "물고기", "수집"] }),
   registryEntry("/상점", "상점/가방", "구매 가능한 아이템 확인", { requiresFeature: "shop" }),
   registryEntry("/구매", "상점/가방", "포인트로 아이템 구매", { examples: ["/구매 1"], requiresFeature: "shop" }),
   registryEntry("/가방", "상점/가방", "내 아이템 확인", { requiresFeature: "shop" }),
   registryEntry("/사용", "상점/가방", "아이템 사용", { examples: ["/사용 1"], requiresFeature: "shop" }),
   registryEntry("/가방선물", "상점/가방", "아이템 선물", { examples: ["/가방선물 닉네임 1 1"], requiresFeature: "shop" }),
+  registryEntry("/판매", "상점/가방", "가방 아이템을 포인트로 판매", { examples: ["/판매 10000 1"], requiresFeature: "shop" }),
   registryEntry("/구매내역", "상점/가방", "구매와 아이템 내역", { requiresFeature: "shop" }),
   registryEntry("/게임", "게임", "미니게임 안내", { requiresFeature: "games" }),
   registryEntry("/주사위", "게임", "주사위 보상 게임", { requiresFeature: "games" }),
@@ -8629,7 +8979,10 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/도움말" || command === "/help" || command === "/?") return helpText(roomState, sender);
   if (command === "/게임") return gameHelpText(roomState);
   if (command === "/주사위") return diceGameCommand(roomState, sender);
+  if (command === "/미끼상점") return baitShopCommand(roomState, sender);
+  if (command === "/미끼구매") return baitPurchaseCommand(roomState, sender, text);
   if (command === "/낚시") return fishingGameCommand(roomState, sender);
+  if (command === "/어항" || command === "/수족관") return aquariumCommand(roomState, sender, text);
   if (command === "/탐험") return exploreGameCommand(roomState, sender);
   if (command === "/날씨" || command === "/오늘날씨" || /^\/.+날씨$/u.test(command)) return weatherCommand(roomState, parsed);
   if (command === "/운세" || command === "/오늘운세") return fortuneCommand(roomState, sender, parsed, identity);
@@ -8664,6 +9017,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/가방") return inventoryCommand(roomState, sender, text);
   if (command === "/사용") return useItemCommand(roomState, sender, text);
   if (command === "/가방선물") return giftItemCommand(roomState, sender, text);
+  if (command === "/판매") return sellItemCommand(roomState, sender, text);
   if (command === "/상점추가") return shopAddCommand(roomState, sender, text);
   if (command === "/상점수정") return shopUpdateCommand(roomState, sender, text);
   if (command === "/상점삭제") return shopDeleteCommand(roomState, sender, text);
