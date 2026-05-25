@@ -1,6 +1,6 @@
 {
   "name": "kakao-room-ops-bot",
-  "version": "0.4.68",
+  "version": "0.4.69",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,8 @@
     "check:deploy": "node scripts/predeploy-check.js",
     "smoke:local": "node scripts/smoke-check.js",
     "smoke:prod": "node scripts/smoke-check.js https://pixgom.com",
+    "android:bundle": "node scripts/android-release-bundle.js",
+    "android:release-report": "node scripts/android-release-bundle.js --report-only",
     "test:local": "node scripts/test-local.js",
     "reset": "node scripts/reset-db.js"
   },

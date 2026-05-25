@@ -643,14 +643,15 @@ public class MainActivity extends Activity {
                 if (homeDiagnosticsStatus == null) return;
                 if (result.ok()) {
                     String updateText = result.appUpdateRequired
-                            ? "\n앱 업데이트: 필요"
-                            : "\n앱 업데이트: 최신 또는 사용 가능";
+                            ? "\n앱 업데이트: 필요 - Play 비공개 테스트 최신 빌드로 업데이트하세요."
+                            : "\n앱 업데이트: 사용 가능 - 서버 최소 버전을 충족합니다.";
                     homeDiagnosticsStatus.setText("서버 진단: 정상\n"
                             + "서버 버전: " + result.serverVersion + "\n"
                             + "서버 시간: " + safeText(result.serverTime) + "\n"
                             + "저장소: " + safeText(result.storageLabel) + (result.dbOk ? " 정상" : " 확인 필요") + "\n"
-                            + "앱 최신: " + safeText(result.latestAndroidVersion) + " (" + result.latestAndroidVersionCode + ")\n"
-                            + "앱 최소: " + safeText(result.minAndroidVersion) + " (" + result.minAndroidVersionCode + ")"
+                            + "내 앱: " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")\n"
+                            + "서버 기준 최신: " + safeText(result.latestAndroidVersion) + " (" + result.latestAndroidVersionCode + ")\n"
+                            + "서버 기준 최소: " + safeText(result.minAndroidVersion) + " (" + result.minAndroidVersionCode + ")"
                             + updateText);
                     homeDiagnosticsStatus.setTextColor(result.appUpdateRequired || !result.dbOk ? Color.rgb(184, 111, 28) : Color.rgb(30, 104, 58));
                 } else {

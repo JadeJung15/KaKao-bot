@@ -55,6 +55,7 @@
 - 37차 구독/연결 안정화: 만료 7일/3일/1일 안내, 만료 후 명령어/브릿지 연결 차단, 앱 연결값 오류 안내 정리
 - 38차 백업 안전장치: 백업 JSON 스키마 버전, 복구 dry-run 검증 API/UI, 복구 실패 원인 요약 추가
 - 39차 배포 자동화: 배포 전 필수 검사 스크립트, 배포 후 주요 URL smoke 스크립트, 롤백 기준 문서화
+- 40차 Android 릴리즈 안정화: 1.0.19(20) 비공개 테스트 빌드 기준, 앱/서버 버전 호환 안내, AAB SHA256 출력 스크립트 추가
 
 ## 명령어
 
@@ -292,6 +293,12 @@ https://pixgom.com/chat-event   안드로이드 브릿지 기본 API 주소
 1. Vercel production 배포 후 `npm.cmd run smoke:prod`를 실행합니다.
 2. `/health`, `/command-store`, `/admin`, `/console` 응답과 핵심 문구를 확인합니다.
 3. `/health`의 `version`, `dbStatus.ok`, 신규 feature 플래그가 기대값인지 확인합니다.
+
+Android 비공개 테스트 AAB 기준:
+
+1. Play Console 업로드 트랙은 항상 비공개 테스트(Closed testing)입니다.
+2. `npm.cmd run android:bundle`로 release AAB를 생성하고 SHA256, 경로, versionName/versionCode를 확인합니다.
+3. 빌드만 검증하고 Play Console 약관 동의, 권한 승인, 실제 업로드는 운영자 계정에서 직접 확인합니다.
 
 롤백 기준:
 

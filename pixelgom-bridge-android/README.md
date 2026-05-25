@@ -20,7 +20,7 @@
 | 월 이용금액 | `5,500원` |
 | targetSdk | 35 |
 | 배포 형식 | Android App Bundle `.aab` |
-| 현재 버전 | `1.0.16` / versionCode `17` |
+| 현재 버전 | `1.0.19` / versionCode `20` |
 
 ## 로컬 빌드
 
@@ -31,13 +31,14 @@ $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
 $env:ANDROID_HOME='C:\Users\jadej\AppData\Local\Android\Sdk'
 .\gradlew.bat :app:assembleDebug
 .\gradlew.bat :app:bundleRelease
+npm.cmd run android:release-report
 ```
 
 Release 업로드 전에는 Play Console용 서명 설정을 별도로 연결해야 합니다.
 
 ## Play 업로드 키
 
-Play Console 내부 테스트에 올릴 `.aab`는 디버그 키가 아니라 업로드 키로 서명해야 합니다.
+Play Console 비공개 테스트에 올릴 `.aab`는 디버그 키가 아니라 업로드 키로 서명해야 합니다.
 
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
@@ -50,6 +51,7 @@ Copy-Item .\keystore.properties.example .\keystore.properties
 
 ```powershell
 .\gradlew.bat :app:bundleRelease
+npm.cmd run android:release-report
 ```
 
 `keystore/`, `keystore.properties`, `*.jks`는 Git에 포함하지 않습니다.
@@ -101,6 +103,8 @@ function response(room, msg, sender, isGroupChat, replier, imageDB, packageName)
 ## Play Store 준비
 
 - 개인정보처리방침 URL: `https://pixgom.com/privacy`
+- 업로드 트랙: 비공개 테스트(Closed testing)
+- AAB 생성 후 `npm.cmd run android:release-report`로 경로, versionName, versionCode, SHA256을 확인
 - Data safety: 카카오 알림의 방 이름, 발신자명, 메시지 내용을 서버로 전송한다고 명시
 - 앱 설명에는 "등록된 픽셀곰 운영방 메시지를 운영봇 서버로 전달하는 관리자용 브릿지"라고 제한적으로 설명
 - 접근성 권한은 사용하지 않음

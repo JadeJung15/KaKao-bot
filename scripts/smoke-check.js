@@ -39,7 +39,7 @@ async function json(baseUrl, pathname) {
 
 try {
   const baseUrl = targetArg ? targetArg.replace(/\/+$/, "") : await localBaseUrl();
-  const health = await json(baseUrl, "/health?versionCode=19");
+  const health = await json(baseUrl, "/health?versionCode=20");
   assert(health.ok === true, "/health ok false");
   assert(health.dbStatus?.ok === true, "/health dbStatus not ok");
   assert(Array.isArray(health.features), "/health features missing");
