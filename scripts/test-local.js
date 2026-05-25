@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 
 let server;
+let weatherServer;
 let testDbPath;
 let baseUrl = process.env.TEST_BASE_URL || "";
 const registeredRoomId = "gu25P5vi";
@@ -21,6 +22,34 @@ if (!baseUrl) {
   process.env.OWNER_ADMIN_EMAILS = `owner-${process.pid}@pixgom.test`;
   await unlink(testDbPath).catch(() => {});
 
+  weatherServer = http.createServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({
+      current: {
+        time: "2026-05-25T13:00",
+        temperature_2m: 22.4,
+        apparent_temperature: 23.1,
+        relative_humidity_2m: 61,
+        precipitation: 0,
+        weather_code: 2,
+        wind_speed_10m: 8.4
+      },
+      current_units: {
+        temperature_2m: "°C",
+        apparent_temperature: "°C",
+        relative_humidity_2m: "%",
+        precipitation: "mm",
+        wind_speed_10m: "km/h"
+      },
+      hourly: {
+        time: ["2026-05-25T13:00"],
+        precipitation_probability: [20]
+      }
+    }));
+  });
+  await new Promise((resolve) => weatherServer.listen(0, "127.0.0.1", resolve));
+  process.env.OPEN_METEO_BASE_URL = `http://127.0.0.1:${weatherServer.address().port}/v1/forecast`;
+
   const { requestHandler } = await import("../server.js");
   server = http.createServer(requestHandler);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -29,6 +58,7 @@ if (!baseUrl) {
 
 async function cleanup() {
   if (server) await new Promise((resolve) => server.close(resolve));
+  if (weatherServer) await new Promise((resolve) => weatherServer.close(resolve));
   if (testDbPath) await unlink(testDbPath).catch(() => {});
 }
 
@@ -74,7 +104,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.71");
+  assert.equal(health.json.version, "0.4.72");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -311,7 +341,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.71");
+  assert.equal(commandTemplates.json.version, "0.4.72");
   assert.equal(commandTemplates.json.total, 400);
   assert.equal(commandTemplates.json.templates.length, 400);
   assert.equal(commandTemplates.json.categories.some((category) => category.title === "펫키우기"), true);
@@ -320,6 +350,8 @@ try {
   assert.equal(commandTemplates.json.templates.some((template) => template.trigger === "/출석" && template.kind === "fixed"), true);
   assert.equal(commandTemplates.json.templates.some((template) => template.installable && template.kind === "custom"), true);
   assert.equal(commandTemplates.json.templates.some((template) => template.installable && template.proxyCommand === "/주사위"), true);
+  assert.equal(commandTemplates.json.templates.some((template) => template.kind === "game-template" && !template.proxyCommand && template.installable === false && template.status === "coming_soon"), true);
+  assert.equal(commandTemplates.json.templates.every((template) => template.kind !== "roadmap" || (template.installable === false && template.status === "coming_soon")), true);
   assert.equal(commandTemplates.json.summary.bundles >= 5, true);
   assert.equal(commandTemplates.json.templates.some((template) => template.kind === "bundle" && template.commands?.length > 1), true);
   assert.equal(commandTemplates.json.templates.some((template) => /관리자가 보상, 쿨타임, 확률/.test(template.response || "")), false);
@@ -339,10 +371,12 @@ try {
 
   const consolePageText = await (await fetch(`${baseUrl}/console`)).text();
   assert.match(consolePageText, /구매자 콘솔/);
-  assert.match(consolePageText, /20260525-buyer-onboarding/);
+  assert.match(consolePageText, /20260525-command-search/);
   const buyerConsoleScriptText = await (await fetch(`${baseUrl}/buyer-console.js`)).text();
   assert.match(buyerConsoleScriptText, /buyer-onboarding/);
   assert.match(buyerConsoleScriptText, /처음 시작 체크리스트/);
+  assert.match(buyerConsoleScriptText, /\/api\/buyer\/room-commands/);
+  assert.match(buyerConsoleScriptText, /명령어 검색/);
 
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
@@ -381,7 +415,7 @@ try {
   assert.match(sessionNavText, /nav-logout/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.4.71");
+  assert.equal(packageJson.version, "0.4.72");
   assert.equal(packageJson.scripts["check:deploy"], "node scripts/predeploy-check.js");
   assert.equal(packageJson.scripts["smoke:local"], "node scripts/smoke-check.js");
   assert.equal(packageJson.scripts["smoke:prod"], "node scripts/smoke-check.js https://pixgom.com");
@@ -580,7 +614,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.4.71");
+  assert.equal(adminDiagnostics.json.version, "0.4.72");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -591,7 +625,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.4.71");
+  assert.equal(adminBackup.json.version, "0.4.72");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -779,7 +813,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.71");
+  assert.equal(buyerGuideApproved.json.version, "0.4.72");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -794,7 +828,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.71");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.72");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -848,6 +882,56 @@ try {
   assert.equal(buyerCommands.json.ok, true);
   assert.equal(buyerCommands.json.commands.some((command) => command.trigger === installableTemplate.trigger), true);
   assert.equal(buyerCommands.json.commands.some((command) => command.sourceTemplateId === installableTemplate.id), true);
+
+  const buyerWeatherSearch = await request("/api/buyer/room-commands", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      q: "날씨"
+    })
+  });
+  assert.equal(buyerWeatherSearch.response.status, 200);
+  assert.equal(buyerWeatherSearch.json.ok, true);
+  assert.equal(buyerWeatherSearch.json.roomName, "판매신청방");
+  assert.equal(buyerWeatherSearch.json.items.some((item) => item.command === "/날씨" && item.status === "available"), true);
+  assert.equal(buyerWeatherSearch.json.items.some((item) => item.aliases.includes("/시흥날씨")), true);
+
+  const buyerTemplateSearch = await request("/api/buyer/room-commands", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      q: installableTemplate.trigger
+    })
+  });
+  assert.equal(buyerTemplateSearch.response.status, 200);
+  assert.equal(buyerTemplateSearch.json.items.some((item) => item.command === installableTemplate.trigger && item.installed === true && item.status === "available"), true);
+
+  const buyerComingSoonSearch = await request("/api/buyer/room-commands", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      q: "행운상자"
+    })
+  });
+  assert.equal(buyerComingSoonSearch.response.status, 200);
+  assert.equal(buyerComingSoonSearch.json.items.some((item) => item.status === "coming_soon" && item.available === false), true);
+
+  const adminCommandSearch = await request("/api/admin/room-commands", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({
+      roomName: "판매신청방",
+      q: "관리자"
+    })
+  });
+  assert.equal(adminCommandSearch.response.status, 200);
+  assert.equal(adminCommandSearch.json.items.some((item) => item.command === "/관리자등록" && item.status === "available"), true);
 
   const installedTemplateReply = await chatPayload({
     registeredRoom: false,
@@ -1268,6 +1352,8 @@ try {
   assert.equal(help.response.status, 200);
   assert.match(help.json.template.outputs[0].simpleText.text, /참여자 명령어/);
   assert.match(help.json.template.outputs[0].simpleText.text, /메시지/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /날씨/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /운세/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /최근이벤트/);
   assert.match(help.json.template.outputs[0].simpleText.text, /포인트/);
   assert.match(help.json.template.outputs[0].simpleText.text, /ㅊㅊ/);
@@ -1279,20 +1365,109 @@ try {
   assert.match(help.json.template.outputs[0].simpleText.text, /이체/);
   assert.match(help.json.template.outputs[0].simpleText.text, /응원/);
   assert.match(help.json.template.outputs[0].simpleText.text, /뽑기/);
-  assert.match(help.json.template.outputs[0].simpleText.text, /\/홀 금액/);
+  assert.match(help.json.template.outputs[0].simpleText.text, /\/홀.*예: \/홀 100/);
   assert.match(help.json.template.outputs[0].simpleText.text, /출석/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /프로필등록/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /입퇴장상세/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /관리자등록/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /관리자재설정/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /원본로그/);
+  assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /픽셀곰게임|게임연동/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /구독|라이선스|월 이용금액|5,500원|roomId/);
   assert.doesNotMatch(help.json.template.outputs[0].simpleText.text, /벤치마크|laggobot|라꼬봇/i);
   assert.match(help.json.template.outputs[0].simpleText.text, /가상 포인트/);
 
+  const skillPlainText = await request("/skill", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      userRequest: {
+        timezone: "Asia/Seoul",
+        utterance: "안녕하세요",
+        user: {
+          id: "test-user",
+          type: "accountId",
+          properties: { nickname: "테스터" }
+        }
+      }
+    })
+  });
+  assert.equal(skillPlainText.response.status, 200);
+  assert.equal(skillPlainText.json.template.outputs[0].simpleText.text, "");
+
+  for (const message of [
+    "안녕하세요",
+    "오늘 날씨 어때?",
+    "https://pixgom.com/path/test",
+    "http://example.com/a/b",
+    "2026/05/25",
+    "A/B 테스트",
+    "문장 중간에 /가 들어간 경우",
+    "C:/Users/test",
+    "이미지/파일 경로처럼 보이는 문자열"
+  ]) {
+    const nonCommand = await chat(message, "라우팅사용자", "라우팅검증방");
+    assert.equal(nonCommand.json.reply, null);
+  }
+
+  const bareSlash = await chat("/", "라우팅사용자", "슬래시검증방");
+  assert.equal(bareSlash.json.reply, null);
+
+  const unknownCommand = await chat("/없는명령어", "라우팅사용자", "미등록검증방");
+  assert.match(unknownCommand.json.reply, /등록되지 않은 명령어/);
+  const unknownCommandRepeat = await chat("/또없는명령어", "라우팅사용자", "미등록검증방");
+  assert.equal(unknownCommandRepeat.json.reply, null);
+
+  const weatherWithoutDefault = await chat("/날씨", "날씨사용자", "날씨검증방");
+  assert.match(weatherWithoutDefault.json.reply, /사용법: \/날씨 서울/);
+  const todayWeatherWithoutDefault = await chat("/오늘날씨", "날씨사용자", "오늘날씨검증방");
+  assert.match(todayWeatherWithoutDefault.json.reply, /사용법: \/날씨 서울/);
+  const seoulWeather = await chat("/날씨 서울", "날씨사용자", "날씨검증방");
+  assert.match(seoulWeather.json.reply, /서울 날씨/);
+  assert.match(seoulWeather.json.reply, /현재 기온: 22\.4/);
+  assert.match(seoulWeather.json.reply, /강수: 0mm \/ 가능성 20%/);
+  const siheungWeather = await chat("/시흥날씨", "날씨사용자", "날씨검증방");
+  assert.match(siheungWeather.json.reply, /시흥 날씨/);
+  const dynamicWeather = await chat("/서울날씨", "날씨사용자", "날씨검증방");
+  assert.match(dynamicWeather.json.reply, /서울 날씨/);
+  const unknownWeatherRegion = await chat("/날씨 없는지역", "날씨사용자", "날씨검증방");
+  assert.match(unknownWeatherRegion.json.reply, /지역을 찾을 수 없습니다/);
+  const tooSpecificWeather = await chat("/날씨 서울 강남", "날씨사용자", "날씨검증방");
+  assert.match(tooSpecificWeather.json.reply, /사용법: \/날씨 서울/);
+  if (process.env.OPEN_METEO_BASE_URL) {
+    const originalWeatherBaseUrl = process.env.OPEN_METEO_BASE_URL;
+    process.env.OPEN_METEO_BASE_URL = "http://127.0.0.1:1/v1/forecast";
+    const weatherFailure = await chat("/날씨 서울", "날씨사용자", "날씨실패방");
+    assert.match(weatherFailure.json.reply, /날씨 정보를 불러오지 못했습니다/);
+    const weatherFailureRepeat = await chat("/날씨 서울", "날씨사용자", "날씨실패방");
+    assert.equal(weatherFailureRepeat.json.reply, null);
+    process.env.OPEN_METEO_BASE_URL = originalWeatherBaseUrl;
+  }
+
+  const fortune = await chatPayload({
+    room: "운세검증방",
+    msg: "/운세",
+    sender: "운세사용자",
+    senderId: "fortune-user-1"
+  });
+  assert.match(fortune.json.reply, /오늘의 운세/);
+  assert.match(fortune.json.reply, /전체운:/);
+  assert.match(fortune.json.reply, /조심할 점:/);
+  assert.match(fortune.json.reply, /행운 포인트:/);
+  assert.match(fortune.json.reply, /한 줄 조언:/);
+  const fortuneRepeat = await chatPayload({
+    room: "운세검증방",
+    msg: "/오늘운세",
+    sender: "운세사용자",
+    senderId: "fortune-user-1"
+  });
+  assert.equal(fortuneRepeat.json.reply, fortune.json.reply);
+  const fortuneInvalid = await chat("/운세 테스트", "운세사용자", "운세검증방");
+  assert.match(fortuneInvalid.json.reply, /사용법: \/운세/);
+
   const removedProfileForm = await chat("/공질", "관리자");
   assert.equal(removedProfileForm.response.status, 200);
-  assert.match(removedProfileForm.json.reply, /등록되지 않은 명령어/);
+  assert.equal(removedProfileForm.json.reply === null || /등록되지 않은 명령어/.test(removedProfileForm.json.reply), true);
 
   const privateChat = await chatPayload({
     registeredRoom: false,
@@ -1542,7 +1717,7 @@ try {
   assert.match(customCommandDelete.json.reply, /삭제했습니다/);
 
   const customCommandAfterDelete = await chat("/규칙", "사용자");
-  assert.match(customCommandAfterDelete.json.reply, /등록되지 않은 명령어/);
+  assert.equal(customCommandAfterDelete.json.reply === null || /등록되지 않은 명령어/.test(customCommandAfterDelete.json.reply), true);
 
   const tempAdminRegister = await chat("/관리자등록 임시관리자", "관리자");
   assert.match(tempAdminRegister.json.reply, /관리자로 등록/);
@@ -1906,10 +2081,10 @@ try {
   assert.match(crossRoomRecoverEvents.json.reply, /sender : 이전방닉 남[\s\S]+회원이력 : 현재방닉 남 \(이전닉: 이전방닉 남\)/);
 
   const removedLinkCommand = await chat("/건의방", "사용자");
-  assert.match(removedLinkCommand.json.reply, /등록되지 않은 명령어/);
+  assert.equal(removedLinkCommand.json.reply === null || /등록되지 않은 명령어/.test(removedLinkCommand.json.reply), true);
 
   const removedLinkRegister = await chat("/링크등록 건의방 https://open.kakao.com/o/test", "관리자");
-  assert.match(removedLinkRegister.json.reply, /등록되지 않은 명령어/);
+  assert.equal(removedLinkRegister.json.reply === null || /등록되지 않은 명령어/.test(removedLinkRegister.json.reply), true);
 
   const profileRegister = await chat(`/프로필등록 미미 여 && ☑닉 /성별 : 미미 / 여
 ☑MBTI / 키 : 엔프피 / 153
@@ -2081,13 +2256,22 @@ try {
   assert.match(unreadNotice.json.reply, /읽지 않은 메시지가 1건/);
   assert.match(unreadNotice.json.reply, /\/메시지/);
 
+  const unreadNoticeRepeat = await chat("다시 왔어", "미미 여");
+  assert.equal(unreadNoticeRepeat.json.reply, null);
+
   const inbox = await chat("/메시지", "미미 여");
   assert.match(inbox.json.reply, /💌 미미 여님, 1건의 메시지/);
   assert.match(inbox.json.reply, /보낸사람 : 관리자/);
   assert.match(inbox.json.reply, /미미야 확인해줘/);
 
   const emptyInbox = await chat("/메세지", "미미 여");
-  assert.match(emptyInbox.json.reply, /메시지가 없습니다/);
+  assert.match(emptyInbox.json.reply, /읽지 않은 메시지가 없습니다/);
+
+  await chat("미미야 새로 확인해줘 @미미 여", "관리자");
+  const secondUnreadNotice = await chat("새 메시지 확인", "미미 여");
+  assert.match(secondUnreadNotice.json.reply, /읽지 않은 메시지가 1건/);
+  const secondInbox = await chat("/메시지", "미미 여");
+  assert.match(secondInbox.json.reply, /미미야 새로 확인해줘/);
 
   const firstEntry = await chat("새친구 남님이 들어왔습니다.타인, 기관 등의 사칭에 유의해 주세요.", "오픈채팅봇");
   assert.match(firstEntry.json.reply, /새친구 남님 어서오세요/);
@@ -2149,8 +2333,7 @@ try {
   assert.equal(normalChat.json.handled, false);
 
   const slashHelp = await chat("/", "사용자");
-  assert.match(slashHelp.json.reply, /운영봇 참여자 명령어/);
-  assert.doesNotMatch(slashHelp.json.reply, /등록되지 않은 명령어/);
+  assert.equal(slashHelp.json.reply, null);
 
   const disabledGame = await chat("/낚시", "사용자");
   assert.match(disabledGame.json.reply, /게임 기능은 이 방에서 꺼져/);

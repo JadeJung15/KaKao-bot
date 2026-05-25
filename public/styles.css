@@ -1759,6 +1759,69 @@ a {
   overflow-wrap: anywhere;
 }
 
+.buyer-command-search {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.buyer-command-search-head,
+.buyer-command-search-form,
+.buyer-command-result > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.buyer-command-search-head span,
+.buyer-command-result span,
+.buyer-command-result small {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.buyer-command-search-form input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px 12px;
+  font: inherit;
+}
+
+.buyer-command-results {
+  display: grid;
+  gap: 10px;
+}
+
+.buyer-command-result {
+  display: grid;
+  gap: 7px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(70, 47, 27, 0.12);
+}
+
+.buyer-command-result:first-child {
+  border-top: 0;
+}
+
+.buyer-command-result p {
+  margin: 0;
+  color: var(--text);
+}
+
+.buyer-command-result[data-status="available"] span {
+  color: #1f7a4d;
+}
+
+.buyer-command-result[data-status="coming_soon"] span,
+.buyer-command-result[data-status="install_required"] span {
+  color: #8a5a00;
+}
+
 .buyer-room-card .button {
   margin-top: 14px;
 }

@@ -148,6 +148,7 @@
           <div><dt>커스텀 명령어</dt><dd>${escapeHtml(String(room.commandCount ?? (room.customCommands || []).length))}개 설치됨</dd></div>
         </dl>
         ${renderRoomCommands(room)}
+        ${renderRoomCommandSearch(room)}
         <div class="buyer-card-actions">
           <button class="button button-secondary" type="button" data-copy="${escapeHtml(room.bridgeConnectCode || "")}">연결코드 복사</button>
           <button class="button button-secondary" type="button" data-copy="${escapeHtml(room.licenseKey || "")}">라이선스 복사</button>
@@ -165,6 +166,90 @@
         ${commands.map((command) => `<span>${escapeHtml(command.trigger)} · ${escapeHtml((command.response || "").split(/\n/)[0].slice(0, 22))}</span>`).join("")}
       </div>
     `;
+  }
+
+  function renderRoomCommandSearch(room) {
+    return `
+      <section class="buyer-command-search" data-room-command-search data-application-id="${escapeHtml(room.applicationId || "")}">
+        <div class="buyer-command-search-head">
+          <strong>명령어 검색</strong>
+          <span>${escapeHtml(room.roomName || "선택한 방")} 기준</span>
+        </div>
+        <div class="buyer-command-search-form">
+          <input type="search" data-room-command-query placeholder="날씨, 운세, 메시지, 공지, 관리">
+          <button class="button button-secondary" type="button" data-room-command-submit>검색</button>
+        </div>
+        <div class="buyer-command-results" data-room-command-results>
+          <article class="buyer-empty">이 방에서 사용할 수 있는 명령어를 검색합니다.</article>
+        </div>
+      </section>
+    `;
+  }
+
+  function commandStatusLabel(item) {
+    const labels = {
+      available: "사용 가능",
+      install_required: "설치 필요",
+      admin_only: "관리자 전용",
+      disabled: "비활성화됨",
+      coming_soon: "준비중"
+    };
+    return labels[item.status] || item.status || "확인 필요";
+  }
+
+  function renderCommandSearchResults(container, data, applicationId) {
+    const items = data.items || [];
+    if (!items.length) {
+      container.innerHTML = `<article class="buyer-empty">해당 방에서 사용할 수 있는 명령어를 찾지 못했습니다.</article>`;
+      return;
+    }
+    container.innerHTML = items.slice(0, 30).map((item) => `
+      <article class="buyer-command-result" data-status="${escapeHtml(item.status || "")}">
+        <div>
+          <strong>${escapeHtml(item.command)}</strong>
+          <span>${escapeHtml(commandStatusLabel(item))}</span>
+        </div>
+        <p>${escapeHtml(item.description || "")}</p>
+        <small>${escapeHtml(item.category || "")}${item.aliases?.length ? ` · alias ${escapeHtml(item.aliases.join(", "))}` : ""}${item.disabledReason ? ` · ${escapeHtml(item.disabledReason)}` : ""}</small>
+        <div class="buyer-card-actions">
+          ${item.available ? `<button class="button button-secondary" type="button" data-copy-command="${escapeHtml(item.examples?.[0] || item.command)}">복사</button>` : ""}
+          ${item.status === "install_required" ? `<a class="button button-secondary" href="/command-store?room=${encodeURIComponent(applicationId)}">스토어</a>` : ""}
+        </div>
+      </article>
+    `).join("");
+  }
+
+  async function loadRoomCommandSearch(panel) {
+    const applicationId = panel.dataset.applicationId || "";
+    const query = panel.querySelector("[data-room-command-query]")?.value || "";
+    const results = panel.querySelector("[data-room-command-results]");
+    const token = sessionStorage.getItem("pixgomBuyerToken") || "";
+    if (!applicationId || !token || !results) return;
+    results.innerHTML = `<article class="buyer-empty">명령어를 불러오는 중입니다.</article>`;
+    const response = await fetch("/api/buyer/room-commands", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token, applicationId, q: query })
+    });
+    const data = await response.json();
+    if (!response.ok || data.ok === false) {
+      results.innerHTML = `<article class="buyer-empty">명령어를 불러오지 못했습니다.</article>`;
+      return;
+    }
+    if (data.guideToken) sessionStorage.setItem("pixgomBuyerToken", data.guideToken);
+    renderCommandSearchResults(results, data, applicationId);
+  }
+
+  function bindRoomCommandSearch() {
+    content.querySelectorAll("[data-room-command-search]").forEach((panel) => {
+      const submit = panel.querySelector("[data-room-command-submit]");
+      const input = panel.querySelector("[data-room-command-query]");
+      submit?.addEventListener("click", () => loadRoomCommandSearch(panel));
+      input?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") loadRoomCommandSearch(panel);
+      });
+      loadRoomCommandSearch(panel);
+    });
   }
 
   function renderSetup(rooms = []) {
@@ -260,6 +345,13 @@
         statusBox.textContent = "복사했습니다.";
       });
     });
+    content.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-copy-command]");
+      if (!button) return;
+      await navigator.clipboard.writeText(button.dataset.copyCommand || "");
+      statusBox.textContent = "명령어를 복사했습니다.";
+    });
+    bindRoomCommandSearch();
   }
 
   async function boot() {

@@ -79,6 +79,8 @@
   }
 
   function templateInstallBadge(template) {
+    if (template.status === "coming_soon") return "준비중";
+    if (template.disabledReason) return "설치 불가";
     if (isBundleTemplate(template)) return `${template.commands.length}개 세트 설치`;
     if (template.proxyCommand) return `${template.proxyCommand} 연결`;
     return template.installable ? "바로 사용" : "기본/예약";
@@ -182,7 +184,7 @@
 
   function renderEditor(template) {
     const installDisabledReason = !template.installable
-      ? "고정 명령어는 설치할 수 없습니다."
+      ? (template.disabledReason || "고정 명령어는 설치할 수 없습니다.")
       : !buyerToken
         ? "구매자 로그인 후 설치할 수 있습니다."
         : !buyerRooms.length

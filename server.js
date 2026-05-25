@@ -1,5 +1,5 @@
 import http from "node:http";
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { copyFile, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { existsSync } from "node:fs";
@@ -12,6 +12,7 @@ const ROOM_BRAND_NAME = process.env.ROOM_BRAND_NAME || "픽셀곰";
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "room-ops-db.json");
+const FORTUNE_POOL_PATH = process.env.FORTUNE_POOL_PATH || path.join(DATA_DIR, "fortune-pool.json");
 const STATE_ID = process.env.BOT_STATE_ID || "main";
 const STATIC_CONTENT_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -25,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.71";
+export const APP_VERSION = "0.4.72";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -241,6 +242,11 @@ const SHOP_MAX_QUANTITY = 99;
 const REENTRY_CANDIDATE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const SYSTEM_EVENT_DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
 const JOIN_SIGNAL_WINDOW_MS = 30 * 60 * 1000;
+const UNKNOWN_COMMAND_USER_COOLDOWN_MS = 60 * 1000;
+const UNKNOWN_COMMAND_ROOM_COOLDOWN_MS = 30 * 1000;
+const WEATHER_ERROR_COOLDOWN_MS = 60 * 1000;
+const OPEN_METEO_BASE_URL = process.env.OPEN_METEO_BASE_URL || "https://api.open-meteo.com/v1/forecast";
+const DEFAULT_WEATHER_REGION = normalizeText(process.env.DEFAULT_WEATHER_REGION || "");
 const DEFAULT_JOIN_PHRASE = process.env.DEFAULT_JOIN_PHRASE || "입장확인";
 const DEFAULT_ROOM_FEATURES = Object.freeze({
   attendance: true,
@@ -559,6 +565,81 @@ function commandTemplateSlug(value) {
     .slice(0, 48);
 }
 
+function normalizeCommandToken(value) {
+  const token = compactSpaces(value).split(/\s+/)[0] || "";
+  if (token.startsWith("／")) return `/${token.slice(1)}`;
+  return token;
+}
+
+function slashTokenLooksLikeNonCommand(token) {
+  if (!token.startsWith("/")) return false;
+  if (/^\/+$/.test(token)) return true;
+  if (/^\/?\d{2,4}\/\d{1,2}(?:\/\d{1,2})?$/.test(token)) return true;
+  return false;
+}
+
+function slashTokenLooksLikeCommand(token) {
+  if (token === "/?") return true;
+  return /^\/[0-9A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ_-]{1,31}$/u.test(token);
+}
+
+function parseBotCommand(message) {
+  const rawText = normalizeText(message);
+  const rawFirstLine = normalizeText(rawText.split(/\r?\n/)[0] || "");
+  if (!rawFirstLine) {
+    return { isCommandAttempt: false, command: "", args: [], rawFirstLine, rawText, reason: "empty" };
+  }
+
+  const firstToken = normalizeCommandToken(rawFirstLine);
+  const normalizedFirstLine = firstToken === "ㅊㅊ"
+    ? `/ㅊㅊ${rawFirstLine.slice(firstToken.length)}`
+    : rawFirstLine.replace(/^\s*／/, "/");
+  if (firstToken === "ㅊㅊ") {
+    return { isCommandAttempt: true, command: "/ㅊㅊ", args: [], rawFirstLine, rawText, reason: "short_attendance" };
+  }
+  if (!firstToken.startsWith("/")) {
+    return { isCommandAttempt: false, command: "", args: [], rawFirstLine, rawText, reason: "no_prefix" };
+  }
+  if (slashTokenLooksLikeNonCommand(firstToken)) {
+    return { isCommandAttempt: false, command: "", args: [], rawFirstLine, rawText, reason: "non_command_slash" };
+  }
+  if (!slashTokenLooksLikeCommand(firstToken)) {
+    return { isCommandAttempt: false, command: "", args: [], rawFirstLine, rawText, reason: "invalid_command_token" };
+  }
+
+  const parts = compactSpaces(normalizedFirstLine).split(/\s+/);
+  return {
+    isCommandAttempt: true,
+    command: normalizeCommandToken(parts[0]),
+    args: parts.slice(1),
+    rawFirstLine,
+    rawText,
+    reason: "command"
+  };
+}
+
+const WEATHER_REGIONS = Object.freeze({
+  "시흥": { name: "시흥", latitude: 37.3799, longitude: 126.8031, aliases: ["시흥시"] },
+  "서울": { name: "서울", latitude: 37.5665, longitude: 126.9780, aliases: ["서울시"] },
+  "인천": { name: "인천", latitude: 37.4563, longitude: 126.7052, aliases: ["인천시"] },
+  "수원": { name: "수원", latitude: 37.2636, longitude: 127.0286, aliases: ["수원시"] },
+  "안산": { name: "안산", latitude: 37.3219, longitude: 126.8309, aliases: ["안산시"] },
+  "안양": { name: "안양", latitude: 37.3943, longitude: 126.9568, aliases: ["안양시"] },
+  "부산": { name: "부산", latitude: 35.1796, longitude: 129.0756, aliases: ["부산시"] },
+  "대구": { name: "대구", latitude: 35.8714, longitude: 128.6014, aliases: ["대구시"] },
+  "대전": { name: "대전", latitude: 36.3504, longitude: 127.3845, aliases: ["대전시"] },
+  "광주": { name: "광주", latitude: 35.1595, longitude: 126.8526, aliases: ["광주시"] },
+  "울산": { name: "울산", latitude: 35.5384, longitude: 129.3114, aliases: ["울산시"] },
+  "제주": { name: "제주", latitude: 33.4996, longitude: 126.5312, aliases: ["제주시"] }
+});
+
+const WEATHER_ALIAS_TO_REGION = Object.freeze(Object.fromEntries(
+  Object.values(WEATHER_REGIONS).flatMap((region) => [
+    [keyFor(region.name), region.name],
+    ...(region.aliases || []).map((alias) => [keyFor(alias), region.name])
+  ])
+));
+
 function commandTemplateResponse(category, word, action, serial) {
   const proxyCommand = gameTemplateProxyCommand(category, word);
   if (category.kind === "game-template") {
@@ -655,6 +736,8 @@ function fixedCommandTemplates() {
         editable: false,
         description: "현재 서버에 내장된 고정 명령어입니다. 커스텀 명령어로 덮어쓸 수 없습니다.",
         response: "",
+        status: "available",
+        disabledReason: "",
         tags: [group.title, "고정", audience === "admin" ? "관리자" : "참여자"]
       });
     }
@@ -679,6 +762,8 @@ function generatedCommandTemplates() {
         const commandBase = commandTemplateSlug(`${word}${action}`);
         let trigger = normalizeCustomCommandTrigger(commandBase) || `/템플릿${serial}`;
         if (usedTriggers.has(trigger)) trigger = normalizeCustomCommandTrigger(`${commandBase}-${serial}`) || `/템플릿${serial}`;
+        const proxyCommand = gameTemplateProxyCommand(category, word);
+        const installable = category.kind === "custom" || (category.kind === "game-template" && Boolean(proxyCommand));
         usedTriggers.add(trigger);
         templates.push({
           id: `${category.id}-${String(serial).padStart(3, "0")}`,
@@ -689,17 +774,19 @@ function generatedCommandTemplates() {
           trigger,
           audience: category.audience,
           kind: category.kind,
-          installable: category.kind === "custom" || category.kind === "game-template",
+          installable,
           editable: category.kind !== "fixed",
           description: category.kind === "custom"
             ? "구매자가 문구를 수정해서 방별 커스텀 명령어로 설치할 수 있습니다."
             : category.kind === "game-template"
-              ? (gameTemplateProxyCommand(category, word)
+              ? (proxyCommand
                 ? "설치하면 해당 명령어가 기존 픽셀곰 미니게임 엔진으로 연결됩니다."
-                : "게임 확장용 템플릿입니다. 현재는 안내 문구로 설치할 수 있습니다.")
+                : "게임 확장 준비중 템플릿입니다. 현재는 설치할 수 없습니다.")
               : "AI 기능 후보 템플릿입니다. 실제 자동화 전에는 운영자 검토가 필요합니다.",
           response: commandTemplateResponse(category, word, action, serial),
-          proxyCommand: gameTemplateProxyCommand(category, word),
+          proxyCommand,
+          status: installable ? "available" : "coming_soon",
+          disabledReason: installable ? "" : (category.kind === "roadmap" ? "정책 검토 후 공개 예정입니다." : "아직 실제 실행 기능이 연결되지 않았습니다."),
           tags: [category.title, category.audience === "admin" ? "관리자" : "참여자", category.kind]
         });
         serial += 1;
@@ -744,6 +831,8 @@ function publicCommandTemplate(template) {
     kind: template.kind,
     installable: template.installable,
     editable: template.editable,
+    status: template.status || (template.installable ? "available" : "read_only"),
+    disabledReason: template.disabledReason || "",
     description: template.description,
     response: template.response,
     proxyCommand: template.proxyCommand || "",
@@ -1834,6 +1923,8 @@ function ensureRoom(state, room) {
     people: {},
     admins: [],
     inbox: {},
+    commandRouting: {},
+    unreadNoticeStates: {},
     events: [],
     rawEvents: [],
     peopleByIdentity: {},
@@ -1849,6 +1940,11 @@ function ensureRoom(state, room) {
   roomState.people ||= {};
   roomState.admins ||= [];
   roomState.inbox ||= {};
+  roomState.commandRouting ||= {};
+  roomState.commandRouting.unknownNotices ||= { byUser: {}, byRoom: {} };
+  roomState.commandRouting.unknownNotices.byUser ||= {};
+  roomState.commandRouting.unknownNotices.byRoom ||= {};
+  roomState.unreadNoticeStates ||= {};
   roomState.events ||= [];
   roomState.rawEvents ||= [];
   roomState.peopleByIdentity ||= {};
@@ -2620,6 +2716,34 @@ function requireAdmin(roomState, sender) {
   return adminOnlyMessage();
 }
 
+function unknownCommandNoticeText(roomState, sender, parsedCommand) {
+  if (!parsedCommand?.isCommandAttempt || !parsedCommand.command) return null;
+  if (!slashTokenLooksLikeCommand(parsedCommand.command)) return null;
+
+  roomState.commandRouting ||= {};
+  roomState.commandRouting.unknownNotices ||= { byUser: {}, byRoom: {} };
+  const state = roomState.commandRouting.unknownNotices;
+  state.byUser ||= {};
+  state.byRoom ||= {};
+
+  const now = Date.now();
+  const userKey = personKey(sender) || "unknown";
+  const roomKeyValue = roomKey(roomState.name || "default");
+  const lastUserAt = Number(state.byUser[userKey]?.lastNotifiedAtMs || 0);
+  const lastRoomAt = Number(state.byRoom[roomKeyValue]?.lastNotifiedAtMs || 0);
+  if (now - lastUserAt < UNKNOWN_COMMAND_USER_COOLDOWN_MS) return null;
+  if (now - lastRoomAt < UNKNOWN_COMMAND_ROOM_COOLDOWN_MS) return null;
+
+  const record = {
+    command: parsedCommand.command,
+    lastNotifiedAt: nowIso(),
+    lastNotifiedAtMs: now
+  };
+  state.byUser[userKey] = record;
+  state.byRoom[roomKeyValue] = record;
+  return "등록되지 않은 명령어입니다. /도움말 로 사용 가능한 명령어를 확인해주세요.";
+}
+
 function recordRoomEvent(roomState, event) {
   roomState.events.push({ ...event, at: nowIso() });
   if (roomState.events.length > 500) roomState.events = roomState.events.slice(-500);
@@ -3169,7 +3293,7 @@ function licenseGuardResult(roomState, payload = {}, message = "", registrationC
   if (!license.key) return null;
   const incoming = normalizeLicenseKey(payload.licenseKey || payload.roomLicenseKey || payload.bridgeLicenseKey);
   if (incoming && incoming === license.key) return null;
-  const isCommand = normalizeText(message).startsWith("/");
+  const isCommand = parseBotCommand(message).isCommandAttempt;
   const guidance = incoming
     ? "브릿지 앱 연결값이 이 방과 일치하지 않습니다."
     : "브릿지 앱 연결값이 비어 있습니다.";
@@ -3648,10 +3772,39 @@ function unreadMessages(roomState, sender) {
   return (roomState.inbox?.[key] || []).filter((message) => !message.readAt);
 }
 
+function unreadNoticeStateHash(messages = []) {
+  const latest = messages.at(-1) || {};
+  return `${messages.length}:${latest.id || latest.at || ""}`;
+}
+
+function clearUnreadNoticeState(roomState, key) {
+  if (!key) return;
+  roomState.unreadNoticeStates ||= {};
+  delete roomState.unreadNoticeStates[key];
+}
+
 function unreadNoticeText(roomState, sender) {
+  const key = resolveName(roomState, sender);
   const messages = unreadMessages(roomState, sender);
-  if (!messages.length) return null;
-  const displayName = displayNameForKey(roomState, resolveName(roomState, sender), sender);
+  if (!messages.length) {
+    clearUnreadNoticeState(roomState, key);
+    return null;
+  }
+
+  roomState.unreadNoticeStates ||= {};
+  const stateHash = unreadNoticeStateHash(messages);
+  const previous = roomState.unreadNoticeStates[key];
+  if (previous?.notifiedStateHash === stateHash) return null;
+
+  roomState.unreadNoticeStates[key] = {
+    unreadCount: messages.length,
+    latestUnreadId: messages.at(-1)?.id || "",
+    latestUnreadAt: messages.at(-1)?.at || "",
+    notifiedStateHash: stateHash,
+    lastNotifiedAt: nowIso()
+  };
+
+  const displayName = displayNameForKey(roomState, key, sender);
   return [
     `${displayName}님`,
     `읽지 않은 메시지가 ${messages.length}건 있습니다.`,
@@ -3663,21 +3816,170 @@ function unreadNoticeText(roomState, sender) {
 function messageInboxCommand(roomState, sender) {
   const key = resolveName(roomState, sender);
   const messages = unreadMessages(roomState, sender);
-  if (!messages.length) return "메시지가 없습니다.";
+  if (!messages.length) {
+    clearUnreadNoticeState(roomState, key);
+    return "읽지 않은 메시지가 없습니다.";
+  }
 
   const readAt = nowIso();
-  for (const message of messages) message.readAt = readAt;
+  const visibleMessages = messages.slice(0, 5);
+  for (const message of visibleMessages) message.readAt = readAt;
+  clearUnreadNoticeState(roomState, key);
 
   const displayName = displayNameForKey(roomState, key, sender);
   const lines = [`💌 ${displayName}님, ${messages.length}건의 메시지가 있습니다.`, ""];
-  messages.forEach((message, index) => {
+  visibleMessages.forEach((message, index) => {
     lines.push(`${index + 1}.`);
     lines.push(`‣ 시간 : ${kstDateTime(new Date(message.at))}`);
     lines.push(`‣ 보낸사람 : ${message.from}`);
-    lines.push(`‣ 내용 : ${message.content}`);
-    if (index < messages.length - 1) lines.push("");
+    lines.push(`‣ 내용 : ${previewText(message.content, 180)}`);
+    if (index < visibleMessages.length - 1) lines.push("");
   });
+  const remaining = messages.length - visibleMessages.length;
+  if (remaining > 0) {
+    lines.push("");
+    lines.push(`외 ${remaining}건은 /메시지 를 다시 입력해 확인할 수 있습니다.`);
+  }
   return lines.join("\n");
+}
+
+function weatherUsageText() {
+  return "사용법: /날씨 서울, /날씨 시흥, /오늘날씨, /시흥날씨";
+}
+
+function weatherRegionByName(value) {
+  const key = keyFor(value);
+  const canonical = WEATHER_ALIAS_TO_REGION[key];
+  return canonical ? WEATHER_REGIONS[canonical] : null;
+}
+
+function defaultWeatherRegion(roomState) {
+  const configured = normalizeText(roomState.settings?.defaultWeatherRegion || DEFAULT_WEATHER_REGION);
+  return configured ? weatherRegionByName(configured) : null;
+}
+
+function weatherRegionFromCommand(roomState, parsedCommand) {
+  const command = parsedCommand.command;
+  if (command === "/날씨") {
+    if (parsedCommand.args.length > 1) return { error: weatherUsageText() };
+    if (parsedCommand.args.length === 1) {
+      const region = weatherRegionByName(parsedCommand.args[0]);
+      return region ? { region } : { error: "지역을 찾을 수 없습니다. 예: /날씨 서울" };
+    }
+    const region = defaultWeatherRegion(roomState);
+    return region ? { region } : { error: weatherUsageText() };
+  }
+  if (command === "/오늘날씨") {
+    if (parsedCommand.args.length) return { error: weatherUsageText() };
+    const region = defaultWeatherRegion(roomState);
+    return region ? { region } : { error: weatherUsageText() };
+  }
+  const dynamicMatch = command.match(/^\/(.+)날씨$/u);
+  if (dynamicMatch) {
+    if (parsedCommand.args.length) return { error: weatherUsageText() };
+    const region = weatherRegionByName(dynamicMatch[1]);
+    return region ? { region } : { error: "지역을 찾을 수 없습니다. 예: /날씨 서울" };
+  }
+  return { error: weatherUsageText() };
+}
+
+function weatherCodeText(code) {
+  const value = Number(code);
+  if ([0].includes(value)) return "맑음";
+  if ([1, 2].includes(value)) return "대체로 맑음";
+  if ([3].includes(value)) return "흐림";
+  if ([45, 48].includes(value)) return "안개";
+  if ([51, 53, 55, 56, 57].includes(value)) return "이슬비";
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(value)) return "비";
+  if ([71, 73, 75, 77, 85, 86].includes(value)) return "눈";
+  if ([95, 96, 99].includes(value)) return "뇌우";
+  return "확인 필요";
+}
+
+function weatherErrorText(roomState, regionName) {
+  roomState.commandRouting ||= {};
+  roomState.commandRouting.weatherErrors ||= {};
+  const key = keyFor(regionName || "default");
+  const previous = roomState.commandRouting.weatherErrors[key];
+  const now = Date.now();
+  if (previous?.lastNotifiedAtMs && now - Number(previous.lastNotifiedAtMs) < WEATHER_ERROR_COOLDOWN_MS) return null;
+  roomState.commandRouting.weatherErrors[key] = {
+    lastNotifiedAt: nowIso(),
+    lastNotifiedAtMs: now
+  };
+  return "날씨 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
+}
+
+async function weatherCommand(roomState, parsedCommand) {
+  const resolved = weatherRegionFromCommand(roomState, parsedCommand);
+  if (resolved.error) return resolved.error;
+  const region = resolved.region;
+  try {
+    const url = new URL(process.env.OPEN_METEO_BASE_URL || OPEN_METEO_BASE_URL);
+    url.searchParams.set("latitude", String(region.latitude));
+    url.searchParams.set("longitude", String(region.longitude));
+    url.searchParams.set("current", "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m");
+    url.searchParams.set("hourly", "precipitation_probability");
+    url.searchParams.set("timezone", "Asia/Seoul");
+    const response = await fetch(url, { signal: AbortSignal.timeout(Number(process.env.WEATHER_TIMEOUT_MS || 3500)) });
+    if (!response.ok) throw new Error(`weather_status_${response.status}`);
+    const data = await response.json();
+    const current = data.current || {};
+    const units = data.current_units || {};
+    const hourly = data.hourly || {};
+    const currentHour = normalizeText(current.time).slice(0, 13);
+    const probabilityIndex = Array.isArray(hourly.time)
+      ? hourly.time.findIndex((time) => normalizeText(time).slice(0, 13) === currentHour)
+      : -1;
+    const precipitationProbability = probabilityIndex >= 0 ? hourly.precipitation_probability?.[probabilityIndex] : null;
+    return [
+      `${region.name} 날씨`,
+      `현재 기온: ${current.temperature_2m ?? "-"}${units.temperature_2m || "°C"}`,
+      `체감/습도: ${current.apparent_temperature ?? "-"}${units.apparent_temperature || "°C"} / ${current.relative_humidity_2m ?? "-"}${units.relative_humidity_2m || "%"}`,
+      `상태: ${weatherCodeText(current.weather_code)}`,
+      `강수: ${current.precipitation ?? 0}${units.precipitation || "mm"}${precipitationProbability == null ? "" : ` / 가능성 ${precipitationProbability}%`}`,
+      `풍속: ${current.wind_speed_10m ?? "-"}${units.wind_speed_10m || "km/h"}`,
+      `기준 시각: ${normalizeText(current.time).replace("T", " ") || kstDateTime()}`
+    ].join("\n");
+  } catch {
+    return weatherErrorText(roomState, region.name);
+  }
+}
+
+let fortunePoolCache = null;
+
+async function fortunePool() {
+  if (fortunePoolCache) return fortunePoolCache;
+  const raw = await readFile(FORTUNE_POOL_PATH, "utf8");
+  const parsed = JSON.parse(raw);
+  for (const key of ["flow", "caution", "luck", "advice"]) {
+    if (!Array.isArray(parsed[key]) || !parsed[key].length) throw new Error(`fortune_pool_${key}_missing`);
+  }
+  fortunePoolCache = parsed;
+  return fortunePoolCache;
+}
+
+function hashNumber(value) {
+  return Number.parseInt(createHash("sha256").update(String(value)).digest("hex").slice(0, 12), 16);
+}
+
+function seededPick(items, seed) {
+  return items[hashNumber(seed) % items.length];
+}
+
+async function fortuneCommand(roomState, sender, parsedCommand, identity = {}) {
+  if (parsedCommand.args.length) return "사용법: /운세 또는 /오늘운세";
+  const pool = await fortunePool();
+  const dateKey = kstDateKey();
+  const stableId = normalizeIdentityId(identity.senderId) || `${roomKey(roomState.name)}:${personKey(sender)}`;
+  const seedBase = `${dateKey}:${stableId}`;
+  return [
+    "오늘의 운세",
+    `전체운: ${seededPick(pool.flow, `${seedBase}:flow`)}`,
+    `조심할 점: ${seededPick(pool.caution, `${seedBase}:caution`)}`,
+    `행운 포인트: ${seededPick(pool.luck, `${seedBase}:luck`)}`,
+    `한 줄 조언: ${seededPick(pool.advice, `${seedBase}:advice`)}`
+  ].join("\n");
 }
 
 function formatNumber(value) {
@@ -5175,6 +5477,206 @@ function commandFeatureKey(command) {
   return "";
 }
 
+function registryEntry(command, category, description, options = {}) {
+  return {
+    command,
+    aliases: options.aliases || [],
+    category,
+    description,
+    examples: options.examples || [command],
+    handler: options.handler || "builtin",
+    enabled: options.enabled !== false,
+    visibility: options.visibility || "public",
+    requiresRole: options.requiresRole || null,
+    requiresFeature: options.requiresFeature || null,
+    requiresLicense: options.requiresLicense || null,
+    storeTemplateId: options.storeTemplateId || "",
+    roomScoped: options.roomScoped !== false,
+    searchableKeywords: options.searchableKeywords || []
+  };
+}
+
+const COMMAND_REGISTRY = Object.freeze([
+  registryEntry("/상태", "기본", "서버 연결 상태 확인", { aliases: ["/status"], searchableKeywords: ["서버", "연결"] }),
+  registryEntry("/도움말", "기본", "현재 사용 가능한 명령어 확인", { aliases: ["/help", "/?"], searchableKeywords: ["help", "명령어"] }),
+  registryEntry("/브릿지", "기본", "브릿지 연결 진단", { aliases: ["/bridge"], searchableKeywords: ["연결", "진단"] }),
+  registryEntry("/js상태", "기본", "브릿지 JS 호환 진단", { aliases: ["/jsstatus", "/로컬상태"], searchableKeywords: ["js", "로컬"] }),
+  registryEntry("/메시지", "운영", "내 읽지 않은 메시지함 확인", { aliases: ["/메세지", "/메시지함"], searchableKeywords: ["읽지 않은", "쪽지"] }),
+  registryEntry("/날씨", "날씨", "지역별 실시간 날씨 조회", { aliases: ["/오늘날씨", "/시흥날씨", "/서울날씨"], examples: ["/날씨 서울", "/시흥날씨"], searchableKeywords: ["오늘날씨", "시흥", "서울"] }),
+  registryEntry("/운세", "운세", "날짜와 사용자 기준 오늘의 운세", { aliases: ["/오늘운세"], searchableKeywords: ["오늘운세", "행운"] }),
+  registryEntry("/출석", "출석", "일일 출석 보상", { aliases: ["/출석체크", "/출첵", "/ㅊㅊ"], requiresFeature: "attendance" }),
+  registryEntry("/미출석", "출석", "오늘 미출석 참여자 확인", { requiresFeature: "attendance" }),
+  registryEntry("/출석순위", "출석", "누적 출석 순위", { aliases: ["/출석 순위"], requiresFeature: "rankings", searchableKeywords: ["랭킹"] }),
+  registryEntry("/포인트", "포인트", "내 포인트 확인", { aliases: ["/내포인트"], requiresFeature: "points" }),
+  registryEntry("/내정보", "포인트", "레벨, 포인트, 채팅 정보 확인", { aliases: ["/레벨"], requiresFeature: "points" }),
+  registryEntry("/좋아요", "포인트", "포인트로 하트 보내기", { examples: ["/좋아요 닉네임 10"], requiresFeature: "points", searchableKeywords: ["하트"] }),
+  registryEntry("/응원", "포인트", "포인트 응원 카드 보내기", { examples: ["/응원 닉네임 메시지"], requiresFeature: "points" }),
+  registryEntry("/뽑기", "포인트", "공개 확률 포인트 뽑기", { aliases: ["/확률뽑기"], requiresFeature: "points" }),
+  registryEntry("/뽑기목록", "포인트", "뽑기 확률과 보상 확인", { requiresFeature: "points" }),
+  registryEntry("/홀", "포인트", "홀짝 포인트 베팅", { aliases: ["/짝", "/홀짝"], examples: ["/홀 100", "/짝 100"], requiresFeature: "points" }),
+  registryEntry("/이체", "포인트", "포인트 이체", { examples: ["/이체 닉네임 100"], requiresFeature: "points" }),
+  registryEntry("/포인트순위", "랭킹", "방별 랭킹 확인", { aliases: ["/좋아요순위", "/레벨순위", "/채팅오늘", "/채팅금주"], requiresFeature: "rankings" }),
+  registryEntry("/상점", "상점/가방", "구매 가능한 아이템 확인", { requiresFeature: "shop" }),
+  registryEntry("/구매", "상점/가방", "포인트로 아이템 구매", { examples: ["/구매 1"], requiresFeature: "shop" }),
+  registryEntry("/가방", "상점/가방", "내 아이템 확인", { requiresFeature: "shop" }),
+  registryEntry("/사용", "상점/가방", "아이템 사용", { examples: ["/사용 1"], requiresFeature: "shop" }),
+  registryEntry("/가방선물", "상점/가방", "아이템 선물", { examples: ["/가방선물 닉네임 1 1"], requiresFeature: "shop" }),
+  registryEntry("/구매내역", "상점/가방", "구매와 아이템 내역", { requiresFeature: "shop" }),
+  registryEntry("/게임", "게임", "미니게임 안내", { requiresFeature: "games" }),
+  registryEntry("/주사위", "게임", "주사위 보상 게임", { requiresFeature: "games" }),
+  registryEntry("/낚시", "게임", "낚시 보상 게임", { requiresFeature: "games" }),
+  registryEntry("/탐험", "게임", "탐험 보상 게임", { requiresFeature: "games" }),
+  registryEntry("/명령어목록", "커스텀", "방별 커스텀 명령어 확인", { aliases: ["/커스텀명령어"], requiresFeature: "customCommands" }),
+  registryEntry("/고정명령어", "커스텀", "예약된 기본 명령어 확인", { requiresFeature: "customCommands" }),
+  registryEntry("/프로필", "프로필", "프로필 조회", { aliases: ["/프로칠"], examples: ["/프로필 닉네임"], requiresFeature: "profiles" }),
+  registryEntry("/입퇴장현황", "히스토리", "입퇴장과 닉네임 이력 조회", { aliases: ["/닉이력"], examples: ["/닉이력 닉네임"], requiresFeature: "history" }),
+  registryEntry("/원본로그", "관리자", "최신 원본 JSON 확인", { aliases: ["/원본이벤트"], visibility: "admin", requiresRole: "admin", requiresFeature: "history" }),
+  registryEntry("/최근이벤트", "관리자", "브릿지 원본 이벤트 요약", { aliases: ["/이벤트로그"], visibility: "admin", requiresRole: "admin", requiresFeature: "history" }),
+  registryEntry("/프로필등록", "관리자", "프로필 등록", { aliases: ["/프로필 등록"], visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
+  registryEntry("/프로필삭제", "관리자", "프로필 삭제", { visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
+  registryEntry("/별명등록", "관리자", "별명 등록", { visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
+  registryEntry("/별명삭제", "관리자", "별명 삭제", { visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
+  registryEntry("/입퇴장상세", "관리자", "입퇴장 상세 이력", { visibility: "admin", requiresRole: "admin", requiresFeature: "history" }),
+  registryEntry("/관리자등록", "관리자", "방 관리자 등록", { visibility: "admin", requiresRole: "admin" }),
+  registryEntry("/관리자삭제", "관리자", "방 관리자 삭제", { visibility: "admin", requiresRole: "admin" }),
+  registryEntry("/관리자재설정", "관리자", "방 관리자 목록 재설정", { aliases: ["/관리자초기화"], visibility: "admin", requiresRole: "admin" }),
+  registryEntry("/관리자목록", "관리자", "방 관리자 목록 확인", { visibility: "admin", requiresRole: "admin" }),
+  registryEntry("/고유값초기화", "관리자", "이름 섞임 방지용 고유값 초기화", { visibility: "admin", requiresRole: "admin", requiresFeature: "history" }),
+  registryEntry("/방등록", "관리자", "방 등록", { visibility: "admin", requiresRole: "admin" }),
+  registryEntry("/입장문구", "관리자", "입장확인 문구 설정", { aliases: ["/방설정"], visibility: "admin", requiresRole: "admin" }),
+  registryEntry("/방정보", "관리자", "방 정보와 목록 관리", { aliases: ["/방목록", "/방삭제"], visibility: "admin", requiresRole: "admin" }),
+  registryEntry("/기능목록", "관리자", "방별 기능 ON/OFF 관리", { aliases: ["/기능", "/기능켜기", "/기능끄기"], visibility: "admin", requiresRole: "admin" }),
+  registryEntry("/구독상태", "관리자", "구독 상태 관리", { aliases: ["/구독연장", "/구독만료"], visibility: "admin", requiresRole: "admin" }),
+  registryEntry("/명령어등록", "관리자", "커스텀 명령어 등록과 삭제", { aliases: ["/명령어수정", "/커스텀등록", "/커스텀수정", "/명령어삭제", "/커스텀삭제"], visibility: "admin", requiresRole: "admin", requiresFeature: "customCommands" }),
+  registryEntry("/포인트지급", "관리자", "참여자 포인트 관리", { aliases: ["/포인트차감", "/포인트설정"], visibility: "admin", requiresRole: "admin", requiresFeature: "points" }),
+  registryEntry("/상점추가", "관리자", "상점과 아이템 관리", { aliases: ["/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수"], visibility: "admin", requiresRole: "admin", requiresFeature: "shop" })
+]);
+
+function commandAvailability(item, roomState = null, sender = "", options = {}) {
+  const adminUser = options.isAdminUser ?? (roomState ? isAdmin(roomState, sender) : false);
+  if (item.enabled === false) return { available: false, status: "disabled", disabledReason: "비활성화됨" };
+  if (item.requiresRole === "admin" && !adminUser) return { available: false, status: "admin_only", disabledReason: "관리자 전용" };
+  if (roomState && item.requiresFeature && !featureEnabled(roomState, item.requiresFeature)) {
+    return { available: false, status: "disabled", disabledReason: `${featureLabel(item.requiresFeature)} 기능이 꺼져 있습니다.` };
+  }
+  return { available: true, status: "available", disabledReason: null };
+}
+
+function commandSearchTokens(query = "") {
+  return compactSpaces(query)
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function commandSearchMatches(item, tokens = []) {
+  if (!tokens.length) return true;
+  const haystack = [
+    item.command,
+    ...(item.aliases || []),
+    item.category,
+    item.description,
+    ...(item.examples || []),
+    ...(item.searchableKeywords || []),
+    item.status,
+    item.disabledReason
+  ].join(" ").toLowerCase();
+  return tokens.every((token) => haystack.includes(token));
+}
+
+function commandCatalogItemFromRegistry(item, roomState, sender, options = {}) {
+  const availability = commandAvailability(item, roomState, sender, options);
+  return {
+    command: item.command,
+    aliases: item.aliases || [],
+    category: item.category,
+    description: item.description,
+    examples: item.examples || [item.command],
+    available: availability.available,
+    installed: true,
+    requiresRole: item.requiresRole,
+    requiresLicense: item.requiresLicense,
+    requiresFeature: item.requiresFeature,
+    status: availability.status,
+    disabledReason: availability.disabledReason,
+    source: "registry",
+    searchableKeywords: item.searchableKeywords || []
+  };
+}
+
+function commandCatalogItemFromCustom(command, roomState) {
+  const enabled = featureEnabled(roomState, "customCommands");
+  return {
+    command: command.trigger,
+    aliases: [],
+    category: "방별 커스텀",
+    description: (command.response || "").split(/\n/)[0].slice(0, 80) || "방별 커스텀 명령어",
+    examples: [command.trigger],
+    available: enabled,
+    installed: true,
+    requiresRole: null,
+    requiresLicense: null,
+    requiresFeature: "customCommands",
+    status: enabled ? "available" : "disabled",
+    disabledReason: enabled ? null : `${featureLabel("customCommands")} 기능이 꺼져 있습니다.`,
+    source: "custom",
+    sourceTemplateId: command.sourceTemplateId || "",
+    searchableKeywords: [command.sourceTemplateKind || "", command.proxyCommand || ""].filter(Boolean)
+  };
+}
+
+function commandCatalogItemFromTemplate(template, installedTemplateIds = new Set()) {
+  const installed = installedTemplateIds.has(template.id);
+  const comingSoon = template.status === "coming_soon" || template.installable === false;
+  return {
+    command: template.command || template.trigger,
+    aliases: (template.commands || []).map((command) => command.trigger).filter(Boolean),
+    category: template.categoryTitle || "명령어 스토어",
+    description: template.description || template.title || "",
+    examples: [template.trigger || template.command].filter(Boolean),
+    available: installed && !comingSoon,
+    installed,
+    requiresRole: template.audience === "admin" ? "admin" : null,
+    requiresLicense: null,
+    requiresFeature: template.kind === "game-template" ? "games" : template.kind === "custom" ? "customCommands" : null,
+    status: comingSoon ? "coming_soon" : installed ? "available" : "install_required",
+    disabledReason: comingSoon ? (template.disabledReason || "준비중") : installed ? null : "설치 필요",
+    source: "template",
+    storeTemplateId: template.id,
+    searchableKeywords: [template.title, template.kind, ...(template.tags || [])].filter(Boolean)
+  };
+}
+
+function buildRoomCommandCatalog(state, roomState, account = {}, options = {}) {
+  const query = normalizeText(options.query || options.q);
+  const tokens = commandSearchTokens(query);
+  const sender = options.sender || account.nickname || account.email || "";
+  const isAdminUser = Boolean(options.isAdminUser);
+  const installedCommands = customCommands(roomState);
+  const installedTemplateIds = new Set(installedCommands.map((command) => command.sourceTemplateId).filter(Boolean));
+  const items = [
+    ...COMMAND_REGISTRY.map((item) => commandCatalogItemFromRegistry(item, roomState, sender, { isAdminUser })),
+    ...installedCommands.map((command) => commandCatalogItemFromCustom(command, roomState)),
+    ...COMMAND_TEMPLATES
+      .filter((template) => template.kind !== "fixed")
+      .map((template) => commandCatalogItemFromTemplate(template, installedTemplateIds))
+  ];
+  const filtered = items
+    .filter((item) => isAdminUser || item.source !== "template" || item.requiresRole !== "admin" || item.status === "coming_soon")
+    .filter((item) => commandSearchMatches(item, tokens))
+    .slice(0, 120);
+  return {
+    ok: true,
+    version: APP_VERSION,
+    roomId: roomState.settings?.roomIds?.[0] || "",
+    roomName: roomState.name || "",
+    query,
+    total: filtered.length,
+    items: filtered
+  };
+}
+
 export async function healthPayload(options = {}) {
   const dbStatus = await storageHealthStatus();
   const clientVersionCode = versionCodeFromHealthOptions(options);
@@ -5230,101 +5732,29 @@ function adminDeleteApplication(state, payload = {}) {
   };
 }
 
-function helpText(isAdminUser = false) {
-  const lines = [
-    `${DEFAULT_BOT_NAME} ${isAdminUser ? "관리자 명령어" : "참여자 명령어"}`,
-    "",
-    "기본",
-    "/상태 - 서버 연결 상태 확인",
-    "/도움말 - 현재 명령어 확인",
-    "/브릿지 - 브릿지 연결 진단",
-    "/js상태 - 브릿지 JS 호환 진단",
-    "",
-    "운영",
-    "/메시지 - 내 메시지함 확인",
-    "",
-    "출석",
-    "/출석, /출석체크, /출첵, /ㅊㅊ - 일일 출석 보상",
-    "/미출석 - 기록된 참여자 중 오늘 미출석 확인",
-    "/출석순위 - 누적 출석 순위",
-    "",
-    "포인트",
-    "/포인트, /내포인트 - 내 포인트 확인",
-    "/내정보, /레벨 - 레벨/포인트/채팅 정보",
-    "/좋아요 닉네임 1~999 - 포인트로 하트 보내기",
-    "/응원 닉네임 메시지 - 포인트 응원 카드",
-    "/뽑기 - 공개 확률 포인트 뽑기",
-    "/뽑기목록 - 뽑기 확률과 보상 확인",
-    "/홀 금액, /짝 금액 - 맞히면 x2",
-    "/이체 닉네임 포인트 - 포인트 이체",
-    "/포인트순위, /좋아요순위, /레벨순위",
-    "/채팅오늘, /채팅금주",
-    "",
-    "상점/가방",
-    "/상점 - 구매 가능한 아이템 확인",
-    "/구매 번호 - 포인트로 아이템 구매",
-    "/가방 - 내 아이템 확인",
-    "/사용 번호 - 아이템 사용",
-    "/가방선물 닉네임 번호 수량 - 아이템 선물",
-    "/구매내역 - 내 구매/아이템 내역",
-    "",
-    "게임",
-    "/게임 - 미니게임 안내",
-    "/주사위, /낚시, /탐험",
-    "/게임명령어 - 현재/예약 게임 명령어",
-    "",
-    "커스텀",
-    "/명령어목록 - 방별 커스텀 명령어",
-    "/고정명령어 - 예약된 기본 명령어",
-    "",
-    "프로필",
-    "/프로필 닉네임",
-    "",
-    "히스토리",
-    "/입퇴장현황 닉네임",
-    "/닉이력 닉네임",
-    ""
-  ];
-
-  if (isAdminUser) {
-    lines.push(
-      "관리자",
-      "/원본로그 - 최신 원본 JSON 확인",
-      "/프로필등록 닉네임 && 프로필내용",
-      "/프로필삭제 닉네임",
-      "/별명등록 닉네임 별명",
-      "/별명삭제 별명",
-      "/입퇴장상세 닉네임",
-      "/관리자등록 닉네임",
-      "/관리자삭제 닉네임",
-      "/관리자재설정 닉네임1,닉네임2",
-      "/관리자초기화 - 방 관리자 목록 초기화",
-      "/관리자목록",
-      "/최근이벤트 - 브릿지 원본 이벤트 요약",
-      "/방등록 입장확인문구",
-      "/입장문구 입장확인문구",
-      "/방정보, /방목록, /방삭제",
-      "/기능목록, /기능켜기 출석, /기능끄기 게임",
-      "/구독상태, /구독연장 1, /구독만료 2026-06-30",
-      "/상점추가 상품명 가격 설명",
-      "/상점수정 번호 가격 설명",
-      "/상점삭제 번호, /상점초기화",
-      "/상점내역",
-      "/아이템지급 닉네임 번호 수량",
-      "/아이템회수 닉네임 번호 수량",
-      "/가방 닉네임 - 특정 참여자 가방 확인",
-      "/명령어등록 /공지 내용",
-      "/명령어삭제 /공지",
-      "/고유값초기화 닉네임 - 이름 섞임 방지",
-      "/포인트지급 닉네임 포인트",
-      "/포인트차감 닉네임 포인트",
-      "/포인트설정 닉네임 포인트",
-      ""
-    );
+function helpText(roomStateOrAdmin = false, sender = "") {
+  const roomState = typeof roomStateOrAdmin === "object" && roomStateOrAdmin !== null ? roomStateOrAdmin : null;
+  const isAdminUser = roomState ? isAdmin(roomState, sender) : Boolean(roomStateOrAdmin);
+  const groups = new Map();
+  for (const item of COMMAND_REGISTRY) {
+    const availability = commandAvailability(item, roomState, sender, { isAdminUser });
+    if (!availability.available) continue;
+    if (item.visibility === "admin" && !isAdminUser) continue;
+    if (!groups.has(item.category)) groups.set(item.category, []);
+    groups.get(item.category).push(item);
   }
-
+  const lines = [`${DEFAULT_BOT_NAME} ${isAdminUser ? "관리자 명령어" : "참여자 명령어"}`, ""];
+  for (const [category, items] of groups.entries()) {
+    lines.push(category);
+    for (const item of items) {
+      const aliasText = item.aliases.length ? ` (${item.aliases.join(", ")})` : "";
+      const exampleText = item.examples?.[0] && item.examples[0] !== item.command ? ` 예: ${item.examples[0]}` : "";
+      lines.push(`${item.command}${aliasText} - ${item.description}${exampleText}`);
+    }
+    lines.push("");
+  }
   lines.push("모든 보상과 상점 아이템은 채팅방 가상 포인트로만 사용합니다.");
-  return lines.join("\n");
+  return lines.join("\n").trim();
 }
 
 function kakaoText(text) {
@@ -5967,8 +6397,16 @@ function approvedApplicationForInstall(state, account = {}, body = {}) {
   const applications = approvedBuyerApplications(state, account);
   const applicationId = normalizeText(body.applicationId || body.appId);
   const roomName = normalizeText(body.roomName || body.room);
+  const requestedRoomId = normalizeText(body.roomId);
   if (applicationId) return applications.find((application) => application.id === applicationId) || null;
   if (roomName) return applications.find((application) => keyFor(application.roomName) === keyFor(roomName)) || null;
+  if (requestedRoomId) {
+    return applications.find((application) => {
+      if (normalizeText(application.roomId) === requestedRoomId) return true;
+      const roomState = state.rooms?.[roomKey(application.roomName)];
+      return (roomState?.settings?.roomIds || []).includes(requestedRoomId);
+    }) || null;
+  }
   return applications[0] || null;
 }
 
@@ -6135,6 +6573,35 @@ async function buyerCustomCommandDeleteFromRequest(state, req, body = {}) {
   return { ...result, guideToken: buyerTokenForAccount(auth.account) };
 }
 
+async function buyerRoomCommandsFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const application = approvedApplicationForInstall(state, auth.account, body);
+  if (!application) return { ok: false, status: 404, error: "approved_room_not_found" };
+  const roomState = ensureRoom(state, application.roomName);
+  return {
+    ...buildRoomCommandCatalog(state, roomState, auth.account, {
+      query: body.q || body.query || body.keyword,
+      isAdminUser: false
+    }),
+    room: applicationRoomPayload(state, auth.account, application),
+    guideToken: buyerTokenForAccount(auth.account)
+  };
+}
+
+function roomStateFromAdminRequest(state, body = {}) {
+  const roomName = normalizeText(body.room || body.roomName || body.name);
+  const requestedRoomId = normalizeText(body.roomId);
+  if (roomName) {
+    const direct = state.rooms?.[roomKey(roomName)];
+    if (direct) return direct;
+  }
+  if (requestedRoomId) {
+    return Object.values(state.rooms || {}).find((roomState) => (roomState.settings?.roomIds || []).includes(requestedRoomId)) || null;
+  }
+  return null;
+}
+
 function bridgeConnectFromRequest(state, body = {}) {
   const tokenPayload = verifyTokenPayload(normalizeText(body.code || body.connectCode || body.bridgeConnectCode || body.token));
   if (tokenPayload?.kind !== "bridge-connect" || !tokenPayload.sub || !tokenPayload.app) {
@@ -6241,6 +6708,14 @@ async function handlePublicAccountApi(req, url) {
     const body = await readBody(req);
     const state = await loadState();
     const result = await buyerCustomCommandsFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/room-commands") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerRoomCommandsFromRequest(state, req, body);
     if (!result.ok) return { status: result.status || 401, body: result };
     return { status: 200, body: result };
   }
@@ -6354,6 +6829,16 @@ async function handleAdminApi(req, url) {
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     return { status: 200, body: adminRoomsPayload(state) };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/room-commands") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const roomState = roomStateFromAdminRequest(state, body);
+    if (!roomState) return { status: 404, body: { ok: false, error: "room_not_found" } };
+    return { status: 200, body: buildRoomCommandCatalog(state, roomState, {}, { query: body.q || body.query, isAdminUser: true }) };
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/diagnostics") {
@@ -6494,104 +6979,103 @@ async function handleAdminApi(req, url) {
 async function handleCommand(state, room, sender, message, identity = {}) {
   const roomState = ensureRoom(state, room);
   const text = normalizeText(message);
-  let command = compactSpaces(text);
-  if (command === "ㅊㅊ") command = "/ㅊㅊ";
+  const parsed = parseBotCommand(text);
+  const compactCommand = compactSpaces(text);
+  const command = parsed.command || normalizeCustomCommandTrigger(compactCommand);
+  if (!parsed.isCommandAttempt && !customCommandMatch(roomState, compactCommand)) return null;
 
   if (command === "/상태" || command === "/status") return statusText(room);
   if (command === "/브릿지" || command === "/bridge") return bridgeServerText(room);
   if (command === "/js상태" || command === "/jsstatus") return bridgeJsServerText();
   if (command === "/로컬상태") return `${DEFAULT_BOT_NAME} 자동응답 스크립트가 실행 중입니다. 이제 /상태 를 보내 서버 연결을 확인하세요.`;
-  if (command.startsWith("/방등록")) return roomRegisterCommand(roomState, sender, text, identity.payload || {});
-  if (/^\/(?:방설정|입장문구)(?:\s|$)/.test(command)) return roomJoinPhraseCommand(roomState, sender, text);
+  if (command === "/방등록") return roomRegisterCommand(roomState, sender, text, identity.payload || {});
+  if (/^\/(?:방설정|입장문구)(?:\s|$)/.test(compactCommand)) return roomJoinPhraseCommand(roomState, sender, text);
   if (command === "/방정보") return requireAdmin(roomState, sender) || roomInfoCommand(roomState);
   if (command === "/방목록") return requireAdmin(roomState, sender) || roomListCommand(state);
   if (command === "/방삭제") return roomDeleteCommand(roomState, sender);
   if (command === "/구독상태") return requireAdmin(roomState, sender) || subscriptionStatusCommand(roomState);
-  if (command.startsWith("/구독연장")) return subscriptionExtendCommand(roomState, sender, text);
-  if (command.startsWith("/구독만료")) return subscriptionExpireCommand(roomState, sender, text);
+  if (command === "/구독연장") return subscriptionExtendCommand(roomState, sender, text);
+  if (command === "/구독만료") return subscriptionExpireCommand(roomState, sender, text);
   if (command === "/기능" || command === "/기능목록") return requireAdmin(roomState, sender) || featureSettingsCommand(roomState);
-  if (command.startsWith("/기능켜기 ")) return featureUpdateCommand(roomState, sender, text, true);
-  if (command.startsWith("/기능끄기 ")) return featureUpdateCommand(roomState, sender, text, false);
+  if (command === "/기능켜기") return featureUpdateCommand(roomState, sender, text, true);
+  if (command === "/기능끄기") return featureUpdateCommand(roomState, sender, text, false);
   if (command === "/고정명령어") return fixedCommandCatalogText(isAdmin(roomState, sender));
   if (command === "/게임명령어") return gameCommandCatalogText();
   if (command === "/명령어목록" || command === "/커스텀명령어") return customCommandListText(roomState);
-  if (/^\/(?:명령어등록|명령어수정|커스텀등록|커스텀수정)\s/.test(command)) return customCommandRegisterCommand(roomState, sender, text);
-  if (/^\/(?:명령어삭제|커스텀삭제)\s/.test(command)) return customCommandDeleteCommand(roomState, sender, text);
-  const requiredFeature = commandFeatureKey(command);
+  if (/^\/(?:명령어등록|명령어수정|커스텀등록|커스텀수정)\s/.test(compactCommand)) return customCommandRegisterCommand(roomState, sender, text);
+  if (/^\/(?:명령어삭제|커스텀삭제)\s/.test(compactCommand)) return customCommandDeleteCommand(roomState, sender, text);
+  const requiredFeature = commandFeatureKey(compactCommand);
   if (requiredFeature && !featureEnabled(roomState, requiredFeature)) return featureDisabledText(requiredFeature);
-  if (command === "/" || command === "/도움말" || command === "/help" || command === "/?") return helpText(isAdmin(roomState, sender));
+  if (command === "/도움말" || command === "/help" || command === "/?") return helpText(roomState, sender);
   if (command === "/게임") return gameHelpText(roomState);
   if (command === "/주사위") return diceGameCommand(roomState, sender);
   if (command === "/낚시") return fishingGameCommand(roomState, sender);
   if (command === "/탐험") return exploreGameCommand(roomState, sender);
+  if (command === "/날씨" || command === "/오늘날씨" || /^\/.+날씨$/u.test(command)) return weatherCommand(roomState, parsed);
+  if (command === "/운세" || command === "/오늘운세") return fortuneCommand(roomState, sender, parsed, identity);
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
   if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return requireAdmin(roomState, sender) || recentEventsCommand(state, roomState, sender, text);
   if (/^\/(?:원본로그|원본이벤트)(?:\s|$)/.test(command)) return rawLogCommand(roomState, sender, text);
   if (/^\/(?:출석|출석체크|출첵|ㅊㅊ)$/.test(command)) return attendanceCommand(roomState, sender);
   if (command === "/미출석") return missingAttendanceCommand(roomState);
-  if (/^\/출석\s*순위$|^\/출석순위$/.test(command)) return attendanceRankingCommand(roomState, sender);
+  if (/^\/출석\s*순위$|^\/출석순위$/.test(compactCommand)) return attendanceRankingCommand(roomState, sender);
   if (/^\/(?:포인트안내|포인트규칙)$/.test(command)) return pointGuideText();
-  if (/^\/포인트\s*순위$|^\/포인트순위$/.test(command)) return rankingText(roomState, sender, "points");
-  if (/^\/좋아요\s*순위$|^\/좋아요순위$/.test(command)) return rankingText(roomState, sender, "likes");
-  if (/^\/레벨\s*순위$|^\/레벨순위$/.test(command)) return rankingText(roomState, sender, "levels");
+  if (/^\/포인트\s*순위$|^\/포인트순위$/.test(compactCommand)) return rankingText(roomState, sender, "points");
+  if (/^\/좋아요\s*순위$|^\/좋아요순위$/.test(compactCommand)) return rankingText(roomState, sender, "likes");
+  if (/^\/레벨\s*순위$|^\/레벨순위$/.test(compactCommand)) return rankingText(roomState, sender, "levels");
   if (command === "/채팅오늘") return rankingText(roomState, sender, "todayChats");
   if (command === "/채팅금주") return rankingText(roomState, sender, "weekChats");
-  if (command.startsWith("/포인트지급 ")) return adminPointAdjustCommand(roomState, sender, text, "grant");
-  if (command.startsWith("/포인트차감 ")) return adminPointAdjustCommand(roomState, sender, text, "debit");
-  if (command.startsWith("/포인트설정 ")) return adminPointAdjustCommand(roomState, sender, text, "set");
+  if (command === "/포인트지급") return adminPointAdjustCommand(roomState, sender, text, "grant");
+  if (command === "/포인트차감") return adminPointAdjustCommand(roomState, sender, text, "debit");
+  if (command === "/포인트설정") return adminPointAdjustCommand(roomState, sender, text, "set");
   if (/^\/(?:포인트|내포인트)(?:\s|$)/.test(command)) return pointViewCommand(roomState, text, sender);
-  if (command.startsWith("/좋아요 ")) return likeCommand(roomState, sender, text);
-  if (command.startsWith("/응원 ")) return cheerCommand(roomState, sender, text);
+  if (command === "/좋아요") return likeCommand(roomState, sender, text);
+  if (command === "/응원") return cheerCommand(roomState, sender, text);
   if (command === "/뽑기목록") return luckyDrawCatalogText();
   if (command === "/확률뽑기" || command === "/뽑기") return luckyDrawCommand(roomState, sender);
-  if (command.startsWith("/홀짝") || /^\/(?:홀|짝)(?:\s|$)/.test(command)) return oddEvenCommand(roomState, sender, text);
-  if (command.startsWith("/이체 ")) return transferCommand(roomState, sender, text);
+  if (command === "/홀짝" || /^\/(?:홀|짝)(?:\s|$)/.test(command)) return oddEvenCommand(roomState, sender, text);
+  if (command === "/이체") return transferCommand(roomState, sender, text);
   if (command === "/상점") return shopListCommand(roomState, sender);
-  if (command.startsWith("/구매 ")) return purchaseItemCommand(roomState, sender, text);
+  if (command === "/구매") return purchaseItemCommand(roomState, sender, text);
   if (command === "/구매내역") return purchaseHistoryCommand(roomState, sender);
-  if (command === "/가방" || command.startsWith("/가방 ")) return inventoryCommand(roomState, sender, text);
-  if (command.startsWith("/사용 ")) return useItemCommand(roomState, sender, text);
-  if (command.startsWith("/가방선물 ")) return giftItemCommand(roomState, sender, text);
-  if (command.startsWith("/상점추가 ")) return shopAddCommand(roomState, sender, text);
-  if (command.startsWith("/상점수정 ")) return shopUpdateCommand(roomState, sender, text);
-  if (command.startsWith("/상점삭제 ")) return shopDeleteCommand(roomState, sender, text);
+  if (command === "/가방") return inventoryCommand(roomState, sender, text);
+  if (command === "/사용") return useItemCommand(roomState, sender, text);
+  if (command === "/가방선물") return giftItemCommand(roomState, sender, text);
+  if (command === "/상점추가") return shopAddCommand(roomState, sender, text);
+  if (command === "/상점수정") return shopUpdateCommand(roomState, sender, text);
+  if (command === "/상점삭제") return shopDeleteCommand(roomState, sender, text);
   if (command === "/상점초기화") return shopResetCommand(roomState, sender);
   if (command === "/상점내역") return shopHistoryCommand(roomState, sender);
-  if (command.startsWith("/아이템지급 ")) return adminItemTransferCommand(roomState, sender, text, "grant");
-  if (command.startsWith("/아이템회수 ")) return adminItemTransferCommand(roomState, sender, text, "revoke");
-  if (/^\/(?:내정보|레벨)(?:\s|$)/.test(command) || command.startsWith("/정보 ")) return memberInfoCommand(roomState, text, sender);
-  if (command.startsWith("/관리자등록 ")) return adminRegisterCommand(roomState, sender, text);
-  if (command.startsWith("/관리자삭제 ")) return adminDeleteCommand(roomState, sender, text);
+  if (command === "/아이템지급") return adminItemTransferCommand(roomState, sender, text, "grant");
+  if (command === "/아이템회수") return adminItemTransferCommand(roomState, sender, text, "revoke");
+  if (/^\/(?:내정보|레벨)(?:\s|$)/.test(command) || command === "/정보") return memberInfoCommand(roomState, text, sender);
+  if (command === "/관리자등록") return adminRegisterCommand(roomState, sender, text);
+  if (command === "/관리자삭제") return adminDeleteCommand(roomState, sender, text);
   if (/^\/(?:관리자재설정|관리자초기화)(?:\s|$)/.test(command)) return adminResetCommand(roomState, sender, text);
   if (command === "/관리자목록") return adminListCommand(roomState);
   if (/^\/고유값초기화(?:\s|$)/.test(command)) return identityResetCommand(roomState, sender, text, identity);
-  if (command.startsWith("/프로필등록 ") || command.startsWith("/프로필 등록 ")) {
+  if (command === "/프로필등록" || /^\/프로필\s+등록(?:\s|$)/.test(compactCommand)) {
     return requireAdmin(roomState, sender) || profileRegisterCommand(roomState, sender, text);
   }
-  if (command.startsWith("/프로필삭제 ")) return requireAdmin(roomState, sender) || profileDeleteCommand(roomState, text);
-  if (command.startsWith("/프로필 ") || command === "/프로필" || command.startsWith("/프로칠 ")) return profileViewCommand(roomState, text, sender);
-  if (command.startsWith("/별명등록 ")) return requireAdmin(roomState, sender) || aliasRegisterCommand(roomState, sender, text);
-  if (command.startsWith("/별명삭제 ")) return requireAdmin(roomState, sender) || aliasDeleteCommand(roomState, text);
-  if (command.startsWith("/입퇴장상세")) {
+  if (command === "/프로필삭제") return requireAdmin(roomState, sender) || profileDeleteCommand(roomState, text);
+  if (command === "/프로필" || command === "/프로칠") return profileViewCommand(roomState, text, sender);
+  if (command === "/별명등록") return requireAdmin(roomState, sender) || aliasRegisterCommand(roomState, sender, text);
+  if (command === "/별명삭제") return requireAdmin(roomState, sender) || aliasDeleteCommand(roomState, text);
+  if (command === "/입퇴장상세") {
     const denied = requireAdmin(roomState, sender);
     if (denied) return denied;
     const query = text.replace(/^\/입퇴장상세\s*/i, "");
     return personDetailedHistoryText(roomState, query, sender);
   }
-  if (command.startsWith("/입퇴장현황") || command.startsWith("/닉이력")) {
+  if (command === "/입퇴장현황" || command === "/닉이력") {
     const query = text.replace(/^\/(?:입퇴장현황|닉이력)\s*/i, "");
     return personHistoryText(roomState, query, sender);
   }
 
-  const customReply = customCommandReply(roomState, command, sender);
+  const customReply = customCommandReply(roomState, compactCommand, sender);
   if (customReply) return customReply;
 
-  if (command.startsWith("/")) {
-    return [
-      "아직 등록되지 않은 명령어입니다.",
-      "/도움말 로 현재 사용 가능한 명령어를 확인해주세요."
-    ].join("\n");
-  }
+  if (parsed.isCommandAttempt) return unknownCommandNoticeText(roomState, sender, parsed);
 
   return null;
 }
@@ -6601,8 +7085,9 @@ async function handleMessage(state, room, sender, message, identity = {}, detect
   const text = normalizeText(message);
   const event = detectedEvent || detectSystemEvent(message);
   const targetIdentity = identity.targetUserId || "";
+  const parsed = parseBotCommand(text);
   const isCustomCommand = Boolean(customCommandMatch(roomState, text));
-  const isCommand = text.startsWith("/") || compactSpaces(text) === "ㅊㅊ" || isCustomCommand;
+  const isCommand = parsed.isCommandAttempt || isCustomCommand;
   if (isSubscriptionExpired(roomState) && !subscriptionBypassCommand(text)) {
     return isCommand ? subscriptionExpiredText(roomState) : null;
   }
@@ -6630,9 +7115,9 @@ export async function handleSkill(payload) {
   const room = "카카오스킬";
   const sender = normalizeText(payload?.userRequest?.user?.properties?.nickname) || "스킬사용자";
   const roomState = ensureRoom(state, room);
-  const reply = (await handleCommand(state, room, sender, utterance)) || helpText(isAdmin(roomState, sender));
+  const reply = await handleCommand(state, room, sender, utterance);
   await saveState(state);
-  return kakaoText(reply);
+  return kakaoText(reply || "");
 }
 
 export async function handleChatEvent(payload) {
@@ -6711,6 +7196,7 @@ export async function requestHandler(req, res) {
       || pathname === "/api/buyer/console"
       || pathname === "/api/buyer/command-templates/install"
       || pathname === "/api/buyer/custom-commands"
+      || pathname === "/api/buyer/room-commands"
       || pathname === "/api/buyer/custom-commands/delete"
       || pathname === "/api/bridge/connect";
 

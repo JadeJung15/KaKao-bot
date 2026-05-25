@@ -54,12 +54,15 @@ try {
   const consolePage = await text(baseUrl, "/console");
   assert(consolePage.includes("구매자 콘솔") || consolePage.includes("픽셀곰 콘솔"), "/console content missing");
 
+  const myRooms = await text(baseUrl, "/my-rooms");
+  assert(myRooms.includes("내 방") || myRooms.includes("구매자 콘솔"), "/my-rooms content missing");
+
   console.log(JSON.stringify({
     ok: true,
     baseUrl,
     version: health.version,
     dbStatus: health.dbStatus.status || health.dbStatus.type,
-    checked: ["/health", "/command-store", "/admin", "/console"]
+    checked: ["/health", "/command-store", "/admin", "/console", "/my-rooms"]
   }, null, 2));
 } catch (error) {
   console.error(error.message);
