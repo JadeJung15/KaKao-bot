@@ -27,6 +27,72 @@
     return `정상 ${remaining}일 남음`;
   }
 
+  function statusText(ok, waitingText, doneText) {
+    return ok ? doneText : waitingText;
+  }
+
+  function onboardingSteps(data) {
+    const applications = data.applications || [];
+    const rooms = data.rooms || [];
+    const approved = rooms.length > 0;
+    const hasApplication = applications.length > 0;
+    const hasConnectCode = rooms.some((room) => room.bridgeConnectCode);
+    return [
+      {
+        title: "회원 로그인",
+        ok: true,
+        detail: data.account?.email || data.account?.nickname || "로그인 완료"
+      },
+      {
+        title: "서비스 신청",
+        ok: hasApplication,
+        detail: statusText(hasApplication, "아직 신청 내역이 없습니다.", `${applications.length}건 확인`)
+      },
+      {
+        title: "운영자 승인",
+        ok: approved,
+        detail: statusText(approved, "입금 확인 후 승인됩니다.", `${rooms.length}개 방 승인됨`)
+      },
+      {
+        title: "앱 연결코드",
+        ok: hasConnectCode,
+        detail: statusText(hasConnectCode, "승인 후 방별 연결코드가 표시됩니다.", "복사 가능")
+      },
+      {
+        title: "앱 설치/권한",
+        ok: approved,
+        detail: approved ? "브릿지 앱에서 연결코드를 입력하세요." : "승인 후 설치 순서가 열립니다."
+      }
+    ];
+  }
+
+  function renderOnboarding(data) {
+    const steps = onboardingSteps(data);
+    return `
+      <section class="buyer-onboarding" aria-label="처음 시작 체크리스트">
+        <div class="buyer-onboarding-head">
+          <div>
+            <p class="section-kicker">Start</p>
+            <h2>처음 시작 체크리스트</h2>
+            <p>구매자가 지금 어디까지 완료됐는지 한눈에 확인합니다.</p>
+          </div>
+          <a class="button button-secondary" href="/setup">설치 안내 보기</a>
+        </div>
+        <div class="buyer-step-grid">
+          ${steps.map((step, index) => `
+            <article class="buyer-step-card" data-state="${step.ok ? "done" : "waiting"}">
+              <strong>${index + 1}</strong>
+              <div>
+                <h3>${escapeHtml(step.title)}</h3>
+                <p>${escapeHtml(step.detail)}</p>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
   async function requestConsole(payload = {}) {
     const response = await fetch("/api/buyer/console", {
       method: "POST",
@@ -74,7 +140,10 @@
           <div><dt>관리자</dt><dd>${escapeHtml((room.roomAdmins || []).join(", ") || room.adminName || "미등록")}</dd></div>
           <div><dt>라이선스 키</dt><dd><code>${escapeHtml(room.licenseKey || "승인 후 발급")}</code></dd></div>
           <div><dt>앱 연결코드</dt><dd><code>${escapeHtml(room.bridgeConnectCode || "승인 후 발급")}</code></dd></div>
-          <div><dt>커스텀 명령어</dt><dd>${escapeHtml(String((room.customCommands || []).length))}개 설치됨</dd></div>
+          <div><dt>라이선스 상태</dt><dd>${escapeHtml(room.licenseStatus || "확인 필요")}</dd></div>
+          <div><dt>브릿지 상태</dt><dd>${escapeHtml(room.bridgeStatus === "ready" ? "연결 준비 완료" : "앱 연결 필요")}</dd></div>
+          <div><dt>구독 상태</dt><dd>${escapeHtml(room.subscriptionStatus || room.subscription?.status || "확인 필요")}</dd></div>
+          <div><dt>커스텀 명령어</dt><dd>${escapeHtml(String(room.commandCount ?? (room.customCommands || []).length))}개 설치됨</dd></div>
         </dl>
         ${renderRoomCommands(room)}
         <div class="buyer-card-actions">
@@ -160,6 +229,7 @@
         <a href="/setup">설치</a>
         <a href="/license">라이선스</a>
       </nav>
+      ${renderOnboarding(data)}
       <section class="${sectionClass("overview")}">
         <h2>신청 상태</h2>
         <div class="buyer-mini-grid">${renderApplications(data.applications || [])}</div>
@@ -196,11 +266,18 @@
     if (kakaoButton) kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
     const savedToken = sessionStorage.getItem("pixgomBuyerToken");
     if (savedToken) {
-      requestConsole({ token: savedToken }).catch(() => sessionStorage.removeItem("pixgomBuyerToken"));
+      requestConsole({ token: savedToken }).catch((error) => {
+        sessionStorage.removeItem("pixgomBuyerToken");
+        statusBox.innerHTML = `세션이 만료되었습니다. 다시 로그인해 주세요. <a href="/login">로그인 화면</a>`;
+      });
       return;
     }
     const payload = await window.PixelgomAuth.accessPayload({});
-    if (payload.accessToken) requestConsole(payload).catch(() => {});
+    if (payload.accessToken) {
+      requestConsole(payload).catch((error) => {
+        statusBox.innerHTML = `콘솔 접근 실패: ${escapeHtml(error.message)} <a href="/login">재로그인</a>`;
+      });
+    }
   }
 
   form?.addEventListener("submit", async (event) => {

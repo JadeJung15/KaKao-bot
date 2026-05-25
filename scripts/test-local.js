@@ -74,7 +74,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.62");
+  assert.equal(health.json.version, "0.4.63");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -172,6 +172,8 @@ try {
   assert.match(health.json.features.join(","), /health-db-status-cards/);
   assert.match(health.json.features.join(","), /bridge-home-diagnostics/);
   assert.match(health.json.features.join(","), /bridge-log-share-action/);
+  assert.match(health.json.features.join(","), /buyer-console-onboarding/);
+  assert.match(health.json.features.join(","), /buyer-room-status-fields/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.additionalRoomPriceKrw, 2200);
   assert.equal(health.json.adminConsoleEnabled, true);
@@ -215,6 +217,7 @@ try {
   assert.match(homeText, /주사위/);
   assert.match(homeText, /커스텀 명령어/);
   assert.match(homeText, /업데이트 기록/);
+  assert.match(homeText, /0\.4\.63/);
   assert.match(homeText, /0\.4\.62/);
   assert.match(homeText, /0\.4\.61/);
   assert.match(homeText, /0\.4\.51/);
@@ -267,7 +270,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.62");
+  assert.equal(commandTemplates.json.version, "0.4.63");
   assert.equal(commandTemplates.json.total, 400);
   assert.equal(commandTemplates.json.templates.length, 400);
   assert.equal(commandTemplates.json.categories.some((category) => category.title === "펫키우기"), true);
@@ -290,6 +293,13 @@ try {
   assert.match(statusPageText, /data-status-app-version/);
   assert.match(statusPageText, /추가 방/);
   assert.doesNotMatch(statusPageText, /"features"/);
+
+  const consolePageText = await (await fetch(`${baseUrl}/console`)).text();
+  assert.match(consolePageText, /구매자 콘솔/);
+  assert.match(consolePageText, /20260525-buyer-onboarding/);
+  const buyerConsoleScriptText = await (await fetch(`${baseUrl}/buyer-console.js`)).text();
+  assert.match(buyerConsoleScriptText, /buyer-onboarding/);
+  assert.match(buyerConsoleScriptText, /처음 시작 체크리스트/);
 
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
@@ -634,7 +644,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.62");
+  assert.equal(buyerGuideApproved.json.version, "0.4.63");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -649,12 +659,16 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.62");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.63");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
   assert.equal(buyerConsoleApproved.json.plan.additionalRoomPriceKrw, 2200);
   assert.equal(buyerConsoleApproved.json.commandStore.total, 400);
+  assert.equal(buyerConsoleApproved.json.rooms[0].licenseStatus, "active");
+  assert.equal(buyerConsoleApproved.json.rooms[0].subscriptionStatus, "active");
+  assert.equal(buyerConsoleApproved.json.rooms[0].bridgeStatus, "ready");
+  assert.equal(buyerConsoleApproved.json.rooms[0].commandCount, 0);
 
   const fixedTemplate = commandTemplates.json.templates.find((template) => template.trigger === "/출석");
   const fixedTemplateInstall = await request("/api/buyer/command-templates/install", {

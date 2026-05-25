@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.62";
+export const APP_VERSION = "0.4.63";
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -144,7 +144,9 @@ export const FEATURES = [
   "server-version-diagnostics",
   "health-db-status-cards",
   "bridge-home-diagnostics",
-  "bridge-log-share-action"
+  "bridge-log-share-action",
+  "buyer-console-onboarding",
+  "buyer-room-status-fields"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -1654,6 +1656,15 @@ function approvedBuyerApplications(state, account = {}) {
 function applicationRoomPayload(state, account = {}, application = {}) {
   const roomState = state.rooms?.[roomKey(application.roomName)];
   const roomView = roomState ? roomAdminView(roomState) : null;
+  const licenseKey = application.licenseKey || roomView?.licenseKey || "";
+  const subscription = roomView?.subscription || application.plan || {};
+  const customCommands = roomView?.customCommands || [];
+  const bridgeConnectCode = bridgeConnectCodeForApplication(account, application);
+  const subscriptionStatus = subscription.status || (application.status === "approved" ? "active" : "pending");
+  const licenseStatus = licenseKey ? roomView?.licenseStatus || "active" : "missing";
+  const bridgeStatus = bridgeConnectCode && licenseKey && (application.roomId || roomView?.roomIds?.[0])
+    ? "ready"
+    : "needs_setup";
   return {
     applicationId: application.id || "",
     roomName: application.roomName || "",
@@ -1661,15 +1672,19 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     roomLink: application.roomLink || roomView?.roomLinks?.[0] || "",
     adminName: application.adminName || "",
     joinPhrase: roomView?.joinPhrase || DEFAULT_JOIN_PHRASE,
-    licenseKey: application.licenseKey || roomView?.licenseKey || "",
+    licenseKey,
+    licenseStatus,
+    subscriptionStatus,
+    bridgeStatus,
     roomAdmins: roomView?.admins?.length ? roomView.admins : [application.adminName].filter(Boolean),
     features: roomView?.features || DEFAULT_ROOM_FEATURES,
-    customCommands: roomView?.customCommands || [],
+    customCommands,
+    commandCount: customCommands.length,
     gameSettings: roomView?.gameSettings || DEFAULT_GAME_SETTINGS,
-    subscription: roomView?.subscription || application.plan,
+    subscription,
     monthlyPriceKrw: roomView?.subscription?.monthlyPriceKrw || application.plan?.monthlyPriceKrw || MONTHLY_PRICE_KRW,
     serverUrl: "https://pixgom.com/chat-event",
-    bridgeConnectCode: bridgeConnectCodeForApplication(account, application)
+    bridgeConnectCode
   };
 }
 
