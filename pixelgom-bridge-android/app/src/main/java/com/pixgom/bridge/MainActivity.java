@@ -30,6 +30,7 @@ public class MainActivity extends Activity {
     private static final String WEBSITE_URL = "https://pixgom.com";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private TextView homeDiagnosticsStatus;
     private TextView permissionStatus;
     private TextView logView;
     private EditText serverUrlInput;
@@ -61,6 +62,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (homeDiagnosticsStatus != null) refreshHomeDiagnostics();
         if (permissionStatus != null) refreshStatus();
         if (logView != null) refreshLogs();
     }
@@ -68,6 +70,7 @@ public class MainActivity extends Activity {
     private void showHome() {
         clearMainRefs();
         setContentView(buildHomeContent());
+        refreshHomeDiagnostics();
     }
 
     private void showMain() {
@@ -120,6 +123,9 @@ public class MainActivity extends Activity {
         infoPanel.addView(labelValue("사용 기능", BridgeConfig.featureSummary(this)));
         infoPanel.addView(labelValue("관리 콘솔", WEBSITE_URL + "/admin"));
         infoPanel.addView(labelValue("구매자 가이드", WEBSITE_URL + "/buyer-guide"));
+        homeDiagnosticsStatus = text("서버 진단: 확인 중", 14, Color.rgb(111, 78, 49), true);
+        homeDiagnosticsStatus.setPadding(0, dp(12), 0, 0);
+        infoPanel.addView(homeDiagnosticsStatus);
 
         LinearLayout stepsPanel = panel();
         stepsPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
@@ -136,6 +142,10 @@ public class MainActivity extends Activity {
         Button checklistButton = secondaryButton("테스트 체크리스트");
         checklistButton.setOnClickListener(v -> showChecklist());
         root.addView(checklistButton);
+
+        Button refreshDiagnosticsButton = secondaryButton("서버 진단 새로고침");
+        refreshDiagnosticsButton.setOnClickListener(v -> refreshHomeDiagnostics());
+        root.addView(refreshDiagnosticsButton);
 
         Button permissionButton = secondaryButton("알림 권한 열기");
         permissionButton.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
@@ -426,6 +436,10 @@ public class MainActivity extends Activity {
         shareButton.setOnClickListener(v -> shareDiagnosis());
         root.addView(shareButton);
 
+        Button shareLogButton = secondaryButton("로그 공유");
+        shareLogButton.setOnClickListener(v -> shareLogs());
+        root.addView(shareLogButton);
+
         Button clearButton = secondaryButton("로그 지우기");
         clearButton.setOnClickListener(v -> {
             BridgeConfig.clearLogs(this);
@@ -444,6 +458,7 @@ public class MainActivity extends Activity {
     }
 
     private void clearMainRefs() {
+        homeDiagnosticsStatus = null;
         permissionStatus = null;
         logView = null;
         serverUrlInput = null;
@@ -602,11 +617,50 @@ public class MainActivity extends Activity {
 
     private void refreshStatus() {
         boolean permission = notificationPermissionEnabled();
+        String permissionHelp = permission ? "" : "\n안내: 설정에서 픽셀곰 브릿지를 허용하고, 카카오톡 방 알림을 켜야 대화를 감지합니다.";
         permissionStatus.setText((permission ? "알림 접근 권한: 허용됨" : "알림 접근 권한: 필요")
+                + permissionHelp
                 + "\n브릿지: " + (BridgeConfig.isEnabled(this) ? "켜짐" : "꺼짐")
                 + "\n등록 방: " + BridgeConfig.roomName(this)
+                + "\n등록 방 수: " + BridgeConfig.roomProfileCount(this) + "개"
                 + "\n사용 기능: " + BridgeConfig.featureSummary(this));
         permissionStatus.setTextColor(permission ? Color.rgb(30, 104, 58) : Color.rgb(184, 74, 43));
+    }
+
+    private void refreshHomeDiagnostics() {
+        if (homeDiagnosticsStatus == null) return;
+        boolean permission = notificationPermissionEnabled();
+        BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
+        homeDiagnosticsStatus.setText("서버 진단: 확인 중\n"
+                + "알림 권한: " + (permission ? "허용됨" : "필요") + "\n"
+                + "대표 방: " + profile.name + " / " + profile.roomId + "\n"
+                + "앱 버전: " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")");
+        homeDiagnosticsStatus.setTextColor(permission ? Color.rgb(30, 104, 58) : Color.rgb(184, 74, 43));
+
+        executor.execute(() -> {
+            EventSender.HealthResult result = EventSender.health(this);
+            runOnUiThread(() -> {
+                if (homeDiagnosticsStatus == null) return;
+                if (result.ok()) {
+                    String updateText = result.appUpdateRequired
+                            ? "\n앱 업데이트: 필요"
+                            : "\n앱 업데이트: 최신 또는 사용 가능";
+                    homeDiagnosticsStatus.setText("서버 진단: 정상\n"
+                            + "서버 버전: " + result.serverVersion + "\n"
+                            + "서버 시간: " + safeText(result.serverTime) + "\n"
+                            + "저장소: " + safeText(result.storageLabel) + (result.dbOk ? " 정상" : " 확인 필요") + "\n"
+                            + "앱 최신: " + safeText(result.latestAndroidVersion) + " (" + result.latestAndroidVersionCode + ")\n"
+                            + "앱 최소: " + safeText(result.minAndroidVersion) + " (" + result.minAndroidVersionCode + ")"
+                            + updateText);
+                    homeDiagnosticsStatus.setTextColor(result.appUpdateRequired || !result.dbOk ? Color.rgb(184, 111, 28) : Color.rgb(30, 104, 58));
+                } else {
+                    homeDiagnosticsStatus.setText("서버 진단: 연결 실패\n"
+                            + "원인: " + safeText(result.error) + "\n"
+                            + "확인: 인터넷 연결, 서버 URL, VPN/보안앱 차단 여부를 확인하세요.");
+                    homeDiagnosticsStatus.setTextColor(Color.rgb(184, 74, 43));
+                }
+            });
+        });
     }
 
     private void refreshLogs() {
@@ -636,6 +690,14 @@ public class MainActivity extends Activity {
         startActivity(Intent.createChooser(intent, "픽셀곰 진단 공유"));
     }
 
+    private void shareLogs() {
+        String logs = BridgeConfig.logs(this);
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TEXT, TextUtils.isEmpty(logs) ? "아직 전송 로그가 없습니다." : logs);
+        startActivity(Intent.createChooser(intent, "픽셀곰 로그 공유"));
+    }
+
     private void copyText(String label, String value) {
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard != null) {
@@ -654,7 +716,7 @@ public class MainActivity extends Activity {
                 + "대표 방: " + profile.name + "\n"
                 + "roomId: " + profile.roomId + "\n"
                 + "입장확인: " + profile.joinPhrase + "\n"
-                + "라이선스: " + (TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey) + "\n"
+                + "라이선스: " + maskLicense(TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey) + "\n"
                 + "방별 설정: " + BridgeConfig.roomProfileCount(this) + "개\n"
                 + "등록 방 목록:\n" + BridgeConfig.roomProfilesSummary(this) + "\n"
                 + "기능: " + BridgeConfig.featureSummary(this) + "\n"
@@ -670,7 +732,7 @@ public class MainActivity extends Activity {
                 + "대표 방: " + profile.name + "\n"
                 + "roomId: " + profile.roomId + "\n"
                 + "입장확인 문구: " + profile.joinPhrase + "\n"
-                + "라이선스: " + (TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey) + "\n"
+                + "라이선스: " + maskLicense(TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey) + "\n"
                 + "등록 방 목록:\n" + BridgeConfig.roomProfilesSummary(this) + "\n\n"
                 + "카카오방 테스트 순서\n"
                 + "1. /브릿지\n"
@@ -687,6 +749,16 @@ public class MainActivity extends Activity {
                 + "- 라이선스 오류: 관리 콘솔과 앱의 라이선스 키 일치 확인\n"
                 + "- 입장 감지: 방장봇 환영 문구와 입장확인 문구 일치 확인\n"
                 + "- 화면 감지: 사용 안 함";
+    }
+
+    private String safeText(String value) {
+        return TextUtils.isEmpty(value) ? "-" : value;
+    }
+
+    private String maskLicense(String value) {
+        if (TextUtils.isEmpty(value)) return "-";
+        if (value.length() <= 10) return value.charAt(0) + "***";
+        return value.substring(0, 7) + "..." + value.substring(value.length() - 4);
     }
 
     private boolean notificationPermissionEnabled() {

@@ -9,6 +9,7 @@
 - 카카오 i 스킬 웹훅: `POST /skill`
 - 상태 확인: `GET /status`, 개발자용 원본 `GET /health`
 - 서버/앱 진단: `/health`에서 DB 상태, 서버 시간, 앱 최소/최신 버전, 업데이트 필요 여부 확인
+- 브릿지 앱 진단: 홈에서 알림 권한, 서버 연결, 등록 방, 앱/서버 버전 상태 확인
 - 픽셀곰 기능 소개 홈페이지: `GET /`
 - 회원가입/서비스 신청/로그인: `GET /signup`, `GET /apply`, `GET /login`
 - 구매자 전용 가이드/콘솔: `GET /buyer-guide`, `GET /console`, `GET /my-rooms`, `GET /setup`, `GET /license`, `GET /command-store`, `POST /api/buyer/guide`, `POST /api/buyer/console`

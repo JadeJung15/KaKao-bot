@@ -112,6 +112,40 @@ final class EventSender {
         }
     }
 
+    static HealthResult health(Context context) {
+        HttpURLConnection connection = null;
+        try {
+            URL url = healthUrl(context);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+
+            int status = connection.getResponseCode();
+            JSONObject response = new JSONObject(readBody(connection, status));
+            if (status < 200 || status >= 300 || !response.optBoolean("ok", false)) {
+                return new HealthResult(status, response.optString("error", "health_failed"));
+            }
+            JSONObject dbStatus = response.optJSONObject("dbStatus");
+            return new HealthResult(
+                    status,
+                    response.optString("version", ""),
+                    response.optString("latestAndroidVersion", ""),
+                    response.optInt("latestAndroidVersionCode", 0),
+                    response.optString("minAndroidVersion", ""),
+                    response.optInt("minAndroidVersionCode", 0),
+                    response.optBoolean("appUpdateRequired", false),
+                    dbStatus == null || dbStatus.optBoolean("ok", false),
+                    dbStatus == null ? response.optString("storage", "") : dbStatus.optString("label", ""),
+                    response.optString("serverTimeKst", response.optString("serverTime", ""))
+            );
+        } catch (Exception error) {
+            return new HealthResult(0, error.getClass().getSimpleName() + ": " + error.getMessage());
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
     private static void writeJson(HttpURLConnection connection, JSONObject payload) throws Exception {
         byte[] bytes = payload.toString().getBytes(StandardCharsets.UTF_8);
         try (OutputStream output = connection.getOutputStream()) {
@@ -136,6 +170,13 @@ final class EventSender {
         URL serverUrl = new URL(BridgeConfig.serverUrl(context));
         String port = serverUrl.getPort() > 0 ? ":" + serverUrl.getPort() : "";
         return new URL(serverUrl.getProtocol() + "://" + serverUrl.getHost() + port + "/api/bridge/connect");
+    }
+
+    private static URL healthUrl(Context context) throws Exception {
+        URL serverUrl = new URL(BridgeConfig.serverUrl(context));
+        String port = serverUrl.getPort() > 0 ? ":" + serverUrl.getPort() : "";
+        String query = "versionCode=" + BuildConfig.VERSION_CODE;
+        return new URL(serverUrl.getProtocol() + "://" + serverUrl.getHost() + port + "/health?" + query);
     }
 
     private static String[] stringArray(JSONArray array) {
@@ -247,6 +288,63 @@ final class EventSender {
             this.profiles = profiles;
             this.localJs = localJs;
             this.games = games;
+        }
+
+        boolean ok() {
+            return error == null && status >= 200 && status < 300;
+        }
+    }
+
+    static final class HealthResult {
+        final int status;
+        final String error;
+        final String serverVersion;
+        final String latestAndroidVersion;
+        final int latestAndroidVersionCode;
+        final String minAndroidVersion;
+        final int minAndroidVersionCode;
+        final boolean appUpdateRequired;
+        final boolean dbOk;
+        final String storageLabel;
+        final String serverTime;
+
+        HealthResult(int status, String error) {
+            this.status = status;
+            this.error = error;
+            this.serverVersion = "";
+            this.latestAndroidVersion = "";
+            this.latestAndroidVersionCode = 0;
+            this.minAndroidVersion = "";
+            this.minAndroidVersionCode = 0;
+            this.appUpdateRequired = false;
+            this.dbOk = false;
+            this.storageLabel = "";
+            this.serverTime = "";
+        }
+
+        HealthResult(
+                int status,
+                String serverVersion,
+                String latestAndroidVersion,
+                int latestAndroidVersionCode,
+                String minAndroidVersion,
+                int minAndroidVersionCode,
+                boolean appUpdateRequired,
+                boolean dbOk,
+                String storageLabel,
+                String serverTime
+        ) {
+            this.status = status;
+            this.error = null;
+            this.serverVersion = serverVersion == null ? "" : serverVersion;
+            this.latestAndroidVersion = latestAndroidVersion == null ? "" : latestAndroidVersion;
+            this.latestAndroidVersionCode = latestAndroidVersionCode;
+            this.minAndroidVersion = minAndroidVersion == null ? "" : minAndroidVersion;
+            this.minAndroidVersionCode = minAndroidVersionCode;
+            this.appUpdateRequired = appUpdateRequired;
+            this.dbOk = dbOk;
+            this.storageLabel = storageLabel == null ? "" : storageLabel;
+            this.serverTime = serverTime == null ? "" : serverTime;
         }
 
         boolean ok() {
