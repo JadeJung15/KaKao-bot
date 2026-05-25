@@ -25,7 +25,8 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.66";
+export const APP_VERSION = "0.4.67";
+const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
   "chat-event-webhook",
@@ -154,7 +155,10 @@ export const FEATURES = [
   "command-store-filter-refinement",
   "subscription-expiry-guidance",
   "bridge-connect-expiry-gate",
-  "license-error-user-guidance"
+  "license-error-user-guidance",
+  "backup-schema-version",
+  "admin-backup-dry-run",
+  "backup-restore-error-summary"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -5490,29 +5494,123 @@ function adminUpsertRoom(state, payload = {}) {
 }
 
 function restoreRoomFromAdminPayload(state, roomPayload = {}) {
+  const settings = roomPayload.settings || {};
+  const subscription = settings.subscription || roomPayload.subscription || {};
+  const license = settings.license || {};
   const result = adminUpsertRoom(state, {
     room: roomPayload.name || roomPayload.room,
-    roomId: roomPayload.roomIds?.[0] || roomPayload.roomId,
-    roomLink: roomPayload.roomLinks?.[0] || roomPayload.roomLink,
-    joinPhrase: roomPayload.joinPhrase,
-    roomAdmins: roomPayload.admins || roomPayload.roomAdmins,
-    licenseKey: roomPayload.licenseKey,
-    monthlyPriceKrw: roomPayload.subscription?.monthlyPriceKrw || roomPayload.monthlyPriceKrw,
-    subscriptionStartedAt: roomPayload.subscription?.startedAt || roomPayload.subscriptionStartedAt,
-    subscriptionExpiresAt: roomPayload.subscription?.expiresAt || roomPayload.subscriptionExpiresAt,
-    registered: roomPayload.registered,
-    enabled: roomPayload.enabled,
-    features: roomPayload.features,
-    gameSettings: roomPayload.gameSettings,
-    customCommands: roomPayload.customCommands
+    roomId: roomPayload.roomIds?.[0] || roomPayload.roomId || settings.roomIds?.[0],
+    roomLink: roomPayload.roomLinks?.[0] || roomPayload.roomLink || settings.roomLinks?.[0],
+    joinPhrase: roomPayload.joinPhrase || settings.joinPhrase,
+    roomAdmins: roomPayload.admins || roomPayload.roomAdmins || roomPayload.admins,
+    licenseKey: roomPayload.licenseKey || license.key,
+    monthlyPriceKrw: subscription.monthlyPriceKrw || roomPayload.monthlyPriceKrw,
+    subscriptionStartedAt: subscription.startedAt || roomPayload.subscriptionStartedAt,
+    subscriptionExpiresAt: subscription.expiresAt || roomPayload.subscriptionExpiresAt,
+    registered: roomPayload.registered ?? settings.registered,
+    enabled: roomPayload.enabled ?? settings.enabled,
+    features: roomPayload.features || settings.features,
+    gameSettings: roomPayload.gameSettings || settings.gameSettings,
+    customCommands: roomPayload.customCommands || settings.customCommands
   });
-  if (result.ok && Array.isArray(roomPayload.roomIds)) {
-    for (const id of roomPayload.roomIds) addUnique(ensureRoom(state, result.room.name).settings.roomIds, id);
+  const roomIds = Array.isArray(roomPayload.roomIds) ? roomPayload.roomIds : settings.roomIds;
+  if (result.ok && Array.isArray(roomIds)) {
+    for (const id of roomIds) addUnique(ensureRoom(state, result.room.name).settings.roomIds, id);
   }
-  if (result.ok && Array.isArray(roomPayload.roomLinks)) {
-    for (const link of roomPayload.roomLinks) addUnique(ensureRoom(state, result.room.name).settings.roomLinks, link);
+  const roomLinks = Array.isArray(roomPayload.roomLinks) ? roomPayload.roomLinks : settings.roomLinks;
+  if (result.ok && Array.isArray(roomLinks)) {
+    for (const link of roomLinks) addUnique(ensureRoom(state, result.room.name).settings.roomLinks, link);
   }
   return result;
+}
+
+function backupRoomEntries(payload = {}) {
+  const fullStateRooms = payload?.state?.rooms;
+  if (fullStateRooms && typeof fullStateRooms === "object" && !Array.isArray(fullStateRooms)) {
+    return Object.entries(fullStateRooms).map(([key, roomPayload]) => ({ key, roomPayload }));
+  }
+  const roomList = Array.isArray(payload?.rooms)
+    ? payload.rooms
+    : Array.isArray(payload?.state?.rooms)
+      ? payload.state.rooms
+      : [];
+  return roomList.map((roomPayload, index) => ({ key: `rooms[${index}]`, roomPayload }));
+}
+
+function validateBackupRoomEntry(entry = {}) {
+  const roomPayload = entry.roomPayload || {};
+  const settings = roomPayload.settings || {};
+  const keyFallback = String(entry.key || "").startsWith("rooms[") ? "" : entry.key;
+  const name = compactSpaces(roomPayload.name || roomPayload.room || keyFallback || "");
+  const roomIds = Array.isArray(roomPayload.roomIds)
+    ? roomPayload.roomIds.filter(Boolean)
+    : Array.isArray(settings.roomIds)
+      ? settings.roomIds.filter(Boolean)
+      : [roomPayload.roomId].filter(Boolean);
+  const roomLinks = Array.isArray(roomPayload.roomLinks)
+    ? roomPayload.roomLinks.filter(Boolean)
+    : Array.isArray(settings.roomLinks)
+      ? settings.roomLinks.filter(Boolean)
+      : [roomPayload.roomLink].filter(Boolean);
+  const features = settings.features || roomPayload.features || {};
+  const customCommands = settings.customCommands || roomPayload.customCommands || {};
+  const subscription = settings.subscription || roomPayload.subscription || {};
+  const licenseKey = settings.license?.key || roomPayload.licenseKey || "";
+  const warnings = [];
+  const errors = [];
+  if (!name) errors.push("room_name_required");
+  if (!roomIds.length) warnings.push("room_id_missing");
+  if (!roomLinks.length) warnings.push("room_link_missing");
+  if (!licenseKey) warnings.push("license_key_missing");
+  if (!subscription.expiresAt && !roomPayload.subscriptionExpiresAt) warnings.push("subscription_expiry_missing");
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    room: {
+      name,
+      roomIds,
+      roomLinks,
+      featureCount: Object.keys(features || {}).length,
+      customCommandCount: Object.keys(customCommands || {}).length,
+      licenseStatus: licenseKey ? "present" : "missing",
+      subscriptionExpiresAt: subscription.expiresAt || roomPayload.subscriptionExpiresAt || ""
+    }
+  };
+}
+
+function validateAdminBackupPayload(payload = {}) {
+  const schemaVersion = payload.schemaVersion || payload.backupSchemaVersion || "legacy";
+  const entries = backupRoomEntries(payload);
+  const errors = [];
+  const warnings = [];
+  if (!entries.length) errors.push("rooms_required");
+  const roomResults = entries.map(validateBackupRoomEntry);
+  for (const result of roomResults) {
+    errors.push(...result.errors);
+    warnings.push(...result.warnings);
+  }
+  const uniqueWarnings = [...new Set(warnings)];
+  const restorableRooms = roomResults
+    .filter((result) => result.room?.name)
+    .map((result) => result.room);
+  return {
+    ok: errors.length === 0,
+    error: errors.length ? "backup_validation_failed" : undefined,
+    schemaVersion,
+    supportedSchemaVersion: BACKUP_SCHEMA_VERSION,
+    appVersion: APP_VERSION,
+    sourceVersion: payload.version || payload.appVersion || "",
+    checkedAt: nowIso(),
+    roomCount: entries.length,
+    restorableRoomCount: restorableRooms.length,
+    restorableRooms,
+    warnings: uniqueWarnings,
+    errors: [...new Set(errors)],
+    summary: errors.length
+      ? `복구 전 검증 실패: ${[...new Set(errors)].join(", ")}`
+      : `${restorableRooms.length}개 방을 복구 대상으로 확인했습니다. 실제 복구 전 관리자 계정과 대상 방을 다시 확인하세요.`
+  };
 }
 
 function validateSignupPayload(payload = {}) {
@@ -6208,7 +6306,27 @@ async function handleAdminApi(req, url) {
     const auth = await requireAdminConsole(req, url);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
-    return { status: 200, body: { ok: true, version: APP_VERSION, exportedAt: nowIso(), state } };
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        schemaVersion: BACKUP_SCHEMA_VERSION,
+        version: APP_VERSION,
+        exportedAt: nowIso(),
+        state
+      }
+    };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/backup/validate") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const validation = validateAdminBackupPayload(body);
+    return {
+      status: validation.ok ? 200 : 400,
+      body: validation
+    };
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/applications") {
@@ -6266,12 +6384,19 @@ async function handleAdminApi(req, url) {
     const body = await readBody(req);
     const auth = await requireAdminConsole(req, url, body);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const validation = validateAdminBackupPayload(body);
+    if (!validation.ok) return { status: 400, body: validation };
     const state = await loadState();
     if (body.state?.rooms && typeof body.state.rooms === "object" && !Array.isArray(body.state.rooms)) {
-      state.rooms = body.state.rooms;
-      normalizeState(state);
-      await saveState(state);
-      return { status: 200, body: { ok: true, restored: Object.values(state.rooms).map((roomState) => roomState.name || "이름없음") } };
+      return {
+        status: 409,
+        body: {
+          ...validation,
+          ok: false,
+          error: "full_state_restore_blocked",
+          summary: "전체 state 덮어쓰기 복구는 현재 보류 중입니다. 먼저 dry-run 결과를 확인하고, 방 단위 복구만 사용하세요."
+        }
+      };
     }
     const rooms = Array.isArray(body.rooms)
       ? body.rooms

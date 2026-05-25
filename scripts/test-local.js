@@ -74,7 +74,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.66");
+  assert.equal(health.json.version, "0.4.67");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -182,6 +182,9 @@ try {
   assert.match(health.json.features.join(","), /subscription-expiry-guidance/);
   assert.match(health.json.features.join(","), /bridge-connect-expiry-gate/);
   assert.match(health.json.features.join(","), /license-error-user-guidance/);
+  assert.match(health.json.features.join(","), /backup-schema-version/);
+  assert.match(health.json.features.join(","), /admin-backup-dry-run/);
+  assert.match(health.json.features.join(","), /backup-restore-error-summary/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.additionalRoomPriceKrw, 2200);
   assert.equal(health.json.adminConsoleEnabled, true);
@@ -288,7 +291,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.66");
+  assert.equal(commandTemplates.json.version, "0.4.67");
   assert.equal(commandTemplates.json.total, 400);
   assert.equal(commandTemplates.json.templates.length, 400);
   assert.equal(commandTemplates.json.categories.some((category) => category.title === "펫키우기"), true);
@@ -326,6 +329,8 @@ try {
   assert.match(adminPageText, /방별 기능 ON\/OFF/);
   assert.match(adminPageText, /admin-status-badge/);
   assert.match(adminPageText, /백업 복구/);
+  assert.match(adminPageText, /복구 dry-run 확인/);
+  assert.match(adminPageText, /\/api\/admin\/backup\/validate/);
   assert.match(adminPageText, /신청\/결제/);
   assert.match(adminPageText, /명령어 추가\/수정/);
   assert.match(adminPageText, /게임 시즌\/보상 설정/);
@@ -520,7 +525,48 @@ try {
   const adminBackup = await request("/api/admin/backup?token=test-admin-token");
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
+  assert.equal(adminBackup.json.schemaVersion, 1);
+  assert.equal(adminBackup.json.version, "0.4.67");
   assert.ok(adminBackup.json.state.rooms);
+
+  const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(adminBackup.json)
+  });
+  assert.equal(backupValidation.response.status, 200);
+  assert.equal(backupValidation.json.ok, true);
+  assert.equal(backupValidation.json.supportedSchemaVersion, 1);
+  assert.ok(backupValidation.json.roomCount >= 1);
+  assert.match(backupValidation.json.summary, /복구 대상/);
+
+  const fullStateRestoreBlocked = await request("/api/admin/restore?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(adminBackup.json)
+  });
+  assert.equal(fullStateRestoreBlocked.response.status, 409);
+  assert.equal(fullStateRestoreBlocked.json.error, "full_state_restore_blocked");
+  assert.match(fullStateRestoreBlocked.json.summary, /전체 state 덮어쓰기 복구/);
+
+  const roomUnitRestore = await request("/api/admin/restore?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ schemaVersion: 1, rooms: Object.values(adminBackup.json.state.rooms).slice(0, 1) })
+  });
+  assert.equal(roomUnitRestore.response.status, 200);
+  assert.equal(roomUnitRestore.json.ok, true);
+  assert.ok(roomUnitRestore.json.restored.length >= 1);
+
+  const backupValidationFailure = await request("/api/admin/backup/validate?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ schemaVersion: 1, rooms: [] })
+  });
+  assert.equal(backupValidationFailure.response.status, 400);
+  assert.equal(backupValidationFailure.json.ok, false);
+  assert.match(backupValidationFailure.json.errors.join(","), /rooms_required/);
+  assert.match(backupValidationFailure.json.summary, /검증 실패/);
 
   const signup = await request("/api/signup", {
     method: "POST",
@@ -668,7 +714,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.66");
+  assert.equal(buyerGuideApproved.json.version, "0.4.67");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -683,7 +729,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.66");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.67");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);

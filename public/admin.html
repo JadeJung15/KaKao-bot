@@ -176,9 +176,12 @@
 
       <section class="admin-import">
         <h2>백업 복구</h2>
-        <p>관리 콘솔에서 받은 백업 JSON을 붙여넣고 복구할 수 있습니다. 운영자 로그인 세션이 필요합니다.</p>
+        <p>관리 콘솔에서 받은 백업 JSON을 붙여넣고 먼저 dry-run 검증을 실행하세요. 전체 state 덮어쓰기 복구는 보류 중이며, 실제 복구는 방 단위 JSON만 허용합니다.</p>
         <textarea id="restore-json" name="restoreJson" data-restore-json rows="8" placeholder='{"rooms":[...]}'></textarea>
-        <button class="button button-secondary" type="button" data-restore>백업 복구 실행</button>
+        <div class="admin-actions">
+          <button class="button button-secondary" type="button" data-validate-backup>복구 dry-run 확인</button>
+          <button class="button button-secondary" type="button" data-restore>검증 후 실제 복구 실행</button>
+        </div>
       </section>
     </main>
 
@@ -740,7 +743,20 @@
         try {
           const json = await requestJson("/api/admin/backup");
           restoreInput.value = JSON.stringify(json, null, 2);
-          print("백업 JSON을 아래 복구 입력칸에 준비했습니다.");
+          print("스키마 버전이 포함된 백업 JSON을 아래 복구 입력칸에 준비했습니다. 실제 복구 전 dry-run 검증을 실행하세요.");
+        } catch (error) {
+          print(friendlyError(error));
+        }
+      });
+
+      document.querySelector("[data-validate-backup]").addEventListener("click", async () => {
+        try {
+          const payload = JSON.parse(restoreInput.value);
+          print(await requestJson("/api/admin/backup/validate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload)
+          }));
         } catch (error) {
           print(friendlyError(error));
         }
