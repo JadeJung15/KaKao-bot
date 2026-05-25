@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.74";
+export const APP_VERSION = "0.4.75";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -302,7 +302,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
   },
   {
     title: "포인트/랭킹",
-    commands: ["/좋아요", "/응원", "/뽑기", "/뽑기목록", "/홀", "/짝", "/이체", "/미출석", "/출석순위", "/포인트순위", "/좋아요순위", "/레벨순위", "/채팅오늘", "/채팅금주"]
+    commands: ["/좋아요", "/응원", "/이체", "/미출석", "/출석순위", "/포인트순위", "/좋아요순위", "/레벨순위", "/채팅오늘", "/채팅금주"]
   },
   {
     title: "상점/가방",
@@ -314,7 +314,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
   },
   {
     title: "게임/연동 예약",
-    commands: ["/게임", "/주사위", "/낚시", "/탐험", "/픽셀곰게임", "/게임연동"]
+    commands: ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/픽셀곰게임", "/게임연동"]
   }
 ]);
 const RESERVED_CUSTOM_COMMANDS = new Set([
@@ -608,7 +608,7 @@ const COMMAND_PACKS = Object.freeze([
     categoryTitle: "게임 애드온",
     description: "주사위, 낚시, 탐험 미니게임을 방 분위기에 맞는 운영 명령어로 연결합니다.",
     features: { games: true, points: true },
-    fixedCommands: ["/게임", "/주사위", "/낚시", "/탐험"],
+    fixedCommands: ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝"],
     customCommands: [
       { trigger: "/운영주사위", response: "주사위 게임을 시작합니다.", proxyCommand: "/주사위" },
       { trigger: "/운영낚시", response: "낚시 게임을 시작합니다.", proxyCommand: "/낚시" },
@@ -2386,6 +2386,9 @@ function gameCommandCatalogText() {
     "/주사위 - 1~6 결과에 따라 포인트 획득",
     "/낚시 - 랜덤 보상 획득",
     "/탐험 - 랜덤 보상 획득",
+    "/뽑기 - 가상 포인트 뽑기",
+    "/뽑기목록 - 뽑기 확률과 보상 확인",
+    "/홀 금액 또는 /짝 금액 - 홀짝 베팅",
     "",
     "예약",
     "/픽셀곰게임 - 별도 픽셀곰 게임 연동 예정",
@@ -2508,12 +2511,12 @@ function featureKeyFromText(value) {
   const text = compactSpaces(value).toLowerCase();
   const aliases = {
     attendance: ["attendance", "attend", "출석", "출첵", "출석체크"],
-    points: ["point", "points", "포인트", "좋아요", "응원", "뽑기", "홀짝", "이체"],
+    points: ["point", "points", "포인트", "좋아요", "응원", "이체"],
     rankings: ["ranking", "rankings", "rank", "랭킹", "순위"],
     history: ["history", "histories", "히스토리", "닉이력", "입퇴장", "최근이벤트"],
     profiles: ["profile", "profiles", "프로필"],
     localJs: ["js", "javascript", "자동응답", "js자동응답", "localjs"],
-    games: ["game", "games", "게임", "미니게임", "주사위", "낚시", "탐험"],
+    games: ["game", "games", "게임", "미니게임", "주사위", "낚시", "탐험", "뽑기", "확률뽑기", "홀짝", "홀", "짝"],
     shop: ["shop", "store", "inventory", "item", "상점", "가방", "아이템", "구매"],
     customCommands: ["custom", "customcommands", "command", "commands", "커스텀", "커스텀명령어", "명령어", "자동문구"]
   };
@@ -4371,9 +4374,8 @@ function pointGuideText() {
     "사용하기",
     `• /좋아요 닉네임 수량 : 1개당 ${formatPoint(LIKE_POINT_COST)}`,
     `• /응원 닉네임 메시지 : 응원 카드 ${formatPoint(CHEER_POINT_COST)}`,
-    `• /뽑기 : 가상 포인트 뽑기 ${formatPoint(LUCKY_DRAW_POINT_COST)}`,
-    "• /홀 금액 또는 /짝 금액 : 맞히면 x2",
     "• /이체 닉네임 포인트 : 수수료 10%",
+    "• /게임 : 뽑기, 홀짝 등 게임형 포인트 명령어 확인",
     "",
     "순위",
     "• /포인트순위, /좋아요순위, /레벨순위"
@@ -5198,6 +5200,9 @@ function gameHelpText(roomState) {
     "/주사위 - 1~6 결과에 따라 포인트 획득",
     "/낚시 - 랜덤 보상 획득",
     "/탐험 - 랜덤 보상 획득",
+    `/뽑기 - 가상 포인트 뽑기 ${formatPoint(LUCKY_DRAW_POINT_COST)}`,
+    "/뽑기목록 - 뽑기 확률과 보상 확인",
+    "/홀 금액 또는 /짝 금액 - 홀짝 베팅",
     "",
     enabled ? "게임 보상은 가상 포인트로만 지급됩니다." : "관리자가 /기능켜기 게임 을 실행하면 사용할 수 있습니다."
   ].join("\n");
@@ -5672,8 +5677,8 @@ function commandFeatureKey(command) {
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
   if (/^\/(?:프로필|프로칠|프로필등록|프로필삭제|별명등록|별명삭제)(?:\s|$)/.test(command)) return "profiles";
-  if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
-  if (/^\/(?:게임|주사위|낚시|탐험)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:게임|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
   if (/^\/(?:상점|구매|구매내역|가방|사용|가방선물|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
   return "";
@@ -5713,9 +5718,9 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/내정보", "포인트", "레벨, 포인트, 채팅 정보 확인", { aliases: ["/레벨"], requiresFeature: "points" }),
   registryEntry("/좋아요", "포인트", "포인트로 하트 보내기", { examples: ["/좋아요 닉네임 10"], requiresFeature: "points", searchableKeywords: ["하트"] }),
   registryEntry("/응원", "포인트", "포인트 응원 카드 보내기", { examples: ["/응원 닉네임 메시지"], requiresFeature: "points" }),
-  registryEntry("/뽑기", "포인트", "공개 확률 포인트 뽑기", { aliases: ["/확률뽑기"], requiresFeature: "points" }),
-  registryEntry("/뽑기목록", "포인트", "뽑기 확률과 보상 확인", { requiresFeature: "points" }),
-  registryEntry("/홀", "포인트", "홀짝 포인트 베팅", { aliases: ["/짝", "/홀짝"], examples: ["/홀 100", "/짝 100"], requiresFeature: "points" }),
+  registryEntry("/뽑기", "게임", "공개 확률 포인트 뽑기", { aliases: ["/확률뽑기"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "랜덤"] }),
+  registryEntry("/뽑기목록", "게임", "뽑기 확률과 보상 확인", { requiresFeature: "games", searchableKeywords: ["포인트", "확률", "보상"] }),
+  registryEntry("/홀", "게임", "홀짝 포인트 베팅", { aliases: ["/짝", "/홀짝"], examples: ["/홀 100", "/짝 100"], requiresFeature: "games", searchableKeywords: ["포인트", "베팅"] }),
   registryEntry("/이체", "포인트", "포인트 이체", { examples: ["/이체 닉네임 100"], requiresFeature: "points" }),
   registryEntry("/포인트순위", "랭킹", "방별 랭킹 확인", { aliases: ["/좋아요순위", "/레벨순위", "/채팅오늘", "/채팅금주"], requiresFeature: "rankings" }),
   registryEntry("/상점", "상점/가방", "구매 가능한 아이템 확인", { requiresFeature: "shop" }),
