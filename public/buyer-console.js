@@ -286,14 +286,16 @@
           <div><dt>구독 안내</dt><dd>${escapeHtml(room.subscriptionNotice || "상태 확인 후 필요 시 운영자에게 문의해 주세요.")}</dd></div>
           <div><dt>커스텀 명령어</dt><dd>${escapeHtml(String(room.commandCount ?? (room.customCommands || []).length))}개 설치됨</dd></div>
         </dl>
+        ${renderLinkedGameRooms(room)}
         ${renderRoomPacks(room)}
         <div class="buyer-room-action-strip">
           <div>
             <strong>다음 할 일</strong>
-            <span>${firstInstall ? "앱 연결코드 복사, 설치 안내 확인, 운영 기본팩 설치 명령어 복사 순서로 진행하세요." : "설치된 팩을 기준으로 필요한 명령어를 검색하거나 스토어에서 추가하세요."}</span>
+            <span>${firstInstall ? "앱 연결코드 복사, 설치 안내 확인, 운영 기본팩 설치 명령어 복사 순서로 진행하세요." : "설치된 팩을 기준으로 필요한 명령어를 검색하거나 스토어에서 추가하세요."} 일반방과 게임방은 같은 브릿지 앱에 방별 연결코드를 차례대로 입력합니다.</span>
           </div>
           <button class="button button-primary" type="button" data-copy="${escapeHtml(room.bridgeConnectCode || "")}" data-copy-label="앱 연결코드">앱 연결코드 복사</button>
           <a class="button button-secondary" href="/setup">설치 안내 보기</a>
+          ${room.canApplyGameRoom ? `<a class="button button-primary" href="${escapeHtml(room.gameRoomApplyUrl || "/apply?roomPurpose=game_room")}">게임방 추가 신청</a>` : ""}
           ${firstInstall ? `<button class="button button-primary" type="button" data-copy="${BASIC_PACK_INSTALL_COMMAND}" data-copy-label="운영 기본팩 설치 명령어">운영 기본팩 설치 명령어 복사</button>` : ""}
           <a class="button button-secondary" href="/command-store?room=${encodeURIComponent(room.applicationId || "")}">명령어 스토어 열기</a>
         </div>
@@ -316,6 +318,30 @@
       </article>
     `;
     }).join("");
+  }
+
+  function renderLinkedGameRooms(room) {
+    if (room.roomPurpose === "game_room") {
+      return `<section class="buyer-linked-game-rooms"><strong>게임방</strong><span>이 방은 게임 전용 방입니다. 포인트와 가방 데이터는 기준 일반방과 함께 사용합니다.</span></section>`;
+    }
+    const linked = room.linkedGameRooms || [];
+    if (!linked.length) {
+      return `<section class="buyer-linked-game-rooms"><strong>게임방 연결</strong><span>승인된 일반방은 게임방 추가 신청으로 별도 게임방을 붙일 수 있습니다.</span></section>`;
+    }
+    return `
+      <section class="buyer-linked-game-rooms">
+        <strong>연결된 게임방</strong>
+        <div>
+          ${linked.map((item) => `
+            <article>
+              <span>${escapeHtml(item.roomName || "게임방")}</span>
+              <small>${escapeHtml(item.statusLabel || item.status || "상태 확인")} · ${escapeHtml(item.paymentStatusLabel || item.paymentStatus || "결제 확인")}</small>
+              ${item.bridgeConnectCode ? `<button class="button button-secondary" type="button" data-copy="${escapeHtml(item.bridgeConnectCode)}" data-copy-label="게임방 연결코드">게임방 연결코드 복사</button>` : ""}
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
   }
 
   function renderRoomCommands(room) {
@@ -442,6 +468,7 @@
         <ol>
           <li>픽셀곰 브릿지 앱을 설치하고 알림 접근 권한을 허용합니다.</li>
           <li>아래 연결코드를 앱의 연결코드 자동 설정에 붙여넣습니다.</li>
+          <li>일반방과 게임방을 함께 쓰는 경우 두 방의 연결코드를 같은 브릿지 앱에 차례로 붙여넣습니다.</li>
           <li>앱에서 서버 테스트 전송을 실행합니다.</li>
           <li>카카오방에서 /브릿지, /상태, /js상태 순서로 확인합니다.</li>
         </ol>

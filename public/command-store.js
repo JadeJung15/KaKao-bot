@@ -324,10 +324,10 @@
               ${(pack.commandsDetailed || []).map((item) => `<li><strong>${escapeHtml(item.command)}</strong><span>${escapeHtml(item.description || "채팅 명령어")}</span></li>`).join("")}
             </ul>
           </details>
-          <div class="template-actions">
-            <button class="button button-secondary" type="button" data-cart-pack="${escapeHtml(pack.id)}">${packCart.has(pack.id) ? "장바구니 제거" : "장바구니 담기"}</button>
-            <button class="button button-primary" type="button" data-copy-pack-install="${escapeHtml(pack.id)}" ${installCommand ? "" : "disabled"}>카톡 설치 명령어 복사</button>
-            ${pack.helpPath ? `<a class="button button-secondary" href="${escapeHtml(pack.helpPath)}">도움말 보기</a>` : ""}
+          <div class="command-pack-actions" aria-label="명령어팩 빠른 작업">
+            <button class="button button-secondary" type="button" data-pack-action-kind="cart" data-cart-pack="${escapeHtml(pack.id)}" title="${packCart.has(pack.id) ? "장바구니 제거" : "장바구니 담기"}">${packCart.has(pack.id) ? "빼기" : "담기"}</button>
+            <button class="button button-primary" type="button" data-pack-action-kind="copy" data-copy-pack-install="${escapeHtml(pack.id)}" title="카톡 설치 명령어 복사" ${installCommand ? "" : "disabled"}>복사</button>
+            ${pack.helpPath ? `<a class="button button-secondary" data-pack-action-kind="help" href="${escapeHtml(pack.helpPath)}" aria-label="도움말 보기" title="도움말 보기">도움말</a>` : ""}
           </div>
           <details class="command-direct-install">
             <summary>고급: 사이트에서 바로 설치</summary>

@@ -939,8 +939,8 @@ a {
   object-fit: contain;
 }
 
-.store-card span,
-.post-card span {
+.store-card > span,
+.post-card > span {
   width: fit-content;
   padding: 6px 9px;
   color: #fff;
@@ -981,9 +981,100 @@ a {
   margin-top: 6px;
 }
 
+.split-room-section {
+  background: #f6fbf8;
+}
+
+.split-room-grid {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.split-room-card,
+.split-room-cta {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(55, 38, 23, 0.08);
+}
+
+.split-room-card span {
+  width: fit-content;
+  padding: 5px 8px;
+  color: #174b38;
+  background: #eef8f4;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.split-room-card h3,
+.split-room-cta strong {
+  margin: 0;
+  font-size: 22px;
+}
+
+.split-room-card p,
+.split-room-cta span {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.split-room-cta {
+  width: min(1120px, 100%);
+  margin: 16px auto 0;
+}
+
+.split-room-cta > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .post-card time {
   color: var(--muted);
   font-weight: 900;
+}
+
+.help-command-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.help-command-list li {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  background: #fffdf8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.help-command-list code {
+  width: fit-content;
+  color: #174b38;
+  font-weight: 900;
+}
+
+.help-command-list span {
+  display: block;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .section-actions {
@@ -1470,6 +1561,7 @@ a {
 }
 
 .auth-card input,
+.auth-card select,
 .auth-card textarea,
 .wide-label textarea {
   width: 100%;
@@ -1483,6 +1575,27 @@ a {
 
 .auth-card textarea {
   resize: vertical;
+}
+
+.apply-room-purpose {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 12px;
+  background: #fffaf1;
+  border: 1px solid #ecd6aa;
+  border-radius: 8px;
+}
+
+.apply-room-purpose legend {
+  padding: 0 4px;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.apply-room-purpose small {
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .consent-list {
@@ -2088,8 +2201,8 @@ a {
 }
 
 .buyer-room-action-strip {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, auto);
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
   margin: 14px 0;
@@ -2097,6 +2210,10 @@ a {
   background: #eef8f4;
   border: 1px solid #cce4d8;
   border-radius: 8px;
+}
+
+.buyer-room-action-strip > div {
+  flex: 1 1 260px;
 }
 
 .buyer-room-action-strip strong,
@@ -2213,6 +2330,55 @@ a {
   margin-top: 4px;
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+.buyer-linked-game-rooms {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 12px;
+  background: #fffaf2;
+  border: 1px solid #ecd6aa;
+  border-radius: 8px;
+}
+
+.buyer-linked-game-rooms > strong,
+.buyer-linked-game-rooms > span {
+  display: block;
+}
+
+.buyer-linked-game-rooms > span,
+.buyer-linked-game-rooms small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.buyer-linked-game-rooms > div {
+  display: grid;
+  gap: 8px;
+}
+
+.buyer-linked-game-rooms article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+  background: #fff;
+  border: 1px solid #ead8bf;
+  border-radius: 8px;
+}
+
+.buyer-linked-game-rooms article span,
+.buyer-linked-game-rooms article small {
+  display: block;
+}
+
+.buyer-linked-game-rooms article .button {
+  min-height: 34px;
+  margin-top: 0;
+  padding: 7px 10px;
+  font-size: 0.82rem;
 }
 
 .buyer-room-card .button {
@@ -2629,6 +2795,22 @@ a {
 
 .command-pack-command-list li span {
   color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.command-pack-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  align-items: center;
+}
+
+.command-pack-actions .button {
+  min-height: 34px;
+  width: 100%;
+  padding: 7px 6px;
+  border-width: 1px;
+  box-shadow: 2px 2px 0 var(--ink);
   font-size: 0.82rem;
 }
 
@@ -3689,6 +3871,7 @@ a {
   .limit-section,
   .contact-section,
   .store-grid,
+  .split-room-grid,
   .post-grid,
   .listing-grid,
   .search-results,
@@ -3711,6 +3894,7 @@ a {
   .command-pack-grid,
   .buyer-pack-summary,
   .buyer-room-action-strip,
+  .buyer-linked-game-rooms article,
   .buyer-transfer-panel,
   .buyer-transfer-form,
   .buyer-transfer-card,

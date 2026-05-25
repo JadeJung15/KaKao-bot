@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.88";
+export const APP_VERSION = "0.4.89";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -178,6 +178,9 @@ export const FEATURES = [
   "command-pack-detail-help",
   "install-delete-code-ux",
   "game-pack-help-pages",
+  "game-room-apply-ux",
+  "compact-command-pack-actions",
+  "help-command-list-style",
   "compact-site-navigation",
   "why-pixgom-redesign",
   "subscription-expiry-guidance",
@@ -2724,9 +2727,48 @@ function approvedBuyerApplications(state, account = {}) {
     .filter((application) => state.payments?.[application.paymentId]?.status === "paid");
 }
 
+function applicationActiveForBilling(application = {}) {
+  return Boolean(application && !["cancelled", "rejected"].includes(application.status));
+}
+
+function gameRoomApplicationsForBase(state, account = {}, baseApplication = {}) {
+  if (!baseApplication?.id) return [];
+  return (account.applicationIds || [])
+    .map((id) => state.applications?.[id])
+    .filter(Boolean)
+    .filter(applicationActiveForBilling)
+    .filter((application) => normalizeApplicationRoomPurpose(application.roomPurpose) === "game_room")
+    .filter((application) => application.linkedApplicationId === baseApplication.id);
+}
+
+function gameRoomSummaryPayload(state, account = {}, application = {}) {
+  const roomState = state.rooms?.[roomKey(application.roomName)];
+  const roomView = roomState ? roomAdminView(roomState) : null;
+  const payment = state.payments?.[application.paymentId] || {};
+  const approved = application.status === "approved" && payment.status === "paid";
+  return {
+    applicationId: application.id || "",
+    roomName: application.roomName || "",
+    roomId: application.roomId || roomView?.roomIds?.[0] || "",
+    roomLink: application.roomLink || roomView?.roomLinks?.[0] || "",
+    roomPurpose: application.roomPurpose || "game_room",
+    linkedApplicationId: application.linkedApplicationId || "",
+    status: application.status || "pending_payment",
+    statusLabel: APPLICATION_STATUS_LABELS[application.status] || application.status || "결제 대기",
+    paymentStatus: payment.status || "awaiting_manual_deposit",
+    paymentStatusLabel: PAYMENT_STATUS_LABELS[payment.status] || payment.status || "입금 대기",
+    roomRole: roomView?.roomRole || "game",
+    bridgeStatus: approved && (application.roomId || roomView?.roomIds?.[0]) ? "ready" : "needs_setup",
+    bridgeConnectCode: approved ? bridgeConnectCodeForApplication(account, application) : ""
+  };
+}
+
 function applicationRoomPayload(state, account = {}, application = {}) {
   const roomState = state.rooms?.[roomKey(application.roomName)];
   const roomView = roomState ? roomAdminView(roomState) : null;
+  const roomPurpose = application.roomPurpose || "general_room";
+  const isGameRoom = normalizeApplicationRoomPurpose(roomPurpose) === "game_room";
+  const linkedGameRooms = isGameRoom ? [] : gameRoomApplicationsForBase(state, account, application);
   const licenseKey = application.licenseKey || roomView?.licenseKey || "";
   const subscription = roomView?.subscription || application.plan || {};
   const customCommands = roomView?.customCommands || [];
@@ -2747,8 +2789,11 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     roomId: application.roomId || roomView?.roomIds?.[0] || "",
     roomLink: application.roomLink || roomView?.roomLinks?.[0] || "",
     adminName: application.adminName || "",
-    roomPurpose: application.roomPurpose || "general_room",
+    roomPurpose,
     linkedApplicationId: application.linkedApplicationId || "",
+    linkedGameRooms: linkedGameRooms.map((item) => gameRoomSummaryPayload(state, account, item)),
+    canApplyGameRoom: !isGameRoom && application.status === "approved" && state.payments?.[application.paymentId]?.status === "paid" && linkedGameRooms.length === 0,
+    gameRoomApplyUrl: !isGameRoom ? `/apply?roomPurpose=game_room&linkedApplicationId=${encodeURIComponent(application.id || "")}` : "",
     roomRole: roomView?.roomRole || "standard",
     canonicalRoomName: roomView?.canonicalRoomName || "",
     joinPhrase: roomView?.joinPhrase || DEFAULT_JOIN_PHRASE,
@@ -8192,6 +8237,9 @@ function createApplicationForAccount(state, account = {}, payload = {}, options 
   if (roomPurpose === "game_room" && !linkedApplication) {
     return { ok: false, status: 403, error: "linked_room_approval_required" };
   }
+  if (roomPurpose === "game_room" && gameRoomApplicationsForBase(state, account, linkedApplication).length) {
+    return { ok: false, status: 409, error: "game_room_already_exists" };
+  }
   const applicationId = generateEntityId("app");
   const paymentId = generateEntityId("pay");
   const plan = applicationPlanForAccount(state, account, { roomPurpose });
@@ -8417,13 +8465,16 @@ function buyerConsolePayload(state, account = {}) {
     .filter(Boolean)
     .map((application) => publicApplicationView(application, state));
   const approvedApplications = approvedBuyerApplications(state, account);
+  const rooms = approvedApplications.map((application) => applicationRoomPayload(state, account, application));
   return {
     ok: true,
     version: APP_VERSION,
     account: publicAccountView(account),
     testAppUrl: PLAY_INTERNAL_TEST_URL,
     applications,
-    rooms: approvedApplications.map((application) => applicationRoomPayload(state, account, application)),
+    rooms,
+    canApplyGameRoom: rooms.some((room) => room.canApplyGameRoom),
+    gameRoomApplyHelp: "승인된 일반방 카드에서 게임방 추가 신청을 누른 뒤, 승인 후 같은 브릿지 앱에 일반방/게임방 연결코드를 차례로 입력하세요.",
     plan: {
       monthlyPriceKrw: MONTHLY_PRICE_KRW,
       additionalRoomPriceKrw: ADDITIONAL_ROOM_PRICE_KRW,

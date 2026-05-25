@@ -30,12 +30,30 @@
           <strong>신청 전 확인</strong>
           <span>방 이름은 실제 카카오 오픈채팅방 이름과 최대한 같게 입력해 주세요.</span>
           <span>요금: 첫 방 5,500원 / 30일, 추가 방 2,200원 / 30일</span>
+          <span>게임방 추가는 승인된 일반방이 있는 계정에서 신청할 수 있습니다.</span>
           <span>신청 후 다음 행동: 입금 후 승인 대기, 승인 완료 시 콘솔에서 연결코드 복사</span>
         </aside>
         <aside class="auth-account-card" data-account-identity hidden></aside>
         <form data-apply-form>
           <label data-email-field>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
           <label data-password-field>비밀번호<input name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="회원 비밀번호"></label>
+          <fieldset class="apply-room-purpose" data-room-purpose>
+            <legend>신청 종류</legend>
+            <label class="check-row">
+              <input name="roomPurpose" type="radio" value="general_room" checked>
+              <span><strong>일반 운영방</strong> 공지, 신고, 포인트, 상점 등 운영 중심 방</span>
+            </label>
+            <label class="check-row">
+              <input name="roomPurpose" type="radio" value="game_room">
+              <span><strong>게임방 추가</strong> 기존 일반방 데이터와 포인트/가방을 공유하는 게임 전용 방</span>
+            </label>
+            <small data-room-purpose-help>하나의 브릿지 앱에 일반방 연결코드와 게임방 연결코드를 차례로 입력하면 두 방을 함께 운영할 수 있습니다.</small>
+          </fieldset>
+          <label data-linked-application-field hidden>기준 일반방
+            <select name="linkedApplicationId" disabled>
+              <option value="">로그인 후 승인된 일반방을 선택하세요</option>
+            </select>
+          </label>
           <label>방 이름<input name="roomName" type="text" required placeholder="예: 주식 공부방, 팬카페 공지방"></label>
           <label>오픈채팅방 링크<input name="roomLink" type="url" required placeholder="https://open.kakao.com/o/abcd1234"></label>
           <label>관리자 닉네임<input name="adminName" type="text" required placeholder="카톡방에서 실제 쓰는 운영자 닉네임"></label>
@@ -75,13 +93,69 @@
       const emailField = document.querySelector("[data-email-field]");
       const passwordField = document.querySelector("[data-password-field]");
       const contactLabel = document.querySelector("[data-contact-label]");
+      const roomPurposeBox = document.querySelector("[data-room-purpose]");
+      const roomPurposeHelp = document.querySelector("[data-room-purpose-help]");
+      const linkedApplicationField = document.querySelector("[data-linked-application-field]");
+      const linkedApplicationSelect = form.elements.linkedApplicationId;
       const authGate = window.PixelgomAuth.createSilentGate({ status: result });
       const savedEmail = sessionStorage.getItem("pixgomSignupEmail");
+      const initialParams = new URLSearchParams(location.search);
+      const initialRoomPurpose = initialParams.get("roomPurpose") === "game_room" ? "game_room" : "general_room";
+      const initialLinkedApplicationId = initialParams.get("linkedApplicationId") || "";
       let loggedInPayload = {};
       if (savedEmail) form.elements.email.value = savedEmail;
+      form.elements.roomPurpose.value = initialRoomPurpose;
+
+      function escapeHtml(value = "") {
+        return String(value).replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        }[char]));
+      }
 
       function showApplyForm(message = "신청하면 결제 대기 상태로 등록됩니다.") {
         authGate.finish(message);
+      }
+
+      function selectedRoomPurpose() {
+        return form.elements.roomPurpose.value === "game_room" ? "game_room" : "general_room";
+      }
+
+      function setRoomPurposeState() {
+        const isGameRoom = selectedRoomPurpose() === "game_room";
+        linkedApplicationField.hidden = !isGameRoom;
+        linkedApplicationSelect.disabled = !isGameRoom;
+        linkedApplicationSelect.required = isGameRoom;
+        form.elements.roomName.placeholder = isGameRoom ? "예: 주식 공부방 게임방" : "예: 주식 공부방, 팬카페 공지방";
+        roomPurposeHelp.textContent = isGameRoom
+          ? "게임방은 승인된 일반방을 기준으로 추가 신청합니다. 승인 후 같은 브릿지 앱에 일반방/게임방 연결코드를 모두 입력하세요."
+          : "하나의 브릿지 앱에 일반방 연결코드와 게임방 연결코드를 차례로 입력하면 두 방을 함께 운영할 수 있습니다.";
+      }
+
+      async function loadBuyerRoomsForGameApply(payload = loggedInPayload) {
+        if (!payload.token && !payload.accessToken) return;
+        const response = await fetch("/api/buyer/console", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const json = await response.json();
+        if (!response.ok || json.ok === false) throw new Error(json.error || "buyer_console_failed");
+        if (json.guideToken) sessionStorage.setItem("pixgomBuyerToken", json.guideToken);
+        const rooms = (json.rooms || []).filter((room) => room.roomPurpose !== "game_room" && (room.canApplyGameRoom || room.applicationId === initialLinkedApplicationId));
+        linkedApplicationSelect.innerHTML = rooms.length
+          ? rooms.map((room) => `<option value="${escapeHtml(room.applicationId)}">${escapeHtml(room.roomName)} · ${escapeHtml(room.subscriptionStatusLabel || "승인됨")}</option>`).join("")
+          : `<option value="">게임방 추가가 가능한 승인 방이 없습니다</option>`;
+        linkedApplicationSelect.disabled = selectedRoomPurpose() !== "game_room" || !rooms.length;
+        linkedApplicationSelect.required = selectedRoomPurpose() === "game_room";
+        if (initialLinkedApplicationId && rooms.some((room) => room.applicationId === initialLinkedApplicationId)) {
+          linkedApplicationSelect.value = initialLinkedApplicationId;
+          form.elements.roomPurpose.value = "game_room";
+          setRoomPurposeState();
+        }
       }
 
       function setLoggedInApplyState(account = {}, payload = {}) {
@@ -108,6 +182,9 @@
           contactLabel.classList.add("is-required");
           form.elements.contact.required = true;
         }
+        loadBuyerRoomsForGameApply(payload).catch((error) => {
+          result.textContent = `승인 방 확인 실패: ${window.PixelgomAuth.friendlyError(error)}`;
+        });
       }
 
       async function resolveLoggedInApplyAccount() {
@@ -169,7 +246,17 @@
         }
       });
 
+      roomPurposeBox.addEventListener("change", () => {
+        setRoomPurposeState();
+        if (selectedRoomPurpose() === "game_room") {
+          loadBuyerRoomsForGameApply().catch((error) => {
+            result.textContent = `승인 방 확인 실패: ${window.PixelgomAuth.friendlyError(error)}`;
+          });
+        }
+      });
+
       (async () => {
+        setRoomPurposeState();
         if (!authGate.hasHint) showApplyForm();
         const cfg = await window.PixelgomAuth.config();
         window.PixelgomAuth.showAuthMode(document.querySelector("[data-auth-mode]"), cfg);
