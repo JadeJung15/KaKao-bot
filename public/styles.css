@@ -1822,6 +1822,28 @@ a {
   color: #8a5a00;
 }
 
+.buyer-pack-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid rgba(31, 41, 55, 0.12);
+  background: #f8fbff;
+}
+
+.buyer-pack-summary strong,
+.buyer-pack-summary span {
+  display: block;
+}
+
+.buyer-pack-summary span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 .buyer-room-card .button {
   margin-top: 14px;
 }
@@ -1985,6 +2007,62 @@ a {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 18px;
+}
+
+.command-pack-panel {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  margin-bottom: 18px;
+  border: 1px solid rgba(31, 41, 55, 0.12);
+  background: #f8fbff;
+}
+
+.command-pack-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.command-pack-head h2 {
+  margin: 0;
+  font-size: clamp(1.3rem, 2vw, 1.7rem);
+}
+
+.command-pack-head span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.command-pack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.command-pack-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(31, 41, 55, 0.12);
+  background: #fff;
+}
+
+.command-pack-card[data-installed="true"] {
+  border-color: rgba(45, 127, 92, 0.45);
+  background: #f4fbf7;
+}
+
+.command-pack-card strong,
+.command-pack-card span,
+.command-pack-card small {
+  display: block;
+}
+
+.command-pack-card span,
+.command-pack-card small {
+  color: var(--muted);
 }
 
 .command-store-summary article,
@@ -2847,6 +2925,9 @@ a {
   .command-store-summary,
   .command-store-install,
   .command-store-workbench,
+  .command-pack-head,
+  .command-pack-grid,
+  .buyer-pack-summary,
   .template-grid {
     grid-template-columns: 1fr;
   }

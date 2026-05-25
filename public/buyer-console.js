@@ -147,6 +147,7 @@
           <div><dt>구독 안내</dt><dd>${escapeHtml(room.subscriptionNotice || "상태 확인 후 필요 시 운영자에게 문의해 주세요.")}</dd></div>
           <div><dt>커스텀 명령어</dt><dd>${escapeHtml(String(room.commandCount ?? (room.customCommands || []).length))}개 설치됨</dd></div>
         </dl>
+        ${renderRoomPacks(room)}
         ${renderRoomCommands(room)}
         ${renderRoomCommandSearch(room)}
         <div class="buyer-card-actions">
@@ -165,6 +166,24 @@
       <div class="buyer-command-preview">
         ${commands.map((command) => `<span>${escapeHtml(command.trigger)} · ${escapeHtml((command.response || "").split(/\n/)[0].slice(0, 22))}</span>`).join("")}
       </div>
+    `;
+  }
+
+  function renderRoomPacks(room) {
+    const packs = room.commandPacks || {};
+    const base = packs.basePackTitle || packs.basePackId || "";
+    const addons = packs.addonPackTitles || packs.addonPackIds || [];
+    if (!base && !addons.length) {
+      return `<p class="buyer-room-note">아직 장착된 명령어 팩이 없습니다. 명령어 스토어에서 기본 운영팩을 장착해 보세요.</p>`;
+    }
+    return `
+      <section class="buyer-pack-summary">
+        <div>
+          <strong>장착된 명령어 팩</strong>
+          <span>기본팩 ${escapeHtml(base || "없음")}${addons.length ? ` · 애드온 ${escapeHtml(addons.join(", "))}` : ""}</span>
+        </div>
+        <a class="button button-secondary" href="/command-store?room=${encodeURIComponent(room.applicationId || "")}">팩 교체</a>
+      </section>
     `;
   }
 
@@ -210,7 +229,7 @@
           <span>${escapeHtml(commandStatusLabel(item))}</span>
         </div>
         <p>${escapeHtml(item.description || "")}</p>
-        <small>${escapeHtml(item.category || "")}${item.aliases?.length ? ` · alias ${escapeHtml(item.aliases.join(", "))}` : ""}${item.disabledReason ? ` · ${escapeHtml(item.disabledReason)}` : ""}</small>
+        <small>${escapeHtml(item.category || "")}${item.sourcePackTitle ? ` · ${escapeHtml(item.sourcePackTitle)} 소속` : ""}${item.aliases?.length ? ` · alias ${escapeHtml(item.aliases.join(", "))}` : ""}${item.disabledReason ? ` · ${escapeHtml(item.disabledReason)}` : ""}</small>
         <div class="buyer-card-actions">
           ${item.available ? `<button class="button button-secondary" type="button" data-copy-command="${escapeHtml(item.examples?.[0] || item.command)}">복사</button>` : ""}
           ${item.status === "install_required" ? `<a class="button button-secondary" href="/command-store?room=${encodeURIComponent(applicationId)}">스토어</a>` : ""}

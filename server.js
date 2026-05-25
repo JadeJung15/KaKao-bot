@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.73";
+export const APP_VERSION = "0.4.74";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -152,6 +152,7 @@ export const FEATURES = [
   "admin-room-status-badges",
   "admin-feature-summary-cards",
   "command-store-installed-search",
+  "command-pack-install-swap",
   "command-store-kakao-preview",
   "command-store-filter-refinement",
   "subscription-expiry-guidance",
@@ -527,6 +528,111 @@ const COMMAND_TEMPLATE_BUNDLES = Object.freeze([
   }
 ]);
 
+const COMMAND_PACKS = Object.freeze([
+  {
+    id: "basic-ops",
+    slot: "base",
+    version: 1,
+    title: "기본 운영팩",
+    tier: "Basic",
+    categoryTitle: "명령어 팩",
+    description: "공지, 규칙, 문의, 프로필양식을 한 번에 장착하는 기본 운영 팩입니다.",
+    features: { customCommands: true, profiles: true },
+    fixedCommands: ["/도움말", "/메시지", "/프로필"],
+    customCommands: [
+      { trigger: "/공지", response: "오늘 공지는 여기입니다.\n\n중요한 내용은 이 메시지 아래에 이어서 안내해 주세요." },
+      { trigger: "/규칙", response: "두글자 닉네임 뒤에 성별을 붙여주세요.\n예: 곰돌 남, 하늘 여" },
+      { trigger: "/문의", response: "문의는 운영진에게 남겨주세요.\n확인 후 순서대로 답변드리겠습니다." },
+      { trigger: "/프로필양식", response: "프로필 양식\n닉네임:\n성별:\n나이대:\n관심사:\n한마디:" }
+    ],
+    tags: ["기본", "운영", "공지", "규칙", "문의", "프로필"]
+  },
+  {
+    id: "basic-ops-plus",
+    slot: "base",
+    version: 1,
+    title: "기본 운영팩+",
+    tier: "Basic+",
+    categoryTitle: "명령어 팩",
+    description: "기본 운영에 출석, 포인트, 레벨, 랭킹 운영 명령어를 함께 켜는 확장 팩입니다.",
+    features: { attendance: true, points: true, rankings: true, profiles: true, customCommands: true },
+    fixedCommands: ["/도움말", "/메시지", "/출석", "/ㅊㅊ", "/미출석", "/포인트", "/내정보", "/출석순위", "/포인트순위", "/레벨순위", "/프로필"],
+    customCommands: [
+      { trigger: "/공지", response: "오늘 공지는 여기입니다.\n\n중요한 내용은 이 메시지 아래에 이어서 안내해 주세요." },
+      { trigger: "/규칙", response: "두글자 닉네임 뒤에 성별을 붙여주세요.\n예: 곰돌 남, 하늘 여" },
+      { trigger: "/문의", response: "문의는 운영진에게 남겨주세요.\n확인 후 순서대로 답변드리겠습니다." },
+      { trigger: "/프로필양식", response: "프로필 양식\n닉네임:\n성별:\n나이대:\n관심사:\n한마디:" },
+      { trigger: "/운영진", response: "운영진 호출이 필요하면 닉네임과 내용을 함께 남겨주세요." },
+      { trigger: "/방소개", response: "이 방은 함께 대화하고 이벤트를 즐기는 오픈채팅방입니다.\n처음 오신 분은 규칙을 먼저 확인해 주세요." },
+      { trigger: "/입장안내", response: "처음 오신 분은 닉네임 규칙과 프로필 양식을 먼저 확인해 주세요." },
+      { trigger: "/신고", response: "신고가 필요한 내용은 닉네임, 시간, 상황을 함께 운영진에게 남겨주세요." },
+      { trigger: "/자주묻는질문", response: "자주 묻는 질문은 이 안내에 이어서 정리해 주세요.\n필요한 내용은 운영진이 계속 업데이트합니다." }
+    ],
+    tags: ["기본", "운영", "출석", "포인트", "레벨", "랭킹"]
+  },
+  {
+    id: "basic-ops-pro",
+    slot: "base",
+    version: 1,
+    title: "기본 운영팩 Pro",
+    tier: "Pro",
+    categoryTitle: "명령어 팩",
+    description: "Basic+에 상점, 가방, 이벤트, 운영 공지까지 포함한 전체 운영 팩입니다.",
+    features: { attendance: true, points: true, rankings: true, profiles: true, shop: true, customCommands: true },
+    fixedCommands: ["/도움말", "/메시지", "/출석", "/ㅊㅊ", "/미출석", "/포인트", "/내정보", "/출석순위", "/포인트순위", "/레벨순위", "/상점", "/구매", "/구매내역", "/가방", "/사용", "/가방선물", "/프로필"],
+    customCommands: [
+      { trigger: "/공지", response: "오늘 공지는 여기입니다.\n\n중요한 내용은 이 메시지 아래에 이어서 안내해 주세요." },
+      { trigger: "/규칙", response: "두글자 닉네임 뒤에 성별을 붙여주세요.\n예: 곰돌 남, 하늘 여" },
+      { trigger: "/문의", response: "문의는 운영진에게 남겨주세요.\n확인 후 순서대로 답변드리겠습니다." },
+      { trigger: "/프로필양식", response: "프로필 양식\n닉네임:\n성별:\n나이대:\n관심사:\n한마디:" },
+      { trigger: "/운영진", response: "운영진 호출이 필요하면 닉네임과 내용을 함께 남겨주세요." },
+      { trigger: "/방소개", response: "이 방은 함께 대화하고 이벤트를 즐기는 오픈채팅방입니다.\n처음 오신 분은 규칙을 먼저 확인해 주세요." },
+      { trigger: "/입장안내", response: "처음 오신 분은 닉네임 규칙과 프로필 양식을 먼저 확인해 주세요." },
+      { trigger: "/신고", response: "신고가 필요한 내용은 닉네임, 시간, 상황을 함께 운영진에게 남겨주세요." },
+      { trigger: "/자주묻는질문", response: "자주 묻는 질문은 이 안내에 이어서 정리해 주세요.\n필요한 내용은 운영진이 계속 업데이트합니다." },
+      { trigger: "/이벤트", response: "진행 중인 이벤트 안내입니다.\n참여 방법과 기간을 확인해 주세요." },
+      { trigger: "/이벤트기간", response: "이벤트 기간은 운영진 공지 기준으로 진행됩니다." },
+      { trigger: "/보상안내", response: "보상은 참여 조건 확인 후 순서대로 지급됩니다." },
+      { trigger: "/상점안내", response: "상점 이용 안내\n/상점 으로 상품을 확인하고 /구매 번호 로 구매할 수 있습니다." },
+      { trigger: "/경고안내", response: "운영진 안내입니다.\n방 규칙 위반 내용이 확인되어 주의 안내드립니다." },
+      { trigger: "/점검공지", response: "운영 점검 안내입니다.\n일부 기능 응답이 잠시 지연될 수 있습니다." }
+    ],
+    tags: ["프로", "운영", "출석", "포인트", "레벨", "상점", "이벤트"]
+  },
+  {
+    id: "addon-mini-games-3",
+    slot: "addon",
+    version: 1,
+    title: "미니게임 3종 애드온",
+    tier: "Addon",
+    categoryTitle: "게임 애드온",
+    description: "주사위, 낚시, 탐험 미니게임을 방 분위기에 맞는 운영 명령어로 연결합니다.",
+    features: { games: true, points: true },
+    fixedCommands: ["/게임", "/주사위", "/낚시", "/탐험"],
+    customCommands: [
+      { trigger: "/운영주사위", response: "주사위 게임을 시작합니다.", proxyCommand: "/주사위" },
+      { trigger: "/운영낚시", response: "낚시 게임을 시작합니다.", proxyCommand: "/낚시" },
+      { trigger: "/운영탐험", response: "탐험 게임을 시작합니다.", proxyCommand: "/탐험" }
+    ],
+    tags: ["애드온", "게임", "주사위", "낚시", "탐험", "포인트"]
+  },
+  {
+    id: "combo-basic-plus-games",
+    slot: "combo",
+    version: 1,
+    title: "기본 운영팩+ + 미니게임 3종",
+    tier: "Combo",
+    categoryTitle: "조합 팩",
+    description: "기본 운영팩+를 기본팩으로 장착하고 미니게임 3종 애드온을 함께 켭니다.",
+    basePackId: "basic-ops-plus",
+    addonPackIds: ["addon-mini-games-3"],
+    features: {},
+    fixedCommands: [],
+    customCommands: [],
+    tags: ["조합", "기본운영팩+", "미니게임", "출석", "포인트"]
+  }
+]);
+
 const initialState = {
   rooms: {},
   accounts: {},
@@ -864,6 +970,93 @@ function commandTemplateCatalogPayload() {
 function commandTemplateById(id) {
   const templateId = normalizeText(id);
   return COMMAND_TEMPLATES.find((template) => template.id === templateId) || null;
+}
+
+function commandPackById(id) {
+  const packId = normalizeText(id);
+  return COMMAND_PACKS.find((pack) => pack.id === packId) || null;
+}
+
+function validCommandPackId(id, slot = "") {
+  const pack = commandPackById(id);
+  if (!pack) return "";
+  if (slot && pack.slot !== slot) return "";
+  return pack.id;
+}
+
+function normalizeCommandPackState(value = {}) {
+  const basePackId = validCommandPackId(value.basePackId, "base");
+  const addonPackIds = [...new Set((Array.isArray(value.addonPackIds) ? value.addonPackIds : [])
+    .map((id) => validCommandPackId(id, "addon"))
+    .filter(Boolean))];
+  return {
+    basePackId,
+    addonPackIds,
+    installedAt: normalizeText(value.installedAt),
+    updatedAt: normalizeText(value.updatedAt),
+    updatedBy: normalizeText(value.updatedBy)
+  };
+}
+
+function publicCommandPack(pack, current = {}) {
+  const commandCount = (pack.customCommands || []).length + (pack.fixedCommands || []).length;
+  const installed = pack.slot === "base"
+    ? current.basePackId === pack.id
+    : pack.slot === "addon"
+      ? (current.addonPackIds || []).includes(pack.id)
+      : current.basePackId === pack.basePackId && (pack.addonPackIds || []).every((id) => (current.addonPackIds || []).includes(id));
+  return {
+    id: pack.id,
+    slot: pack.slot,
+    version: pack.version,
+    title: pack.title,
+    tier: pack.tier,
+    categoryTitle: pack.categoryTitle,
+    description: pack.description,
+    commandCount,
+    fixedCommands: pack.fixedCommands || [],
+    customCommands: (pack.customCommands || []).map((command) => ({
+      trigger: command.trigger,
+      response: command.response,
+      proxyCommand: command.proxyCommand || ""
+    })),
+    features: pack.features || {},
+    basePackId: pack.basePackId || "",
+    addonPackIds: pack.addonPackIds || [],
+    installed,
+    status: "available",
+    installable: true,
+    tags: pack.tags || []
+  };
+}
+
+function commandPackCatalogPayload(current = {}) {
+  const normalized = normalizeCommandPackState(current);
+  return {
+    ok: true,
+    version: APP_VERSION,
+    total: COMMAND_PACKS.length,
+    summary: {
+      base: COMMAND_PACKS.filter((pack) => pack.slot === "base").length,
+      addon: COMMAND_PACKS.filter((pack) => pack.slot === "addon").length,
+      combo: COMMAND_PACKS.filter((pack) => pack.slot === "combo").length,
+      installed: COMMAND_PACKS.filter((pack) => publicCommandPack(pack, normalized).installed).length
+    },
+    current: normalized,
+    packs: COMMAND_PACKS.map((pack) => publicCommandPack(pack, normalized))
+  };
+}
+
+function commandPackStatePayload(current = {}) {
+  const normalized = normalizeCommandPackState(current);
+  const basePack = commandPackById(normalized.basePackId);
+  const addonPacks = normalized.addonPackIds.map((id) => commandPackById(id)).filter(Boolean);
+  return {
+    ...normalized,
+    basePackTitle: basePack?.title || "",
+    addonPackTitles: addonPacks.map((pack) => pack.title),
+    addonPacks: addonPacks.map((pack) => ({ id: pack.id, title: pack.title, tier: pack.tier }))
+  };
 }
 
 function nowIso() {
@@ -1828,6 +2021,7 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     features: roomView?.features || DEFAULT_ROOM_FEATURES,
     customCommands,
     commandCount: customCommands.length,
+    commandPacks: commandPackStatePayload(roomView?.commandPacks || {}),
     gameSettings: roomView?.gameSettings || DEFAULT_GAME_SETTINGS,
     subscription,
     monthlyPriceKrw: roomView?.subscription?.monthlyPriceKrw || application.plan?.monthlyPriceKrw || MONTHLY_PRICE_KRW,
@@ -1930,7 +2124,7 @@ function ensureRoom(state, room) {
     peopleByIdentity: {},
     ambiguousIdentities: [],
     shop: {},
-    settings: {},
+    settings: { commandPacks: normalizeCommandPackState() },
     pendingEntries: []
   };
   const roomState = state.rooms[key];
@@ -1951,6 +2145,7 @@ function ensureRoom(state, room) {
   roomState.ambiguousIdentities ||= [];
   roomState.shop = normalizeShopState(roomState.shop || {});
   roomState.settings ||= {};
+  roomState.settings.commandPacks = normalizeCommandPackState(roomState.settings.commandPacks || {});
   roomState.settings.enabled = roomState.settings.enabled !== false;
   roomState.settings.registered ||= false;
   roomState.settings.roomIds ||= [];
@@ -2149,6 +2344,9 @@ function normalizeCustomCommands(value = []) {
       updatedBy: normalizeText(item?.updatedBy),
       sourceTemplateId: normalizeText(item?.sourceTemplateId),
       sourceTemplateKind: normalizeText(item?.sourceTemplateKind),
+      sourcePackId: normalizeText(item?.sourcePackId),
+      sourcePackSlot: normalizeText(item?.sourcePackSlot),
+      sourcePackVersion: Number(item?.sourcePackVersion || 0) || 0,
       proxyCommand: normalizeCustomCommandTrigger(item?.proxyCommand)
     });
   }
@@ -5583,14 +5781,28 @@ function commandSearchMatches(item, tokens = []) {
     item.description,
     ...(item.examples || []),
     ...(item.searchableKeywords || []),
+    item.sourcePackId,
+    item.sourcePackTitle,
     item.status,
     item.disabledReason
   ].join(" ").toLowerCase();
   return tokens.every((token) => haystack.includes(token));
 }
 
+function activeCommandPacks(roomState) {
+  const current = normalizeCommandPackState(roomState.settings?.commandPacks || {});
+  return [current.basePackId, ...(current.addonPackIds || [])]
+    .map((id) => commandPackById(id))
+    .filter(Boolean);
+}
+
+function commandPackForFixedCommand(roomState, command) {
+  return activeCommandPacks(roomState).find((pack) => (pack.fixedCommands || []).includes(command)) || null;
+}
+
 function commandCatalogItemFromRegistry(item, roomState, sender, options = {}) {
   const availability = commandAvailability(item, roomState, sender, options);
+  const sourcePack = commandPackForFixedCommand(roomState, item.command);
   return {
     command: item.command,
     aliases: item.aliases || [],
@@ -5605,7 +5817,10 @@ function commandCatalogItemFromRegistry(item, roomState, sender, options = {}) {
     status: availability.status,
     disabledReason: availability.disabledReason,
     source: "registry",
-    searchableKeywords: item.searchableKeywords || []
+    sourcePackId: sourcePack?.id || "",
+    sourcePackTitle: sourcePack?.title || "",
+    sourcePackSlot: sourcePack?.slot || "",
+    searchableKeywords: [...(item.searchableKeywords || []), sourcePack?.title || "", sourcePack?.tier || ""].filter(Boolean)
   };
 }
 
@@ -5626,7 +5841,10 @@ function commandCatalogItemFromCustom(command, roomState) {
     disabledReason: enabled ? null : `${featureLabel("customCommands")} 기능이 꺼져 있습니다.`,
     source: "custom",
     sourceTemplateId: command.sourceTemplateId || "",
-    searchableKeywords: [command.sourceTemplateKind || "", command.proxyCommand || ""].filter(Boolean)
+    sourcePackId: command.sourcePackId || "",
+    sourcePackTitle: command.sourcePackId ? commandPackById(command.sourcePackId)?.title || "" : "",
+    sourcePackSlot: command.sourcePackSlot || "",
+    searchableKeywords: [command.sourceTemplateKind || "", command.proxyCommand || "", command.sourcePackId || "", commandPackById(command.sourcePackId)?.title || ""].filter(Boolean)
   };
 }
 
@@ -5829,6 +6047,7 @@ function roomAdminView(roomState) {
       .map(([, label]) => label),
     customCommands: customCommandsList,
     commandCount: customCommandsList.length,
+    commandPacks: commandPackStatePayload(settings.commandPacks || {}),
     gameSettings: gameSettings(roomState),
     subscription: {
       status: subscription.status || "unset",
@@ -6393,6 +6612,7 @@ function buyerConsolePayload(state, account = {}) {
       days: DEFAULT_SUBSCRIPTION_DAYS
     },
     commandStore: commandTemplateCatalogPayload(),
+    commandPacks: commandPackCatalogPayload(),
     ownerAdminNotice: "/admin 은 판매자 운영자 전용입니다. 구매자는 /console, /my-rooms, /setup, /license 화면만 사용합니다."
   };
 }
@@ -6431,6 +6651,134 @@ function templateInstallItems(template, body = {}) {
     response: normalizeCustomCommandResponse(body.response || template.response),
     proxyCommand: normalizeCustomCommandTrigger(template.proxyCommand || "")
   }];
+}
+
+function commandPackInstallItems(pack, slot) {
+  return (pack.customCommands || []).map((item) => ({
+    trigger: normalizeCustomCommandTrigger(item.trigger),
+    response: normalizeCustomCommandResponse(item.response),
+    proxyCommand: normalizeCustomCommandTrigger(item.proxyCommand || ""),
+    sourcePackId: pack.id,
+    sourcePackSlot: slot || pack.slot,
+    sourcePackVersion: pack.version
+  })).filter((item) => item.trigger && item.response);
+}
+
+function resolveCommandPackSelection(current = {}, body = {}) {
+  let basePackId = Object.hasOwn(body, "basePackId")
+    ? validCommandPackId(body.basePackId, "base")
+    : current.basePackId || "";
+  let addonPackIds = Object.hasOwn(body, "addonPackIds")
+    ? [...new Set((Array.isArray(body.addonPackIds) ? body.addonPackIds : []).map((id) => validCommandPackId(id, "addon")).filter(Boolean))]
+    : [...(current.addonPackIds || [])];
+  const requestedPack = commandPackById(body.commandPackId || body.packId);
+  const action = normalizeText(body.action || "apply");
+  if (requestedPack?.slot === "base") basePackId = requestedPack.id;
+  if (requestedPack?.slot === "addon") {
+    addonPackIds = action === "remove"
+      ? addonPackIds.filter((id) => id !== requestedPack.id)
+      : [...new Set([...addonPackIds, requestedPack.id])];
+  }
+  if (requestedPack?.slot === "combo") {
+    basePackId = validCommandPackId(requestedPack.basePackId, "base");
+    addonPackIds = [...new Set((requestedPack.addonPackIds || []).map((id) => validCommandPackId(id, "addon")).filter(Boolean))];
+  }
+  return { basePackId, addonPackIds };
+}
+
+function applyCommandPacksToRoom(roomState, account = {}, body = {}) {
+  roomState.settings ||= {};
+  const current = normalizeCommandPackState(roomState.settings.commandPacks || {});
+  const selection = resolveCommandPackSelection(current, body);
+  const basePack = selection.basePackId ? commandPackById(selection.basePackId) : null;
+  const addonPacks = selection.addonPackIds.map((id) => commandPackById(id)).filter(Boolean);
+  if (selection.basePackId && !basePack) return { ok: false, status: 400, error: "invalid_base_pack" };
+  if (addonPacks.length !== selection.addonPackIds.length) return { ok: false, status: 400, error: "invalid_addon_pack" };
+
+  const installedAt = nowIso();
+  const updatedBy = account.email || account.nickname || "buyer_console";
+  const keepCommands = customCommands(roomState).filter((command) => !command.sourcePackSlot);
+  const byTrigger = new Map(keepCommands.map((command) => [command.trigger, command]));
+  const packCommands = [
+    ...(basePack ? commandPackInstallItems(basePack, "base") : []),
+    ...addonPacks.flatMap((pack) => commandPackInstallItems(pack, "addon"))
+  ];
+  const skippedCommands = [];
+  for (const command of packCommands) {
+    if (RESERVED_CUSTOM_COMMANDS.has(command.trigger)) {
+      skippedCommands.push({ ...command, reason: "reserved_command" });
+      continue;
+    }
+    const existing = byTrigger.get(command.trigger);
+    if (existing && !existing.sourcePackId) {
+      skippedCommands.push({ ...command, reason: "direct_command_exists" });
+      continue;
+    }
+    byTrigger.set(command.trigger, {
+      trigger: command.trigger,
+      response: command.response,
+      updatedAt: installedAt,
+      updatedBy,
+      sourceTemplateId: "",
+      sourceTemplateKind: "command-pack",
+      sourcePackId: command.sourcePackId,
+      sourcePackSlot: command.sourcePackSlot,
+      sourcePackVersion: command.sourcePackVersion,
+      proxyCommand: command.proxyCommand || ""
+    });
+  }
+  if (byTrigger.size > CUSTOM_COMMAND_LIMIT) return { ok: false, status: 400, error: "custom_command_limit" };
+
+  roomState.settings.customCommands = normalizeCustomCommands([...byTrigger.values()]);
+  roomState.settings.commandPacks = normalizeCommandPackState({
+    basePackId: selection.basePackId,
+    addonPackIds: selection.addonPackIds,
+    installedAt: current.installedAt || installedAt,
+    updatedAt: installedAt,
+    updatedBy
+  });
+  roomState.settings.features ||= { ...DEFAULT_ROOM_FEATURES };
+  for (const pack of [basePack, ...addonPacks].filter(Boolean)) {
+    for (const [key, value] of Object.entries(pack.features || {})) {
+      roomState.settings.features[key] = value !== false;
+    }
+  }
+  recordRoomEvent(roomState, {
+    type: "command_packs_applied",
+    trigger: [selection.basePackId, ...selection.addonPackIds].filter(Boolean).join(", "),
+    by: updatedBy
+  });
+  return {
+    ok: true,
+    version: APP_VERSION,
+    current: roomState.settings.commandPacks,
+    packs: commandPackCatalogPayload(roomState.settings.commandPacks).packs,
+    installedCommands: packCommands.filter((command) => !skippedCommands.some((skipped) => skipped.trigger === command.trigger)),
+    skippedCommands,
+    customCommandCount: roomState.settings.customCommands.length
+  };
+}
+
+function applyCommandPacksForBuyer(state, account = {}, body = {}) {
+  const application = approvedApplicationForInstall(state, account, body);
+  if (!application) return { ok: false, status: 404, error: "approved_room_not_found" };
+  const roomState = ensureRoom(state, application.roomName);
+  const result = applyCommandPacksToRoom(roomState, account, body);
+  if (!result.ok) return result;
+  return {
+    ...result,
+    room: applicationRoomPayload(state, account, application)
+  };
+}
+
+function buyerRoomCommandPacksForAccount(state, account = {}, body = {}) {
+  const application = approvedApplicationForInstall(state, account, body);
+  if (!application) return { ok: false, status: 404, error: "approved_room_not_found" };
+  const roomState = ensureRoom(state, application.roomName);
+  return {
+    ...commandPackCatalogPayload(roomState.settings.commandPacks),
+    room: applicationRoomPayload(state, account, application)
+  };
 }
 
 function installCommandTemplateForBuyer(state, account = {}, body = {}) {
@@ -6498,6 +6846,10 @@ function buyerCustomCommandsForAccount(state, account = {}, body = {}) {
       updatedBy: item.updatedBy,
       sourceTemplateId: item.sourceTemplateId || "",
       sourceTemplateKind: item.sourceTemplateKind || "",
+      sourcePackId: item.sourcePackId || "",
+      sourcePackTitle: item.sourcePackId ? commandPackById(item.sourcePackId)?.title || "" : "",
+      sourcePackSlot: item.sourcePackSlot || "",
+      sourcePackVersion: item.sourcePackVersion || 0,
       proxyCommand: item.proxyCommand || ""
     }))
   };
@@ -6557,6 +6909,22 @@ async function buyerCommandTemplateInstallFromRequest(state, req, body = {}) {
   const auth = await accountFromBuyerRequest(state, req, body);
   if (!auth.ok) return auth;
   const result = installCommandTemplateForBuyer(state, auth.account, body);
+  if (!result.ok) return result;
+  return { ...result, guideToken: buyerTokenForAccount(auth.account) };
+}
+
+async function buyerCommandPacksApplyFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const result = applyCommandPacksForBuyer(state, auth.account, body);
+  if (!result.ok) return result;
+  return { ...result, guideToken: buyerTokenForAccount(auth.account) };
+}
+
+async function buyerRoomCommandPacksFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const result = buyerRoomCommandPacksForAccount(state, auth.account, body);
   if (!result.ok) return result;
   return { ...result, guideToken: buyerTokenForAccount(auth.account) };
 }
@@ -6654,6 +7022,10 @@ async function handlePublicAccountApi(req, url) {
     return { status: 200, body: commandTemplateCatalogPayload() };
   }
 
+  if (req.method === "GET" && url.pathname === "/api/command-packs") {
+    return { status: 200, body: commandPackCatalogPayload() };
+  }
+
   if (req.method === "POST" && url.pathname === "/api/signup") {
     const body = await readBody(req);
     const state = await loadState();
@@ -6705,6 +7077,23 @@ async function handlePublicAccountApi(req, url) {
     const result = await buyerCommandTemplateInstallFromRequest(state, req, body);
     if (!result.ok) return { status: result.status || 401, body: result };
     await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/command-packs/apply") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerCommandPacksApplyFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/room-command-packs") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerRoomCommandPacksFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
     return { status: 200, body: result };
   }
 
@@ -7193,12 +7582,15 @@ export async function requestHandler(req, res) {
     const adminApi = pathname.startsWith("/api/admin/");
     const publicAccountApi = pathname === "/api/auth/config"
       || pathname === "/api/command-templates"
+      || pathname === "/api/command-packs"
       || pathname === "/api/signup"
       || pathname === "/api/apply"
       || pathname === "/api/login"
       || pathname === "/api/buyer/guide"
       || pathname === "/api/buyer/console"
       || pathname === "/api/buyer/command-templates/install"
+      || pathname === "/api/buyer/command-packs/apply"
+      || pathname === "/api/buyer/room-command-packs"
       || pathname === "/api/buyer/custom-commands"
       || pathname === "/api/buyer/room-commands"
       || pathname === "/api/buyer/custom-commands/delete"

@@ -104,7 +104,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.73");
+  assert.equal(health.json.version, "0.4.74");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -341,7 +341,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.73");
+  assert.equal(commandTemplates.json.version, "0.4.74");
   assert.equal(commandTemplates.json.total, 400);
   assert.equal(commandTemplates.json.templates.length, 400);
   assert.equal(commandTemplates.json.categories.some((category) => category.title === "펫키우기"), true);
@@ -357,6 +357,16 @@ try {
   assert.equal(commandTemplates.json.templates.some((template) => /관리자가 보상, 쿨타임, 확률/.test(template.response || "")), false);
   assert.equal(commandTemplates.json.templates.some((template) => /템플릿 번호/.test(template.response || "")), false);
 
+  const commandPacks = await request("/api/command-packs");
+  assert.equal(commandPacks.response.status, 200);
+  assert.equal(commandPacks.json.ok, true);
+  assert.equal(commandPacks.json.version, "0.4.74");
+  assert.equal(commandPacks.json.packs.some((pack) => pack.id === "basic-ops"), true);
+  assert.equal(commandPacks.json.packs.some((pack) => pack.id === "basic-ops-plus" && pack.fixedCommands.includes("/출석") && pack.fixedCommands.includes("/포인트")), true);
+  assert.equal(commandPacks.json.packs.some((pack) => pack.id === "basic-ops-pro" && pack.fixedCommands.includes("/레벨순위") && pack.fixedCommands.includes("/상점")), true);
+  assert.equal(commandPacks.json.packs.some((pack) => pack.id === "addon-mini-games-3" && pack.customCommands.some((command) => command.proxyCommand === "/주사위")), true);
+  assert.equal(commandPacks.json.packs.some((pack) => pack.id === "combo-basic-plus-games" && pack.basePackId === "basic-ops-plus"), true);
+
   const statusPage = await fetch(`${baseUrl}/status`);
   const statusPageText = await statusPage.text();
   assert.match(statusPageText, /서버 상태/);
@@ -371,12 +381,20 @@ try {
 
   const consolePageText = await (await fetch(`${baseUrl}/console`)).text();
   assert.match(consolePageText, /구매자 콘솔/);
-  assert.match(consolePageText, /20260525-command-search/);
+  assert.match(consolePageText, /20260525-command-packs/);
   const buyerConsoleScriptText = await (await fetch(`${baseUrl}/buyer-console.js`)).text();
   assert.match(buyerConsoleScriptText, /buyer-onboarding/);
   assert.match(buyerConsoleScriptText, /처음 시작 체크리스트/);
   assert.match(buyerConsoleScriptText, /\/api\/buyer\/room-commands/);
   assert.match(buyerConsoleScriptText, /명령어 검색/);
+  assert.match(buyerConsoleScriptText, /장착된 명령어 팩/);
+
+  const commandStorePageText = await (await fetch(`${baseUrl}/command-store`)).text();
+  assert.match(commandStorePageText, /명령어 팩/);
+  assert.match(commandStorePageText, /장착/);
+  assert.match(commandStorePageText, /교체/);
+  assert.match(commandStoreScriptText, /\/api\/command-packs/);
+  assert.match(commandStoreScriptText, /\/api\/buyer\/command-packs\/apply/);
 
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
@@ -415,7 +433,7 @@ try {
   assert.match(sessionNavText, /nav-logout/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.4.73");
+  assert.equal(packageJson.version, "0.4.74");
   assert.equal(packageJson.scripts["check:deploy"], "node scripts/predeploy-check.js");
   assert.equal(packageJson.scripts["smoke:local"], "node scripts/smoke-check.js");
   assert.equal(packageJson.scripts["smoke:prod"], "node scripts/smoke-check.js https://pixgom.com");
@@ -614,7 +632,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.4.73");
+  assert.equal(adminDiagnostics.json.version, "0.4.74");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -625,7 +643,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.4.73");
+  assert.equal(adminBackup.json.version, "0.4.74");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -813,7 +831,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.73");
+  assert.equal(buyerGuideApproved.json.version, "0.4.74");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -828,7 +846,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.73");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.74");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -856,6 +874,102 @@ try {
 
   const installableTemplate = commandTemplates.json.templates.find((template) => template.installable && template.categoryId === "basic-ops");
   assert.ok(installableTemplate);
+
+  const directCustomInstall = await request("/api/buyer/command-templates/install", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      templateId: installableTemplate.id,
+      trigger: "/직접",
+      response: "직접 만든 명령어입니다."
+    })
+  });
+  assert.equal(directCustomInstall.response.status, 200);
+  assert.equal(directCustomInstall.json.command.trigger, "/직접");
+
+  const basicPackApply = await request("/api/buyer/command-packs/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      basePackId: "basic-ops",
+      addonPackIds: []
+    })
+  });
+  assert.equal(basicPackApply.response.status, 200);
+  assert.equal(basicPackApply.json.ok, true);
+  assert.equal(basicPackApply.json.current.basePackId, "basic-ops");
+  assert.equal(basicPackApply.json.room.commandPacks.basePackTitle, "기본 운영팩");
+  assert.equal(basicPackApply.json.room.commandCount >= 5, true);
+
+  const proPackApply = await request("/api/buyer/command-packs/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      basePackId: "basic-ops-pro",
+      addonPackIds: []
+    })
+  });
+  assert.equal(proPackApply.response.status, 200);
+  assert.equal(proPackApply.json.current.basePackId, "basic-ops-pro");
+  assert.equal(proPackApply.json.room.features.attendance, true);
+  assert.equal(proPackApply.json.room.features.points, true);
+  assert.equal(proPackApply.json.room.features.rankings, true);
+  assert.equal(proPackApply.json.room.features.shop, true);
+
+  const roomPackState = await request("/api/buyer/room-command-packs", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId
+    })
+  });
+  assert.equal(roomPackState.response.status, 200);
+  assert.equal(roomPackState.json.current.basePackId, "basic-ops-pro");
+  assert.equal(roomPackState.json.packs.some((pack) => pack.id === "basic-ops-pro" && pack.installed === true), true);
+
+  const proPackCommands = await request("/api/buyer/custom-commands", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId
+    })
+  });
+  assert.equal(proPackCommands.response.status, 200);
+  assert.equal(proPackCommands.json.commands.some((command) => command.trigger === "/직접" && !command.sourcePackId), true);
+  assert.equal(proPackCommands.json.commands.some((command) => command.trigger === "/점검공지" && command.sourcePackId === "basic-ops-pro" && command.sourcePackSlot === "base"), true);
+
+  const proPackSearch = await request("/api/buyer/room-commands", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      q: "레벨"
+    })
+  });
+  assert.equal(proPackSearch.response.status, 200);
+  assert.equal(proPackSearch.json.items.some((item) => item.command === "/포인트순위" && item.aliases.includes("/레벨순위") && item.sourcePackTitle === "기본 운영팩 Pro"), true);
+
+  const blockedOtherRoomPack = await request("/api/buyer/command-packs/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: "app_other_buyer_room",
+      basePackId: "basic-ops"
+    })
+  });
+  assert.equal(blockedOtherRoomPack.response.status, 404);
+  assert.equal(blockedOtherRoomPack.json.error, "approved_room_not_found");
+
   const templateInstall = await request("/api/buyer/command-templates/install", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -1086,6 +1200,19 @@ try {
   });
   assert.match(enableApprovedGame.json.reply, /게임 기능이 켜졌습니다/);
 
+  const miniGamePackApply = await request("/api/buyer/command-packs/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      basePackId: "basic-ops-pro",
+      addonPackIds: ["addon-mini-games-3"]
+    })
+  });
+  assert.equal(miniGamePackApply.response.status, 200);
+  assert.equal(miniGamePackApply.json.current.addonPackIds.includes("addon-mini-games-3"), true);
+
   const diceProxyReply = await chatPayload({
     registeredRoom: false,
     room: "판매신청방",
@@ -1096,6 +1223,38 @@ try {
     licenseKey: approvedApplication.json.room.licenseKey
   });
   assert.match(diceProxyReply.json.reply, /주사위 게임/);
+
+  const fishingPackProxyReply = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "/운영낚시",
+    sender: "구매자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.match(fishingPackProxyReply.json.reply, /낚시 결과/);
+
+  const miniGamePackRemove = await request("/api/buyer/command-packs/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      basePackId: "basic-ops-pro",
+      addonPackIds: []
+    })
+  });
+  assert.equal(miniGamePackRemove.response.status, 200);
+  const afterMiniGameRemove = await request("/api/buyer/custom-commands", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId
+    })
+  });
+  assert.equal(afterMiniGameRemove.json.commands.some((command) => command.trigger === "/운영낚시"), false);
 
   const deleteInstalled = await request("/api/buyer/custom-commands/delete", {
     method: "POST",

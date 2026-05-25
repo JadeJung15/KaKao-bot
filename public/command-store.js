@@ -13,9 +13,13 @@
   const installedList = document.querySelector("[data-installed-list]");
   const installedSearchInput = document.querySelector("[data-installed-search]");
   const refreshInstalledButton = document.querySelector("[data-refresh-installed]");
+  const packPanel = document.querySelector("[data-command-pack-panel]");
+  const packGrid = document.querySelector("[data-command-pack-grid]");
+  const packCurrent = document.querySelector("[data-command-pack-current]");
   const loadMoreButton = document.querySelector("[data-load-more]");
 
   let catalog = { templates: [], categories: [], summary: {}, total: 0 };
+  let packCatalog = { packs: [], current: {}, summary: {} };
   let buyerToken = "";
   let buyerRooms = [];
   let installedCommandsCache = [];
@@ -24,6 +28,7 @@
   let visibleLimit = 24;
   const favorites = new Set(readList("pixgomCommandFavorites"));
   const cart = new Set(readList("pixgomCommandCart"));
+  const packCart = new Set(readList("pixgomCommandPackCart"));
 
   function readList(key) {
     try {
@@ -90,11 +95,26 @@
     return catalog.templates.find((item) => item.id === id);
   }
 
+  function packById(id) {
+    return (packCatalog.packs || []).find((item) => item.id === id);
+  }
+
+  function packSlotLabel(value) {
+    const labels = { base: "기본팩", addon: "애드온", combo: "조합팩" };
+    return labels[value] || value || "팩";
+  }
+
+  function packCommandText(pack) {
+    const fixed = (pack.fixedCommands || []).length;
+    const custom = (pack.customCommands || []).length;
+    return `${fixed + custom}개 명령어${fixed ? ` · 고정 ${fixed}개` : ""}${custom ? ` · 커스텀 ${custom}개` : ""}`;
+  }
+
   function renderSummary() {
     summary.innerHTML = `
       <article><strong>${catalog.total}</strong><span>전체 템플릿</span></article>
       <article><strong>${catalog.summary?.installable || 0}</strong><span>설치 가능</span></article>
-      <article><strong>${cart.size}</strong><span>장바구니</span></article>
+      <article><strong>${cart.size + packCart.size}</strong><span>장바구니</span></article>
       <article><strong>${favorites.size}</strong><span>즐겨찾기</span></article>
     `;
   }
@@ -112,6 +132,7 @@
 
   function modeMatches(template) {
     if (currentMode === "featured") return template.installable && template.kind !== "fixed";
+    if (currentMode === "packs") return false;
     if (currentMode === "bundle") return isBundleTemplate(template);
     if (currentMode === "installable") return template.installable;
     if (currentMode === "game") return template.kind === "game-template" || template.categoryId === "bundle-game" || (template.commands || []).some((command) => command.proxyCommand);
@@ -120,6 +141,43 @@
     if (currentMode === "favorite") return favorites.has(template.id);
     if (currentMode === "cart") return cart.has(template.id);
     return true;
+  }
+
+  function renderCommandPacks() {
+    if (!packPanel || !packGrid) return;
+    const current = packCatalog.current || {};
+    const packs = packCatalog.packs || [];
+    packPanel.hidden = currentMode !== "packs" && !packs.some((pack) => pack.installed);
+    if (packPanel.hidden) return;
+    const basePack = packs.find((pack) => pack.id === current.basePackId);
+    const addonTitles = packs.filter((pack) => (current.addonPackIds || []).includes(pack.id)).map((pack) => pack.title);
+    packCurrent.textContent = basePack
+      ? `현재 ${basePack.title}${addonTitles.length ? ` + ${addonTitles.join(", ")}` : ""}`
+      : "아직 장착된 기본팩이 없습니다.";
+    const visiblePacks = currentMode === "packs" ? packs : packs.filter((pack) => pack.installed);
+    packGrid.innerHTML = visiblePacks.map((pack) => {
+      const isBase = pack.slot === "base";
+      const isAddon = pack.slot === "addon";
+      const actionLabel = pack.installed ? (isAddon ? "해제" : "장착됨") : isBase ? (current.basePackId ? "교체" : "장착") : "장착";
+      return `
+        <article class="command-pack-card" data-installed="${pack.installed ? "true" : "false"}">
+          <div>
+            <span>${escapeHtml(packSlotLabel(pack.slot))} · ${escapeHtml(pack.tier)}</span>
+            <strong>${escapeHtml(pack.title)}</strong>
+          </div>
+          <p>${escapeHtml(pack.description)}</p>
+          <small>${escapeHtml(packCommandText(pack))}</small>
+          <div class="template-badges">
+            ${(pack.fixedCommands || []).slice(0, 4).map((command) => `<span>${escapeHtml(command)}</span>`).join("")}
+            ${(pack.customCommands || []).slice(0, 4).map((command) => `<span>${escapeHtml(command.trigger)}</span>`).join("")}
+          </div>
+          <div class="template-actions">
+            <button class="button button-secondary" type="button" data-cart-pack="${escapeHtml(pack.id)}">${packCart.has(pack.id) ? "장바구니 제거" : "장바구니 담기"}</button>
+            <button class="button button-primary" type="button" data-apply-pack="${escapeHtml(pack.id)}" data-pack-action="${pack.installed && isAddon ? "remove" : "apply"}" ${buyerToken && buyerRooms.length && !(pack.installed && isBase) ? "" : "disabled"}>${escapeHtml(actionLabel)}</button>
+          </div>
+        </article>
+      `;
+    }).join("");
   }
 
   function templateMatches(template) {
@@ -152,6 +210,7 @@
   }
 
   function renderTemplates() {
+    renderCommandPacks();
     const matchedTemplates = catalog.templates.filter(templateMatches);
     const templates = matchedTemplates.slice(0, visibleLimit);
     grid.innerHTML = templates.map((template) => `
@@ -263,6 +322,31 @@
     if (template) renderEditor(template);
   }
 
+  async function loadCommandPacks() {
+    const response = await fetch("/api/command-packs");
+    const data = await response.json();
+    if (response.ok && data.ok !== false) packCatalog = data;
+    renderCommandPacks();
+    renderSummary();
+  }
+
+  async function loadRoomCommandPacks() {
+    if (!buyerToken || !installRoomInput.value) return;
+    const response = await fetch("/api/buyer/room-command-packs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: buyerToken, applicationId: installRoomInput.value })
+    });
+    const data = await response.json();
+    if (!response.ok || data.ok === false) return;
+    if (data.guideToken) {
+      buyerToken = data.guideToken;
+      sessionStorage.setItem("pixgomBuyerToken", buyerToken);
+    }
+    packCatalog = data;
+    renderCommandPacks();
+  }
+
   async function loadBuyerState() {
     if (!window.PixelgomAuth) return;
     const savedToken = sessionStorage.getItem("pixgomBuyerToken");
@@ -285,6 +369,7 @@
         installRoomInput.innerHTML = buyerRooms.map((room) => `<option value="${escapeHtml(room.applicationId)}">${escapeHtml(room.roomName)}</option>`).join("");
         const preferredRoom = new URLSearchParams(window.location.search).get("room");
         if (preferredRoom && buyerRooms.some((room) => room.applicationId === preferredRoom)) installRoomInput.value = preferredRoom;
+        await loadRoomCommandPacks();
         await loadInstalledCommands();
       } else {
         statusBox.textContent = "로그인은 확인됐지만 승인된 방이 없어 설치 버튼을 사용할 수 없습니다.";
@@ -361,6 +446,47 @@
     renderTemplates();
   }
 
+  async function applyCommandPack(packId, action = "apply") {
+    const pack = packById(packId);
+    if (!pack) return;
+    if (!buyerToken || !installRoomInput.value) {
+      statusBox.textContent = "구매자 로그인 후 명령어 팩을 장착할 수 있습니다.";
+      return;
+    }
+    const current = packCatalog.current || {};
+    const addonPackIds = new Set(current.addonPackIds || []);
+    let body = { token: buyerToken, applicationId: installRoomInput.value };
+    if (pack.slot === "base") {
+      body = { ...body, basePackId: pack.id, addonPackIds: [...addonPackIds] };
+    } else if (pack.slot === "addon") {
+      if (action === "remove") addonPackIds.delete(pack.id);
+      else addonPackIds.add(pack.id);
+      body = { ...body, basePackId: current.basePackId || "", addonPackIds: [...addonPackIds] };
+    } else {
+      body = { ...body, commandPackId: pack.id };
+    }
+    const response = await fetch("/api/buyer/command-packs/apply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    if (!response.ok || data.ok === false) {
+      statusBox.textContent = `팩 장착 실패: ${data.error || "unknown_error"}`;
+      return;
+    }
+    if (data.guideToken) {
+      buyerToken = data.guideToken;
+      sessionStorage.setItem("pixgomBuyerToken", buyerToken);
+    }
+    packCart.delete(pack.id);
+    writeSet("pixgomCommandPackCart", packCart);
+    statusBox.textContent = `${pack.title} ${action === "remove" ? "해제" : "장착/교체"} 완료`;
+    await loadRoomCommandPacks();
+    await loadInstalledCommands();
+    renderTemplates();
+  }
+
   async function loadInstalledCommands() {
     if (!buyerToken || !installRoomInput.value) return;
     const response = await fetch("/api/buyer/custom-commands", {
@@ -393,7 +519,7 @@
       <article class="installed-command-card">
         <strong>${escapeHtml(command.trigger)}</strong>
         <p>${escapeHtml(command.response.split(/\n/)[0] || "응답 문구 없음")}</p>
-        <span>${command.proxyCommand ? `${escapeHtml(command.proxyCommand)} 게임 연결` : "문구형"}</span>
+        <span>${command.sourcePackTitle ? `${escapeHtml(command.sourcePackTitle)} 소속` : command.proxyCommand ? `${escapeHtml(command.proxyCommand)} 게임 연결` : "문구형"}</span>
         <small>${escapeHtml(command.updatedAt ? `수정 ${command.updatedAt.slice(0, 10)}` : "수정일 미기록")}</small>
         <button class="button button-secondary" type="button" data-edit-command="${escapeHtml(command.trigger)}">편집</button>
         <button class="button button-secondary" type="button" data-delete-command="${escapeHtml(command.trigger)}">삭제</button>
@@ -454,6 +580,13 @@
     if (cartButton) toggleSet(cart, cartButton.dataset.cartTemplate, "pixgomCommandCart");
   });
 
+  packGrid?.addEventListener("click", async (event) => {
+    const cartButton = event.target.closest("[data-cart-pack]");
+    const applyButton = event.target.closest("[data-apply-pack]");
+    if (cartButton) toggleSet(packCart, cartButton.dataset.cartPack, "pixgomCommandPackCart");
+    if (applyButton) await applyCommandPack(applyButton.dataset.applyPack, applyButton.dataset.packAction || "apply");
+  });
+
   editor.addEventListener("click", async (event) => {
     if (!currentTemplateId) return;
     const template = templateById(currentTemplateId);
@@ -494,7 +627,10 @@
     });
   });
 
-  installRoomInput.addEventListener("change", loadInstalledCommands);
+  installRoomInput.addEventListener("change", async () => {
+    await loadRoomCommandPacks();
+    await loadInstalledCommands();
+  });
   installedSearchInput?.addEventListener("input", () => renderInstalledCommands(installedCommandsCache));
   refreshInstalledButton?.addEventListener("click", loadInstalledCommands);
   loadMoreButton?.addEventListener("click", () => {
@@ -507,6 +643,7 @@
     catalog = await response.json();
     renderCategoryOptions();
     renderSummary();
+    await loadCommandPacks();
     await loadBuyerState();
     const first = catalog.templates.find((template) => template.installable && template.kind !== "fixed");
     if (first) selectTemplate(first.id);

@@ -49,8 +49,16 @@
 ```
 
 - 응답 항목은 `command`, `aliases`, `category`, `description`, `examples`, `available`, `installed`, `requiresRole`, `requiresLicense`, `status`, `disabledReason`를 포함합니다.
-- 검색 대상은 registry, 스토어 템플릿, 방별 커스텀 명령어를 조합합니다.
+- 검색 대상은 registry, 스토어 템플릿, 방별 커스텀 명령어, 장착된 명령어 팩을 조합합니다.
 - 검색은 공백과 쉼표 기준 다중 키워드, 대소문자 무시 방식입니다.
+
+## 명령어 팩
+
+- `GET /api/command-packs`로 기본 운영팩, 기본 운영팩+, Pro, 미니게임 3종 애드온, 조합팩을 조회합니다.
+- `POST /api/buyer/command-packs/apply`로 구매자 방에 기본팩 1개와 애드온 여러 개를 장착합니다.
+- 기본팩 교체 시 `sourcePackSlot: "base"` 명령어만 교체하고 직접 만든 커스텀 명령어는 보존합니다.
+- Basic+와 Pro에는 출석, 포인트, 레벨/랭킹 같은 고정 기능 명령어와 관련 feature toggle이 포함됩니다.
+- 미니게임 3종 애드온은 `/운영주사위`, `/운영낚시`, `/운영탐험`을 기존 `/주사위`, `/낚시`, `/탐험` 엔진으로 연결합니다.
 
 ## 화면 사용법
 
