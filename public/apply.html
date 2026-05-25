@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>서비스 신청 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260524-buyer-console">
+    <link rel="stylesheet" href="/styles.css?v=20260525-new-buyer-ux">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="auth-page">
@@ -16,14 +16,30 @@
         <h1>서비스 신청</h1>
         <p>첫 방은 30일 5,500원, 같은 계정의 추가 방은 30일 2,200원입니다. 입금 확인 후 관리자가 승인하면 라이선스와 연결코드가 생성됩니다.</p>
         <small data-auth-mode>로그인 방식을 확인 중입니다.</small>
+        <div class="start-journey" aria-label="처음 시작 5단계">
+          <strong>처음 시작 5단계</strong>
+          <ol>
+            <li><span>1</span>계정 만들기</li>
+            <li class="is-active"><span>2</span>서비스 신청</li>
+            <li><span>3</span>운영자 승인</li>
+            <li><span>4</span>앱 연결</li>
+            <li><span>5</span>첫 명령어 설치</li>
+          </ol>
+        </div>
+        <aside class="auth-next-card">
+          <strong>신청 전 확인</strong>
+          <span>방 이름은 실제 카카오 오픈채팅방 이름과 최대한 같게 입력해 주세요.</span>
+          <span>요금: 첫 방 5,500원 / 30일, 추가 방 2,200원 / 30일</span>
+          <span>신청 후 다음 행동: 입금 후 승인 대기, 승인 완료 시 콘솔에서 연결코드 복사</span>
+        </aside>
         <form data-apply-form>
           <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
           <label>비밀번호<input name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="회원 비밀번호"></label>
-          <label>방 이름<input name="roomName" type="text" required placeholder="픽셀곰 RPG 놀이터"></label>
-          <label>오픈채팅방 링크<input name="roomLink" type="url" required placeholder="https://open.kakao.com/o/..."></label>
-          <label>관리자 닉네임<input name="adminName" type="text" required placeholder="운영자 닉네임"></label>
+          <label>방 이름<input name="roomName" type="text" required placeholder="예: 주식 공부방, 팬카페 공지방"></label>
+          <label>오픈채팅방 링크<input name="roomLink" type="url" required placeholder="https://open.kakao.com/o/abcd1234"></label>
+          <label>관리자 닉네임<input name="adminName" type="text" required placeholder="카톡방에서 실제 쓰는 운영자 닉네임"></label>
           <label>연락처<input name="contact" type="text" placeholder="카카오ID 또는 연락 가능한 채널"></label>
-          <label>요청 메모<textarea name="memo" rows="4" placeholder="초기 설정 요청사항"></textarea></label>
+          <label>요청 메모<textarea name="memo" rows="4" placeholder="예: 기본 운영팩부터 설치하고 싶습니다."></textarea></label>
           <div class="consent-list" aria-label="약관 동의">
             <label class="check-row">
               <input name="termsAgreed" type="checkbox" required>
@@ -49,7 +65,7 @@
         </div>
       </section>
     </main>
-    <script src="/auth.js?v=20260524-buyer-console"></script>
+    <script src="/auth.js?v=20260525-new-buyer-ux"></script>
     <script>
       const form = document.querySelector("[data-apply-form]");
       const result = document.querySelector("[data-apply-result]");
@@ -79,11 +95,11 @@
             "",
             ...json.next,
             "",
-            "운영자가 승인하면 /login 과 /buyer-guide 에서 연결코드를 확인할 수 있습니다."
+            "다음 행동: 입금/승인 상태를 기다린 뒤 /login 또는 /console 에서 연결코드를 복사하세요."
           ].join("\n");
           form.reset();
         } catch (error) {
-          result.textContent = `신청 실패: ${error.message}`;
+          result.textContent = `신청 실패: ${window.PixelgomAuth.friendlyError(error)}`;
         }
       });
 
@@ -92,7 +108,7 @@
         try {
           await window.PixelgomAuth.signInWithKakao("/apply");
         } catch (error) {
-          result.textContent = `카카오 로그인 실패: ${error.message}`;
+          result.textContent = `카카오 로그인 실패: ${window.PixelgomAuth.friendlyError(error)}`;
         }
       });
 

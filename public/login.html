@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>로그인 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-auth-pricing">
+    <link rel="stylesheet" href="/styles.css?v=20260525-new-buyer-ux">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="auth-page">
@@ -15,6 +15,16 @@
         <p class="section-kicker">Login</p>
         <h1>로그인</h1>
         <p>구매자는 로그인 후 구매자 콘솔에서 자기 방과 연결코드를 확인합니다.</p>
+        <div class="start-journey" aria-label="처음 시작 5단계">
+          <strong>처음 시작 5단계</strong>
+          <ol>
+            <li><span>1</span>계정 만들기</li>
+            <li><span>2</span>서비스 신청</li>
+            <li class="is-active"><span>3</span>운영자 승인</li>
+            <li><span>4</span>앱 연결</li>
+            <li><span>5</span>첫 명령어 설치</li>
+          </ol>
+        </div>
         <form data-login-form>
           <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
           <label>비밀번호<input name="password" type="password" autocomplete="current-password" required placeholder="비밀번호"></label>
@@ -30,7 +40,7 @@
         </div>
       </section>
     </main>
-    <script src="/auth.js?v=20260525-auth-pricing"></script>
+    <script src="/auth.js?v=20260525-new-buyer-ux"></script>
     <script>
       const form = document.querySelector("[data-login-form]");
       const result = document.querySelector("[data-login-result]");
@@ -56,6 +66,13 @@
               `  연결코드: ${room.bridgeConnectCode || "승인 후 발급"}`
             ].join("\n")).join("\n")
           : "";
+        const nextAction = json.ownerAccess
+          ? "다음 행동: 운영자 어드민으로 이동합니다."
+          : json.buyerRooms?.length
+            ? "다음 행동: 앱 연결코드 복사 → 설치 안내 확인 → 명령어 스토어에서 첫 팩 설치"
+            : json.applications?.length
+              ? "다음 행동: 입금/승인 대기 상태를 확인하세요."
+              : "다음 행동: 서비스 신청하기";
         result.textContent = [
           "로그인되었습니다.",
           `닉네임: ${json.account.nickname || "미입력"}`,
@@ -68,7 +85,7 @@
           buyerRooms ? "승인된 방 연결정보" : "",
           buyerRooms,
           "",
-          json.ownerAccess ? "다음: /admin 운영자 어드민으로 이동합니다." : "다음: /console 구매자 콘솔로 이동합니다."
+          nextAction
         ].join("\n");
         setTimeout(() => {
           window.location.href = json.ownerAccess ? "/admin" : "/console";
@@ -83,7 +100,7 @@
           await window.PixelgomAuth.signInWithPassword(values.email, values.password);
           await finishLogin(await window.PixelgomAuth.accessPayload(values));
         } catch (error) {
-          result.textContent = `로그인 실패: ${error.message}`;
+          result.textContent = `로그인 실패: ${window.PixelgomAuth.friendlyError(error)}`;
         }
       });
 
@@ -92,7 +109,7 @@
         try {
           await window.PixelgomAuth.signInWithKakao("/login");
         } catch (error) {
-          result.textContent = `카카오 로그인 실패: ${error.message}`;
+          result.textContent = `카카오 로그인 실패: ${window.PixelgomAuth.friendlyError(error)}`;
         }
       });
 
@@ -103,7 +120,7 @@
         if (payload.accessToken) {
           result.textContent = "로그인 세션을 확인 중입니다.";
           finishLogin(payload).catch((error) => {
-            result.textContent = `카카오 로그인 처리 실패: ${error.message}`;
+            result.textContent = `카카오 로그인 처리 실패: ${window.PixelgomAuth.friendlyError(error)}`;
           });
         }
       })();

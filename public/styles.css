@@ -1265,7 +1265,7 @@ a {
 }
 
 .auth-card {
-  width: min(460px, 100%);
+  width: min(560px, 100%);
   display: grid;
   gap: 14px;
   padding: 28px;
@@ -1291,6 +1291,79 @@ a {
   background: #fff7e2;
   border: 1px solid #ecd6aa;
   border-radius: 8px;
+}
+
+.start-journey {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: #eef8f4;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+}
+
+.start-journey > strong {
+  color: #174b38;
+}
+
+.start-journey ol {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.start-journey li {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.start-journey li span {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: #174b38;
+  background: #fff;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+}
+
+.start-journey li.is-active {
+  color: #174b38;
+}
+
+.start-journey li.is-active span {
+  color: #fff;
+  background: #477f63;
+  border-color: #477f63;
+}
+
+.auth-next-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  color: #4b321f;
+  background: #fff8ec;
+  border: 1px solid #e2d1bd;
+  border-radius: 8px;
+}
+
+.auth-next-card strong,
+.auth-next-card span {
+  display: block;
+}
+
+.auth-next-card span {
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .auth-card form {
@@ -1391,6 +1464,47 @@ a {
 
 .kakao-button:hover {
   background: #f5dc00;
+}
+
+.start-section {
+  padding-top: clamp(34px, 6vw, 72px);
+}
+
+.start-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.start-card {
+  display: grid;
+  gap: 10px;
+  min-height: 176px;
+  padding: 18px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 22px rgba(55, 38, 23, 0.06);
+}
+
+.start-card > strong {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  color: #fff;
+  background: #477f63;
+  border-radius: 8px;
+}
+
+.start-card h3,
+.start-card p {
+  margin: 0;
+}
+
+.start-card p {
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 .form-status {
@@ -1538,6 +1652,40 @@ a {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 12px 30px rgba(55, 38, 23, 0.08);
+}
+
+.buyer-next-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  margin: 0 0 18px;
+  padding: clamp(18px, 3vw, 24px);
+  background: #eef8f4;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+}
+
+.buyer-next-action h2,
+.buyer-next-action p {
+  margin: 0;
+}
+
+.buyer-next-action h2 {
+  font-size: clamp(24px, 4vw, 34px);
+}
+
+.buyer-next-action p {
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.buyer-next-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .buyer-onboarding-head {
@@ -1741,6 +1889,33 @@ a {
   border: 1px solid #cce4d8;
   border-radius: 8px;
   line-height: 1.5;
+}
+
+.buyer-room-action-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, auto);
+  gap: 10px;
+  align-items: center;
+  margin: 14px 0;
+  padding: 12px;
+  background: #eef8f4;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+}
+
+.buyer-room-action-strip strong,
+.buyer-room-action-strip span {
+  display: block;
+}
+
+.buyer-room-action-strip span {
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.buyer-room-action-strip .button {
+  margin-top: 0;
 }
 
 .buyer-command-preview {
@@ -3061,6 +3236,7 @@ a {
   }
 
   .status-strip,
+  .start-grid,
   .role-grid,
   .feature-grid,
   .room-section,
@@ -3077,6 +3253,7 @@ a {
   .search-results,
   .buyer-gate,
   .buyer-console-hero,
+  .buyer-next-action,
   .buyer-step-grid,
   .buyer-mini-grid,
   .buyer-room-grid,
@@ -3092,6 +3269,7 @@ a {
   .command-pack-head,
   .command-pack-grid,
   .buyer-pack-summary,
+  .buyer-room-action-strip,
   .template-grid {
     grid-template-columns: 1fr;
   }
@@ -3129,6 +3307,10 @@ a {
 
   .buyer-onboarding-head {
     display: grid;
+  }
+
+  .buyer-next-buttons {
+    justify-content: flex-start;
   }
 
   .command-section {
@@ -3171,6 +3353,15 @@ a {
 
   .command-cart-head {
     display: grid;
+  }
+
+  .start-journey ol {
+    grid-template-columns: 1fr;
+  }
+
+  .buyer-room-action-strip .button,
+  .buyer-next-buttons .button {
+    width: 100%;
   }
 
   .template-card,

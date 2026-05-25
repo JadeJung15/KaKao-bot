@@ -197,7 +197,11 @@
         <div class="command-cart-empty">
           <p class="section-kicker">Cart</p>
           <h2>아직 장바구니가 비어 있습니다</h2>
-          <p>팩이나 대표 명령어를 담으면 카톡방에 붙여넣을 설치 명령어가 이곳에 만들어집니다.</p>
+          <p>처음 설치라면 운영 기본팩 pk.001부터 담아 카톡방에 붙여넣는 흐름이 가장 쉽습니다.</p>
+          <div class="template-actions">
+            <button class="button button-primary" type="button" data-add-first-pack="ops-core">처음이면 운영 기본팩 담기</button>
+            <button class="button button-secondary" type="button" data-store-mode-jump="packs">팩으로 시작 보기</button>
+          </div>
         </div>
       `;
       return;
@@ -257,7 +261,7 @@
       ` : `
         <article class="command-cart-copy">
           <strong>카톡 설치</strong>
-          <span>장바구니에 담으면 한 번에 붙여넣을 설치 명령어가 만들어집니다.</span>
+          <span>처음이면 운영 기본팩 pk.001을 담아 카톡방에서 확인 설치하세요.</span>
         </article>
       `}
     `;
@@ -769,7 +773,7 @@
       const template = templateById(copyButton.dataset.copyTemplateInstall);
       if (template?.installCode) {
         copyText(`/명령어설치 ${template.installCode}`).then(() => {
-          statusBox.textContent = `${template.installCode} 설치 명령어를 복사했습니다.`;
+          statusBox.textContent = `${template.installCode} 설치 명령어를 복사했습니다. 카톡방에 붙여넣고 /설치확인 코드로 완료하세요.`;
         });
       }
     }
@@ -784,7 +788,7 @@
       const pack = packById(copyButton.dataset.copyPackInstall);
       if (pack?.installCode) {
         await copyText(`/명령어설치 ${pack.installCode}`);
-        statusBox.textContent = `${pack.installCode} 설치 명령어를 복사했습니다.`;
+        statusBox.textContent = `${pack.installCode} 설치 명령어를 복사했습니다. 카톡방에 붙여넣고 /설치확인 코드로 완료하세요.`;
       }
     }
     if (applyButton) await applyCommandPack(applyButton.dataset.applyPack, applyButton.dataset.packAction || "apply");
@@ -796,7 +800,7 @@
       if (!command) return;
       await copyText(command);
       const items = cartInstallItems();
-      statusBox.textContent = `${items.length}개 항목의 카톡 설치 명령어를 복사했습니다. 채팅방에 붙여넣은 뒤 /설치확인 코드로 완료하세요.`;
+      statusBox.textContent = `${items.length}개 항목의 카톡 설치 명령어를 복사했습니다. 카톡방에 붙여넣고 /설치확인 코드로 완료하세요.`;
     }
     if (event.target.closest("[data-clear-cart]")) {
       clearCart();
@@ -806,6 +810,17 @@
     if (recommendButton && !event.target.closest("[data-command-pack-grid]")) {
       toggleSet(packCart, recommendButton.dataset.cartPack, "pixgomCommandPackCart");
       statusBox.textContent = "추천 팩을 장바구니에 담았습니다.";
+    }
+    const firstPackButton = event.target.closest("[data-add-first-pack]");
+    if (firstPackButton) {
+      toggleSet(packCart, firstPackButton.dataset.addFirstPack, "pixgomCommandPackCart");
+      storeMode = "cart";
+      statusBox.textContent = "운영 기본팩을 장바구니에 담았습니다. 카톡 설치 명령어를 복사해 주세요.";
+    }
+    const modeJumpButton = event.target.closest("[data-store-mode-jump]");
+    if (modeJumpButton) {
+      storeMode = modeJumpButton.dataset.storeModeJump;
+      renderTemplates();
     }
   }
 
@@ -836,7 +851,7 @@
     if (event.target.closest("[data-copy-install-current]")) {
       if (!template.installCode) return;
       await copyText(`/명령어설치 ${template.installCode}`);
-      statusBox.textContent = `${template.installCode} 설치 명령어를 복사했습니다. 채팅방에 붙여넣어 미리보기를 확인하세요.`;
+      statusBox.textContent = `${template.installCode} 설치 명령어를 복사했습니다. 카톡방에 붙여넣고 /설치확인 코드로 완료하세요.`;
     }
     if (event.target.closest("[data-favorite-current]")) toggleSet(favorites, currentTemplateId, "pixgomCommandFavorites");
     if (event.target.closest("[data-cart-current]")) toggleSet(cart, currentTemplateId, "pixgomCommandCart");

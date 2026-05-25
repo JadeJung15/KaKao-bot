@@ -40,7 +40,7 @@
     const hasConnectCode = rooms.some((room) => room.bridgeConnectCode);
     return [
       {
-        title: "회원 로그인",
+        title: "계정 만들기",
         ok: true,
         detail: data.account?.email || data.account?.nickname || "로그인 완료"
       },
@@ -55,16 +55,58 @@
         detail: statusText(approved, "입금 확인 후 승인됩니다.", `${rooms.length}개 방 승인됨`)
       },
       {
-        title: "앱 연결코드",
+        title: "앱 연결",
         ok: hasConnectCode,
-        detail: statusText(hasConnectCode, "승인 후 방별 연결코드가 표시됩니다.", "복사 가능")
+        detail: statusText(hasConnectCode, "승인 후 방별 연결코드가 표시됩니다.", "연결코드 복사 가능")
       },
       {
-        title: "앱 설치/권한",
+        title: "첫 명령어 설치",
         ok: approved,
-        detail: approved ? "브릿지 앱에서 연결코드를 입력하세요." : "승인 후 설치 순서가 열립니다."
+        detail: approved ? "명령어 스토어에서 운영 기본팩부터 설치하세요." : "승인 후 명령어 설치가 열립니다."
       }
     ];
+  }
+
+  function nextAction(data) {
+    const applications = data.applications || [];
+    const rooms = data.rooms || [];
+    if (!applications.length && !rooms.length) {
+      return {
+        detail: "아직 신청 내역이 없습니다. 먼저 서비스 신청서를 접수해 주세요.",
+        primary: { label: "서비스 신청하기", href: "/apply" },
+        secondary: { label: "요금 확인", href: "/license" }
+      };
+    }
+    if (!rooms.length) {
+      return {
+        detail: "신청은 접수됐고 입금/운영자 승인 대기 상태입니다. 승인되면 연결코드가 표시됩니다.",
+        primary: { label: "입금/승인 대기 상태 확인", href: "/console" },
+        secondary: { label: "오픈채팅 문의", href: "https://open.kakao.com/o/gu25P5vi" }
+      };
+    }
+    const firstRoom = rooms[0] || {};
+    return {
+      detail: `${firstRoom.roomName || "승인된 방"} 연결코드를 앱에 넣고, 운영 기본팩을 첫 명령어로 설치해 주세요.`,
+      primary: { label: "명령어 스토어 열기", href: `/command-store?room=${encodeURIComponent(firstRoom.applicationId || "")}` },
+      secondary: { label: "설치 안내 보기", href: "/setup" }
+    };
+  }
+
+  function renderNextAction(data) {
+    const action = nextAction(data);
+    return `
+      <section class="buyer-next-action" aria-label="다음 행동">
+        <div>
+          <p class="section-kicker">Next</p>
+          <h2>${escapeHtml(action.primary.label)}</h2>
+          <p>${escapeHtml(action.detail)}</p>
+        </div>
+        <div class="buyer-next-buttons">
+          <a class="button button-primary" href="${escapeHtml(action.primary.href)}">${escapeHtml(action.primary.label)}</a>
+          <a class="button button-secondary" href="${escapeHtml(action.secondary.href)}">${escapeHtml(action.secondary.label)}</a>
+        </div>
+      </section>
+    `;
   }
 
   function renderOnboarding(data) {
@@ -148,11 +190,20 @@
           <div><dt>커스텀 명령어</dt><dd>${escapeHtml(String(room.commandCount ?? (room.customCommands || []).length))}개 설치됨</dd></div>
         </dl>
         ${renderRoomPacks(room)}
+        <div class="buyer-room-action-strip">
+          <div>
+            <strong>다음 할 일</strong>
+            <span>앱 연결 후 명령어 스토어에서 운영 기본팩을 첫 설치로 진행하세요.</span>
+          </div>
+          <button class="button button-primary" type="button" data-copy="${escapeHtml(room.bridgeConnectCode || "")}" data-copy-label="앱 연결코드">앱 연결코드 복사</button>
+          <a class="button button-secondary" href="/setup">설치 안내 보기</a>
+          <a class="button button-secondary" href="/command-store?room=${encodeURIComponent(room.applicationId || "")}">명령어 스토어 열기</a>
+        </div>
         ${renderRoomCommands(room)}
         ${renderRoomCommandSearch(room)}
         <div class="buyer-card-actions">
-          <button class="button button-secondary" type="button" data-copy="${escapeHtml(room.bridgeConnectCode || "")}">연결코드 복사</button>
-          <button class="button button-secondary" type="button" data-copy="${escapeHtml(room.licenseKey || "")}">라이선스 복사</button>
+          <button class="button button-secondary" type="button" data-copy="${escapeHtml(room.bridgeConnectCode || "")}" data-copy-label="앱 연결코드">연결코드 복사</button>
+          <button class="button button-secondary" type="button" data-copy="${escapeHtml(room.licenseKey || "")}" data-copy-label="라이선스 키">라이선스 복사</button>
           <a class="button button-secondary" href="/command-store?room=${encodeURIComponent(room.applicationId || "")}">방별 명령어 관리</a>
         </div>
       </article>
@@ -339,6 +390,7 @@
         <a href="/setup">설치</a>
         <a href="/license">라이선스</a>
       </nav>
+      ${renderNextAction(data)}
       ${renderOnboarding(data)}
       <section class="${sectionClass("overview")}">
         <h2>신청 상태</h2>
@@ -365,14 +417,14 @@
         const value = button.dataset.copy || "";
         if (!value) return;
         await navigator.clipboard.writeText(value);
-        statusBox.textContent = "복사했습니다.";
+        statusBox.textContent = `${button.dataset.copyLabel || "값"}를 복사했습니다.`;
       });
     });
     content.addEventListener("click", async (event) => {
       const button = event.target.closest("[data-copy-command]");
       if (!button) return;
       await navigator.clipboard.writeText(button.dataset.copyCommand || "");
-      statusBox.textContent = "명령어를 복사했습니다.";
+      statusBox.textContent = "명령어 예시를 복사했습니다.";
     });
     bindRoomCommandSearch();
   }
@@ -385,14 +437,14 @@
     if (savedToken) {
       requestConsole({ token: savedToken }).catch((error) => {
         sessionStorage.removeItem("pixgomBuyerToken");
-        statusBox.innerHTML = `세션이 만료되었습니다. 다시 로그인해 주세요. <a href="/login">로그인 화면</a>`;
+        statusBox.innerHTML = `${escapeHtml(window.PixelgomAuth.friendlyError(error))} <a href="/login">로그인 화면</a>`;
       });
       return;
     }
     const payload = await window.PixelgomAuth.accessPayload({});
     if (payload.accessToken) {
       requestConsole(payload).catch((error) => {
-        statusBox.innerHTML = `콘솔 접근 실패: ${escapeHtml(error.message)} <a href="/login">재로그인</a>`;
+        statusBox.innerHTML = `콘솔 접근 실패: ${escapeHtml(window.PixelgomAuth.friendlyError(error))} <a href="/login">재로그인</a>`;
       });
     }
   }
@@ -407,8 +459,8 @@
       form.reset();
     } catch (error) {
       statusBox.textContent = error.message === "buyer_approval_required"
-        ? "구매 승인 후 이용할 수 있습니다."
-        : `콘솔 접근 실패: ${error.message}`;
+        ? window.PixelgomAuth.friendlyError("buyer_approval_required")
+        : `콘솔 접근 실패: ${window.PixelgomAuth.friendlyError(error)}`;
     }
   });
 
@@ -417,7 +469,7 @@
     try {
       await window.PixelgomAuth.signInWithKakao("/console");
     } catch (error) {
-      statusBox.textContent = `카카오 로그인 실패: ${error.message}`;
+      statusBox.textContent = `카카오 로그인 실패: ${window.PixelgomAuth.friendlyError(error)}`;
     }
   });
 

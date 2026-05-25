@@ -107,6 +107,41 @@ window.PixelgomAuth = (() => {
       : "이메일로 시작할 수 있습니다.";
   }
 
+  function friendlyError(error) {
+    const raw = typeof error === "string"
+      ? error
+      : (error?.message || error?.error || "unknown_error");
+    const normalized = String(raw).trim();
+    const lower = normalized.toLowerCase();
+    const labels = {
+      email_required: "이메일을 입력해 주세요.",
+      password_required: "비밀번호를 입력해 주세요.",
+      password_too_short: "비밀번호는 8자 이상으로 입력해 주세요.",
+      password_mismatch: "비밀번호가 일치하지 않습니다.",
+      nickname_required: "닉네임을 입력해 주세요.",
+      terms_required: "필수 약관에 동의해 주세요.",
+      privacy_required: "개인정보처리방침에 동의해 주세요.",
+      room_name_required: "방 이름을 입력해 주세요. 예: 주식 공부방, 팬카페 공지방",
+      openchat_link_required: "오픈채팅방 링크를 https://open.kakao.com/o/... 형식으로 입력해 주세요.",
+      room_link_required: "오픈채팅방 링크를 입력해 주세요.",
+      admin_name_required: "카톡방에서 사용할 관리자 닉네임을 입력해 주세요.",
+      contact_required: "연락 가능한 카카오ID 또는 연락처를 입력해 주세요.",
+      invalid_login: "이메일 또는 비밀번호를 확인해 주세요.",
+      login_failed: "로그인 정보를 확인해 주세요.",
+      signup_failed: "회원가입 정보를 다시 확인해 주세요.",
+      apply_failed: "신청 정보를 다시 확인해 주세요.",
+      buyer_approval_required: "아직 구매 승인 전입니다. 신청/입금 상태를 먼저 확인해 주세요.",
+      email_already_registered: "이미 가입된 이메일입니다. 로그인 후 서비스 신청을 진행해 주세요.",
+      kakao_login_not_configured: "카카오 로그인이 아직 설정되지 않았습니다. 이메일 로그인을 이용해 주세요.",
+      password_reset_requires_supabase: "비밀번호 재설정은 이메일 인증 모드에서 사용할 수 있습니다."
+    };
+    if (labels[normalized]) return labels[normalized];
+    if (lower.includes("invalid login credentials")) return labels.invalid_login;
+    if (lower.includes("already registered") || lower.includes("already exists")) return labels.email_already_registered;
+    if (lower.includes("email")) return normalized;
+    return labels[lower] || normalized || "처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.";
+  }
+
   return {
     config,
     client,
@@ -118,6 +153,7 @@ window.PixelgomAuth = (() => {
     updatePassword,
     signInWithKakao,
     signOut,
-    showAuthMode
+    showAuthMode,
+    friendlyError
   };
 })();

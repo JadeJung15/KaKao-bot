@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>회원가입 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-auth-pricing">
+    <link rel="stylesheet" href="/styles.css?v=20260525-new-buyer-ux">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="auth-page">
@@ -16,6 +16,16 @@
         <h1>회원가입</h1>
         <p>구매자 계정을 만든 뒤 이메일 인증을 완료하면 서비스 신청으로 이동할 수 있습니다.</p>
         <small data-auth-mode>로그인 방식을 확인 중입니다.</small>
+        <div class="start-journey" aria-label="처음 시작 5단계">
+          <strong>처음 시작 5단계</strong>
+          <ol>
+            <li class="is-active"><span>1</span>계정 만들기</li>
+            <li><span>2</span>서비스 신청</li>
+            <li><span>3</span>운영자 승인</li>
+            <li><span>4</span>앱 연결</li>
+            <li><span>5</span>첫 명령어 설치</li>
+          </ol>
+        </div>
         <form data-signup-form>
           <label>닉네임<input name="nickname" type="text" autocomplete="nickname" required maxlength="40" placeholder="콘솔에 표시될 이름"></label>
           <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
@@ -46,7 +56,7 @@
         </div>
       </section>
     </main>
-    <script src="/auth.js?v=20260525-auth-pricing"></script>
+    <script src="/auth.js?v=20260525-new-buyer-ux"></script>
     <script>
       const form = document.querySelector("[data-signup-form]");
       const result = document.querySelector("[data-signup-result]");
@@ -69,15 +79,15 @@
         result.textContent = "계정을 만드는 중입니다.";
         const payload = Object.fromEntries(new FormData(form).entries());
         if (!payload.nickname?.trim()) {
-          result.textContent = "회원가입 실패: 닉네임을 입력해 주세요.";
+          result.textContent = `회원가입 실패: ${window.PixelgomAuth.friendlyError("nickname_required")}`;
           return;
         }
         if (payload.password !== payload.passwordConfirm) {
-          result.textContent = "회원가입 실패: 비밀번호가 일치하지 않습니다.";
+          result.textContent = `회원가입 실패: ${window.PixelgomAuth.friendlyError("password_mismatch")}`;
           return;
         }
         if (!payload.termsAgreed || !payload.privacyAgreed) {
-          result.textContent = "회원가입 실패: 필수 약관에 동의해 주세요.";
+          result.textContent = `회원가입 실패: ${window.PixelgomAuth.friendlyError("terms_required")}`;
           return;
         }
         try {
@@ -109,7 +119,7 @@
             window.location.href = "/apply";
           }, 900);
         } catch (error) {
-          result.textContent = `회원가입 실패: ${error.message}`;
+          result.textContent = `회원가입 실패: ${window.PixelgomAuth.friendlyError(error)}`;
         }
       });
 
@@ -118,7 +128,7 @@
         try {
           const payload = Object.fromEntries(new FormData(form).entries());
           if (!payload.termsAgreed || !payload.privacyAgreed) {
-            result.textContent = "카카오 가입 전 필수 약관에 동의해 주세요.";
+            result.textContent = `카카오 가입 실패: ${window.PixelgomAuth.friendlyError("terms_required")}`;
             return;
           }
           sessionStorage.setItem("pixgomSignupConsent", JSON.stringify({
@@ -129,7 +139,7 @@
           }));
           await window.PixelgomAuth.signInWithKakao("/signup");
         } catch (error) {
-          result.textContent = `카카오 로그인 실패: ${error.message}`;
+          result.textContent = `카카오 로그인 실패: ${window.PixelgomAuth.friendlyError(error)}`;
         }
       });
 
