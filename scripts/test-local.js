@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import http from "node:http";
-import { unlink, writeFile } from "node:fs/promises";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -74,7 +74,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.67");
+  assert.equal(health.json.version, "0.4.68");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -185,6 +185,9 @@ try {
   assert.match(health.json.features.join(","), /backup-schema-version/);
   assert.match(health.json.features.join(","), /admin-backup-dry-run/);
   assert.match(health.json.features.join(","), /backup-restore-error-summary/);
+  assert.match(health.json.features.join(","), /deployment-preflight-script/);
+  assert.match(health.json.features.join(","), /deployment-smoke-script/);
+  assert.match(health.json.features.join(","), /rollback-runbook/);
   assert.equal(health.json.monthlyPriceKrw, 5500);
   assert.equal(health.json.additionalRoomPriceKrw, 2200);
   assert.equal(health.json.adminConsoleEnabled, true);
@@ -291,7 +294,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.67");
+  assert.equal(commandTemplates.json.version, "0.4.68");
   assert.equal(commandTemplates.json.total, 400);
   assert.equal(commandTemplates.json.templates.length, 400);
   assert.equal(commandTemplates.json.categories.some((category) => category.title === "펫키우기"), true);
@@ -355,6 +358,12 @@ try {
   assert.match(sessionNavText, /pixgomOwnerToken/);
   assert.match(sessionNavText, /pixgomBuyerToken/);
   assert.match(sessionNavText, /nav-logout/);
+
+  const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
+  assert.equal(packageJson.version, "0.4.68");
+  assert.equal(packageJson.scripts["check:deploy"], "node scripts/predeploy-check.js");
+  assert.equal(packageJson.scripts["smoke:local"], "node scripts/smoke-check.js");
+  assert.equal(packageJson.scripts["smoke:prod"], "node scripts/smoke-check.js https://pixgom.com");
 
   const adminUnauthorized = await request("/api/admin/rooms");
   assert.equal(adminUnauthorized.response.status, 401);
@@ -526,7 +535,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.4.67");
+  assert.equal(adminBackup.json.version, "0.4.68");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -714,7 +723,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.67");
+  assert.equal(buyerGuideApproved.json.version, "0.4.68");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -729,7 +738,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.67");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.68");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);

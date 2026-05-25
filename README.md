@@ -54,6 +54,7 @@
 - 36차 명령어 스토어 품질: 설치 전 카카오 응답 미리보기, 참여자용 빠른 필터, 설치된 명령어 검색/편집 불러오기
 - 37차 구독/연결 안정화: 만료 7일/3일/1일 안내, 만료 후 명령어/브릿지 연결 차단, 앱 연결값 오류 안내 정리
 - 38차 백업 안전장치: 백업 JSON 스키마 버전, 복구 dry-run 검증 API/UI, 복구 실패 원인 요약 추가
+- 39차 배포 자동화: 배포 전 필수 검사 스크립트, 배포 후 주요 URL smoke 스크립트, 롤백 기준 문서화
 
 ## 명령어
 
@@ -214,6 +215,18 @@ npm.cmd start
 npm.cmd run test:local
 ```
 
+배포 전 필수 검사:
+
+```powershell
+npm.cmd run check:deploy
+```
+
+로컬 smoke 확인:
+
+```powershell
+npm.cmd run smoke:local
+```
+
 로컬 DB 초기화:
 
 ```powershell
@@ -267,6 +280,24 @@ https://pixgom.com/chat-event   안드로이드 브릿지 기본 API 주소
 ```
 
 운영 브릿지는 혼동을 줄이기 위해 `https://pixgom.com/chat-event`를 기본 주소로 사용합니다. Vercel 기본 도메인은 장애 진단용 보조 주소로만 둡니다.
+
+배포 전 기준:
+
+1. `npm.cmd run check:deploy`가 통과해야 합니다.
+2. 체크 스크립트는 `node --check`, `git diff --check`, `npm run test:local`을 순서대로 실행합니다.
+3. 실패하면 커밋/푸시/배포를 중단하고 같은 Phase에서 원인을 수정합니다.
+
+배포 후 기준:
+
+1. Vercel production 배포 후 `npm.cmd run smoke:prod`를 실행합니다.
+2. `/health`, `/command-store`, `/admin`, `/console` 응답과 핵심 문구를 확인합니다.
+3. `/health`의 `version`, `dbStatus.ok`, 신규 feature 플래그가 기대값인지 확인합니다.
+
+롤백 기준:
+
+1. 배포 후 `/health`가 실패하거나 `dbStatus.ok`가 false이면 즉시 직전 정상 Vercel deployment로 롤백합니다.
+2. `/command-store`, `/admin`, `/console` 중 하나라도 빈 화면이거나 핵심 문구가 없으면 새 배포를 사용하지 않습니다.
+3. 롤백 후 `/updates`에는 장애 원인과 복구 시각을 별도 카드로 기록합니다.
 
 ## 안드로이드 픽셀곰 브릿지 연결
 

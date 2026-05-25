@@ -25,7 +25,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.67";
+export const APP_VERSION = "0.4.68";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -158,7 +158,10 @@ export const FEATURES = [
   "license-error-user-guidance",
   "backup-schema-version",
   "admin-backup-dry-run",
-  "backup-restore-error-summary"
+  "backup-restore-error-summary",
+  "deployment-preflight-script",
+  "deployment-smoke-script",
+  "rollback-runbook"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];

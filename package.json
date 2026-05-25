@@ -1,10 +1,13 @@
 {
   "name": "kakao-room-ops-bot",
-  "version": "0.4.67",
+  "version": "0.4.68",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.js",
+    "check:deploy": "node scripts/predeploy-check.js",
+    "smoke:local": "node scripts/smoke-check.js",
+    "smoke:prod": "node scripts/smoke-check.js https://pixgom.com",
     "test:local": "node scripts/test-local.js",
     "reset": "node scripts/reset-db.js"
   },
