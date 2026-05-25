@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>로그인 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-auth-session-gate">
+    <link rel="stylesheet" href="/styles.css?v=20260525-silent-auth">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="auth-page auth-checking">
@@ -31,7 +31,7 @@
           <button class="button button-primary" type="submit">로그인</button>
           <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인</button>
         </form>
-        <pre class="form-status" data-login-result aria-live="polite">로그인 세션을 확인 중입니다.</pre>
+        <pre class="form-status" data-login-result aria-live="polite"></pre>
         <div class="auth-links">
           <a href="/signup">회원가입</a>
           <a href="/forgot-password">비밀번호 찾기</a>
@@ -40,15 +40,15 @@
         </div>
       </section>
     </main>
-    <script src="/auth.js?v=20260525-auth-session-gate"></script>
+    <script src="/auth.js?v=20260525-silent-auth"></script>
     <script>
       const form = document.querySelector("[data-login-form]");
       const result = document.querySelector("[data-login-result]");
       const kakaoButton = document.querySelector("[data-kakao-login]");
+      const authGate = window.PixelgomAuth.createSilentGate({ status: result });
 
       function showLoginForm(message = "회원가입 후 신청 상태를 확인할 수 있습니다.") {
-        document.body.classList.remove("auth-checking");
-        result.textContent = message;
+        authGate.finish(message);
       }
 
       async function finishLogin(payload) {
@@ -119,11 +119,22 @@
       });
 
       (async () => {
+        const storedBuyerToken = sessionStorage.getItem("pixgomBuyerToken");
+        const storedOwnerToken = sessionStorage.getItem("pixgomOwnerToken");
+        if (storedOwnerToken) {
+          window.location.href = "/admin";
+          return;
+        }
+        if (storedBuyerToken) {
+          window.location.href = "/console";
+          return;
+        }
+        if (!authGate.hasHint) showLoginForm();
         const cfg = await window.PixelgomAuth.config();
         kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
         const payload = await window.PixelgomAuth.accessPayload({});
         if (payload.accessToken) {
-          result.textContent = "로그인 세션을 확인 중입니다.";
+          authGate.keepQuiet();
           finishLogin(payload).catch((error) => {
             showLoginForm(`카카오 로그인 처리 실패: ${window.PixelgomAuth.friendlyError(error)}`);
           });

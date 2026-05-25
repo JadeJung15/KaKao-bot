@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>서비스 신청 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-auth-session-gate">
+    <link rel="stylesheet" href="/styles.css?v=20260525-silent-auth">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="auth-page auth-checking">
@@ -57,7 +57,7 @@
           <button class="button button-primary" type="submit">신청 접수</button>
           <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인 후 신청</button>
         </form>
-        <pre class="form-status" data-apply-result aria-live="polite">로그인 세션을 확인 중입니다.</pre>
+        <pre class="form-status" data-apply-result aria-live="polite"></pre>
         <div class="auth-links">
           <a href="/signup">계정 만들기</a>
           <a href="/login">신청 상태 확인</a>
@@ -65,17 +65,17 @@
         </div>
       </section>
     </main>
-    <script src="/auth.js?v=20260525-auth-session-gate"></script>
+    <script src="/auth.js?v=20260525-silent-auth"></script>
     <script>
       const form = document.querySelector("[data-apply-form]");
       const result = document.querySelector("[data-apply-result]");
       const kakaoButton = document.querySelector("[data-kakao-login]");
+      const authGate = window.PixelgomAuth.createSilentGate({ status: result });
       const savedEmail = sessionStorage.getItem("pixgomSignupEmail");
       if (savedEmail) form.elements.email.value = savedEmail;
 
       function showApplyForm(message = "신청하면 결제 대기 상태로 등록됩니다.") {
-        document.body.classList.remove("auth-checking");
-        result.textContent = message;
+        authGate.finish(message);
       }
 
       form.addEventListener("submit", async (event) => {
@@ -118,6 +118,7 @@
       });
 
       (async () => {
+        if (!authGate.hasHint) showApplyForm();
         const cfg = await window.PixelgomAuth.config();
         window.PixelgomAuth.showAuthMode(document.querySelector("[data-auth-mode]"), cfg);
         kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
@@ -126,7 +127,7 @@
           form.elements.email.value = session.user.email;
           form.elements.password.required = false;
           form.elements.password.placeholder = "소셜 로그인 사용 중";
-          showApplyForm("로그인 세션을 확인했습니다. 방 정보를 입력해 신청을 이어가세요.");
+          showApplyForm("방 정보를 입력해 신청을 이어가세요.");
           return;
         }
         showApplyForm();

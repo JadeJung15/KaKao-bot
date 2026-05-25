@@ -551,6 +551,7 @@
   async function loadBuyerState() {
     if (!window.PixelgomAuth) return;
     const savedToken = sessionStorage.getItem("pixgomBuyerToken");
+    if (!savedToken && !window.PixelgomAuth.hasStoredSessionHint()) return;
     const payload = savedToken ? { token: savedToken } : await window.PixelgomAuth.accessPayload({});
     if (!payload.token && !payload.accessToken && !payload.email) return;
     try {

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>구매자 가이드 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-auth-session-gate">
+    <link rel="stylesheet" href="/styles.css?v=20260525-silent-auth">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="sub-page buyer-page">
@@ -38,18 +38,23 @@
           <button class="button button-primary" type="submit">가이드 열기</button>
           <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인</button>
         </form>
-        <pre class="form-status" data-buyer-status aria-live="polite">로그인 세션을 확인 중입니다.</pre>
+        <pre class="form-status" data-buyer-status aria-live="polite"></pre>
       </section>
 
       <section class="buyer-content" data-buyer-content hidden></section>
     </main>
-    <script src="/auth.js?v=20260525-auth-session-gate"></script>
+    <script src="/auth.js?v=20260525-silent-auth"></script>
     <script>
       const form = document.querySelector("[data-buyer-form]");
       const statusBox = document.querySelector("[data-buyer-status]");
       const content = document.querySelector("[data-buyer-content]");
       const gate = document.querySelector("[data-buyer-gate]");
       const kakaoButton = document.querySelector("[data-kakao-login]");
+      const authGate = window.PixelgomAuth.createSilentGate({
+        root: gate,
+        status: statusBox,
+        checkingClass: "is-auth-checking"
+      });
 
       function escapeHtml(value) {
         return String(value ?? "")
@@ -105,6 +110,7 @@
       }
 
       function showBuyerGate(message = "구매 승인된 계정으로 로그인하세요.") {
+        authGate.finish(message);
         gate.classList.remove("is-auth-checking");
         gate.hidden = false;
         form.hidden = false;
@@ -148,9 +154,11 @@
       });
 
       (async () => {
+        if (!authGate.hasHint) showBuyerGate();
         const cfg = await window.PixelgomAuth.config();
         window.PixelgomAuth.showAuthMode(document.querySelector("[data-auth-mode]"), cfg);
         kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
+        if (!authGate.hasHint) return;
         const savedToken = sessionStorage.getItem("pixgomBuyerToken");
         if (savedToken) {
           requestGuide({ token: savedToken }).catch((error) => {

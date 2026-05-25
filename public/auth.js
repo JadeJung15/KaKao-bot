@@ -33,6 +33,56 @@ window.PixelgomAuth = (() => {
     return fallback;
   }
 
+  function hasStoredSessionHint() {
+    try {
+      if (sessionStorage.getItem("pixgomBuyerToken") || sessionStorage.getItem("pixgomOwnerToken")) return true;
+    } catch {
+      // Storage can be blocked in some in-app browsers.
+    }
+    const storageList = [];
+    try { storageList.push(localStorage); } catch {}
+    try { storageList.push(sessionStorage); } catch {}
+    return storageList.some((storage) => {
+      try {
+        for (let index = 0; index < storage.length; index += 1) {
+          const key = storage.key(index) || "";
+          if (/^sb-.+-auth-token$/.test(key) && storage.getItem(key)) return true;
+        }
+      } catch {
+        return false;
+      }
+      return false;
+    });
+  }
+
+  function createSilentGate(options = {}) {
+    const root = options.root || document.body;
+    const status = options.status || null;
+    const checkingClass = options.checkingClass || "auth-checking";
+    const progressClass = options.progressClass || "auth-progress-visible";
+    const delayMs = Number.isFinite(options.delayMs) ? options.delayMs : 260;
+    const hasHint = hasStoredSessionHint();
+    let finished = false;
+    const timer = window.setTimeout(() => {
+      if (!finished && hasHint) root?.classList.add(progressClass);
+    }, delayMs);
+
+    function finish(message = "") {
+      finished = true;
+      window.clearTimeout(timer);
+      root?.classList.remove(checkingClass, progressClass);
+      if (status) status.textContent = message;
+    }
+
+    function keepQuiet(message = "") {
+      if (status) status.textContent = message;
+    }
+
+    if (!hasHint) root?.classList.remove(progressClass);
+    else keepQuiet("");
+    return { hasHint, finish, keepQuiet };
+  }
+
   async function signInWithPassword(email, password) {
     const supabaseClient = await client();
     if (!supabaseClient) return { local: true };
@@ -147,6 +197,8 @@ window.PixelgomAuth = (() => {
     client,
     session,
     accessPayload,
+    hasStoredSessionHint,
+    createSilentGate,
     signInWithPassword,
     signUpWithPassword,
     resetPasswordForEmail,

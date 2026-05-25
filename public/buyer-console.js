@@ -6,6 +6,12 @@
   const kakaoButton = document.querySelector("[data-kakao-login]");
   const signOutButton = document.querySelector("[data-sign-out]");
   const initialView = document.body.dataset.consoleView || "overview";
+  const authGate = window.PixelgomAuth?.createSilentGate({
+    root: gate,
+    status: statusBox,
+    checkingClass: "is-auth-checking"
+  });
+  const BASIC_PACK_INSTALL_COMMAND = "/명령어설치 pk.001";
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -68,6 +74,18 @@
     ];
   }
 
+  function hasInstalledCommandPack(room = {}) {
+    const packs = room.commandPacks || {};
+    return Boolean(
+      packs.basePackId
+      || packs.basePackTitle
+      || (packs.addonPackIds || []).length
+      || (packs.addonPackTitles || []).length
+      || (packs.installedPackIds || []).length
+      || (packs.installedPackTitles || []).length
+    );
+  }
+
   function nextAction(data) {
     const applications = data.applications || [];
     const rooms = data.rooms || [];
@@ -86,6 +104,13 @@
       };
     }
     const firstRoom = rooms[0] || {};
+    if (!hasInstalledCommandPack(firstRoom)) {
+      return {
+        detail: `${firstRoom.roomName || "승인된 방"}에 운영 기본팩을 먼저 설치하면 /상태, /도움말, /메시지, /날씨, /운세 흐름을 바로 확인할 수 있습니다.`,
+        primary: { label: "운영 기본팩 설치 명령어 복사", copy: BASIC_PACK_INSTALL_COMMAND },
+        secondary: { label: "설치 안내 보기", href: "/setup" }
+      };
+    }
     return {
       detail: `${firstRoom.roomName || "승인된 방"} 연결코드를 앱에 넣고, 운영 기본팩을 첫 명령어로 설치해 주세요.`,
       primary: { label: "명령어 스토어 열기", href: `/command-store?room=${encodeURIComponent(firstRoom.applicationId || "")}` },
@@ -103,7 +128,9 @@
           <p>${escapeHtml(action.detail)}</p>
         </div>
         <div class="buyer-next-buttons">
-          <a class="button button-primary" href="${escapeHtml(action.primary.href)}">${escapeHtml(action.primary.label)}</a>
+          ${action.primary.copy
+            ? `<button class="button button-primary" type="button" data-copy="${escapeHtml(action.primary.copy)}" data-copy-label="${escapeHtml(action.primary.label)}">${escapeHtml(action.primary.label)}</button>`
+            : `<a class="button button-primary" href="${escapeHtml(action.primary.href)}">${escapeHtml(action.primary.label)}</a>`}
           <a class="button button-secondary" href="${escapeHtml(action.secondary.href)}">${escapeHtml(action.secondary.label)}</a>
         </div>
       </section>
@@ -155,6 +182,7 @@
   }
 
   function showConsoleGate(message = "구매 승인된 계정으로 로그인하세요.") {
+    authGate?.finish(message);
     gate?.classList.remove("is-auth-checking");
     gate?.removeAttribute("hidden");
     if (form) form.hidden = false;
@@ -178,8 +206,10 @@
     if (!rooms.length) {
       return `<article class="buyer-empty"><h3>승인된 방이 없습니다</h3><p>운영자가 입금 확인 후 승인하면 이곳에 방별 라이선스와 연결코드가 표시됩니다.</p></article>`;
     }
-    return rooms.map((room) => `
-      <article class="buyer-room-card">
+    return rooms.map((room) => {
+      const firstInstall = !hasInstalledCommandPack(room);
+      return `
+      <article class="buyer-room-card" data-first-install="${firstInstall ? "true" : "false"}">
         <div class="buyer-room-head">
           <h3>${escapeHtml(room.roomName)}</h3>
           <span>${escapeHtml(roomStatus(room))}</span>
@@ -201,21 +231,21 @@
         <div class="buyer-room-action-strip">
           <div>
             <strong>다음 할 일</strong>
-            <span>앱 연결 후 명령어 스토어에서 운영 기본팩을 첫 설치로 진행하세요.</span>
+            <span>${firstInstall ? "앱 연결코드 복사, 설치 안내 확인, 운영 기본팩 설치 명령어 복사 순서로 진행하세요." : "설치된 팩을 기준으로 필요한 명령어를 검색하거나 스토어에서 추가하세요."}</span>
           </div>
           <button class="button button-primary" type="button" data-copy="${escapeHtml(room.bridgeConnectCode || "")}" data-copy-label="앱 연결코드">앱 연결코드 복사</button>
           <a class="button button-secondary" href="/setup">설치 안내 보기</a>
+          ${firstInstall ? `<button class="button button-primary" type="button" data-copy="${BASIC_PACK_INSTALL_COMMAND}" data-copy-label="운영 기본팩 설치 명령어">운영 기본팩 설치 명령어 복사</button>` : ""}
           <a class="button button-secondary" href="/command-store?room=${encodeURIComponent(room.applicationId || "")}">명령어 스토어 열기</a>
         </div>
         ${renderRoomCommands(room)}
         ${renderRoomCommandSearch(room)}
         <div class="buyer-card-actions">
-          <button class="button button-secondary" type="button" data-copy="${escapeHtml(room.bridgeConnectCode || "")}" data-copy-label="앱 연결코드">연결코드 복사</button>
           <button class="button button-secondary" type="button" data-copy="${escapeHtml(room.licenseKey || "")}" data-copy-label="라이선스 키">라이선스 복사</button>
-          <a class="button button-secondary" href="/command-store?room=${encodeURIComponent(room.applicationId || "")}">방별 명령어 관리</a>
         </div>
       </article>
-    `).join("");
+    `;
+    }).join("");
   }
 
   function renderRoomCommands(room) {
@@ -425,7 +455,8 @@
         const value = button.dataset.copy || "";
         if (!value) return;
         await navigator.clipboard.writeText(value);
-        statusBox.textContent = `${button.dataset.copyLabel || "값"}를 복사했습니다.`;
+        const label = button.dataset.copyLabel || "값";
+        statusBox.textContent = `${label}를 복사했습니다.${label.includes("설치 명령어") ? " 카톡방에 붙여넣고 /설치확인 코드로 완료하세요." : ""}`;
       });
     });
     content.addEventListener("click", async (event) => {
@@ -438,9 +469,11 @@
   }
 
   async function boot() {
+    if (!authGate?.hasHint) showConsoleGate();
     const cfg = await window.PixelgomAuth.config();
     window.PixelgomAuth.showAuthMode(document.querySelector("[data-auth-mode]"), cfg);
     if (kakaoButton) kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
+    if (!authGate?.hasHint) return;
     const savedToken = sessionStorage.getItem("pixgomBuyerToken");
     if (savedToken) {
       requestConsole({ token: savedToken }).catch((error) => {
