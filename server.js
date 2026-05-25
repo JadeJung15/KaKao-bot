@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.75";
+export const APP_VERSION = "0.4.76";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -129,7 +129,7 @@ export const FEATURES = [
   "shop-admin-commands",
   "chat-sensitive-info-redaction",
   "command-template-store",
-  "command-template-catalog-400",
+  "representative-command-store",
   "buyer-command-template-install",
   "owned-bridge-engine-marketing",
   "command-template-response-editor",
@@ -336,7 +336,7 @@ const LUCKY_DRAW_OUTCOMES = [
   { threshold: 1, label: "꽝", reward: 0, chance: "50%" }
 ];
 const MAX_LIKE_AMOUNT = 999;
-const COMMAND_TEMPLATE_TOTAL = 400;
+const STORE_TEMPLATE_VERSION = 2;
 
 const COMMAND_TEMPLATE_CATEGORY_CONFIGS = Object.freeze([
   {
@@ -444,27 +444,6 @@ const COMMAND_TEMPLATE_BUNDLES = Object.freeze([
     tags: ["세트", "운영", "공지", "규칙", "프로필", "추천"]
   },
   {
-    id: "bundle-prefix-samples",
-    categoryId: "bundle-ops",
-    categoryTitle: "추천 세트",
-    title: "접두어 구분 예시 세트",
-    command: "4개 명령어 세트",
-    trigger: "접두어예시세트",
-    audience: "participant",
-    kind: "bundle",
-    installable: true,
-    editable: true,
-    description: "/공지, 공지, !공지, .공지처럼 접두어가 다른 명령어를 각각 다르게 운영하는 예시입니다.",
-    response: "같은 단어라도 접두어에 따라 다른 응답을 줄 수 있는 예시 세트입니다.",
-    commands: [
-      { trigger: "/공지", response: "오늘 공지는 여기입니다." },
-      { trigger: "공지", response: "간단 공지입니다. 자세한 내용은 /공지 를 확인해 주세요." },
-      { trigger: "!공지", response: "긴급 공지입니다. 운영진 안내를 우선 확인해 주세요." },
-      { trigger: ".공지", response: "관리용 공지 메모입니다." }
-    ],
-    tags: ["세트", "접두어", "무슬래시", "공지", "예시"]
-  },
-  {
     id: "bundle-event-season",
     categoryId: "bundle-event",
     categoryTitle: "이벤트 세트",
@@ -528,108 +507,256 @@ const COMMAND_TEMPLATE_BUNDLES = Object.freeze([
   }
 ]);
 
+const COMMAND_PACK_COMMANDS = Object.freeze({
+  "ops-core": ["/상태", "/도움말", "/브릿지", "/js상태", "/메시지", "/날씨", "/운세"],
+  "attendance-growth": ["/출석", "/미출석", "/출석순위", "/포인트", "/내정보", "/포인트순위"],
+  "point-economy": ["/포인트", "/내정보", "/좋아요", "/응원", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위"],
+  "game-chance": ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/포인트"],
+  "shop-inventory": ["/상점", "/구매", "/가방", "/사용", "/가방선물", "/구매내역"],
+  "custom-command": ["/명령어목록", "/커스텀명령어", "/고정명령어", "/명령어등록", "/명령어수정", "/명령어삭제", "/커스텀등록", "/커스텀수정", "/커스텀삭제"],
+  "profile-history": ["/프로필", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
+  "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그"],
+  "event-engagement": ["/출석", "/좋아요", "/응원", "/운세", "/날씨", "/채팅오늘", "/채팅금주", "/포인트순위"]
+});
+const ALL_IN_ONE_PACK_COMMANDS = Object.freeze([...new Set(Object.values(COMMAND_PACK_COMMANDS).flat())]);
+
+const LEGACY_PACK_COMMANDS = Object.freeze({
+  "basic-ops": ["/도움말", "/메시지", "/프로필"],
+  "basic-ops-plus": ["/도움말", "/메시지", "/출석", "/ㅊㅊ", "/미출석", "/포인트", "/내정보", "/출석순위", "/포인트순위", "/레벨순위", "/프로필"],
+  "basic-ops-pro": ["/도움말", "/메시지", "/출석", "/ㅊㅊ", "/미출석", "/포인트", "/내정보", "/출석순위", "/포인트순위", "/레벨순위", "/상점", "/구매", "/구매내역", "/가방", "/사용", "/가방선물", "/프로필"],
+  "addon-mini-games-3": ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝"]
+});
+
+const LEGACY_OPERATING_CUSTOM_COMMANDS = Object.freeze([
+  { trigger: "/공지", response: "오늘 공지는 여기입니다.\n\n중요한 내용은 이 메시지 아래에 이어서 안내해 주세요." },
+  { trigger: "/규칙", response: "두글자 닉네임 뒤에 성별을 붙여주세요.\n예: 곰돌 남, 하늘 여" },
+  { trigger: "/문의", response: "문의는 운영진에게 남겨주세요.\n확인 후 순서대로 답변드리겠습니다." },
+  { trigger: "/프로필양식", response: "프로필 양식\n닉네임:\n성별:\n나이대:\n관심사:\n한마디:" }
+]);
+const LEGACY_PLUS_CUSTOM_COMMANDS = Object.freeze([
+  ...LEGACY_OPERATING_CUSTOM_COMMANDS,
+  { trigger: "/운영진", response: "운영진 호출이 필요하면 닉네임과 내용을 함께 남겨주세요." },
+  { trigger: "/방소개", response: "이 방은 함께 대화하고 이벤트를 즐기는 오픈채팅방입니다.\n처음 오신 분은 규칙을 먼저 확인해 주세요." },
+  { trigger: "/입장안내", response: "처음 오신 분은 닉네임 규칙과 프로필 양식을 먼저 확인해 주세요." },
+  { trigger: "/신고", response: "신고가 필요한 내용은 닉네임, 시간, 상황을 함께 운영진에게 남겨주세요." },
+  { trigger: "/자주묻는질문", response: "자주 묻는 질문은 이 안내에 이어서 정리해 주세요.\n필요한 내용은 운영진이 계속 업데이트합니다." }
+]);
+const LEGACY_PRO_CUSTOM_COMMANDS = Object.freeze([
+  ...LEGACY_PLUS_CUSTOM_COMMANDS,
+  { trigger: "/이벤트", response: "진행 중인 이벤트 안내입니다.\n참여 방법과 기간을 확인해 주세요." },
+  { trigger: "/이벤트기간", response: "이벤트 기간은 운영진 공지 기준으로 진행됩니다." },
+  { trigger: "/보상안내", response: "보상은 참여 조건 확인 후 순서대로 지급됩니다." },
+  { trigger: "/상점안내", response: "상점 이용 안내\n/상점 으로 상품을 확인하고 /구매 번호 로 구매할 수 있습니다." },
+  { trigger: "/경고안내", response: "운영진 안내입니다.\n방 규칙 위반 내용이 확인되어 주의 안내드립니다." },
+  { trigger: "/점검공지", response: "운영 점검 안내입니다.\n일부 기능 응답이 잠시 지연될 수 있습니다." }
+]);
+
 const COMMAND_PACKS = Object.freeze([
+  {
+    id: "ops-core",
+    slot: "pack",
+    version: 1,
+    title: "운영 기본팩",
+    tier: "Core",
+    categoryTitle: "명령어 팩",
+    description: "상태, 도움말, 브릿지 진단, 메시지함, 날씨와 운세를 묶은 기본 운영 팩입니다.",
+    features: {},
+    fixedCommands: COMMAND_PACK_COMMANDS["ops-core"],
+    customCommands: [],
+    tags: ["기본", "운영", "상태", "메시지", "날씨", "운세"]
+  },
+  {
+    id: "attendance-growth",
+    slot: "pack",
+    version: 1,
+    title: "출석 성장팩",
+    tier: "Growth",
+    categoryTitle: "명령어 팩",
+    description: "출석 체크, 포인트 보상, 레벨 성장과 출석 순위를 제공합니다.",
+    features: { attendance: true, points: true, rankings: true },
+    fixedCommands: COMMAND_PACK_COMMANDS["attendance-growth"],
+    customCommands: [],
+    tags: ["출석", "성장", "포인트", "랭킹"]
+  },
+  {
+    id: "point-economy",
+    slot: "pack",
+    version: 1,
+    title: "포인트 경제팩",
+    tier: "Economy",
+    categoryTitle: "명령어 팩",
+    description: "가상 포인트 확인, 이체, 좋아요, 응원과 랭킹을 제공합니다.",
+    features: { points: true, rankings: true },
+    fixedCommands: COMMAND_PACK_COMMANDS["point-economy"],
+    customCommands: [],
+    tags: ["포인트", "좋아요", "응원", "이체", "가상"]
+  },
+  {
+    id: "game-chance",
+    slot: "pack",
+    version: 1,
+    title: "게임 확률팩",
+    tier: "Game",
+    categoryTitle: "명령어 팩",
+    description: "채팅방 내부 가상 포인트만 사용하는 뽑기와 홀짝 게임 팩입니다.",
+    features: { games: true, points: true },
+    fixedCommands: COMMAND_PACK_COMMANDS["game-chance"],
+    customCommands: [],
+    tags: ["게임", "뽑기", "홀짝", "확률", "가상포인트"]
+  },
+  {
+    id: "shop-inventory",
+    slot: "pack",
+    version: 1,
+    title: "상점 가방팩",
+    tier: "Shop",
+    categoryTitle: "명령어 팩",
+    description: "방 내부 가상 아이템 상점, 구매, 가방, 사용, 선물 기능을 제공합니다.",
+    features: { shop: true, points: true },
+    fixedCommands: COMMAND_PACK_COMMANDS["shop-inventory"],
+    customCommands: [],
+    tags: ["상점", "가방", "아이템", "구매", "가상"]
+  },
+  {
+    id: "custom-command",
+    slot: "pack",
+    version: 1,
+    title: "커스텀 명령어팩",
+    tier: "Custom",
+    categoryTitle: "명령어 팩",
+    description: "방별 커스텀 명령어 조회와 관리자 등록, 수정, 삭제 기능을 제공합니다.",
+    features: { customCommands: true },
+    fixedCommands: COMMAND_PACK_COMMANDS["custom-command"],
+    customCommands: [],
+    tags: ["커스텀", "명령어", "관리"]
+  },
+  {
+    id: "profile-history",
+    slot: "pack",
+    version: 1,
+    title: "프로필 히스토리팩",
+    tier: "Profile",
+    categoryTitle: "명령어 팩",
+    description: "프로필, 별명, 입퇴장과 닉네임 이력 관리를 제공합니다.",
+    features: { profiles: true, history: true },
+    fixedCommands: COMMAND_PACK_COMMANDS["profile-history"],
+    customCommands: [],
+    tags: ["프로필", "히스토리", "닉이력", "입퇴장"]
+  },
+  {
+    id: "admin-ops",
+    slot: "pack",
+    version: 1,
+    title: "관리자 운영팩",
+    tier: "Admin",
+    categoryTitle: "명령어 팩",
+    description: "방 운영, 관리자, 기능 ON/OFF, 구독과 로그 확인 명령어를 제공합니다.",
+    features: { history: true, profiles: true, points: true, shop: true, customCommands: true },
+    fixedCommands: COMMAND_PACK_COMMANDS["admin-ops"],
+    customCommands: [],
+    tags: ["관리자", "운영", "기능", "구독", "로그"]
+  },
+  {
+    id: "event-engagement",
+    slot: "pack",
+    version: 1,
+    title: "이벤트 참여팩",
+    tier: "Event",
+    categoryTitle: "명령어 팩",
+    description: "출석, 응원, 좋아요, 운세, 날씨와 채팅 랭킹을 묶은 참여 유도 팩입니다.",
+    features: { attendance: true, points: true, rankings: true },
+    fixedCommands: COMMAND_PACK_COMMANDS["event-engagement"],
+    customCommands: [],
+    tags: ["이벤트", "참여", "출석", "응원", "랭킹"]
+  },
+  {
+    id: "all-in-one-ops",
+    slot: "pack",
+    version: 1,
+    title: "풀 운영 올인원팩",
+    tier: "All-in-one",
+    categoryTitle: "명령어 팩",
+    description: "운영 기본부터 관리자 기능까지 한 번에 구성하되 권한별 실행 제한은 유지합니다.",
+    features: { attendance: true, points: true, rankings: true, history: true, profiles: true, games: true, shop: true, customCommands: true },
+    fixedCommands: ALL_IN_ONE_PACK_COMMANDS,
+    customCommands: [],
+    tags: ["올인원", "전체", "운영", "관리자"]
+  },
   {
     id: "basic-ops",
     slot: "base",
     version: 1,
     title: "기본 운영팩",
-    tier: "Basic",
+    tier: "Legacy",
     categoryTitle: "명령어 팩",
-    description: "공지, 규칙, 문의, 프로필양식을 한 번에 장착하는 기본 운영 팩입니다.",
+    description: "이전 버전 호환용 기본 운영 팩입니다.",
     features: { customCommands: true, profiles: true },
-    fixedCommands: ["/도움말", "/메시지", "/프로필"],
-    customCommands: [
-      { trigger: "/공지", response: "오늘 공지는 여기입니다.\n\n중요한 내용은 이 메시지 아래에 이어서 안내해 주세요." },
-      { trigger: "/규칙", response: "두글자 닉네임 뒤에 성별을 붙여주세요.\n예: 곰돌 남, 하늘 여" },
-      { trigger: "/문의", response: "문의는 운영진에게 남겨주세요.\n확인 후 순서대로 답변드리겠습니다." },
-      { trigger: "/프로필양식", response: "프로필 양식\n닉네임:\n성별:\n나이대:\n관심사:\n한마디:" }
-    ],
-    tags: ["기본", "운영", "공지", "규칙", "문의", "프로필"]
+    fixedCommands: LEGACY_PACK_COMMANDS["basic-ops"],
+    customCommands: LEGACY_OPERATING_CUSTOM_COMMANDS,
+    tags: ["legacy", "기본", "운영"],
+    hidden: true
   },
   {
     id: "basic-ops-plus",
     slot: "base",
     version: 1,
     title: "기본 운영팩+",
-    tier: "Basic+",
+    tier: "Legacy",
     categoryTitle: "명령어 팩",
-    description: "기본 운영에 출석, 포인트, 레벨, 랭킹 운영 명령어를 함께 켜는 확장 팩입니다.",
+    description: "이전 버전 호환용 확장 운영 팩입니다.",
     features: { attendance: true, points: true, rankings: true, profiles: true, customCommands: true },
-    fixedCommands: ["/도움말", "/메시지", "/출석", "/ㅊㅊ", "/미출석", "/포인트", "/내정보", "/출석순위", "/포인트순위", "/레벨순위", "/프로필"],
-    customCommands: [
-      { trigger: "/공지", response: "오늘 공지는 여기입니다.\n\n중요한 내용은 이 메시지 아래에 이어서 안내해 주세요." },
-      { trigger: "/규칙", response: "두글자 닉네임 뒤에 성별을 붙여주세요.\n예: 곰돌 남, 하늘 여" },
-      { trigger: "/문의", response: "문의는 운영진에게 남겨주세요.\n확인 후 순서대로 답변드리겠습니다." },
-      { trigger: "/프로필양식", response: "프로필 양식\n닉네임:\n성별:\n나이대:\n관심사:\n한마디:" },
-      { trigger: "/운영진", response: "운영진 호출이 필요하면 닉네임과 내용을 함께 남겨주세요." },
-      { trigger: "/방소개", response: "이 방은 함께 대화하고 이벤트를 즐기는 오픈채팅방입니다.\n처음 오신 분은 규칙을 먼저 확인해 주세요." },
-      { trigger: "/입장안내", response: "처음 오신 분은 닉네임 규칙과 프로필 양식을 먼저 확인해 주세요." },
-      { trigger: "/신고", response: "신고가 필요한 내용은 닉네임, 시간, 상황을 함께 운영진에게 남겨주세요." },
-      { trigger: "/자주묻는질문", response: "자주 묻는 질문은 이 안내에 이어서 정리해 주세요.\n필요한 내용은 운영진이 계속 업데이트합니다." }
-    ],
-    tags: ["기본", "운영", "출석", "포인트", "레벨", "랭킹"]
+    fixedCommands: LEGACY_PACK_COMMANDS["basic-ops-plus"],
+    customCommands: LEGACY_PLUS_CUSTOM_COMMANDS,
+    tags: ["legacy", "기본", "운영", "출석"],
+    hidden: true
   },
   {
     id: "basic-ops-pro",
     slot: "base",
     version: 1,
     title: "기본 운영팩 Pro",
-    tier: "Pro",
+    tier: "Legacy",
     categoryTitle: "명령어 팩",
-    description: "Basic+에 상점, 가방, 이벤트, 운영 공지까지 포함한 전체 운영 팩입니다.",
+    description: "이전 버전 호환용 Pro 운영 팩입니다.",
     features: { attendance: true, points: true, rankings: true, profiles: true, shop: true, customCommands: true },
-    fixedCommands: ["/도움말", "/메시지", "/출석", "/ㅊㅊ", "/미출석", "/포인트", "/내정보", "/출석순위", "/포인트순위", "/레벨순위", "/상점", "/구매", "/구매내역", "/가방", "/사용", "/가방선물", "/프로필"],
-    customCommands: [
-      { trigger: "/공지", response: "오늘 공지는 여기입니다.\n\n중요한 내용은 이 메시지 아래에 이어서 안내해 주세요." },
-      { trigger: "/규칙", response: "두글자 닉네임 뒤에 성별을 붙여주세요.\n예: 곰돌 남, 하늘 여" },
-      { trigger: "/문의", response: "문의는 운영진에게 남겨주세요.\n확인 후 순서대로 답변드리겠습니다." },
-      { trigger: "/프로필양식", response: "프로필 양식\n닉네임:\n성별:\n나이대:\n관심사:\n한마디:" },
-      { trigger: "/운영진", response: "운영진 호출이 필요하면 닉네임과 내용을 함께 남겨주세요." },
-      { trigger: "/방소개", response: "이 방은 함께 대화하고 이벤트를 즐기는 오픈채팅방입니다.\n처음 오신 분은 규칙을 먼저 확인해 주세요." },
-      { trigger: "/입장안내", response: "처음 오신 분은 닉네임 규칙과 프로필 양식을 먼저 확인해 주세요." },
-      { trigger: "/신고", response: "신고가 필요한 내용은 닉네임, 시간, 상황을 함께 운영진에게 남겨주세요." },
-      { trigger: "/자주묻는질문", response: "자주 묻는 질문은 이 안내에 이어서 정리해 주세요.\n필요한 내용은 운영진이 계속 업데이트합니다." },
-      { trigger: "/이벤트", response: "진행 중인 이벤트 안내입니다.\n참여 방법과 기간을 확인해 주세요." },
-      { trigger: "/이벤트기간", response: "이벤트 기간은 운영진 공지 기준으로 진행됩니다." },
-      { trigger: "/보상안내", response: "보상은 참여 조건 확인 후 순서대로 지급됩니다." },
-      { trigger: "/상점안내", response: "상점 이용 안내\n/상점 으로 상품을 확인하고 /구매 번호 로 구매할 수 있습니다." },
-      { trigger: "/경고안내", response: "운영진 안내입니다.\n방 규칙 위반 내용이 확인되어 주의 안내드립니다." },
-      { trigger: "/점검공지", response: "운영 점검 안내입니다.\n일부 기능 응답이 잠시 지연될 수 있습니다." }
-    ],
-    tags: ["프로", "운영", "출석", "포인트", "레벨", "상점", "이벤트"]
+    fixedCommands: LEGACY_PACK_COMMANDS["basic-ops-pro"],
+    customCommands: LEGACY_PRO_CUSTOM_COMMANDS,
+    tags: ["legacy", "프로", "운영"],
+    hidden: true
   },
   {
     id: "addon-mini-games-3",
     slot: "addon",
     version: 1,
     title: "미니게임 3종 애드온",
-    tier: "Addon",
+    tier: "Legacy",
     categoryTitle: "게임 애드온",
-    description: "주사위, 낚시, 탐험 미니게임을 방 분위기에 맞는 운영 명령어로 연결합니다.",
+    description: "이전 버전 호환용 미니게임 애드온입니다.",
     features: { games: true, points: true },
-    fixedCommands: ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝"],
+    fixedCommands: LEGACY_PACK_COMMANDS["addon-mini-games-3"],
     customCommands: [
       { trigger: "/운영주사위", response: "주사위 게임을 시작합니다.", proxyCommand: "/주사위" },
       { trigger: "/운영낚시", response: "낚시 게임을 시작합니다.", proxyCommand: "/낚시" },
       { trigger: "/운영탐험", response: "탐험 게임을 시작합니다.", proxyCommand: "/탐험" }
     ],
-    tags: ["애드온", "게임", "주사위", "낚시", "탐험", "포인트"]
+    tags: ["legacy", "게임", "주사위", "낚시", "탐험"],
+    hidden: true
   },
   {
     id: "combo-basic-plus-games",
     slot: "combo",
     version: 1,
     title: "기본 운영팩+ + 미니게임 3종",
-    tier: "Combo",
+    tier: "Legacy",
     categoryTitle: "조합 팩",
-    description: "기본 운영팩+를 기본팩으로 장착하고 미니게임 3종 애드온을 함께 켭니다.",
+    description: "이전 버전 호환용 조합 팩입니다.",
     basePackId: "basic-ops-plus",
     addonPackIds: ["addon-mini-games-3"],
     features: {},
     fixedCommands: [],
     customCommands: [],
-    tags: ["조합", "기본운영팩+", "미니게임", "출석", "포인트"]
+    tags: ["legacy", "조합", "미니게임"],
+    hidden: true
   }
 ]);
 
@@ -824,6 +951,99 @@ function gameTemplateProxyCommand(category, word) {
   return "";
 }
 
+const REPRESENTATIVE_COMMAND_TEMPLATES = Object.freeze([
+  ["basic-ops", "기본 운영", "participant", "custom", "/공지", "공지", "오늘 공지는 여기입니다.\n\n중요한 내용은 이 메시지 아래에 이어서 안내해 주세요.", "방 공지 대표 명령어입니다."],
+  ["basic-ops", "기본 운영", "participant", "custom", "/규칙", "규칙", "두글자 닉네임 뒤에 성별을 붙여주세요.\n예: 곰돌 남, 하늘 여", "방 규칙 안내 대표 명령어입니다."],
+  ["basic-ops", "기본 운영", "participant", "custom", "/문의", "문의", "문의는 운영진에게 남겨주세요.\n확인 후 순서대로 답변드리겠습니다.", "운영진 문의 안내 대표 명령어입니다."],
+  ["basic-ops", "기본 운영", "participant", "custom", "/운영진", "운영진", "운영진 호출이 필요하면 닉네임과 내용을 함께 남겨주세요.", "운영진 호출 안내입니다."],
+  ["basic-ops", "기본 운영", "participant", "custom", "/방소개", "방소개", "이 방은 함께 대화하고 이벤트를 즐기는 오픈채팅방입니다.\n처음 오신 분은 규칙을 먼저 확인해 주세요.", "방 소개 대표 명령어입니다."],
+  ["basic-ops", "기본 운영", "participant", "custom", "/초보안내", "초보안내", "처음 오신 분은 공지와 규칙을 먼저 확인해 주세요.\n궁금한 점은 /문의 로 남겨주세요.", "초보 참여자 안내입니다."],
+  ["basic-ops", "기본 운영", "participant", "custom", "/인사", "인사", "처음 오신 분은 가볍게 인사부터 나눠주세요.\n반갑게 맞이하겠습니다.", "입장 인사 안내입니다."],
+  ["basic-ops", "기본 운영", "participant", "custom", "/자주묻는질문", "자주 묻는 질문", "자주 묻는 질문은 이 안내에 이어서 정리해 주세요.\n필요한 내용은 운영진이 계속 업데이트합니다.", "FAQ 대표 명령어입니다."],
+  ["basic-ops", "기본 운영", "participant", "custom", "/시간표", "시간표", "방 일정과 운영 시간은 이 메시지 아래에 이어서 안내해 주세요.", "시간표 안내 대표 명령어입니다."],
+  ["basic-ops", "기본 운영", "participant", "custom", "/신고", "신고", "신고가 필요한 내용은 닉네임, 시간, 상황을 함께 운영진에게 남겨주세요.", "신고 안내 대표 명령어입니다."],
+  ["participant", "참여자용", "participant", "custom", "/프로필양식", "프로필 양식", "프로필 양식\n닉네임:\n성별:\n나이대:\n관심사:\n한마디:", "참여자 프로필 작성 양식입니다."],
+  ["participant", "참여자용", "participant", "custom", "/닉네임규칙", "닉네임 규칙", "닉네임은 알아보기 쉽게 설정해 주세요.\n운영진이 확인하기 어려운 이름은 변경을 요청할 수 있습니다.", "닉네임 규칙 안내입니다."],
+  ["participant", "참여자용", "participant", "custom", "/입장인사", "입장 인사", "처음 오신 분은 가볍게 인사부터 나눠주세요.\n반갑게 맞이하겠습니다.", "입장 인사 안내입니다."],
+  ["participant", "참여자용", "participant", "custom", "/대화주제", "대화 주제", "오늘 대화 주제는 운영진이 이 메시지 아래에 이어서 안내합니다.", "대화 주제 안내입니다."],
+  ["participant", "참여자용", "participant", "custom", "/자기소개", "자기소개", "자기소개 양식\n닉네임:\n관심사:\n요즘 하고 싶은 이야기:", "자기소개 양식입니다."],
+  ["participant", "참여자용", "participant", "custom", "/오늘질문", "오늘 질문", "오늘의 질문은 이 메시지 아래에 이어서 안내해 주세요.", "참여 유도 질문입니다."],
+  ["participant", "참여자용", "participant", "custom", "/친구찾기", "친구찾기", "같이 이야기할 친구를 찾을 때는 관심사와 가능한 시간을 함께 남겨주세요.", "친구 찾기 안내입니다."],
+  ["participant", "참여자용", "participant", "custom", "/방분위기", "방 분위기", "서로 존중하며 편하게 대화하는 분위기를 지향합니다.", "방 분위기 안내입니다."],
+  ["participant", "참여자용", "participant", "custom", "/참여팁", "참여 팁", "공지와 규칙을 확인한 뒤 관심 있는 주제로 편하게 참여해 주세요.", "참여 팁 안내입니다."],
+  ["participant", "참여자용", "participant", "custom", "/활동안내", "활동 안내", "출석, 응원, 좋아요 같은 기능은 방 설정에 따라 사용할 수 있습니다.", "활동 기능 안내입니다."],
+  ["admin", "관리자용", "admin", "custom", "/점검공지", "점검 공지", "운영 점검 안내입니다.\n일부 기능 응답이 잠시 지연될 수 있습니다.", "관리자용 점검 공지입니다."],
+  ["admin", "관리자용", "admin", "custom", "/경고안내", "경고 안내", "운영진 안내입니다.\n방 규칙 위반 내용이 확인되어 주의 안내드립니다.", "관리자용 경고 안내입니다."],
+  ["admin", "관리자용", "admin", "custom", "/운영메모", "운영 메모", "운영진 메모입니다.\n확인할 내용을 이 메시지 아래에 이어서 정리해 주세요.", "운영진 메모 양식입니다."],
+  ["admin", "관리자용", "admin", "custom", "/제재기준", "제재 기준", "방 제재 기준은 운영진 공지 기준을 따릅니다.\n세부 기준은 이 메시지 아래에 이어서 안내해 주세요.", "제재 기준 안내입니다."],
+  ["admin", "관리자용", "admin", "custom", "/신고처리", "신고 처리", "신고 접수 내용을 확인했습니다.\n처리 결과는 운영진 확인 후 안내하겠습니다.", "신고 처리 안내입니다."],
+  ["admin", "관리자용", "admin", "custom", "/이벤트등록", "이벤트 등록", "이벤트 등록 양식\n이름:\n기간:\n참여 방법:\n보상:", "이벤트 등록 양식입니다."],
+  ["admin", "관리자용", "admin", "custom", "/랭킹보상", "랭킹 보상", "랭킹 보상 안내입니다.\n대상자와 지급 기준은 운영진 확인 후 공지됩니다.", "랭킹 보상 안내입니다."],
+  ["admin", "관리자용", "admin", "custom", "/상점공지", "상점 공지", "상점 안내입니다.\n상품 변경이나 점검 내용은 이 메시지 아래에 이어서 안내해 주세요.", "상점 공지 안내입니다."],
+  ["admin", "관리자용", "admin", "custom", "/관리규칙", "관리 규칙", "관리 규칙은 방 운영진 기준에 따라 적용됩니다.\n세부 내용은 이 메시지 아래에 이어서 안내해 주세요.", "관리 규칙 안내입니다."],
+  ["admin", "관리자용", "admin", "custom", "/휴방안내", "휴방 안내", "휴방 안내입니다.\n재개 일정은 운영진 공지를 확인해 주세요.", "휴방 안내입니다."],
+  ["shop-item", "상점/아이템", "participant", "custom", "/상점안내", "상점 안내", "상점 이용 안내\n/상점 으로 상품을 확인하고 /구매 번호 로 구매할 수 있습니다.", "가상 포인트 상점 안내입니다."],
+  ["shop-item", "상점/아이템", "participant", "custom", "/아이템목록", "아이템 목록", "아이템 목록은 /상점 으로 확인할 수 있습니다.", "아이템 목록 안내입니다."],
+  ["shop-item", "상점/아이템", "participant", "custom", "/가방안내", "가방 안내", "가방 이용 안내\n/가방 으로 보유 아이템을 확인하고 /사용 번호 로 사용할 수 있습니다.", "가방 사용 안내입니다."],
+  ["shop-item", "상점/아이템", "participant", "custom", "/구매방법", "구매 방법", "구매 방법\n/구매 번호 형식으로 입력하면 가상 포인트로 상품을 구매합니다.", "구매 방법 안내입니다."],
+  ["shop-item", "상점/아이템", "participant", "custom", "/선물방법", "선물 방법", "아이템 선물 안내\n/가방선물 닉네임 번호 수량 형식으로 선물할 수 있습니다.", "아이템 선물 안내입니다."],
+  ["shop-item", "상점/아이템", "participant", "custom", "/사용방법", "사용 방법", "아이템 사용 안내\n/사용 번호 형식으로 보유 아이템을 사용할 수 있습니다.", "아이템 사용 안내입니다."],
+  ["shop-item", "상점/아이템", "participant", "custom", "/포인트안내", "포인트 안내", "포인트는 채팅방 내부 가상 포인트이며 현금 가치나 환전 기능이 없습니다.", "가상 포인트 정책 안내입니다."],
+  ["shop-item", "상점/아이템", "participant", "custom", "/보상교환", "보상 교환", "보상 교환은 방 내부 가상 아이템 기준으로만 운영합니다.", "가상 보상 교환 안내입니다."],
+  ["shop-item", "상점/아이템", "participant", "custom", "/쿠폰", "쿠폰", "쿠폰 안내는 운영진 공지 기준으로 진행됩니다.", "쿠폰 안내입니다."],
+  ["shop-item", "상점/아이템", "participant", "custom", "/시즌상품", "시즌 상품", "시즌 상품은 운영진이 등록한 방 내부 가상 아이템 기준으로 운영합니다.", "시즌 상품 안내입니다."],
+  ["event-season", "이벤트/시즌", "participant", "custom", "/출석이벤트", "출석 이벤트", "출석 이벤트 안내입니다.\n참여 기간과 보상 기준을 확인해 주세요.", "출석 이벤트 안내입니다."],
+  ["event-season", "이벤트/시즌", "participant", "custom", "/랭킹이벤트", "랭킹 이벤트", "랭킹 이벤트 안내입니다.\n집계 기준과 기간을 확인해 주세요.", "랭킹 이벤트 안내입니다."],
+  ["event-season", "이벤트/시즌", "participant", "custom", "/신규이벤트", "신규 이벤트", "진행 중인 신규 이벤트를 이 메시지 아래에 이어서 안내해 주세요.", "신규 이벤트 안내입니다."],
+  ["event-season", "이벤트/시즌", "participant", "custom", "/주말이벤트", "주말 이벤트", "주말 이벤트 안내입니다.\n참여 방법과 기간을 확인해 주세요.", "주말 이벤트 안내입니다."],
+  ["event-season", "이벤트/시즌", "participant", "custom", "/시즌공지", "시즌 공지", "시즌 공지입니다.\n기간과 참여 조건을 확인해 주세요.", "시즌 공지 안내입니다."],
+  ["event-season", "이벤트/시즌", "participant", "custom", "/보상안내", "보상 안내", "보상은 참여 조건 확인 후 순서대로 지급됩니다.", "보상 안내입니다."],
+  ["event-season", "이벤트/시즌", "participant", "custom", "/미션", "미션", "오늘의 미션은 이 메시지 아래에 이어서 안내해 주세요.", "미션 안내입니다."],
+  ["event-season", "이벤트/시즌", "participant", "custom", "/챌린지", "챌린지", "챌린지 안내입니다.\n참여 방법과 기간을 확인해 주세요.", "챌린지 안내입니다."],
+  ["event-season", "이벤트/시즌", "participant", "custom", "/기념일", "기념일", "기념일 이벤트 안내입니다.\n참여 전 방 규칙을 확인해 주세요.", "기념일 안내입니다."],
+  ["event-season", "이벤트/시즌", "participant", "custom", "/투표", "투표", "투표 안내입니다.\n선택지와 마감 시간을 확인해 주세요.", "투표 안내입니다."],
+  ["community-fun", "커뮤니티/재미", "participant", "custom", "/오늘운세안내", "오늘 운세 안내", "오늘 운세는 /운세 또는 /오늘운세 로 확인할 수 있습니다.", "운세 기능 안내입니다."],
+  ["community-fun", "커뮤니티/재미", "participant", "custom", "/밸런스게임", "밸런스 게임", "밸런스 게임 주제는 이 메시지 아래에 이어서 안내해 주세요.", "밸런스 게임 안내입니다."],
+  ["community-fun", "커뮤니티/재미", "participant", "custom", "/칭찬", "칭찬", "서로의 좋은 점을 가볍게 칭찬해 주세요.", "칭찬 참여 안내입니다."],
+  ["community-fun", "커뮤니티/재미", "participant", "custom", "/응원문구", "응원 문구", "오늘의 응원 문구는 이 메시지 아래에 이어서 안내해 주세요.", "응원 문구 안내입니다."],
+  ["community-fun", "커뮤니티/재미", "participant", "custom", "/랜덤질문", "랜덤 질문", "랜덤 질문은 운영진이 이 메시지 아래에 이어서 안내합니다.", "랜덤 질문 안내입니다."],
+  ["community-fun", "커뮤니티/재미", "participant", "custom", "/오늘메뉴", "오늘 메뉴", "오늘 메뉴 추천은 이 메시지 아래에 이어서 안내해 주세요.", "오늘 메뉴 안내입니다."],
+  ["community-fun", "커뮤니티/재미", "participant", "custom", "/심심풀이", "심심풀이", "심심풀이 주제는 이 메시지 아래에 이어서 안내해 주세요.", "심심풀이 안내입니다."],
+  ["community-fun", "커뮤니티/재미", "participant", "custom", "/익명사연", "익명 사연", "익명 사연은 운영진 안내 기준에 맞춰 접수해 주세요.", "익명 사연 안내입니다."],
+  ["community-fun", "커뮤니티/재미", "participant", "custom", "/인기투표", "인기 투표", "인기 투표는 운영진 공지 기준으로 진행됩니다.", "인기 투표 안내입니다."],
+  ["community-fun", "커뮤니티/재미", "participant", "custom", "/분위기전환", "분위기 전환", "분위기 전환용 주제는 이 메시지 아래에 이어서 안내해 주세요.", "분위기 전환 안내입니다."],
+  ["game-link", "게임 연결", "participant", "game-template", "/운영주사위", "운영 주사위", "주사위 게임을 시작합니다.", "설치하면 /주사위 미니게임 엔진으로 연결됩니다.", "/주사위"],
+  ["game-link", "게임 연결", "participant", "game-template", "/운영낚시", "운영 낚시", "낚시 게임을 시작합니다.", "설치하면 /낚시 미니게임 엔진으로 연결됩니다.", "/낚시"],
+  ["game-link", "게임 연결", "participant", "game-template", "/운영탐험", "운영 탐험", "탐험 게임을 시작합니다.", "설치하면 /탐험 미니게임 엔진으로 연결됩니다.", "/탐험"],
+  ["game-link", "게임 연결", "participant", "game-template", "/펫키우기", "펫키우기", "펫키우기 기능은 준비 중입니다.", "게임 확장 준비중 템플릿입니다. 현재는 설치할 수 없습니다.", ""],
+  ["ai-helper", "AI 운영도우미 후보", "admin", "roadmap", "/공지초안", "공지 초안", "AI 공지 초안 기능은 준비 중입니다.", "AI 기능 후보 템플릿입니다. 실제 자동화 전에는 운영자 검토가 필요합니다.", ""]
+]);
+
+function representativeCommandTemplates() {
+  return REPRESENTATIVE_COMMAND_TEMPLATES.map((row, index) => {
+    const [categoryId, categoryTitle, audience, kind, trigger, title, response, description, proxyCommand = ""] = row;
+    const installable = kind === "custom" || (kind === "game-template" && Boolean(proxyCommand));
+    return {
+      id: `${categoryId}-${String(index + 1).padStart(3, "0")}`,
+      categoryId,
+      categoryTitle,
+      title,
+      command: trigger,
+      trigger,
+      audience,
+      kind,
+      installable,
+      editable: installable,
+      description,
+      response,
+      proxyCommand,
+      status: installable ? "available" : "coming_soon",
+      disabledReason: installable ? "" : (kind === "roadmap" ? "정책 검토 후 공개 예정입니다." : "아직 실제 실행 기능이 연결되지 않았습니다."),
+      tags: [categoryTitle, audience === "admin" ? "관리자" : "참여자", kind, title]
+    };
+  });
+}
+
 function fixedCommandTemplates() {
   const templates = [];
   for (const group of FIXED_COMMAND_GROUPS) {
@@ -854,52 +1074,16 @@ function fixedCommandTemplates() {
 function generatedCommandTemplates() {
   const templates = [
     ...fixedCommandTemplates(),
-    ...COMMAND_TEMPLATE_BUNDLES
+    ...COMMAND_TEMPLATE_BUNDLES,
+    ...representativeCommandTemplates()
   ];
-  const usedTriggers = new Set(templates.flatMap((template) => [
-    template.trigger,
-    ...(template.commands || []).map((command) => command.trigger)
-  ]));
-  let serial = 1;
-  for (const category of COMMAND_TEMPLATE_CATEGORY_CONFIGS) {
-    for (const word of category.words) {
-      for (const action of category.actions) {
-        if (templates.length >= COMMAND_TEMPLATE_TOTAL) return templates;
-        const commandBase = commandTemplateSlug(`${word}${action}`);
-        let trigger = normalizeCustomCommandTrigger(commandBase) || `/템플릿${serial}`;
-        if (usedTriggers.has(trigger)) trigger = normalizeCustomCommandTrigger(`${commandBase}-${serial}`) || `/템플릿${serial}`;
-        const proxyCommand = gameTemplateProxyCommand(category, word);
-        const installable = category.kind === "custom" || (category.kind === "game-template" && Boolean(proxyCommand));
-        usedTriggers.add(trigger);
-        templates.push({
-          id: `${category.id}-${String(serial).padStart(3, "0")}`,
-          categoryId: category.id,
-          categoryTitle: category.title,
-          title: `${word} ${action}`,
-          command: trigger,
-          trigger,
-          audience: category.audience,
-          kind: category.kind,
-          installable,
-          editable: category.kind !== "fixed",
-          description: category.kind === "custom"
-            ? "구매자가 문구를 수정해서 방별 커스텀 명령어로 설치할 수 있습니다."
-            : category.kind === "game-template"
-              ? (proxyCommand
-                ? "설치하면 해당 명령어가 기존 픽셀곰 미니게임 엔진으로 연결됩니다."
-                : "게임 확장 준비중 템플릿입니다. 현재는 설치할 수 없습니다.")
-              : "AI 기능 후보 템플릿입니다. 실제 자동화 전에는 운영자 검토가 필요합니다.",
-          response: commandTemplateResponse(category, word, action, serial),
-          proxyCommand,
-          status: installable ? "available" : "coming_soon",
-          disabledReason: installable ? "" : (category.kind === "roadmap" ? "정책 검토 후 공개 예정입니다." : "아직 실제 실행 기능이 연결되지 않았습니다."),
-          tags: [category.title, category.audience === "admin" ? "관리자" : "참여자", category.kind]
-        });
-        serial += 1;
-      }
-    }
-  }
-  return templates.slice(0, COMMAND_TEMPLATE_TOTAL);
+  const seen = new Set();
+  return templates.filter((template) => {
+    const key = normalizeCustomCommandTrigger(template.trigger || template.command || template.id);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 const COMMAND_TEMPLATES = Object.freeze(generatedCommandTemplates());
@@ -989,9 +1173,13 @@ function normalizeCommandPackState(value = {}) {
   const addonPackIds = [...new Set((Array.isArray(value.addonPackIds) ? value.addonPackIds : [])
     .map((id) => validCommandPackId(id, "addon"))
     .filter(Boolean))];
+  const installedPackIds = [...new Set((Array.isArray(value.installedPackIds) ? value.installedPackIds : [])
+    .map((id) => validCommandPackId(id, "pack"))
+    .filter(Boolean))];
   return {
     basePackId,
     addonPackIds,
+    installedPackIds,
     installedAt: normalizeText(value.installedAt),
     updatedAt: normalizeText(value.updatedAt),
     updatedBy: normalizeText(value.updatedBy)
@@ -1000,11 +1188,13 @@ function normalizeCommandPackState(value = {}) {
 
 function publicCommandPack(pack, current = {}) {
   const commandCount = (pack.customCommands || []).length + (pack.fixedCommands || []).length;
-  const installed = pack.slot === "base"
-    ? current.basePackId === pack.id
-    : pack.slot === "addon"
-      ? (current.addonPackIds || []).includes(pack.id)
-      : current.basePackId === pack.basePackId && (pack.addonPackIds || []).every((id) => (current.addonPackIds || []).includes(id));
+  const installed = pack.slot === "pack"
+    ? (current.installedPackIds || []).includes(pack.id)
+    : pack.slot === "base"
+      ? current.basePackId === pack.id
+      : pack.slot === "addon"
+        ? (current.addonPackIds || []).includes(pack.id)
+        : current.basePackId === pack.basePackId && (pack.addonPackIds || []).every((id) => (current.addonPackIds || []).includes(id));
   return {
     id: pack.id,
     slot: pack.slot,
@@ -1023,6 +1213,7 @@ function publicCommandPack(pack, current = {}) {
     features: pack.features || {},
     basePackId: pack.basePackId || "",
     addonPackIds: pack.addonPackIds || [],
+    hidden: Boolean(pack.hidden),
     installed,
     status: "available",
     installable: true,
@@ -1032,18 +1223,18 @@ function publicCommandPack(pack, current = {}) {
 
 function commandPackCatalogPayload(current = {}) {
   const normalized = normalizeCommandPackState(current);
+  const visiblePacks = COMMAND_PACKS.filter((pack) => !pack.hidden);
   return {
     ok: true,
     version: APP_VERSION,
-    total: COMMAND_PACKS.length,
+    total: visiblePacks.length,
     summary: {
-      base: COMMAND_PACKS.filter((pack) => pack.slot === "base").length,
-      addon: COMMAND_PACKS.filter((pack) => pack.slot === "addon").length,
-      combo: COMMAND_PACKS.filter((pack) => pack.slot === "combo").length,
-      installed: COMMAND_PACKS.filter((pack) => publicCommandPack(pack, normalized).installed).length
+      pack: visiblePacks.filter((pack) => pack.slot === "pack").length,
+      legacy: COMMAND_PACKS.filter((pack) => pack.hidden).length,
+      installed: visiblePacks.filter((pack) => publicCommandPack(pack, normalized).installed).length
     },
     current: normalized,
-    packs: COMMAND_PACKS.map((pack) => publicCommandPack(pack, normalized))
+    packs: visiblePacks.map((pack) => publicCommandPack(pack, normalized))
   };
 }
 
@@ -1051,9 +1242,12 @@ function commandPackStatePayload(current = {}) {
   const normalized = normalizeCommandPackState(current);
   const basePack = commandPackById(normalized.basePackId);
   const addonPacks = normalized.addonPackIds.map((id) => commandPackById(id)).filter(Boolean);
+  const installedPacks = normalized.installedPackIds.map((id) => commandPackById(id)).filter(Boolean);
   return {
     ...normalized,
     basePackTitle: basePack?.title || "",
+    installedPackTitles: installedPacks.map((pack) => pack.title),
+    installedPacks: installedPacks.map((pack) => ({ id: pack.id, title: pack.title, tier: pack.tier })),
     addonPackTitles: addonPacks.map((pack) => pack.title),
     addonPacks: addonPacks.map((pack) => ({ id: pack.id, title: pack.title, tier: pack.tier }))
   };
@@ -5684,8 +5878,16 @@ function commandFeatureKey(command) {
   return "";
 }
 
+function commandPackIdsForCommand(command) {
+  return COMMAND_PACKS
+    .filter((pack) => !pack.hidden && (pack.fixedCommands || []).includes(command))
+    .map((pack) => pack.id);
+}
+
 function registryEntry(command, category, description, options = {}) {
+  const featureKey = options.featureKey || options.requiresFeature || null;
   return {
+    id: options.id || `builtin-${commandTemplateSlug(command.replace(/^\//, ""))}`,
     command,
     aliases: options.aliases || [],
     category,
@@ -5695,11 +5897,15 @@ function registryEntry(command, category, description, options = {}) {
     enabled: options.enabled !== false,
     visibility: options.visibility || "public",
     requiresRole: options.requiresRole || null,
-    requiresFeature: options.requiresFeature || null,
+    requiresFeature: featureKey,
+    featureKey,
     requiresLicense: options.requiresLicense || null,
     storeTemplateId: options.storeTemplateId || "",
+    packIds: options.packIds || commandPackIdsForCommand(command),
     roomScoped: options.roomScoped !== false,
-    searchableKeywords: options.searchableKeywords || []
+    searchableKeywords: options.searchableKeywords || [],
+    status: options.status || (options.enabled === false ? "disabled" : "available"),
+    disabledReason: options.disabledReason || null
   };
 }
 
@@ -5759,10 +5965,23 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/상점추가", "관리자", "상점과 아이템 관리", { aliases: ["/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수"], visibility: "admin", requiresRole: "admin", requiresFeature: "shop" })
 ]);
 
+function resolveCommandRegistryItem(command, compactCommand = "") {
+  const token = normalizeCommandToken(command);
+  const raw = compactSpaces(compactCommand);
+  return COMMAND_REGISTRY.find((item) => (
+    item.command === token
+    || (item.aliases || []).includes(token)
+    || (raw && (item.command === raw || (item.aliases || []).includes(raw)))
+  )) || null;
+}
+
 function commandAvailability(item, roomState = null, sender = "", options = {}) {
   const adminUser = options.isAdminUser ?? (roomState ? isAdmin(roomState, sender) : false);
-  if (item.enabled === false) return { available: false, status: "disabled", disabledReason: "비활성화됨" };
+  if (item.enabled === false || item.status === "disabled") return { available: false, status: "disabled", disabledReason: item.disabledReason || "비활성화됨" };
   if (item.requiresRole === "admin" && !adminUser) return { available: false, status: "admin_only", disabledReason: "관리자 전용" };
+  if (roomState && !commandInstalledInRoom(item, roomState)) {
+    return { available: false, status: "install_required", disabledReason: "명령어 팩 설치 필요" };
+  }
   if (roomState && item.requiresFeature && !featureEnabled(roomState, item.requiresFeature)) {
     return { available: false, status: "disabled", disabledReason: `${featureLabel(item.requiresFeature)} 기능이 꺼져 있습니다.` };
   }
@@ -5796,9 +6015,23 @@ function commandSearchMatches(item, tokens = []) {
 
 function activeCommandPacks(roomState) {
   const current = normalizeCommandPackState(roomState.settings?.commandPacks || {});
-  return [current.basePackId, ...(current.addonPackIds || [])]
+  return [...(current.installedPackIds || []), current.basePackId, ...(current.addonPackIds || [])]
     .map((id) => commandPackById(id))
     .filter(Boolean);
+}
+
+function roomUsesExplicitCommandPacks(roomState) {
+  const current = normalizeCommandPackState(roomState?.settings?.commandPacks || {});
+  return Boolean(current.installedPackIds.length || current.basePackId || current.addonPackIds.length);
+}
+
+function commandInstalledInRoom(item, roomState) {
+  if (!roomState || !roomUsesExplicitCommandPacks(roomState)) return true;
+  if (["/상태", "/도움말", "/방등록"].includes(item.command)) return true;
+  const activePacks = activeCommandPacks(roomState);
+  if ((item.packIds || []).some((id) => activePacks.some((pack) => pack.id === id))) return true;
+  const commands = [item.command, ...(item.aliases || [])];
+  return activePacks.some((pack) => commands.some((command) => (pack.fixedCommands || []).includes(command)));
 }
 
 function commandPackForFixedCommand(roomState, command) {
@@ -5815,17 +6048,19 @@ function commandCatalogItemFromRegistry(item, roomState, sender, options = {}) {
     description: item.description,
     examples: item.examples || [item.command],
     available: availability.available,
-    installed: true,
+    installed: commandInstalledInRoom(item, roomState),
     requiresRole: item.requiresRole,
     requiresLicense: item.requiresLicense,
     requiresFeature: item.requiresFeature,
+    featureKey: item.featureKey,
     status: availability.status,
     disabledReason: availability.disabledReason,
     source: "registry",
     sourcePackId: sourcePack?.id || "",
     sourcePackTitle: sourcePack?.title || "",
     sourcePackSlot: sourcePack?.slot || "",
-    searchableKeywords: [...(item.searchableKeywords || []), sourcePack?.title || "", sourcePack?.tier || ""].filter(Boolean)
+    packIds: item.packIds || [],
+    searchableKeywords: [...(item.searchableKeywords || []), sourcePack?.title || "", sourcePack?.tier || "", ...(item.packIds || [])].filter(Boolean)
   };
 }
 
@@ -6670,6 +6905,9 @@ function commandPackInstallItems(pack, slot) {
 }
 
 function resolveCommandPackSelection(current = {}, body = {}) {
+  let installedPackIds = Object.hasOwn(body, "installedPackIds")
+    ? [...new Set((Array.isArray(body.installedPackIds) ? body.installedPackIds : []).map((id) => validCommandPackId(id, "pack")).filter(Boolean))]
+    : [...(current.installedPackIds || [])];
   let basePackId = Object.hasOwn(body, "basePackId")
     ? validCommandPackId(body.basePackId, "base")
     : current.basePackId || "";
@@ -6678,6 +6916,11 @@ function resolveCommandPackSelection(current = {}, body = {}) {
     : [...(current.addonPackIds || [])];
   const requestedPack = commandPackById(body.commandPackId || body.packId);
   const action = normalizeText(body.action || "apply");
+  if (requestedPack?.slot === "pack") {
+    installedPackIds = action === "remove"
+      ? installedPackIds.filter((id) => id !== requestedPack.id)
+      : [...new Set([...installedPackIds, requestedPack.id])];
+  }
   if (requestedPack?.slot === "base") basePackId = requestedPack.id;
   if (requestedPack?.slot === "addon") {
     addonPackIds = action === "remove"
@@ -6688,7 +6931,7 @@ function resolveCommandPackSelection(current = {}, body = {}) {
     basePackId = validCommandPackId(requestedPack.basePackId, "base");
     addonPackIds = [...new Set((requestedPack.addonPackIds || []).map((id) => validCommandPackId(id, "addon")).filter(Boolean))];
   }
-  return { basePackId, addonPackIds };
+  return { basePackId, addonPackIds, installedPackIds };
 }
 
 function applyCommandPacksToRoom(roomState, account = {}, body = {}) {
@@ -6697,14 +6940,17 @@ function applyCommandPacksToRoom(roomState, account = {}, body = {}) {
   const selection = resolveCommandPackSelection(current, body);
   const basePack = selection.basePackId ? commandPackById(selection.basePackId) : null;
   const addonPacks = selection.addonPackIds.map((id) => commandPackById(id)).filter(Boolean);
+  const installedPacks = selection.installedPackIds.map((id) => commandPackById(id)).filter(Boolean);
   if (selection.basePackId && !basePack) return { ok: false, status: 400, error: "invalid_base_pack" };
   if (addonPacks.length !== selection.addonPackIds.length) return { ok: false, status: 400, error: "invalid_addon_pack" };
+  if (installedPacks.length !== selection.installedPackIds.length) return { ok: false, status: 400, error: "invalid_command_pack" };
 
   const installedAt = nowIso();
   const updatedBy = account.email || account.nickname || "buyer_console";
   const keepCommands = customCommands(roomState).filter((command) => !command.sourcePackSlot);
   const byTrigger = new Map(keepCommands.map((command) => [command.trigger, command]));
   const packCommands = [
+    ...installedPacks.flatMap((pack) => commandPackInstallItems(pack, "pack")),
     ...(basePack ? commandPackInstallItems(basePack, "base") : []),
     ...addonPacks.flatMap((pack) => commandPackInstallItems(pack, "addon"))
   ];
@@ -6736,6 +6982,7 @@ function applyCommandPacksToRoom(roomState, account = {}, body = {}) {
 
   roomState.settings.customCommands = normalizeCustomCommands([...byTrigger.values()]);
   roomState.settings.commandPacks = normalizeCommandPackState({
+    installedPackIds: selection.installedPackIds,
     basePackId: selection.basePackId,
     addonPackIds: selection.addonPackIds,
     installedAt: current.installedAt || installedAt,
@@ -6743,14 +6990,14 @@ function applyCommandPacksToRoom(roomState, account = {}, body = {}) {
     updatedBy
   });
   roomState.settings.features ||= { ...DEFAULT_ROOM_FEATURES };
-  for (const pack of [basePack, ...addonPacks].filter(Boolean)) {
+  for (const pack of [...installedPacks, basePack, ...addonPacks].filter(Boolean)) {
     for (const [key, value] of Object.entries(pack.features || {})) {
       roomState.settings.features[key] = value !== false;
     }
   }
   recordRoomEvent(roomState, {
     type: "command_packs_applied",
-    trigger: [selection.basePackId, ...selection.addonPackIds].filter(Boolean).join(", "),
+    trigger: [...selection.installedPackIds, selection.basePackId, ...selection.addonPackIds].filter(Boolean).join(", "),
     by: updatedBy
   });
   return {
@@ -7402,6 +7649,8 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/명령어목록" || command === "/커스텀명령어") return customCommandListText(roomState);
   if (/^\/(?:명령어등록|명령어수정|커스텀등록|커스텀수정)\s/.test(compactCommand)) return customCommandRegisterCommand(roomState, sender, text);
   if (/^\/(?:명령어삭제|커스텀삭제)\s/.test(compactCommand)) return customCommandDeleteCommand(roomState, sender, text);
+  const registryItem = resolveCommandRegistryItem(command, compactCommand);
+  if (registryItem && !commandInstalledInRoom(registryItem, roomState)) return "설치되지 않은 명령어입니다. 명령어 스토어에서 필요한 팩을 장착해 주세요.";
   const requiredFeature = commandFeatureKey(compactCommand);
   if (requiredFeature && !featureEnabled(roomState, requiredFeature)) return featureDisabledText(requiredFeature);
   if (command === "/도움말" || command === "/help" || command === "/?") return helpText(roomState, sender);

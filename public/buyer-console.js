@@ -171,18 +171,22 @@
 
   function renderRoomPacks(room) {
     const packs = room.commandPacks || {};
+    const installed = packs.installedPackTitles || packs.installedPackIds || [];
     const base = packs.basePackTitle || packs.basePackId || "";
     const addons = packs.addonPackTitles || packs.addonPackIds || [];
-    if (!base && !addons.length) {
-      return `<p class="buyer-room-note">아직 장착된 명령어 팩이 없습니다. 명령어 스토어에서 기본 운영팩을 장착해 보세요.</p>`;
+    if (!installed.length && !base && !addons.length) {
+      return `<p class="buyer-room-note">아직 장착된 명령어 팩이 없습니다. 명령어 스토어에서 운영 기본팩을 장착해 보세요.</p>`;
     }
+    const packText = installed.length
+      ? installed.join(", ")
+      : `기본팩 ${base || "없음"}${addons.length ? ` · 애드온 ${addons.join(", ")}` : ""}`;
     return `
       <section class="buyer-pack-summary">
         <div>
           <strong>장착된 명령어 팩</strong>
-          <span>기본팩 ${escapeHtml(base || "없음")}${addons.length ? ` · 애드온 ${escapeHtml(addons.join(", "))}` : ""}</span>
+          <span>${escapeHtml(packText)}</span>
         </div>
-        <a class="button button-secondary" href="/command-store?room=${encodeURIComponent(room.applicationId || "")}">팩 교체</a>
+        <a class="button button-secondary" href="/command-store?room=${encodeURIComponent(room.applicationId || "")}">팩 관리</a>
       </section>
     `;
   }

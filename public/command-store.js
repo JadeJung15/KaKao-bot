@@ -100,7 +100,7 @@
   }
 
   function packSlotLabel(value) {
-    const labels = { base: "기본팩", addon: "애드온", combo: "조합팩" };
+    const labels = { pack: "명령어팩", base: "기본팩", addon: "애드온", combo: "조합팩" };
     return labels[value] || value || "팩";
   }
 
@@ -149,16 +149,13 @@
     const packs = packCatalog.packs || [];
     packPanel.hidden = currentMode !== "packs" && !packs.some((pack) => pack.installed);
     if (packPanel.hidden) return;
-    const basePack = packs.find((pack) => pack.id === current.basePackId);
-    const addonTitles = packs.filter((pack) => (current.addonPackIds || []).includes(pack.id)).map((pack) => pack.title);
-    packCurrent.textContent = basePack
-      ? `현재 ${basePack.title}${addonTitles.length ? ` + ${addonTitles.join(", ")}` : ""}`
-      : "아직 장착된 기본팩이 없습니다.";
+    const installedTitles = packs.filter((pack) => (current.installedPackIds || []).includes(pack.id)).map((pack) => pack.title);
+    packCurrent.textContent = installedTitles.length
+      ? `현재 ${installedTitles.join(", ")}`
+      : "아직 장착된 명령어 팩이 없습니다.";
     const visiblePacks = currentMode === "packs" ? packs : packs.filter((pack) => pack.installed);
     packGrid.innerHTML = visiblePacks.map((pack) => {
-      const isBase = pack.slot === "base";
-      const isAddon = pack.slot === "addon";
-      const actionLabel = pack.installed ? (isAddon ? "해제" : "장착됨") : isBase ? (current.basePackId ? "교체" : "장착") : "장착";
+      const actionLabel = pack.installed ? "해제" : "장착";
       return `
         <article class="command-pack-card" data-installed="${pack.installed ? "true" : "false"}">
           <div>
@@ -173,7 +170,7 @@
           </div>
           <div class="template-actions">
             <button class="button button-secondary" type="button" data-cart-pack="${escapeHtml(pack.id)}">${packCart.has(pack.id) ? "장바구니 제거" : "장바구니 담기"}</button>
-            <button class="button button-primary" type="button" data-apply-pack="${escapeHtml(pack.id)}" data-pack-action="${pack.installed && isAddon ? "remove" : "apply"}" ${buyerToken && buyerRooms.length && !(pack.installed && isBase) ? "" : "disabled"}>${escapeHtml(actionLabel)}</button>
+            <button class="button button-primary" type="button" data-apply-pack="${escapeHtml(pack.id)}" data-pack-action="${pack.installed ? "remove" : "apply"}" ${buyerToken && buyerRooms.length ? "" : "disabled"}>${escapeHtml(actionLabel)}</button>
           </div>
         </article>
       `;
@@ -237,7 +234,7 @@
       loadMoreButton.hidden = matchedTemplates.length <= visibleLimit;
       loadMoreButton.textContent = `더 보기 (${templates.length}/${matchedTemplates.length})`;
     }
-    statusBox.textContent = `현재 ${templates.length}개를 표시 중입니다. 세트 템플릿은 꼭 같이 써야 하는 명령어를 한 번에 설치합니다. /공지, 공지, !공지, .공지 는 각각 다른 명령어입니다.`;
+    statusBox.textContent = `현재 ${templates.length}개를 표시 중입니다. 중복 템플릿은 대표 명령어 1개로 정리했고 기본 추천은 /공지 같은 슬래시 명령어를 우선합니다.`;
     renderSummary();
   }
 
@@ -453,18 +450,7 @@
       statusBox.textContent = "구매자 로그인 후 명령어 팩을 장착할 수 있습니다.";
       return;
     }
-    const current = packCatalog.current || {};
-    const addonPackIds = new Set(current.addonPackIds || []);
-    let body = { token: buyerToken, applicationId: installRoomInput.value };
-    if (pack.slot === "base") {
-      body = { ...body, basePackId: pack.id, addonPackIds: [...addonPackIds] };
-    } else if (pack.slot === "addon") {
-      if (action === "remove") addonPackIds.delete(pack.id);
-      else addonPackIds.add(pack.id);
-      body = { ...body, basePackId: current.basePackId || "", addonPackIds: [...addonPackIds] };
-    } else {
-      body = { ...body, commandPackId: pack.id };
-    }
+    const body = { token: buyerToken, applicationId: installRoomInput.value, commandPackId: pack.id, action };
     const response = await fetch("/api/buyer/command-packs/apply", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -481,7 +467,7 @@
     }
     packCart.delete(pack.id);
     writeSet("pixgomCommandPackCart", packCart);
-    statusBox.textContent = `${pack.title} ${action === "remove" ? "해제" : "장착/교체"} 완료`;
+    statusBox.textContent = `${pack.title} ${action === "remove" ? "해제" : "장착"} 완료`;
     await loadRoomCommandPacks();
     await loadInstalledCommands();
     renderTemplates();
