@@ -29,6 +29,55 @@
     }
   }
 
+  function isConsoleLink(anchor) {
+    try {
+      return new URL(anchor.href, window.location.origin).pathname === "/console";
+    } catch {
+      return anchor.getAttribute("href") === "/console";
+    }
+  }
+
+  function linkElement({ href, label, className = "" }) {
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.textContent = label;
+    if (className) anchor.className = className;
+    return anchor;
+  }
+
+  function normalizeSiteNavigation() {
+    const header = document.querySelector(".site-header");
+    const nav = header?.querySelector(".nav-links");
+    if (!header || !nav || nav.dataset.pixgomUnified === "true") return;
+
+    const primaryLinks = [
+      { href: "/#features", label: "기능" },
+      { href: "/command-store", label: "명령어" },
+      { href: "/#pricing", label: "요금" },
+      { href: "/updates", label: "업데이트" },
+      { href: "/console", label: "콘솔" },
+      { href: "/apply", label: "서비스 신청", className: "nav-cta" }
+    ];
+    nav.replaceChildren(...primaryLinks.map(linkElement));
+    nav.dataset.pixgomUnified = "true";
+
+    if (!header.querySelector("[data-nav-menu-toggle]")) {
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "nav-menu-toggle";
+      toggle.dataset.navMenuToggle = "true";
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.textContent = "메뉴";
+      toggle.addEventListener("click", () => {
+        const open = header.classList.toggle("nav-open");
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+      nav.insertAdjacentElement("afterend", toggle);
+    }
+  }
+
+  normalizeSiteNavigation();
+
   const ownerToken = storageValue(sessionStorage, "pixgomOwnerToken");
   const buyerToken = storageValue(sessionStorage, "pixgomBuyerToken");
   const loggedIn = Boolean(ownerToken || buyerToken || hasSupabaseSession());
@@ -51,8 +100,8 @@
     window.location.href = "/login";
   }
 
-  for (const anchor of document.querySelectorAll("a")) {
-    if (!isLoginLink(anchor)) continue;
+  for (const anchor of document.querySelectorAll(".site-header a, a[href='/login']")) {
+    if (!isLoginLink(anchor) && !isConsoleLink(anchor)) continue;
     anchor.href = targetHref;
     anchor.textContent = targetText;
     anchor.classList.add("nav-logged-in");

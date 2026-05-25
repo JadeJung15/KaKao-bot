@@ -77,15 +77,11 @@
         <span>픽셀곰</span>
       </a>
       <nav class="nav-links" aria-label="페이지 이동">
-        <a href="#features">기능</a>
-        <a href="#commands">명령어</a>
-        <a href="/command-store">명령어 스토어</a>
-        <a href="#pricing">요금</a>
-        <a href="#updates">업데이트</a>
-        <a href="/store">스토어</a>
-        <a href="/guide">가이드</a>
-        <a href="/console">구매자 콘솔</a>
-        <a href="/login">로그인</a>
+        <a href="/#features">기능</a>
+        <a href="/command-store">명령어</a>
+        <a href="/#pricing">요금</a>
+        <a href="/updates">업데이트</a>
+        <a href="/console">콘솔</a>
         <a class="nav-cta" href="/apply">서비스 신청</a>
       </nav>
     </header>
@@ -107,7 +103,7 @@
           <div class="hero-actions" aria-label="주요 작업">
             <a class="button button-primary" href="/apply">서비스 신청</a>
             <a class="button button-secondary" href="https://open.kakao.com/o/gu25P5vi" target="_blank" rel="noopener noreferrer">오픈채팅 문의</a>
-            <a class="button button-secondary" href="/command-store">명령어 보기</a>
+            <a class="button button-secondary" href="/command-store">명령어 스토어</a>
           </div>
         </div>
       </section>
@@ -125,7 +121,6 @@
             <a href="/command-store">명령어 스토어</a>
             <a href="#pricing">요금제</a>
             <a href="#updates">공지/업데이트</a>
-            <a href="/store">스토어</a>
             <a href="/privacy">법적 고지</a>
             <a href="/console">구매자 전용</a>
           </div>
@@ -133,55 +128,53 @@
         </div>
       </section>
 
-      <section class="status-strip" aria-label="서비스 핵심 상태">
+      <section class="status-strip" aria-label="픽셀곰 시작 흐름">
         <div>
-          <strong>고정 명령어</strong>
-          <span>운영, 포인트, 히스토리, 게임 예약 명령어는 기본값으로 보호합니다.</span>
+          <span class="step-label">Step 01</span>
+          <strong>서비스 신청</strong>
+          <span>방 이름과 오픈채팅 링크를 입력해 운영할 방을 신청합니다.</span>
         </div>
         <div>
-          <strong>커스텀 명령어</strong>
-          <span>명령어 스토어에서 대표 명령어와 10종 팩을 고르고 방별 자동응답으로 설치합니다.</span>
+          <span class="step-label">Step 02</span>
+          <strong>앱 연결</strong>
+          <span>구매자 콘솔에서 연결코드를 복사해 픽셀곰 브릿지 앱에 넣습니다.</span>
         </div>
         <div>
-          <strong>전용 브릿지</strong>
-          <span>타 앱 스크립트가 아니라 자체 개발한 픽셀곰 브릿지 엔진 앱을 기준으로 운영합니다.</span>
+          <span class="step-label">Step 03</span>
+          <strong>명령어 설치</strong>
+          <span>운영 기본팩 또는 필요한 팩을 카톡 설치 명령어로 장착합니다.</span>
         </div>
         <div>
-          <strong>단일 요금</strong>
-          <span>기본 방 5,500원, 추가 방은 2,200원으로 구독 만료를 관리합니다.</span>
+          <span class="step-label">Step 04</span>
+          <strong>운영 관리</strong>
+          <span>콘솔에서 방별 설정, 명령어, 라이선스 상태를 확인합니다.</span>
         </div>
       </section>
 
       <section class="section why-pixgom-section" aria-labelledby="why-pixgom-title">
-        <div class="section-heading reveal">
-          <p class="section-kicker">Why Pixelgom</p>
-          <h2 id="why-pixgom-title">왜 픽셀곰인가?</h2>
-          <p>자체 브릿지, 웹 콘솔, 명령어 스토어를 한 흐름으로 묶어 오픈채팅 운영 부담을 줄입니다.</p>
-        </div>
-        <div class="why-pixgom-layout">
-          <article class="why-pixgom-copy reveal" data-search-source="왜 픽셀곰 자체 개발 브릿지 엔진 오픈채팅 운영 안정 저렴">
+        <div class="why-pixgom-layout reveal" data-search-source="왜 픽셀곰 자체 개발 브릿지 엔진 오픈채팅 운영 안정 저렴">
+          <div class="why-pixgom-copy">
+            <p class="section-kicker">Why Pixelgom</p>
+            <h2 id="why-pixgom-title">타 앱 스크립트에 기대지 않는 오픈채팅 운영 엔진</h2>
             <p>
-              픽셀곰은 타 앱 스크립트에 기대지 않고, 자체 개발한 브릿지 엔진으로 카카오 오픈채팅 운영을 연결합니다.
+              픽셀곰은 자체 개발 브릿지 엔진, 웹 콘솔, 명령어 스토어를 한 흐름으로 묶어 방 운영자가 매번 설정을 찾아 헤매는 시간을 줄입니다.
             </p>
-            <p>
-              웹 콘솔, 명령어 스토어, 방별 설정, 라이선스 관리를 한곳에서 처리해 운영 중 끊김과 설정 스트레스를 줄입니다.
-            </p>
-            <p>
-              GitHub 기반 버전 관리와 Vercel 중심의 웹 배포 인프라로 빠르게 개선하고 안정적으로 운영하며, 월 5,500원부터 시작해 운영 비용 부담도 낮췄습니다.
-            </p>
-          </article>
-          <div class="why-pixgom-points reveal" aria-label="픽셀곰 강점">
+          </div>
+          <div class="why-pixgom-points" aria-label="픽셀곰 강점">
             <article>
+              <span>01</span>
               <strong>자체 브릿지</strong>
-              <span>카카오 알림과 서버 계약을 직접 통제해 방별 설정과 라이선스를 안정적으로 연결합니다.</span>
+              <p>카카오 알림과 서버 연결을 픽셀곰 기준으로 관리합니다.</p>
             </article>
             <article>
-              <strong>운영 통합</strong>
-              <span>콘솔, 명령어 스토어, 방별 기능 토글을 한곳에서 관리합니다.</span>
+              <span>02</span>
+              <strong>한곳에서 관리</strong>
+              <p>콘솔, 명령어 스토어, 방별 설정, 라이선스를 한 화면 흐름으로 연결합니다.</p>
             </article>
             <article>
-              <strong>낮은 비용</strong>
-              <span>기본 방 월 5,500원, 추가 방 월 2,200원으로 시작합니다.</span>
+              <span>03</span>
+              <strong>월 5,500원부터</strong>
+              <p>Vercel + postgres 중심의 운영 구조로 빠르게 개선하고 비용 부담을 낮췄습니다.</p>
             </article>
           </div>
         </div>
@@ -438,8 +431,8 @@
           </article>
         </div>
         <div class="section-actions reveal">
-          <a class="button button-secondary" href="/store">스토어 페이지 보기</a>
-          <a class="button button-primary" href="/command-store">명령어 템플릿 보기</a>
+          <a class="button button-secondary" href="/store">상품/로드맵 보기</a>
+          <a class="button button-primary" href="/command-store">명령어 스토어</a>
         </div>
       </section>
 
@@ -450,6 +443,12 @@
           <p>변경 사항을 게시글 형태로 남겨 고객에게 현재 기능과 제한 범위를 투명하게 안내합니다.</p>
         </div>
         <div class="post-grid">
+          <article class="post-card reveal" data-search-source="업데이트 0.4.82 신고 실기능 명령어 정리 사이트 메뉴 Why Pixelgom IA">
+            <span>업데이트</span>
+            <h3>픽셀곰 0.4.82 업데이트</h3>
+            <time datetime="2026-05-25">2026년 5월 25일</time>
+            <p>단순 안내만 하던 액션형 명령어를 정리하고 /신고를 관리자 메시지함과 연결했습니다. 홈 Why Pixelgom 섹션과 상단 메뉴를 더 짧고 명확한 구조로 개편했습니다.</p>
+          </article>
           <article class="post-card reveal" data-search-source="업데이트 0.4.81 로그인 전환 조용한 세션 확인 운영 기본팩 첫 설치 자체 브릿지">
             <span>업데이트</span>
             <h3>픽셀곰 0.4.81 업데이트</h3>
@@ -749,7 +748,8 @@
         <span>카카오 오픈채팅 운영 자동화</span>
       </div>
       <nav aria-label="하단 메뉴">
-        <a href="/store">스토어</a>
+        <a href="/store">상품/로드맵</a>
+        <a href="/command-store">명령어 스토어</a>
         <a href="/updates">업데이트</a>
         <a href="/privacy">개인정보처리방침</a>
         <a href="/terms">서비스 이용약관</a>

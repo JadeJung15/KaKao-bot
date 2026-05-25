@@ -12,10 +12,11 @@
     <header class="site-header" aria-label="주요 메뉴">
       <a class="brand" href="/" aria-label="픽셀곰 홈"><img src="/assets/pixgom-closeup.png" alt=""><span>픽셀곰</span></a>
       <nav class="nav-links" aria-label="페이지 이동">
-        <a href="/console">구매자 콘솔</a>
-        <a href="/command-store">명령어 스토어</a>
+        <a href="/#features">기능</a>
+        <a href="/command-store">명령어</a>
+        <a href="/#pricing">요금</a>
         <a href="/updates">업데이트</a>
-        <a href="/login">로그인</a>
+        <a href="/console">콘솔</a>
         <a class="nav-cta" href="/apply">서비스 신청</a>
       </nav>
     </header>
@@ -65,15 +66,18 @@
 
       <section class="command-store-summary" data-template-summary></section>
 
-      <section class="command-store-filters" data-template-filters aria-label="빠른 보기">
-        <button class="is-active" type="button" data-filter-mode="featured">추천</button>
-        <button type="button" data-filter-mode="bundle">세트</button>
-        <button type="button" data-filter-mode="installable">설치 가능</button>
-        <button type="button" data-filter-mode="game">게임 연결</button>
-        <button type="button" data-filter-mode="participant">참여자용</button>
-        <button type="button" data-filter-mode="admin">관리자용</button>
-        <button type="button" data-filter-mode="favorite">즐겨찾기</button>
-      </section>
+      <details class="command-store-filter-panel">
+        <summary>상세 필터</summary>
+        <section class="command-store-filters" data-template-filters aria-label="빠른 보기">
+          <button class="is-active" type="button" data-filter-mode="featured">추천</button>
+          <button type="button" data-filter-mode="bundle">세트</button>
+          <button type="button" data-filter-mode="installable">설치 가능</button>
+          <button type="button" data-filter-mode="game">게임 연결</button>
+          <button type="button" data-filter-mode="participant">참여자용</button>
+          <button type="button" data-filter-mode="admin">관리자용</button>
+          <button type="button" data-filter-mode="favorite">즐겨찾기</button>
+        </section>
+      </details>
 
       <section class="command-pack-panel" data-command-pack-panel hidden>
         <div class="command-pack-head">

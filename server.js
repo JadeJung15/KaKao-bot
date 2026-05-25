@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.81";
+export const APP_VERSION = "0.4.82";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -160,6 +160,10 @@ export const FEATURES = [
   "new-buyer-journey-ux",
   "auth-session-gate",
   "silent-auth-transition",
+  "room-report-workflow",
+  "command-store-action-cleanup",
+  "compact-site-navigation",
+  "why-pixgom-redesign",
   "subscription-expiry-guidance",
   "bridge-connect-expiry-gate",
   "license-error-user-guidance",
@@ -303,7 +307,7 @@ const PAYMENT_STATUS_LABELS = Object.freeze({
 const FIXED_COMMAND_GROUPS = Object.freeze([
   {
     title: "기본 운영",
-    commands: ["/상태", "/도움말", "/브릿지", "/js상태", "/로컬상태", "/메시지", "/출석", "/출첵", "/ㅊㅊ", "/포인트", "/내정보", "/프로필", "/닉이력"]
+    commands: ["/상태", "/도움말", "/브릿지", "/js상태", "/로컬상태", "/메시지", "/신고", "/출석", "/출첵", "/ㅊㅊ", "/포인트", "/내정보", "/프로필", "/닉이력"]
   },
   {
     title: "포인트/랭킹",
@@ -315,7 +319,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
   },
   {
     title: "관리자",
-    commands: ["/방등록", "/방정보", "/방목록", "/방삭제", "/입장문구", "/기능목록", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/관리자등록", "/관리자삭제", "/관리자목록", "/최근이벤트", "/원본로그", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장상세", "/고유값초기화", "/포인트지급", "/포인트차감", "/포인트설정", "/상점추가", "/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수", "/명령어등록", "/명령어삭제", "/명령어목록"]
+    commands: ["/방등록", "/방정보", "/방목록", "/방삭제", "/입장문구", "/기능목록", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/관리자등록", "/관리자삭제", "/관리자목록", "/최근이벤트", "/원본로그", "/신고목록", "/신고처리", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장상세", "/고유값초기화", "/포인트지급", "/포인트차감", "/포인트설정", "/상점추가", "/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수", "/명령어등록", "/명령어삭제", "/명령어목록"]
   },
   {
     title: "게임/연동 예약",
@@ -351,7 +355,7 @@ const COMMAND_TEMPLATE_CATEGORY_CONFIGS = Object.freeze([
     title: "기본 운영",
     audience: "participant",
     kind: "custom",
-    words: ["공지", "규칙", "문의", "운영진", "방소개", "초보안내", "인사", "자주묻는질문", "시간표", "신고"],
+    words: ["공지", "규칙", "문의", "운영진", "방소개", "초보안내", "인사", "자주묻는질문", "시간표"],
     actions: ["안내", "요약", "확인", "바로보기", "오늘", "필수", "모음", "처음"]
   },
   {
@@ -367,7 +371,7 @@ const COMMAND_TEMPLATE_CATEGORY_CONFIGS = Object.freeze([
     title: "관리자용",
     audience: "admin",
     kind: "custom",
-    words: ["점검공지", "경고안내", "운영메모", "제재기준", "신고처리", "이벤트등록", "랭킹보상", "상점공지", "관리규칙", "휴방안내"],
+    words: ["점검공지", "경고안내", "운영메모", "제재기준", "상점공지", "관리규칙", "휴방안내"],
     actions: ["양식", "공지", "체크", "기록", "안내", "템플릿", "요약", "보고"]
   },
   {
@@ -399,7 +403,7 @@ const COMMAND_TEMPLATE_CATEGORY_CONFIGS = Object.freeze([
     title: "상점/아이템",
     audience: "participant",
     kind: "custom",
-    words: ["상점안내", "아이템목록", "가방안내", "구매방법", "선물방법", "사용방법", "포인트안내", "보상교환", "쿠폰", "시즌상품"],
+    words: ["상점안내", "아이템목록", "가방안내", "구매방법", "선물방법", "사용방법", "포인트안내", "보상교환", "시즌상품"],
     actions: ["보기", "안내", "예시", "규칙", "추천", "확인", "도움말", "주의"]
   },
   {
@@ -407,7 +411,7 @@ const COMMAND_TEMPLATE_CATEGORY_CONFIGS = Object.freeze([
     title: "이벤트/시즌",
     audience: "participant",
     kind: "custom",
-    words: ["출석이벤트", "랭킹이벤트", "신규이벤트", "주말이벤트", "시즌공지", "보상안내", "미션", "챌린지", "기념일", "투표"],
+    words: ["출석이벤트", "랭킹이벤트", "신규이벤트", "주말이벤트", "시즌공지", "보상안내", "미션", "챌린지", "기념일"],
     actions: ["안내", "참여", "보상", "기간", "규칙", "현황", "결과", "예정"]
   },
   {
@@ -415,7 +419,7 @@ const COMMAND_TEMPLATE_CATEGORY_CONFIGS = Object.freeze([
     title: "커뮤니티/재미",
     audience: "participant",
     kind: "custom",
-    words: ["오늘운세", "밸런스게임", "칭찬", "응원문구", "랜덤질문", "오늘메뉴", "심심풀이", "익명사연", "인기투표", "분위기전환"],
+    words: ["오늘운세", "밸런스게임", "칭찬", "응원문구", "랜덤질문", "오늘메뉴", "심심풀이", "익명사연", "분위기전환"],
     actions: ["시작", "추천", "보기", "뽑기", "나누기", "참여", "예시", "모음"]
   },
   {
@@ -515,14 +519,14 @@ const COMMAND_TEMPLATE_BUNDLES = Object.freeze([
 ]);
 
 const COMMAND_PACK_COMMANDS = Object.freeze({
-  "ops-core": ["/상태", "/도움말", "/브릿지", "/js상태", "/메시지", "/날씨", "/운세"],
+  "ops-core": ["/상태", "/도움말", "/브릿지", "/js상태", "/메시지", "/날씨", "/운세", "/신고"],
   "attendance-growth": ["/출석", "/미출석", "/출석순위", "/포인트", "/내정보", "/포인트순위"],
   "point-economy": ["/포인트", "/내정보", "/좋아요", "/응원", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위"],
   "game-chance": ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/포인트"],
   "shop-inventory": ["/상점", "/구매", "/가방", "/사용", "/가방선물", "/구매내역"],
   "custom-command": ["/명령어목록", "/커스텀명령어", "/고정명령어", "/명령어등록", "/명령어수정", "/명령어삭제", "/커스텀등록", "/커스텀수정", "/커스텀삭제"],
   "profile-history": ["/프로필", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
-  "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록"],
+  "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그", "/신고목록", "/신고처리", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록"],
   "event-engagement": ["/출석", "/좋아요", "/응원", "/운세", "/날씨", "/채팅오늘", "/채팅금주", "/포인트순위"]
 });
 const ALL_IN_ONE_PACK_COMMANDS = Object.freeze([...new Set(Object.values(COMMAND_PACK_COMMANDS).flat())]);
@@ -545,7 +549,6 @@ const LEGACY_PLUS_CUSTOM_COMMANDS = Object.freeze([
   { trigger: "/운영진", response: "운영진 호출이 필요하면 닉네임과 내용을 함께 남겨주세요." },
   { trigger: "/방소개", response: "이 방은 함께 대화하고 이벤트를 즐기는 오픈채팅방입니다.\n처음 오신 분은 규칙을 먼저 확인해 주세요." },
   { trigger: "/입장안내", response: "처음 오신 분은 닉네임 규칙과 프로필 양식을 먼저 확인해 주세요." },
-  { trigger: "/신고", response: "신고가 필요한 내용은 닉네임, 시간, 상황을 함께 운영진에게 남겨주세요." },
   { trigger: "/자주묻는질문", response: "자주 묻는 질문은 이 안내에 이어서 정리해 주세요.\n필요한 내용은 운영진이 계속 업데이트합니다." }
 ]);
 const LEGACY_PRO_CUSTOM_COMMANDS = Object.freeze([
@@ -968,7 +971,6 @@ const REPRESENTATIVE_COMMAND_TEMPLATES = Object.freeze([
   ["basic-ops", "기본 운영", "participant", "custom", "/인사", "인사", "처음 오신 분은 가볍게 인사부터 나눠주세요.\n반갑게 맞이하겠습니다.", "입장 인사 안내입니다."],
   ["basic-ops", "기본 운영", "participant", "custom", "/자주묻는질문", "자주 묻는 질문", "자주 묻는 질문은 이 안내에 이어서 정리해 주세요.\n필요한 내용은 운영진이 계속 업데이트합니다.", "FAQ 대표 명령어입니다."],
   ["basic-ops", "기본 운영", "participant", "custom", "/시간표", "시간표", "방 일정과 운영 시간은 이 메시지 아래에 이어서 안내해 주세요.", "시간표 안내 대표 명령어입니다."],
-  ["basic-ops", "기본 운영", "participant", "custom", "/신고", "신고", "신고가 필요한 내용은 닉네임, 시간, 상황을 함께 운영진에게 남겨주세요.", "신고 안내 대표 명령어입니다."],
   ["participant", "참여자용", "participant", "custom", "/프로필양식", "프로필 양식", "프로필 양식\n닉네임:\n성별:\n나이대:\n관심사:\n한마디:", "참여자 프로필 작성 양식입니다."],
   ["participant", "참여자용", "participant", "custom", "/닉네임규칙", "닉네임 규칙", "닉네임은 알아보기 쉽게 설정해 주세요.\n운영진이 확인하기 어려운 이름은 변경을 요청할 수 있습니다.", "닉네임 규칙 안내입니다."],
   ["participant", "참여자용", "participant", "custom", "/입장인사", "입장 인사", "처음 오신 분은 가볍게 인사부터 나눠주세요.\n반갑게 맞이하겠습니다.", "입장 인사 안내입니다."],
@@ -983,9 +985,6 @@ const REPRESENTATIVE_COMMAND_TEMPLATES = Object.freeze([
   ["admin", "관리자용", "admin", "custom", "/경고안내", "경고 안내", "운영진 안내입니다.\n방 규칙 위반 내용이 확인되어 주의 안내드립니다.", "관리자용 경고 안내입니다."],
   ["admin", "관리자용", "admin", "custom", "/운영메모", "운영 메모", "운영진 메모입니다.\n확인할 내용을 이 메시지 아래에 이어서 정리해 주세요.", "운영진 메모 양식입니다."],
   ["admin", "관리자용", "admin", "custom", "/제재기준", "제재 기준", "방 제재 기준은 운영진 공지 기준을 따릅니다.\n세부 기준은 이 메시지 아래에 이어서 안내해 주세요.", "제재 기준 안내입니다."],
-  ["admin", "관리자용", "admin", "custom", "/신고처리", "신고 처리", "신고 접수 내용을 확인했습니다.\n처리 결과는 운영진 확인 후 안내하겠습니다.", "신고 처리 안내입니다."],
-  ["admin", "관리자용", "admin", "custom", "/이벤트등록", "이벤트 등록", "이벤트 등록 양식\n이름:\n기간:\n참여 방법:\n보상:", "이벤트 등록 양식입니다."],
-  ["admin", "관리자용", "admin", "custom", "/랭킹보상", "랭킹 보상", "랭킹 보상 안내입니다.\n대상자와 지급 기준은 운영진 확인 후 공지됩니다.", "랭킹 보상 안내입니다."],
   ["admin", "관리자용", "admin", "custom", "/상점공지", "상점 공지", "상점 안내입니다.\n상품 변경이나 점검 내용은 이 메시지 아래에 이어서 안내해 주세요.", "상점 공지 안내입니다."],
   ["admin", "관리자용", "admin", "custom", "/관리규칙", "관리 규칙", "관리 규칙은 방 운영진 기준에 따라 적용됩니다.\n세부 내용은 이 메시지 아래에 이어서 안내해 주세요.", "관리 규칙 안내입니다."],
   ["admin", "관리자용", "admin", "custom", "/휴방안내", "휴방 안내", "휴방 안내입니다.\n재개 일정은 운영진 공지를 확인해 주세요.", "휴방 안내입니다."],
@@ -997,7 +996,6 @@ const REPRESENTATIVE_COMMAND_TEMPLATES = Object.freeze([
   ["shop-item", "상점/아이템", "participant", "custom", "/사용방법", "사용 방법", "아이템 사용 안내\n/사용 번호 형식으로 보유 아이템을 사용할 수 있습니다.", "아이템 사용 안내입니다."],
   ["shop-item", "상점/아이템", "participant", "custom", "/포인트안내", "포인트 안내", "포인트는 채팅방 내부 가상 포인트이며 현금 가치나 환전 기능이 없습니다.", "가상 포인트 정책 안내입니다."],
   ["shop-item", "상점/아이템", "participant", "custom", "/보상교환", "보상 교환", "보상 교환은 방 내부 가상 아이템 기준으로만 운영합니다.", "가상 보상 교환 안내입니다."],
-  ["shop-item", "상점/아이템", "participant", "custom", "/쿠폰", "쿠폰", "쿠폰 안내는 운영진 공지 기준으로 진행됩니다.", "쿠폰 안내입니다."],
   ["shop-item", "상점/아이템", "participant", "custom", "/시즌상품", "시즌 상품", "시즌 상품은 운영진이 등록한 방 내부 가상 아이템 기준으로 운영합니다.", "시즌 상품 안내입니다."],
   ["event-season", "이벤트/시즌", "participant", "custom", "/출석이벤트", "출석 이벤트", "출석 이벤트 안내입니다.\n참여 기간과 보상 기준을 확인해 주세요.", "출석 이벤트 안내입니다."],
   ["event-season", "이벤트/시즌", "participant", "custom", "/랭킹이벤트", "랭킹 이벤트", "랭킹 이벤트 안내입니다.\n집계 기준과 기간을 확인해 주세요.", "랭킹 이벤트 안내입니다."],
@@ -1008,7 +1006,6 @@ const REPRESENTATIVE_COMMAND_TEMPLATES = Object.freeze([
   ["event-season", "이벤트/시즌", "participant", "custom", "/미션", "미션", "오늘의 미션은 이 메시지 아래에 이어서 안내해 주세요.", "미션 안내입니다."],
   ["event-season", "이벤트/시즌", "participant", "custom", "/챌린지", "챌린지", "챌린지 안내입니다.\n참여 방법과 기간을 확인해 주세요.", "챌린지 안내입니다."],
   ["event-season", "이벤트/시즌", "participant", "custom", "/기념일", "기념일", "기념일 이벤트 안내입니다.\n참여 전 방 규칙을 확인해 주세요.", "기념일 안내입니다."],
-  ["event-season", "이벤트/시즌", "participant", "custom", "/투표", "투표", "투표 안내입니다.\n선택지와 마감 시간을 확인해 주세요.", "투표 안내입니다."],
   ["community-fun", "커뮤니티/재미", "participant", "custom", "/오늘운세안내", "오늘 운세 안내", "오늘 운세는 /운세 또는 /오늘운세 로 확인할 수 있습니다.", "운세 기능 안내입니다."],
   ["community-fun", "커뮤니티/재미", "participant", "custom", "/밸런스게임", "밸런스 게임", "밸런스 게임 주제는 이 메시지 아래에 이어서 안내해 주세요.", "밸런스 게임 안내입니다."],
   ["community-fun", "커뮤니티/재미", "participant", "custom", "/칭찬", "칭찬", "서로의 좋은 점을 가볍게 칭찬해 주세요.", "칭찬 참여 안내입니다."],
@@ -1017,7 +1014,6 @@ const REPRESENTATIVE_COMMAND_TEMPLATES = Object.freeze([
   ["community-fun", "커뮤니티/재미", "participant", "custom", "/오늘메뉴", "오늘 메뉴", "오늘 메뉴 추천은 이 메시지 아래에 이어서 안내해 주세요.", "오늘 메뉴 안내입니다."],
   ["community-fun", "커뮤니티/재미", "participant", "custom", "/심심풀이", "심심풀이", "심심풀이 주제는 이 메시지 아래에 이어서 안내해 주세요.", "심심풀이 안내입니다."],
   ["community-fun", "커뮤니티/재미", "participant", "custom", "/익명사연", "익명 사연", "익명 사연은 운영진 안내 기준에 맞춰 접수해 주세요.", "익명 사연 안내입니다."],
-  ["community-fun", "커뮤니티/재미", "participant", "custom", "/인기투표", "인기 투표", "인기 투표는 운영진 공지 기준으로 진행됩니다.", "인기 투표 안내입니다."],
   ["community-fun", "커뮤니티/재미", "participant", "custom", "/분위기전환", "분위기 전환", "분위기 전환용 주제는 이 메시지 아래에 이어서 안내해 주세요.", "분위기 전환 안내입니다."],
   ["game-link", "게임 연결", "participant", "game-template", "/운영주사위", "운영 주사위", "주사위 게임을 시작합니다.", "설치하면 /주사위 미니게임 엔진으로 연결됩니다.", "/주사위"],
   ["game-link", "게임 연결", "participant", "game-template", "/운영낚시", "운영 낚시", "낚시 게임을 시작합니다.", "설치하면 /낚시 미니게임 엔진으로 연결됩니다.", "/낚시"],
@@ -2365,6 +2361,46 @@ function roomTitle(room) {
   return normalizeText(room) || "기본방";
 }
 
+function normalizeReportId(value) {
+  return normalizeText(value).toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 20);
+}
+
+function reportNumberFromId(value) {
+  const match = normalizeReportId(value).match(/(\d+)$/);
+  return match ? Math.max(0, Math.trunc(Number(match[1]) || 0)) : 0;
+}
+
+function normalizeReports(value = []) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((item) => {
+      const report = item && typeof item === "object" ? item : {};
+      const id = normalizeReportId(report.id);
+      if (!id) return null;
+      const status = ["open", "resolved"].includes(report.status) ? report.status : "open";
+      return {
+        id,
+        status,
+        reporter: stripKakaoSuffix(report.reporter || report.from || ""),
+        reporterKey: normalizeText(report.reporterKey),
+        target: stripKakaoSuffix(report.target || ""),
+        reason: previewText(report.reason || report.content || "", 300),
+        createdAt: normalizeText(report.createdAt || report.at) || nowIso(),
+        resolvedAt: normalizeText(report.resolvedAt),
+        resolvedBy: stripKakaoSuffix(report.resolvedBy || ""),
+        resolution: previewText(report.resolution || report.result || "", 180)
+      };
+    })
+    .filter(Boolean)
+    .slice(-200);
+}
+
+function nextReportNumber(roomState) {
+  const current = Math.max(1, Math.trunc(Number(roomState.reportNextId || 1)) || 1);
+  const maxExisting = Math.max(0, ...(roomState.reports || []).map((report) => reportNumberFromId(report.id)));
+  return Math.max(current, maxExisting + 1);
+}
+
 function ensureRoom(state, room) {
   const key = roomKey(room);
   state.rooms[key] ||= {
@@ -2374,6 +2410,8 @@ function ensureRoom(state, room) {
     people: {},
     admins: [],
     inbox: {},
+    reports: [],
+    reportNextId: 1,
     commandRouting: {},
     commandInstallDrafts: {},
     unreadNoticeStates: {},
@@ -2392,6 +2430,8 @@ function ensureRoom(state, room) {
   roomState.people ||= {};
   roomState.admins ||= [];
   roomState.inbox ||= {};
+  roomState.reports = normalizeReports(roomState.reports || []);
+  roomState.reportNextId = nextReportNumber(roomState);
   roomState.commandRouting ||= {};
   roomState.commandInstallDrafts ||= {};
   roomState.commandRouting.unknownNotices ||= { byUser: {}, byRoom: {} };
@@ -4231,6 +4271,132 @@ function recordMentionMessages(roomState, sender, message) {
   return targetKeys;
 }
 
+function pushInboxMessage(roomState, targetName, from, content) {
+  const key = resolveName(roomState, targetName);
+  if (!key) return "";
+  roomState.inbox ||= {};
+  roomState.inbox[key] ||= [];
+  roomState.inbox[key].push({
+    id: messageId(roomState, key),
+    from: stripKakaoSuffix(from),
+    content: previewText(content, 900),
+    at: nowIso(),
+    readAt: null
+  });
+  if (roomState.inbox[key].length > 100) roomState.inbox[key] = roomState.inbox[key].slice(-100);
+  return key;
+}
+
+function reportAdminNames(roomState) {
+  const names = [...configuredAdmins(), ...(roomState.admins || [])]
+    .map(stripKakaoSuffix)
+    .filter(Boolean);
+  return names.filter((name, index, list) => list.findIndex((value) => personKey(value) === personKey(name)) === index);
+}
+
+function nextReportId(roomState) {
+  const next = nextReportNumber(roomState);
+  roomState.reportNextId = next + 1;
+  return `R${String(next).padStart(4, "0")}`;
+}
+
+function parseReportInput(parsed) {
+  const body = compactSpaces((parsed?.args || []).join(" "));
+  if (!body) return { target: "", reason: "" };
+  const parts = body.split(/\s+/);
+  if (parts.length >= 2 && parts[0].length <= 24) {
+    return { target: stripKakaoSuffix(parts[0]), reason: previewText(parts.slice(1).join(" "), 260) };
+  }
+  return { target: "", reason: previewText(body, 260) };
+}
+
+function reportUsageText() {
+  return [
+    "사용법: /신고 닉네임 사유",
+    "대상이 명확하지 않으면 /신고 사유 로 접수할 수 있습니다."
+  ].join("\n");
+}
+
+function reportCreateCommand(roomState, sender, parsed) {
+  const input = parseReportInput(parsed);
+  if (!input.reason) return reportUsageText();
+
+  roomState.reports = normalizeReports(roomState.reports || []);
+  const report = {
+    id: nextReportId(roomState),
+    status: "open",
+    reporter: stripKakaoSuffix(sender),
+    reporterKey: resolveName(roomState, sender),
+    target: input.target,
+    reason: input.reason,
+    createdAt: nowIso(),
+    resolvedAt: "",
+    resolvedBy: "",
+    resolution: ""
+  };
+  roomState.reports.push(report);
+  if (roomState.reports.length > 200) roomState.reports = roomState.reports.slice(-200);
+
+  const adminNames = reportAdminNames(roomState);
+  const message = [
+    `신고가 접수되었습니다. (${report.id})`,
+    `신고자: ${report.reporter || "-"}`,
+    `대상: ${report.target || "미지정"}`,
+    `내용: ${report.reason}`,
+    "",
+    `/신고목록 으로 확인하고 /신고처리 ${report.id} 처리내용 으로 완료 처리할 수 있습니다.`
+  ].join("\n");
+  const deliveredKeys = adminNames.map((adminName) => pushInboxMessage(roomState, adminName, "픽셀곰 신고함", message)).filter(Boolean);
+  recordRoomEvent(roomState, { type: "report_created", reportId: report.id, reporter: report.reporter, target: report.target, deliveredAdmins: deliveredKeys.length });
+
+  return [
+    "신고가 접수되었습니다.",
+    `신고번호: ${report.id}`,
+    deliveredKeys.length
+      ? "방 관리자 메시지함으로 전달했습니다."
+      : "등록된 방 관리자가 없어 신고 기록만 저장했습니다."
+  ].join("\n");
+}
+
+function reportListCommand(roomState, parsed) {
+  roomState.reports = normalizeReports(roomState.reports || []);
+  const showAll = (parsed?.args || []).some((arg) => /^(전체|all)$/i.test(arg));
+  const reports = (showAll ? roomState.reports : roomState.reports.filter((report) => report.status !== "resolved")).slice(-10).reverse();
+  if (!reports.length) return showAll ? "신고 기록이 없습니다." : "대기 중인 신고가 없습니다.";
+
+  const lines = [showAll ? "신고 목록" : "대기 중인 신고 목록", ""];
+  reports.forEach((report, index) => {
+    lines.push(`${index + 1}. ${report.id} · ${report.status === "resolved" ? "처리완료" : "대기"}`);
+    lines.push(`신고자: ${report.reporter || "-"} / 대상: ${report.target || "미지정"}`);
+    lines.push(`내용: ${previewText(report.reason, 90)}`);
+    if (report.status === "resolved") lines.push(`처리: ${report.resolution || "-"} (${report.resolvedBy || "-"})`);
+    if (index < reports.length - 1) lines.push("");
+  });
+  return lines.join("\n");
+}
+
+function reportResolveCommand(roomState, sender, parsed) {
+  const [rawId, ...resolutionParts] = parsed?.args || [];
+  const id = normalizeReportId(rawId || "");
+  if (!id) return "사용법: /신고처리 R0001 처리내용";
+
+  roomState.reports = normalizeReports(roomState.reports || []);
+  const report = roomState.reports.find((item) => item.id === id);
+  if (!report) return "해당 신고번호를 찾을 수 없습니다.";
+  if (report.status === "resolved") return `${report.id} 신고는 이미 처리 완료 상태입니다.`;
+
+  report.status = "resolved";
+  report.resolvedAt = nowIso();
+  report.resolvedBy = stripKakaoSuffix(sender);
+  report.resolution = previewText(resolutionParts.join(" ") || "처리 완료", 180);
+  recordRoomEvent(roomState, { type: "report_resolved", reportId: report.id, by: sender });
+  return [
+    "신고 처리가 완료되었습니다.",
+    `신고번호: ${report.id}`,
+    `처리내용: ${report.resolution}`
+  ].join("\n");
+}
+
 function unreadMessages(roomState, sender) {
   const key = resolveName(roomState, sender);
   return (roomState.inbox?.[key] || []).filter((message) => !message.readAt);
@@ -5980,6 +6146,7 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/브릿지", "기본", "브릿지 연결 진단", { aliases: ["/bridge"], searchableKeywords: ["연결", "진단"] }),
   registryEntry("/js상태", "기본", "브릿지 JS 호환 진단", { aliases: ["/jsstatus", "/로컬상태"], searchableKeywords: ["js", "로컬"] }),
   registryEntry("/메시지", "운영", "내 읽지 않은 메시지함 확인", { aliases: ["/메세지", "/메시지함"], searchableKeywords: ["읽지 않은", "쪽지"] }),
+  registryEntry("/신고", "운영", "방 관리자에게 신고 접수", { examples: ["/신고 닉네임 사유", "/신고 사유"], searchableKeywords: ["신고", "관리자", "메시지함"] }),
   registryEntry("/날씨", "날씨", "지역별 실시간 날씨 조회", { aliases: ["/오늘날씨", "/시흥날씨", "/서울날씨"], examples: ["/날씨 서울", "/시흥날씨"], searchableKeywords: ["오늘날씨", "시흥", "서울"] }),
   registryEntry("/운세", "운세", "날짜와 사용자 기준 오늘의 운세", { aliases: ["/오늘운세"], searchableKeywords: ["오늘운세", "행운"] }),
   registryEntry("/출석", "출석", "일일 출석 보상", { aliases: ["/출석체크", "/출첵", "/ㅊㅊ"], requiresFeature: "attendance" }),
@@ -6015,6 +6182,8 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/입퇴장현황", "히스토리", "입퇴장과 닉네임 이력 조회", { aliases: ["/닉이력"], examples: ["/닉이력 닉네임"], requiresFeature: "history" }),
   registryEntry("/원본로그", "관리자", "최신 원본 JSON 확인", { aliases: ["/원본이벤트"], visibility: "admin", requiresRole: "admin", requiresFeature: "history" }),
   registryEntry("/최근이벤트", "관리자", "브릿지 원본 이벤트 요약", { aliases: ["/이벤트로그"], visibility: "admin", requiresRole: "admin", requiresFeature: "history" }),
+  registryEntry("/신고목록", "관리자", "접수된 신고 목록 확인", { visibility: "admin", requiresRole: "admin", searchableKeywords: ["신고", "처리", "관리자"] }),
+  registryEntry("/신고처리", "관리자", "신고 처리 완료 기록", { visibility: "admin", requiresRole: "admin", examples: ["/신고처리 R0001 처리 완료"], searchableKeywords: ["신고", "처리", "관리자"] }),
   registryEntry("/프로필등록", "관리자", "프로필 등록", { aliases: ["/프로필 등록"], visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
   registryEntry("/프로필삭제", "관리자", "프로필 삭제", { visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
   registryEntry("/별명등록", "관리자", "별명 등록", { visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
@@ -6097,7 +6266,7 @@ function roomUsesExplicitCommandPacks(roomState) {
 
 function commandInstalledInRoom(item, roomState) {
   if (!roomState || !roomUsesExplicitCommandPacks(roomState)) return true;
-  if (["/상태", "/도움말", "/방등록", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록"].includes(item.command)) return true;
+  if (["/상태", "/도움말", "/방등록", "/신고", "/신고목록", "/신고처리", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록"].includes(item.command)) return true;
   const activePacks = activeCommandPacks(roomState);
   if ((item.packIds || []).some((id) => activePacks.some((pack) => pack.id === id))) return true;
   const commands = [item.command, ...(item.aliases || [])];
@@ -8048,6 +8217,9 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/날씨" || command === "/오늘날씨" || /^\/.+날씨$/u.test(command)) return weatherCommand(roomState, parsed);
   if (command === "/운세" || command === "/오늘운세") return fortuneCommand(roomState, sender, parsed, identity);
   if (/^\/(?:메시지|메세지|메시지함)(?:\s|$)/.test(command)) return messageInboxCommand(roomState, sender);
+  if (command === "/신고") return reportCreateCommand(roomState, sender, parsed);
+  if (command === "/신고목록") return requireAdmin(roomState, sender) || reportListCommand(roomState, parsed);
+  if (command === "/신고처리") return requireAdmin(roomState, sender) || reportResolveCommand(roomState, sender, parsed);
   if (/^\/(?:최근이벤트|이벤트로그)(?:\s|$)/.test(command)) return requireAdmin(roomState, sender) || recentEventsCommand(state, roomState, sender, text);
   if (/^\/(?:원본로그|원본이벤트)(?:\s|$)/.test(command)) return rawLogCommand(roomState, sender, text);
   if (/^\/(?:출석|출석체크|출첵|ㅊㅊ)$/.test(command)) return attendanceCommand(roomState, sender);
