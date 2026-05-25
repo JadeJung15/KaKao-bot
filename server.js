@@ -2227,9 +2227,18 @@ function bridgeConnectCodeForApplication(account = {}, application = {}) {
 function tokenFromRequest(req, body = {}) {
   return normalizeText(
     body.token
+      || body.buyerToken
       || req.headers["x-buyer-token"]
       || req.headers.authorization?.replace(/^Bearer\s+/i, "")
   );
+}
+
+function accountFromBuyerToken(state, token) {
+  const tokenPayload = verifyTokenPayload(token);
+  if (tokenPayload?.sub && (!tokenPayload.kind || tokenPayload.kind === "buyer-guide") && state.accounts?.[tokenPayload.sub]) {
+    return state.accounts[tokenPayload.sub];
+  }
+  return null;
 }
 
 function approvedBuyerApplications(state, account = {}) {
@@ -6828,15 +6837,18 @@ function validateSignupPayload(payload = {}) {
   };
 }
 
-function validateApplicationFields(payload = {}, fallbackEmail = "") {
+function validateApplicationFields(payload = {}, fallbackEmail = "", options = {}) {
   const email = normalizeEmail(payload.email);
   const roomName = compactSpaces(payload.roomName || payload.room || "");
   const roomLink = normalizeText(payload.roomLink || payload.openChatLink || payload.link || "");
   const adminName = compactSpaces(payload.adminName || payload.roomAdmin || payload.managerName || "");
+  const contact = normalizeText(payload.contact || "");
   const roomId = payloadRoomId({ roomId: payload.roomId, roomLink });
   const errors = [];
   const resolvedEmail = email || normalizeEmail(fallbackEmail);
-  if (!validEmail(resolvedEmail)) errors.push("email_required");
+  const missingEmailAllowed = Boolean(options.allowMissingEmail);
+  if (!validEmail(resolvedEmail) && !(missingEmailAllowed && !resolvedEmail)) errors.push("email_required");
+  if (missingEmailAllowed && !resolvedEmail && options.requireContactWithoutEmail && !contact) errors.push("contact_required");
   if (!roomName) errors.push("room_name_required");
   if (!roomLink || !roomId) errors.push("openchat_link_required");
   if (!adminName) errors.push("admin_name_required");
@@ -6849,14 +6861,19 @@ function validateApplicationFields(payload = {}, fallbackEmail = "") {
       roomLink,
       roomId,
       adminName,
-      contact: normalizeText(payload.contact || ""),
+      contact,
       memo: normalizeText(payload.memo || "").slice(0, 500)
     }
   };
 }
 
-function createApplicationForAccount(state, account = {}, payload = {}) {
-  const validated = validateApplicationFields(payload, account.email);
+function createApplicationForAccount(state, account = {}, payload = {}, options = {}) {
+  const accountEmail = normalizeEmail(account.email);
+  const allowMissingEmail = Boolean(options.allowMissingEmail || !accountEmail);
+  const validated = validateApplicationFields(payload, accountEmail, {
+    allowMissingEmail,
+    requireContactWithoutEmail: allowMissingEmail
+  });
   if (!validated.ok) return { ok: false, status: 400, error: validated.errors[0], errors: validated.errors };
   const value = validated.value;
   const applicationId = generateEntityId("app");
@@ -7037,10 +7054,14 @@ async function createSignupAccountFromRequest(state, body = {}) {
 }
 
 async function createSignupApplicationFromRequest(state, body = {}) {
+  const tokenAccount = accountFromBuyerToken(state, normalizeText(body.token || body.buyerToken));
+  if (tokenAccount) {
+    return createApplicationForAccount(state, tokenAccount, { ...body, email: tokenAccount.email || "" }, { allowMissingEmail: true });
+  }
   const external = await externalAccountFromRequest(state, body, { requireConsentsForNew: true });
   if (external) {
     if (!external.ok) return external;
-    return createApplicationForAccount(state, external.account, { ...body, email: external.account.email });
+    return createApplicationForAccount(state, external.account, { ...body, email: external.account.email || "" }, { allowMissingEmail: true });
   }
   return createSignupApplication(state, body);
 }
@@ -7682,10 +7703,8 @@ function deleteBuyerCustomCommand(state, account = {}, body = {}) {
 }
 
 async function accountFromBuyerRequest(state, req, body = {}) {
-  const tokenPayload = verifyTokenPayload(tokenFromRequest(req, body));
-  if (tokenPayload?.sub && (!tokenPayload.kind || tokenPayload.kind === "buyer-guide") && state.accounts?.[tokenPayload.sub]) {
-    return { ok: true, account: state.accounts[tokenPayload.sub] };
-  }
+  const tokenAccount = accountFromBuyerToken(state, tokenFromRequest(req, body));
+  if (tokenAccount) return { ok: true, account: tokenAccount };
   const external = await externalAccountFromRequest(state, body);
   if (external) return external;
   const login = loginAccount(state, body);
@@ -7953,6 +7972,80 @@ function adminApplicationsPayload(state) {
   };
 }
 
+function publicAdminReportView(roomState = {}, report = {}) {
+  return {
+    roomName: roomState.name || "",
+    roomId: roomState.settings?.roomIds?.[0] || "",
+    id: report.id || "",
+    status: report.status || "open",
+    reporter: report.reporter || "",
+    target: report.target || "",
+    reason: report.reason || "",
+    createdAt: report.createdAt || "",
+    resolvedAt: report.resolvedAt || "",
+    resolvedBy: report.resolvedBy || "",
+    resolution: report.resolution || ""
+  };
+}
+
+function adminReportsPayload(state, options = {}) {
+  const requestedStatus = normalizeText(options.status || "open");
+  const status = ["open", "resolved", "all"].includes(requestedStatus) ? requestedStatus : "open";
+  const roomFilter = normalizeText(options.room || options.roomName);
+  const reports = [];
+  for (const roomState of Object.values(state.rooms || {})) {
+    roomState.reports = normalizeReports(roomState.reports || []);
+    if (roomFilter && keyFor(roomState.name) !== keyFor(roomFilter)) continue;
+    for (const report of roomState.reports) {
+      if (status === "open" && report.status === "resolved") continue;
+      if (status === "resolved" && report.status !== "resolved") continue;
+      reports.push(publicAdminReportView(roomState, report));
+    }
+  }
+  reports.sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
+  const allReports = Object.values(state.rooms || {}).flatMap((roomState) => normalizeReports(roomState.reports || []));
+  return {
+    ok: true,
+    version: APP_VERSION,
+    generatedAt: nowIso(),
+    filter: {
+      status,
+      roomName: roomFilter
+    },
+    summary: {
+      total: allReports.length,
+      open: allReports.filter((report) => report.status !== "resolved").length,
+      resolved: allReports.filter((report) => report.status === "resolved").length,
+      visible: reports.length
+    },
+    reports
+  };
+}
+
+function adminResolveReport(state, payload = {}, resolvedBy = "admin_console") {
+  const roomName = normalizeText(payload.roomName || payload.room || payload.name);
+  const reportId = normalizeReportId(payload.reportId || payload.id);
+  if (!roomName) return { ok: false, status: 400, error: "room_required" };
+  if (!reportId) return { ok: false, status: 400, error: "report_id_required" };
+  const roomState = state.rooms?.[roomKey(roomName)] || Object.values(state.rooms || {}).find((room) => keyFor(room.name) === keyFor(roomName));
+  if (!roomState) return { ok: false, status: 404, error: "room_not_found" };
+  roomState.reports = normalizeReports(roomState.reports || []);
+  const report = roomState.reports.find((item) => item.id === reportId);
+  if (!report) return { ok: false, status: 404, error: "report_not_found" };
+  if (report.status !== "resolved") {
+    report.status = "resolved";
+    report.resolvedAt = nowIso();
+    report.resolvedBy = resolvedBy;
+    report.resolution = previewText(payload.resolution || payload.result || "처리 완료", 180);
+    recordRoomEvent(roomState, { type: "report_resolved", reportId: report.id, by: resolvedBy });
+  }
+  return {
+    ok: true,
+    version: APP_VERSION,
+    report: publicAdminReportView(roomState, report)
+  };
+}
+
 function adminApproveApplication(state, payload = {}, approvedBy = "admin_console") {
   const applicationId = normalizeText(payload.applicationId || payload.id);
   if (!applicationId) return { ok: false, status: 400, error: "application_id_required" };
@@ -8092,6 +8185,13 @@ async function handleAdminApi(req, url) {
     return { status: 200, body: adminApplicationsPayload(state) };
   }
 
+  if (req.method === "GET" && url.pathname === "/api/admin/reports") {
+    const auth = await requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return { status: 200, body: adminReportsPayload(state, Object.fromEntries(url.searchParams.entries())) };
+  }
+
   if (req.method === "POST" && url.pathname === "/api/admin/rooms") {
     const body = await readBody(req);
     const auth = await requireAdminConsole(req, url, body);
@@ -8109,6 +8209,17 @@ async function handleAdminApi(req, url) {
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     const result = adminDeleteRoom(state, body);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/reports/resolve") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminResolveReport(state, body, auth.by || "admin_console");
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };

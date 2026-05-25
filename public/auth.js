@@ -33,6 +33,18 @@ window.PixelgomAuth = (() => {
     return fallback;
   }
 
+  async function storedAccessPayload(fallback = {}) {
+    const payload = await accessPayload(fallback);
+    if (payload.accessToken) return payload;
+    try {
+      const buyerToken = sessionStorage.getItem("pixgomBuyerToken");
+      if (buyerToken) return { ...fallback, token: buyerToken };
+    } catch {
+      // Storage can be blocked in some in-app browsers.
+    }
+    return fallback;
+  }
+
   function hasStoredSessionHint() {
     try {
       if (sessionStorage.getItem("pixgomBuyerToken") || sessionStorage.getItem("pixgomOwnerToken")) return true;
@@ -197,6 +209,7 @@ window.PixelgomAuth = (() => {
     client,
     session,
     accessPayload,
+    storedAccessPayload,
     hasStoredSessionHint,
     createSilentGate,
     signInWithPassword,

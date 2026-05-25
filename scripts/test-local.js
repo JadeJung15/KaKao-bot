@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import http from "node:http";
+import { createHmac } from "node:crypto";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,6 +67,33 @@ async function request(pathname, options = {}) {
   const response = await fetch(`${baseUrl}${pathname}`, options);
   const json = await response.json();
   return { response, json };
+}
+
+function signTestBuyerToken(accountId, email = "") {
+  const payload = {
+    kind: "buyer-guide",
+    sub: accountId,
+    email,
+    exp: Date.now() + 60 * 60 * 1000
+  };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", "test-admin-token").update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+async function upsertTestAccount(account) {
+  if (!testDbPath) throw new Error("testDbPath_required");
+  const state = JSON.parse(await readFile(testDbPath, "utf8"));
+  state.accounts ||= {};
+  state.accounts[account.id] = {
+    status: "active",
+    applicationIds: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...account
+  };
+  await writeFile(testDbPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  return state.accounts[account.id];
 }
 
 async function chat(msg, sender = "사용자", room = "테스트방") {
@@ -367,6 +395,9 @@ try {
   assert.match(applyPageText, /신청 전 확인/);
   assert.match(applyPageText, /https:\/\/open\.kakao\.com\/o\/abcd1234/);
   assert.match(applyPageText, /friendlyError/);
+  assert.match(applyPageText, /data-account-identity/);
+  assert.match(applyPageText, /연락 가능한 연락처/);
+  assert.match(applyPageText, /storedAccessPayload/);
   const loginPageText = await (await fetch(`${baseUrl}/login`)).text();
   assert.match(loginPageText, /처음 시작 5단계/);
   assert.match(loginPageText, /auth-page auth-checking/);
@@ -506,6 +537,10 @@ try {
   assert.match(adminPageText, /방, 관리자, 라이선스/);
   assert.match(adminPageText, /운영자 로그인 확인/);
   assert.match(adminPageText, /room-delete-button/);
+  assert.match(adminPageText, /신고 관리/);
+  assert.match(adminPageText, /data-load-reports/);
+  assert.match(adminPageText, /data-report-status-filter/);
+  assert.match(adminPageText, /\/api\/admin\/reports\/resolve/);
   assert.match(adminPageText, /session-nav\.js/);
   assert.doesNotMatch(adminPageText, /ADMIN_CONSOLE_TOKEN/);
 
@@ -918,6 +953,69 @@ try {
   assert.match(approvedLogin.json.guideToken, /\./);
   assert.equal(approvedLogin.json.buyerRooms.length, 1);
   assert.match(approvedLogin.json.buyerRooms[0].bridgeConnectCode, /\./);
+
+  const tokenApply = await request("/api/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      roomName: "토큰추가방",
+      roomLink: "https://open.kakao.com/o/tokenApply1",
+      adminName: "신청관리자",
+      contact: "kakao-token"
+    })
+  });
+  assert.equal(tokenApply.response.status, 200);
+  assert.equal(tokenApply.json.application.email, `tester-${process.pid}@pixgom.test`);
+  assert.equal(tokenApply.json.application.status, "pending_payment");
+  assert.equal(tokenApply.json.payment.amountKrw, 2200);
+
+  const kakaoNoEmailAccountId = `acct_kakao_no_email_${process.pid}`;
+  await upsertTestAccount({
+    id: kakaoNoEmailAccountId,
+    email: "",
+    nickname: "카카오닉",
+    auth: {
+      provider: "kakao",
+      externalId: `kakao-${process.pid}`,
+      providers: ["kakao"],
+      name: "카카오닉",
+      linkedAt: new Date().toISOString()
+    },
+    consents: {
+      terms: { agreed: true, at: new Date().toISOString(), version: "2026-05-25" },
+      privacy: { agreed: true, at: new Date().toISOString(), version: "2026-05-25" },
+      marketing: { agreed: false, at: "", version: "2026-05-25" }
+    }
+  });
+  const kakaoNoEmailToken = signTestBuyerToken(kakaoNoEmailAccountId);
+  const kakaoNoContactApply = await request("/api/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: kakaoNoEmailToken,
+      roomName: "카카오무이메일방",
+      roomLink: "https://open.kakao.com/o/kakaoNoEmail1",
+      adminName: "카카오관리자"
+    })
+  });
+  assert.equal(kakaoNoContactApply.response.status, 400);
+  assert.equal(kakaoNoContactApply.json.error, "contact_required");
+
+  const kakaoContactApply = await request("/api/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: kakaoNoEmailToken,
+      roomName: "카카오무이메일방",
+      roomLink: "https://open.kakao.com/o/kakaoNoEmail1",
+      adminName: "카카오관리자",
+      contact: "openchat-contact"
+    })
+  });
+  assert.equal(kakaoContactApply.response.status, 200);
+  assert.equal(kakaoContactApply.json.application.email, "");
+  assert.equal(kakaoContactApply.json.application.contact, "openchat-contact");
 
   const buyerGuideApproved = await request("/api/buyer/guide", {
     method: "POST",
@@ -2105,6 +2203,36 @@ try {
   const reportResolved = await chat(`/신고처리 ${reportId} 확인 후 조치`, "관리자", "신고테스트방");
   assert.match(reportResolved.json.reply, /신고 처리가 완료/);
   assert.match(reportResolved.json.reply, /확인 후 조치/);
+
+  const reportCreatedForAdmin = await chat("/신고 다른사용자 부적절한 홍보", "신고자", "신고테스트방");
+  const adminReportId = reportCreatedForAdmin.json.reply.match(/R\d{4}/)?.[0];
+  assert.ok(adminReportId);
+
+  const adminReportsDenied = await request("/api/admin/reports");
+  assert.equal(adminReportsDenied.response.status, 401);
+  assert.equal(adminReportsDenied.json.error, "owner_login_required");
+
+  const adminReportsOpen = await request("/api/admin/reports?token=test-admin-token&status=open");
+  assert.equal(adminReportsOpen.response.status, 200);
+  assert.equal(adminReportsOpen.json.summary.open >= 1, true);
+  assert.equal(adminReportsOpen.json.reports.some((report) => report.roomName === "신고테스트방" && report.id === adminReportId && report.status === "open"), true);
+
+  const adminReportResolved = await request("/api/admin/reports/resolve", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({
+      roomName: "신고테스트방",
+      reportId: adminReportId,
+      resolution: "어드민 화면에서 처리"
+    })
+  });
+  assert.equal(adminReportResolved.response.status, 200);
+  assert.equal(adminReportResolved.json.report.status, "resolved");
+  assert.equal(adminReportResolved.json.report.resolution, "어드민 화면에서 처리");
+
+  const adminReportsResolved = await request("/api/admin/reports?token=test-admin-token&status=resolved");
+  assert.equal(adminReportsResolved.response.status, 200);
+  assert.equal(adminReportsResolved.json.reports.some((report) => report.id === adminReportId && report.status === "resolved"), true);
 
   const fixedCommands = await chat("/고정명령어", "관리자");
   assert.match(fixedCommands.json.reply, /픽셀곰 고정 명령어/);

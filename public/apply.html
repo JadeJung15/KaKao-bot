@@ -32,13 +32,14 @@
           <span>요금: 첫 방 5,500원 / 30일, 추가 방 2,200원 / 30일</span>
           <span>신청 후 다음 행동: 입금 후 승인 대기, 승인 완료 시 콘솔에서 연결코드 복사</span>
         </aside>
+        <aside class="auth-account-card" data-account-identity hidden></aside>
         <form data-apply-form>
-          <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
-          <label>비밀번호<input name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="회원 비밀번호"></label>
+          <label data-email-field>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
+          <label data-password-field>비밀번호<input name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="회원 비밀번호"></label>
           <label>방 이름<input name="roomName" type="text" required placeholder="예: 주식 공부방, 팬카페 공지방"></label>
           <label>오픈채팅방 링크<input name="roomLink" type="url" required placeholder="https://open.kakao.com/o/abcd1234"></label>
           <label>관리자 닉네임<input name="adminName" type="text" required placeholder="카톡방에서 실제 쓰는 운영자 닉네임"></label>
-          <label>연락처<input name="contact" type="text" placeholder="카카오ID 또는 연락 가능한 채널"></label>
+          <label data-contact-label>연락 가능한 연락처<input name="contact" type="text" placeholder="이메일, 카카오ID, 전화번호, 오픈채팅 문의 식별값"></label>
           <label>요청 메모<textarea name="memo" rows="4" placeholder="예: 기본 운영팩부터 설치하고 싶습니다."></textarea></label>
           <div class="consent-list" aria-label="약관 동의">
             <label class="check-row">
@@ -70,12 +71,61 @@
       const form = document.querySelector("[data-apply-form]");
       const result = document.querySelector("[data-apply-result]");
       const kakaoButton = document.querySelector("[data-kakao-login]");
+      const accountIdentity = document.querySelector("[data-account-identity]");
+      const emailField = document.querySelector("[data-email-field]");
+      const passwordField = document.querySelector("[data-password-field]");
+      const contactLabel = document.querySelector("[data-contact-label]");
       const authGate = window.PixelgomAuth.createSilentGate({ status: result });
       const savedEmail = sessionStorage.getItem("pixgomSignupEmail");
+      let loggedInPayload = {};
       if (savedEmail) form.elements.email.value = savedEmail;
 
       function showApplyForm(message = "신청하면 결제 대기 상태로 등록됩니다.") {
         authGate.finish(message);
+      }
+
+      function setLoggedInApplyState(account = {}, payload = {}) {
+        loggedInPayload = payload;
+        const email = account.email || "";
+        const label = email || account.nickname || account.authProvider || "카카오 로그인 계정";
+        accountIdentity.hidden = false;
+        accountIdentity.textContent = email
+          ? `로그인된 계정으로 신청합니다: ${label}`
+          : "카카오 계정에 이메일이 없어 연락 가능한 연락처를 필수로 받습니다.";
+        form.elements.email.required = false;
+        form.elements.email.value = email;
+        form.elements.email.readOnly = Boolean(email);
+        form.elements.password.required = false;
+        form.elements.password.value = "";
+        form.elements.password.placeholder = "로그인된 계정 사용 중";
+        passwordField.hidden = true;
+        if (email) {
+          emailField.hidden = false;
+          contactLabel.classList.remove("is-required");
+          form.elements.contact.required = false;
+        } else {
+          emailField.hidden = true;
+          contactLabel.classList.add("is-required");
+          form.elements.contact.required = true;
+        }
+      }
+
+      async function resolveLoggedInApplyAccount() {
+        const payload = await window.PixelgomAuth.storedAccessPayload({});
+        if (!payload.token && !payload.accessToken) return null;
+        const endpoint = payload.token ? "/api/buyer/console" : "/api/login";
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const json = await response.json();
+        if (!response.ok || json.ok === false) throw new Error(json.error || "login_failed");
+        if (json.guideToken) sessionStorage.setItem("pixgomBuyerToken", json.guideToken);
+        return {
+          account: json.account || {},
+          payload: json.guideToken ? { token: json.guideToken } : payload
+        };
       }
 
       form.addEventListener("submit", async (event) => {
@@ -83,11 +133,13 @@
         result.textContent = "신청을 접수하는 중입니다.";
         const payload = Object.fromEntries(new FormData(form).entries());
         try {
-          const authPayload = await window.PixelgomAuth.accessPayload(payload);
+          const authPayload = Object.keys(loggedInPayload).length
+            ? { ...payload, ...loggedInPayload }
+            : await window.PixelgomAuth.storedAccessPayload(payload);
           const response = await fetch("/api/apply", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(authPayload.accessToken ? { ...payload, accessToken: authPayload.accessToken } : payload)
+            body: JSON.stringify(authPayload)
           });
           const json = await response.json();
           if (!response.ok || json.ok === false) throw new Error(json.error || "apply_failed");
@@ -122,13 +174,18 @@
         const cfg = await window.PixelgomAuth.config();
         window.PixelgomAuth.showAuthMode(document.querySelector("[data-auth-mode]"), cfg);
         kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
-        const session = await window.PixelgomAuth.session();
-        if (session?.user?.email) {
-          form.elements.email.value = session.user.email;
-          form.elements.password.required = false;
-          form.elements.password.placeholder = "소셜 로그인 사용 중";
-          showApplyForm("방 정보를 입력해 신청을 이어가세요.");
-          return;
+        if (authGate.hasHint) {
+          try {
+            const current = await resolveLoggedInApplyAccount();
+            if (current?.account) {
+              setLoggedInApplyState(current.account, current.payload);
+              showApplyForm("로그인된 계정으로 방 정보만 입력해 신청하세요.");
+              return;
+            }
+          } catch (error) {
+            showApplyForm(`로그인 상태 확인 실패: ${window.PixelgomAuth.friendlyError(error)}`);
+            return;
+          }
         }
         showApplyForm();
       })();

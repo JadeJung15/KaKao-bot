@@ -51,6 +51,7 @@
         </label>
         <button class="button button-primary" type="button" data-load-rooms>등록 방 불러오기</button>
         <button class="button button-secondary" type="button" data-load-applications>신청/결제 불러오기</button>
+        <button class="button button-secondary" type="button" data-load-reports>신고 불러오기</button>
         <button class="button button-secondary" type="button" data-diagnostics>진단 새로고침</button>
         <button class="button button-secondary" type="button" data-backup>백업 JSON 받기</button>
       </section>
@@ -62,6 +63,27 @@
         <article><strong>-</strong><span>만료 임박</span></article>
         <article><strong>-</strong><span>문제 방</span></article>
         <article><strong>-</strong><span>브릿지 확인</span></article>
+      </section>
+
+      <section class="admin-report-panel" aria-label="신고 관리">
+        <div class="admin-report-head">
+          <div>
+            <p class="section-kicker">Reports</p>
+            <h2>신고 관리</h2>
+            <p>채팅방에서 접수된 신고를 모아 보고 처리 완료 상태로 바꿉니다.</p>
+          </div>
+          <label>
+            상태
+            <select id="report-status-filter" name="reportStatusFilter" data-report-status-filter>
+              <option value="open">대기</option>
+              <option value="resolved">처리 완료</option>
+              <option value="all">전체</option>
+            </select>
+          </label>
+        </div>
+        <div class="report-card-list" data-report-list>
+          <p>신고 불러오기를 누르면 접수된 신고가 표시됩니다.</p>
+        </div>
       </section>
 
       <section class="admin-grid admin-grid-wide">
@@ -194,14 +216,17 @@
       const output = document.querySelector("[data-admin-output]");
       const roomList = document.querySelector("[data-room-list]");
       const applicationList = document.querySelector("[data-application-list]");
+      const reportList = document.querySelector("[data-report-list]");
       const summary = document.querySelector("[data-summary]");
       const restoreInput = document.querySelector("[data-restore-json]");
       const searchInput = document.querySelector("[data-admin-search]");
       const roomStatusFilterInput = document.querySelector("[data-room-status-filter]");
+      const reportStatusFilterInput = document.querySelector("[data-report-status-filter]");
       const commandTriggerInput = document.querySelector("[data-command-trigger]");
       const commandResponseInput = document.querySelector("[data-command-response]");
       let rooms = [];
       let applications = [];
+      let reports = [];
       let selectedRoom = null;
       let ownerToken = sessionStorage.getItem("pixgomOwnerToken") || "";
 
@@ -292,6 +317,20 @@
           application.statusLabel,
           application.payment?.status,
           application.payment?.statusLabel
+        ).includes(term);
+      }
+
+      function reportMatchesSearch(report, term) {
+        if (!term) return true;
+        return searchableText(
+          report.roomName,
+          report.id,
+          report.status,
+          report.reporter,
+          report.target,
+          report.reason,
+          report.resolution,
+          report.resolvedBy
         ).includes(term);
       }
 
@@ -569,6 +608,41 @@
         }
       }
 
+      function renderReports(data) {
+        if (Array.isArray(data.reports)) reports = data.reports;
+        const term = searchTerm();
+        const visibleReports = reports.filter((report) => reportMatchesSearch(report, term));
+        reportList.innerHTML = "";
+        if (!visibleReports.length) {
+          reportList.innerHTML = `<p>${term ? "검색 결과가 없습니다." : "표시할 신고가 없습니다."}</p>`;
+          return;
+        }
+        for (const report of visibleReports.slice(0, 50)) {
+          const resolved = report.status === "resolved";
+          const card = document.createElement("article");
+          card.className = "report-card";
+          card.dataset.status = resolved ? "resolved" : "open";
+          card.innerHTML = `
+            <div class="report-card-body">
+              <div class="report-card-title">
+                <strong>${escapeHtml(report.roomName || "방 이름 없음")} · ${escapeHtml(report.id)}</strong>
+                ${statusBadge(resolved ? "처리 완료" : "대기", resolved ? "ok" : "warn")}
+              </div>
+              <span>신고자 ${escapeHtml(report.reporter || "-")} · 대상 ${escapeHtml(report.target || "미지정")}</span>
+              <p>${escapeHtml(report.reason || "-")}</p>
+              <small>접수 ${escapeHtml(report.createdAt || "-")}${resolved ? ` · 처리 ${escapeHtml(report.resolvedAt || "-")} · ${escapeHtml(report.resolvedBy || "-")}` : ""}</small>
+              ${resolved ? `<small>처리 내용: ${escapeHtml(report.resolution || "-")}</small>` : ""}
+            </div>
+            <div class="report-card-actions">
+              <textarea data-report-resolution rows="3" placeholder="처리 내용">${resolved ? escapeHtml(report.resolution || "") : ""}</textarea>
+              <button class="button button-secondary" type="button" data-resolve-report ${resolved ? "disabled" : ""}>처리 완료</button>
+            </div>
+          `;
+          card.querySelector("[data-resolve-report]")?.addEventListener("click", () => resolveReport(report, card));
+          reportList.appendChild(card);
+        }
+      }
+
       function compactPrintPayload(value) {
         if (!value || typeof value !== "object") return value;
         if (Array.isArray(value.rooms)) {
@@ -638,6 +712,32 @@
         const json = await requestJson("/api/admin/applications");
         renderApplications(json);
         print(compactPrintPayload(json));
+      }
+
+      async function loadReports() {
+        const status = reportStatusFilterInput.value || "open";
+        const json = await requestJson(`/api/admin/reports?status=${encodeURIComponent(status)}`);
+        renderReports(json);
+        print(compactPrintPayload(json));
+      }
+
+      async function resolveReport(report, card) {
+        const resolution = card.querySelector("[data-report-resolution]")?.value?.trim() || "처리 완료";
+        try {
+          const json = await requestJson("/api/admin/reports/resolve", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              roomName: report.roomName,
+              reportId: report.id,
+              resolution
+            })
+          });
+          print(json);
+          await loadReports();
+        } catch (error) {
+          print(friendlyError(error));
+        }
       }
 
       async function approveApplication(applicationId) {
@@ -724,6 +824,10 @@
         loadApplications().catch((error) => print(friendlyError(error)));
       });
 
+      document.querySelector("[data-load-reports]").addEventListener("click", () => {
+        loadReports().catch((error) => print(friendlyError(error)));
+      });
+
       document.querySelector("[data-add-command]").addEventListener("click", () => {
         upsertCommandLine(commandTriggerInput.value, commandResponseInput.value);
       });
@@ -731,10 +835,15 @@
       searchInput.addEventListener("input", () => {
         renderRooms({ rooms });
         renderApplications({ applications });
+        renderReports({ reports });
       });
 
       roomStatusFilterInput.addEventListener("change", () => {
         renderRooms({ rooms });
+      });
+
+      reportStatusFilterInput.addEventListener("change", () => {
+        loadReports().catch((error) => print(friendlyError(error)));
       });
 
       document.querySelector("[data-diagnostics]").addEventListener("click", async () => {
