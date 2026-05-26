@@ -137,7 +137,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.91");
+  assert.equal(health.json.version, "0.4.92");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -286,6 +286,10 @@ try {
   assert.match(health.json.features.join(","), /admin-diagnostics-summary/);
   assert.match(health.json.features.join(","), /incident-history-cards/);
   assert.match(health.json.features.join(","), /server-owned-room-settings/);
+  assert.match(health.json.features.join(","), /buyer-account-profile-edit/);
+  assert.match(health.json.features.join(","), /application-inquiry-workflow/);
+  assert.match(health.json.features.join(","), /buyer-room-groups/);
+  assert.match(health.json.features.join(","), /buyer-room-mode-settings/);
   assert.equal(health.json.incidentMessages.SERVER_ERROR.code, "server_error");
   assert.equal(health.json.incidentMessages.DB_ERROR.code, "db_error");
   assert.equal(health.json.incidentMessages.AUTH_ERROR.code, "auth_error");
@@ -378,8 +382,11 @@ try {
   assert.doesNotMatch(statusStripText, /커스텀 명령어/);
   assert.match(homeText, /href="\/command-store">명령어<\/a>/);
   assert.match(homeText, /href="\/console">콘솔<\/a>/);
+  assert.match(homeText, /href="\/login">로그인<\/a>/);
+  assert.match(homeText, /정보수정/);
   const homeNavText = homeText.match(/<nav class="nav-links"[\s\S]*?<\/nav>/)?.[0] || "";
   assert.doesNotMatch(homeNavText, /href="\/store"/);
+  assert.match(homeNavText, /href="\/login">로그인<\/a>/);
   assert.match(homeText, /0\.4\.82/);
   assert.match(homeText, /0\.4\.81/);
   assert.match(homeText, /0\.4\.70/);
@@ -392,7 +399,7 @@ try {
   assert.match(homeText, /게임방 추가 신청/);
   assert.match(homeText, /일반방 연결코드와 게임방 연결코드를 차례로 입력/);
 
-  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup", "/forgot-password", "/reset-password", "/apply", "/console", "/my-rooms", "/setup", "/license", "/status", "/command-store", "/help/pet", "/help/rpg", "/help/monster", "/help/attendance", "/help/ranking", "/help/games", "/help/shop"]) {
+  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup", "/forgot-password", "/reset-password", "/apply", "/account", "/console", "/my-rooms", "/setup", "/license", "/status", "/command-store", "/help/pet", "/help/rpg", "/help/monster", "/help/attendance", "/help/ranking", "/help/games", "/help/shop"]) {
     const page = await fetch(`${baseUrl}${pagePath}`);
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-type") || "", /text\/html/);
@@ -402,6 +409,7 @@ try {
   assert.match(noticePageText, /장애 대응 기준/);
   const updatesPageText = await (await fetch(`${baseUrl}/updates`)).text();
   assert.match(updatesPageText, /픽셀곰 0\.4\.84/);
+  assert.match(updatesPageText, /픽셀곰 0\.4\.92/);
   assert.match(updatesPageText, /픽셀곰 0\.4\.82/);
   assert.match(updatesPageText, /픽셀곰 0\.4\.83/);
   assert.match(updatesPageText, /픽셀곰 0\.4\.81/);
@@ -432,6 +440,17 @@ try {
   assert.match(applyPageText, /게임방 추가/);
   assert.match(applyPageText, /data-linked-application-field/);
   assert.match(applyPageText, /loadBuyerRoomsForGameApply/);
+  assert.match(applyPageText, /신청접수가 정상적으로 완료되었습니다/);
+  assert.match(applyPageText, /data-apply-success/);
+  assert.match(applyPageText, /data-application-inquiry-form/);
+  assert.match(applyPageText, /결제요청 일시/);
+  assert.match(applyPageText, /기준 일반방/);
+  assert.match(applyPageText, /\/api\/application-inquiries/);
+  const accountPageText = await (await fetch(`${baseUrl}/account`)).text();
+  assert.match(accountPageText, /정보수정/);
+  assert.match(accountPageText, /닉네임 수정/);
+  assert.match(accountPageText, /data-account-profile-form/);
+  assert.match(accountPageText, /\/api\/buyer\/account\/profile/);
   const loginPageText = await (await fetch(`${baseUrl}/login`)).text();
   assert.match(loginPageText, /처음 시작 5단계/);
   assert.match(loginPageText, /auth-page auth-checking/);
@@ -484,7 +503,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.91");
+  assert.equal(commandTemplates.json.version, "0.4.92");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -513,7 +532,7 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.4.91");
+  assert.equal(commandPacks.json.version, "0.4.92");
   assert.equal(commandPacks.json.total, 13);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.fixedCommands.includes("/상태") && pack.fixedCommands.includes("/운세") && pack.fixedCommands.includes("/신고")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.installCode === "pk.001" && pack.installCodeType === "pack"), true);
@@ -581,6 +600,10 @@ try {
   assert.match(buyerConsoleScriptText, /\/api\/buyer\/room-transfer\/cancel/);
   assert.match(buyerConsoleScriptText, /이관 내역/);
   assert.match(buyerConsoleScriptText, /renderTransferHistory/);
+  assert.match(buyerConsoleScriptText, /renderRoomGroups/);
+  assert.match(buyerConsoleScriptText, /일반방\+게임방 통합 설정/);
+  assert.match(buyerConsoleScriptText, /\/api\/buyer\/room-mode-settings/);
+  assert.match(buyerConsoleScriptText, /data-room-mode-form/);
 
   const commandStorePageText = await (await fetch(`${baseUrl}/command-store`)).text();
   assert.match(commandStorePageText, /명령어 팩/);
@@ -622,6 +645,11 @@ try {
   assert.match(adminPageText, /data-load-transfers/);
   assert.match(adminPageText, /data-transfer-status-filter/);
   assert.match(adminPageText, /\/api\/admin\/transfers/);
+  assert.match(adminPageText, /신청 문의/);
+  assert.match(adminPageText, /data-load-application-inquiries/);
+  assert.match(adminPageText, /\/api\/admin\/application-inquiries/);
+  assert.match(adminPageText, /결제요청 일시/);
+  assert.match(adminPageText, /기준 일반방/);
   assert.match(adminPageText, /session-nav\.js/);
   assert.doesNotMatch(adminPageText, /ADMIN_CONSOLE_TOKEN/);
 
@@ -642,9 +670,11 @@ try {
   assert.match(sessionNavText, /normalizeSiteNavigation/);
   assert.match(sessionNavText, /nav-menu-toggle/);
   assert.match(sessionNavText, /nav-logout/);
+  assert.match(sessionNavText, /href: "\/login", label: "로그인"/);
+  assert.match(sessionNavText, /href = "\/account"/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.4.91");
+  assert.equal(packageJson.version, "0.4.92");
   assert.equal(packageJson.scripts["check:deploy"], "node scripts/predeploy-check.js");
   assert.equal(packageJson.scripts["smoke:local"], "node scripts/smoke-check.js");
   assert.equal(packageJson.scripts["smoke:prod"], "node scripts/smoke-check.js https://pixgom.com");
@@ -844,7 +874,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.4.91");
+  assert.equal(adminDiagnostics.json.version, "0.4.92");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -855,7 +885,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.4.91");
+  assert.equal(adminBackup.json.version, "0.4.92");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -936,6 +966,36 @@ try {
   assert.equal(apply.json.application.status, "pending_payment");
   assert.equal(apply.json.payment.status, "awaiting_manual_deposit");
   assert.equal(apply.json.payment.amountKrw, 5500);
+  assert.match(apply.json.payment.requestedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(apply.json.application.payment.requestedAt, apply.json.payment.requestedAt);
+  assert.match(apply.json.inquiryAccessToken, /\./);
+
+  const applicationInquiry = await request("/api/application-inquiries", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      applicationId: apply.json.application.id,
+      inquiryAccessToken: apply.json.inquiryAccessToken,
+      type: "deposit_check",
+      message: "입금 확인 부탁드립니다."
+    })
+  });
+  assert.equal(applicationInquiry.response.status, 200);
+  assert.equal(applicationInquiry.json.inquiry.applicationId, apply.json.application.id);
+  assert.equal(applicationInquiry.json.inquiry.type, "deposit_check");
+  assert.equal(applicationInquiry.json.inquiry.status, "open");
+  const reusedApplicationInquiry = await request("/api/application-inquiries", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      applicationId: apply.json.application.id,
+      inquiryAccessToken: apply.json.inquiryAccessToken,
+      type: "payment_check",
+      message: "다시 확인 부탁드립니다."
+    })
+  });
+  assert.equal(reusedApplicationInquiry.response.status, 409);
+  assert.equal(reusedApplicationInquiry.json.error, "inquiry_token_used");
 
   const badDuplicateSignup = await request("/api/signup", {
     method: "POST",
@@ -964,7 +1024,34 @@ try {
   assert.equal(login.json.applications.length, 1);
   assert.equal(login.json.applications[0].payment.status, "awaiting_manual_deposit");
   assert.equal(login.json.buyerAccess, false);
-  assert.equal(Object.hasOwn(login.json, "guideToken"), false);
+  assert.match(login.json.guideToken, /\./);
+
+  const profileUpdate = await request("/api/buyer/account/profile", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: login.json.guideToken,
+      nickname: "테스터수정"
+    })
+  });
+  assert.equal(profileUpdate.response.status, 200);
+  assert.equal(profileUpdate.json.account.nickname, "테스터수정");
+  const invalidProfileUpdate = await request("/api/buyer/account/profile", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: login.json.guideToken, nickname: "가" })
+  });
+  assert.equal(invalidProfileUpdate.response.status, 400);
+  assert.equal(invalidProfileUpdate.json.error, "nickname_invalid");
+  const profileLogin = await request("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `tester-${process.pid}@pixgom.test`,
+      password: "password123"
+    })
+  });
+  assert.equal(profileLogin.json.account.nickname, "테스터수정");
 
   const buyerGuideAnonymous = await request("/api/buyer/guide", {
     method: "POST",
@@ -989,6 +1076,18 @@ try {
   assert.equal(adminApplications.response.status, 200);
   assert.match(JSON.stringify(adminApplications.json.applications), /판매신청방/);
   assert.equal(adminApplications.json.summary.pending >= 1, true);
+  assert.equal(adminApplications.json.applications.some((application) => application.id === apply.json.application.id && application.payment.requestedAt === apply.json.payment.requestedAt), true);
+  assert.equal(adminApplications.json.applications.some((application) => application.id === apply.json.application.id && application.inquirySummary.open === 1), true);
+  const adminApplicationInquiries = await request("/api/admin/application-inquiries?token=test-admin-token");
+  assert.equal(adminApplicationInquiries.response.status, 200);
+  assert.equal(adminApplicationInquiries.json.inquiries.some((inquiry) => inquiry.applicationId === apply.json.application.id && inquiry.status === "open"), true);
+  const resolvedApplicationInquiry = await request("/api/admin/application-inquiries/resolve", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({ inquiryId: applicationInquiry.json.inquiry.id, resolution: "입금 확인 대기 안내" })
+  });
+  assert.equal(resolvedApplicationInquiry.response.status, 200);
+  assert.equal(resolvedApplicationInquiry.json.inquiry.status, "resolved");
 
   const cleanupApplication = await request("/api/apply", {
     method: "POST",
@@ -1099,6 +1198,19 @@ try {
   assert.equal(kakaoContactApply.json.application.email, "");
   assert.equal(kakaoContactApply.json.application.contact, "openchat-contact");
 
+  const foreignApplicationInquiry = await request("/api/application-inquiries", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: kakaoNoEmailToken,
+      applicationId: apply.json.application.id,
+      type: "other",
+      message: "다른 계정 신청 문의 시도"
+    })
+  });
+  assert.equal(foreignApplicationInquiry.response.status, 403);
+  assert.equal(foreignApplicationInquiry.json.error, "application_forbidden");
+
   const buyerGuideApproved = await request("/api/buyer/guide", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -1106,7 +1218,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.91");
+  assert.equal(buyerGuideApproved.json.version, "0.4.92");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -1121,7 +1233,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.91");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.92");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -1509,7 +1621,16 @@ try {
   assert.equal(gameRoomApply.json.application.plan.type, "game_room");
   assert.equal(gameRoomApply.json.application.roomPurpose, "game_room");
   assert.equal(gameRoomApply.json.application.linkedApplicationId, buyerConsoleApproved.json.rooms[0].applicationId);
+  assert.equal(gameRoomApply.json.application.mainRoom.roomName, "판매신청방");
+  assert.equal(gameRoomApply.json.application.linkedApplication.roomName, "판매신청방");
   assert.equal(gameRoomApply.json.payment.amountKrw, 2200);
+  assert.match(gameRoomApply.json.payment.requestedAt, /^\d{4}-\d{2}-\d{2}T/);
+  const adminApplicationsWithGameRoom = await request("/api/admin/applications?token=test-admin-token");
+  assert.equal(adminApplicationsWithGameRoom.json.applications.some((application) => (
+    application.id === gameRoomApply.json.application.id
+    && application.mainRoom.roomName === "판매신청방"
+    && application.payment.requestedAt === gameRoomApply.json.payment.requestedAt
+  )), true);
 
   const duplicateGameRoomApply = await request("/api/apply", {
     method: "POST",
@@ -1557,6 +1678,12 @@ try {
   assert.equal(consoleGameRoom.roomPurpose, "game_room");
   assert.equal(consoleGameRoom.canApplyGameRoom, false);
   assert.equal(consoleGameRoom.linkedApplicationId, buyerConsoleApproved.json.rooms[0].applicationId);
+  assert.equal(Array.isArray(buyerConsoleWithGameRoom.json.roomGroups), true);
+  const consoleRoomGroup = buyerConsoleWithGameRoom.json.roomGroups.find((group) => group.baseRoom.applicationId === buyerConsoleApproved.json.rooms[0].applicationId);
+  assert.equal(consoleRoomGroup.baseRoom.roomName, "판매신청방");
+  assert.equal(consoleRoomGroup.gameRooms.some((room) => room.applicationId === gameRoomApply.json.application.id), true);
+  assert.equal(consoleRoomGroup.roomModeSettings.generalRoomGameBlocked, true);
+  assert.equal(consoleRoomGroup.roomModeSettings.gameRoomOpsBlocked, true);
 
   const generalRoomGameBlocked = await chatPayload({
     registeredRoom: false,
@@ -1623,6 +1750,52 @@ try {
     licenseKey: approvedGameRoom.json.room.licenseKey
   });
   assert.match(gameRoomOpsBlocked.json.reply, /게임방에서는 게임 명령어만 사용할 수 있습니다/);
+
+  const roomModeDisabled = await request("/api/buyer/room-mode-settings", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      generalRoomGameBlocked: false,
+      gameRoomOpsBlocked: false
+    })
+  });
+  assert.equal(roomModeDisabled.response.status, 200);
+  const disabledGroup = roomModeDisabled.json.roomGroups.find((group) => group.baseRoom.applicationId === buyerConsoleApproved.json.rooms[0].applicationId);
+  assert.equal(disabledGroup.roomModeSettings.generalRoomGameBlocked, false);
+  assert.equal(disabledGroup.roomModeSettings.gameRoomOpsBlocked, false);
+  const generalRoomGameAllowedAfterToggle = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "/던전",
+    sender: "게임참여자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.doesNotMatch(generalRoomGameAllowedAfterToggle.json.reply || "", /일반방에서는 게임 실행 명령어를 사용할 수 없습니다/);
+  const gameRoomOpsAllowedAfterToggle = await chatPayload({
+    registeredRoom: false,
+    room: "판매게임방",
+    msg: "/게임방공지",
+    sender: "게임참여자",
+    roomId: "salesGame1",
+    roomLink: "https://open.kakao.com/o/salesGame1",
+    licenseKey: approvedGameRoom.json.room.licenseKey
+  });
+  assert.match(gameRoomOpsAllowedAfterToggle.json.reply || "", /일반방 공지입니다/);
+  const roomModeEnabled = await request("/api/buyer/room-mode-settings", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      generalRoomGameBlocked: true,
+      gameRoomOpsBlocked: true
+    })
+  });
+  assert.equal(roomModeEnabled.response.status, 200);
 
   const adminCommandSearch = await request("/api/admin/room-commands", {
     method: "POST",

@@ -56,6 +56,7 @@
       { href: "/#pricing", label: "요금" },
       { href: "/updates", label: "업데이트" },
       { href: "/console", label: "콘솔" },
+      { href: "/login", label: "로그인" },
       { href: "/apply", label: "서비스 신청", className: "nav-cta" }
     ];
     nav.replaceChildren(...primaryLinks.map(linkElement));
@@ -101,11 +102,18 @@
   }
 
   for (const anchor of document.querySelectorAll(".site-header a, a[href='/login']")) {
-    if (!isLoginLink(anchor) && !isConsoleLink(anchor)) continue;
-    anchor.href = targetHref;
-    anchor.textContent = targetText;
-    anchor.classList.add("nav-logged-in");
-    if (!anchor.parentElement?.querySelector(".nav-logout")) {
+    if (isLoginLink(anchor)) {
+      anchor.href = "/account";
+      anchor.textContent = "정보수정";
+      anchor.classList.add("nav-logged-in");
+    } else if (isConsoleLink(anchor)) {
+      anchor.href = targetHref;
+      anchor.textContent = targetText;
+      anchor.classList.add("nav-logged-in");
+    } else {
+      continue;
+    }
+    if (!document.querySelector(".site-header .nav-logout")) {
       const logoutButton = document.createElement("button");
       logoutButton.type = "button";
       logoutButton.className = "nav-logout";

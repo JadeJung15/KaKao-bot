@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>정보수정 | 픽셀곰</title>
+    <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
+    <link rel="stylesheet" href="/styles.css?v=20260526-account-ux">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body class="sub-page account-page auth-checking">
+    <header class="site-header" aria-label="주요 메뉴">
+      <a class="brand" href="/" aria-label="픽셀곰 홈"><img src="/assets/pixgom-closeup.png" alt=""><span>픽셀곰</span></a>
+      <nav class="nav-links" aria-label="페이지 이동">
+        <a href="/#features">기능</a>
+        <a href="/command-store">명령어</a>
+        <a href="/#pricing">요금</a>
+        <a href="/updates">업데이트</a>
+        <a href="/console">콘솔</a>
+        <a href="/login">로그인</a>
+        <a class="nav-cta" href="/apply">서비스 신청</a>
+      </nav>
+    </header>
+    <main class="document-main account-main">
+      <section class="auth-card account-card">
+        <p class="section-kicker">Account</p>
+        <h1>정보수정</h1>
+        <p>로그인된 픽셀곰 계정의 회원 닉네임을 수정합니다. 카카오 계정도 이 화면에서 표시 닉네임을 바꿀 수 있습니다.</p>
+        <small data-auth-mode>로그인 방식을 확인 중입니다.</small>
+        <form data-account-login-form>
+          <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
+          <label>비밀번호<input name="password" type="password" autocomplete="current-password" required placeholder="비밀번호"></label>
+          <button class="button button-primary" type="submit">로그인 후 정보수정</button>
+          <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인</button>
+        </form>
+        <form data-account-profile-form hidden>
+          <div class="account-profile-summary" data-account-summary></div>
+          <label>닉네임 수정<input name="nickname" type="text" required minlength="2" maxlength="30" placeholder="2~30자 닉네임"></label>
+          <div class="account-action-row">
+            <button class="button button-primary" type="submit">닉네임 저장</button>
+            <a class="button button-secondary" href="/console">콘솔로 이동</a>
+          </div>
+        </form>
+        <pre class="form-status" data-account-status aria-live="polite"></pre>
+      </section>
+    </main>
+    <script src="/auth.js?v=20260525-silent-auth"></script>
+    <script>
+      const loginForm = document.querySelector("[data-account-login-form]");
+      const profileForm = document.querySelector("[data-account-profile-form]");
+      const statusBox = document.querySelector("[data-account-status]");
+      const summaryBox = document.querySelector("[data-account-summary]");
+      const kakaoButton = document.querySelector("[data-kakao-login]");
+      const authGate = window.PixelgomAuth.createSilentGate({ status: statusBox });
+      let authPayload = {};
+
+      function showStatus(message = "") {
+        authGate.finish(message);
+      }
+
+      function renderAccount(account = {}, payload = {}) {
+        authPayload = payload;
+        loginForm.hidden = true;
+        profileForm.hidden = false;
+        profileForm.elements.nickname.value = account.nickname || "";
+        const accountName = account.email || account.authProvider || "카카오 계정";
+        summaryBox.innerHTML = [
+          `<strong>${escapeHtml(account.nickname || "닉네임 미입력")}</strong>`,
+          `<span>${escapeHtml(accountName)}</span>`
+        ].join("");
+        showStatus("닉네임을 수정할 수 있습니다.");
+      }
+
+      function escapeHtml(value = "") {
+        return String(value).replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        }[char]));
+      }
+
+      async function loadAccount(payload) {
+        const response = await fetch("/api/buyer/console", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const json = await response.json();
+        if (!response.ok || json.ok === false) throw new Error(json.error || "login_failed");
+        if (json.guideToken) sessionStorage.setItem("pixgomBuyerToken", json.guideToken);
+        renderAccount(json.account || {}, json.guideToken ? { token: json.guideToken } : payload);
+      }
+
+      loginForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        statusBox.textContent = "로그인 확인 중입니다.";
+        const values = Object.fromEntries(new FormData(loginForm).entries());
+        try {
+          await window.PixelgomAuth.signInWithPassword(values.email, values.password);
+          const response = await fetch("/api/login", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(await window.PixelgomAuth.accessPayload(values))
+          });
+          const json = await response.json();
+          if (!response.ok || json.ok === false) throw new Error(json.error || "login_failed");
+          if (json.guideToken) sessionStorage.setItem("pixgomBuyerToken", json.guideToken);
+          renderAccount(json.account || {}, json.guideToken ? { token: json.guideToken } : values);
+        } catch (error) {
+          statusBox.textContent = `로그인 실패: ${window.PixelgomAuth.friendlyError(error)}`;
+        }
+      });
+
+      profileForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        statusBox.textContent = "닉네임을 저장하는 중입니다.";
+        const values = Object.fromEntries(new FormData(profileForm).entries());
+        try {
+          const response = await fetch("/api/buyer/account/profile", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ...authPayload, nickname: values.nickname })
+          });
+          const json = await response.json();
+          if (!response.ok || json.ok === false) throw new Error(json.error || "profile_update_failed");
+          if (json.guideToken) sessionStorage.setItem("pixgomBuyerToken", json.guideToken);
+          renderAccount(json.account || {}, json.guideToken ? { token: json.guideToken } : authPayload);
+          statusBox.textContent = "닉네임이 저장되었습니다.";
+        } catch (error) {
+          statusBox.textContent = `저장 실패: ${window.PixelgomAuth.friendlyError(error)}`;
+        }
+      });
+
+      kakaoButton?.addEventListener("click", async () => {
+        statusBox.textContent = "카카오 로그인으로 이동합니다.";
+        try {
+          await window.PixelgomAuth.signInWithKakao("/account");
+        } catch (error) {
+          statusBox.textContent = `카카오 로그인 실패: ${window.PixelgomAuth.friendlyError(error)}`;
+        }
+      });
+
+      (async () => {
+        const cfg = await window.PixelgomAuth.config();
+        window.PixelgomAuth.showAuthMode(document.querySelector("[data-auth-mode]"), cfg);
+        kakaoButton.hidden = !cfg.auth?.kakaoEnabled;
+        const stored = sessionStorage.getItem("pixgomBuyerToken");
+        if (stored) {
+          loadAccount({ token: stored }).catch((error) => {
+            sessionStorage.removeItem("pixgomBuyerToken");
+            showStatus(`로그인 상태 확인 실패: ${window.PixelgomAuth.friendlyError(error)}`);
+          });
+          return;
+        }
+        const payload = await window.PixelgomAuth.accessPayload({});
+        if (payload.accessToken) {
+          loadAccount(payload).catch((error) => {
+            showStatus(`로그인 상태 확인 실패: ${window.PixelgomAuth.friendlyError(error)}`);
+          });
+          return;
+        }
+        showStatus("로그인 후 닉네임을 수정할 수 있습니다.");
+      })();
+    </script>
+  </body>
+</html>

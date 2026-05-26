@@ -261,14 +261,11 @@
     `;
   }
 
-  function renderRooms(rooms = []) {
-    if (!rooms.length) {
-      return `<article class="buyer-empty"><h3>승인된 방이 없습니다</h3><p>운영자가 입금 확인 후 승인하면 이곳에 방별 라이선스와 연결코드가 표시됩니다.</p></article>`;
-    }
-    return rooms.map((room) => {
-      const firstInstall = !hasInstalledCommandPack(room);
-      return `
-      <article class="buyer-room-card" data-first-install="${firstInstall ? "true" : "false"}">
+  function renderRoomCard(room, options = {}) {
+    const firstInstall = !hasInstalledCommandPack(room);
+    const compact = options.compact === true;
+    return `
+      <article class="buyer-room-card${compact ? " is-compact-room" : ""}" data-first-install="${firstInstall ? "true" : "false"}">
         <div class="buyer-room-head">
           <h3>${escapeHtml(room.roomName)}</h3>
           <span>${escapeHtml(roomStatus(room))}</span>
@@ -286,7 +283,7 @@
           <div><dt>구독 안내</dt><dd>${escapeHtml(room.subscriptionNotice || "상태 확인 후 필요 시 운영자에게 문의해 주세요.")}</dd></div>
           <div><dt>커스텀 명령어</dt><dd>${escapeHtml(String(room.commandCount ?? (room.customCommands || []).length))}개 설치됨</dd></div>
         </dl>
-        ${renderLinkedGameRooms(room)}
+        ${options.hideLinkedGameRooms ? "" : renderLinkedGameRooms(room)}
         ${renderRoomPacks(room)}
         <div class="buyer-room-action-strip">
           <div>
@@ -317,6 +314,59 @@
         </div>
       </article>
     `;
+  }
+
+  function renderRooms(rooms = []) {
+    if (!rooms.length) {
+      return `<article class="buyer-empty"><h3>승인된 방이 없습니다</h3><p>운영자가 입금 확인 후 승인하면 이곳에 방별 라이선스와 연결코드가 표시됩니다.</p></article>`;
+    }
+    return rooms.map((room) => renderRoomCard(room)).join("");
+  }
+
+  function renderRoomModeSettings(group = {}) {
+    const baseRoom = group.baseRoom || {};
+    const settings = group.roomModeSettings || {};
+    if (!baseRoom.applicationId || !settings.enabled) {
+      return `<p class="buyer-room-note">게임방을 추가하면 이곳에서 일반방/게임방 분리 설정을 한 번에 관리할 수 있습니다.</p>`;
+    }
+    return `
+      <form class="buyer-room-mode-settings" data-room-mode-form data-application-id="${escapeHtml(baseRoom.applicationId || "")}">
+        <div>
+          <strong>일반방+게임방 통합 설정</strong>
+          <span>두 방의 포인트, 가방, 게임 데이터는 하나로 공유됩니다.</span>
+        </div>
+        <label class="check-row">
+          <input type="checkbox" name="generalRoomGameBlocked" ${settings.generalRoomGameBlocked ? "checked" : ""}>
+          <span>일반방에서 게임 실행 명령어 차단</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" name="gameRoomOpsBlocked" ${settings.gameRoomOpsBlocked ? "checked" : ""}>
+          <span>게임방에서 운영/공지 명령어 차단</span>
+        </label>
+        <button class="button button-secondary" type="submit">분리 설정 저장</button>
+        <p data-room-mode-output></p>
+      </form>
+    `;
+  }
+
+  function renderRoomGroups(groups = [], rooms = []) {
+    if (!groups.length) return renderRooms(rooms);
+    return groups.map((group) => {
+      const baseRoom = group.baseRoom;
+      const gameRooms = group.gameRooms || [];
+      if (!baseRoom) return renderRooms(gameRooms);
+      return `
+        <article class="buyer-room-group-card">
+          ${renderRoomCard(baseRoom, { hideLinkedGameRooms: true })}
+          ${renderRoomModeSettings(group)}
+          <details class="buyer-game-room-details" ${gameRooms.length ? "" : "open"}>
+            <summary>게임방 ${gameRooms.length ? `${gameRooms.length}개 연결됨` : "추가 전"}</summary>
+            ${gameRooms.length
+              ? `<div class="buyer-game-room-list">${gameRooms.map((room) => renderRoomCard(room, { compact: true })).join("")}</div>`
+              : `<p class="buyer-room-note">게임방 추가 신청 후 승인되면 이 영역에 접어서 관리됩니다.</p>`}
+          </details>
+        </article>
+      `;
     }).join("");
   }
 
@@ -498,7 +548,7 @@
           <li>앱을 재설치해도 연결코드를 다시 입력하면 같은 라이선스를 사용할 수 있습니다.</li>
         </ol>
       </article>
-      <div class="buyer-room-grid">${renderRooms(data.rooms || [])}</div>
+      <div class="buyer-room-grid">${renderRoomGroups(data.roomGroups || [], data.rooms || [])}</div>
     `;
   }
 
@@ -508,6 +558,7 @@
 
   function renderConsole(data) {
     const rooms = data.rooms || [];
+    const roomGroups = data.roomGroups || [];
     content.hidden = false;
     content.innerHTML = `
       <section class="buyer-console-hero">
@@ -535,7 +586,7 @@
       </section>
       <section class="${sectionClass("rooms")}">
         <h2>내 방</h2>
-        <div class="buyer-room-grid">${renderRooms(rooms)}</div>
+        <div class="buyer-room-grid">${renderRoomGroups(roomGroups, rooms)}</div>
       </section>
       <section class="${sectionClass("setup")}">
         <h2>설치와 연결</h2>
@@ -613,6 +664,27 @@
       } catch (error) {
         statusBox.textContent = window.PixelgomAuth.friendlyError(error);
       }
+    });
+    content.querySelectorAll("[data-room-mode-form]").forEach((modeForm) => {
+      modeForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const output = modeForm.querySelector("[data-room-mode-output]");
+        try {
+          if (output) output.textContent = "분리 설정을 저장하는 중입니다.";
+          const values = Object.fromEntries(new FormData(modeForm).entries());
+          await requestBuyerAction("/api/buyer/room-mode-settings", {
+            applicationId: modeForm.dataset.applicationId || "",
+            generalRoomGameBlocked: values.generalRoomGameBlocked === "on",
+            gameRoomOpsBlocked: values.gameRoomOpsBlocked === "on"
+          });
+          if (output) output.textContent = "일반방+게임방 통합 설정을 저장했습니다.";
+          statusBox.textContent = "방 분리 설정이 저장되었습니다.";
+          await requestConsole(buyerTokenPayload());
+        } catch (error) {
+          if (output) output.textContent = window.PixelgomAuth.friendlyError(error);
+          statusBox.textContent = window.PixelgomAuth.friendlyError(error);
+        }
+      });
     });
     bindRoomCommandSearch();
   }

@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.91";
+export const APP_VERSION = "0.4.92";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -201,7 +201,12 @@ export const FEATURES = [
   "standardized-incident-messages",
   "admin-diagnostics-summary",
   "incident-history-cards",
-  "server-owned-room-settings"
+  "server-owned-room-settings",
+  "buyer-account-profile-edit",
+  "application-inquiry-workflow",
+  "application-payment-requested-at",
+  "buyer-room-groups",
+  "buyer-room-mode-settings"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -2095,6 +2100,7 @@ function normalizeState(state) {
   state.applications ||= {};
   state.payments ||= {};
   state.roomTransfers ||= {};
+  state.applicationInquiries ||= {};
   return state;
 }
 
@@ -2567,6 +2573,7 @@ function publicAccountView(account = {}) {
 }
 
 function publicPaymentView(payment = {}) {
+  const requestedAt = payment.requestedAt || payment.createdAt || "";
   return {
     id: payment.id || "",
     applicationId: payment.applicationId || "",
@@ -2574,9 +2581,42 @@ function publicPaymentView(payment = {}) {
     method: payment.method || "manual_deposit",
     status: payment.status || "awaiting_manual_deposit",
     statusLabel: PAYMENT_STATUS_LABELS[payment.status] || payment.status || "입금 대기",
+    requestedAt,
     createdAt: payment.createdAt || "",
     approvedAt: payment.approvedAt || "",
     approvedBy: payment.approvedBy || ""
+  };
+}
+
+function publicLinkedApplicationSummary(state = {}, application = {}) {
+  if (!application?.id) return null;
+  const payment = state.payments?.[application.paymentId] || {};
+  return {
+    id: application.id || "",
+    roomName: application.roomName || "",
+    roomLink: application.roomLink || "",
+    roomId: application.roomId || "",
+    roomPurpose: application.roomPurpose || "general_room",
+    status: application.status || "pending_payment",
+    statusLabel: APPLICATION_STATUS_LABELS[application.status] || application.status || "결제 대기",
+    paymentStatus: payment.status || "awaiting_manual_deposit",
+    paymentStatusLabel: PAYMENT_STATUS_LABELS[payment.status] || payment.status || "입금 대기",
+    paymentRequestedAt: payment.requestedAt || payment.createdAt || ""
+  };
+}
+
+function applicationInquirySummary(state = {}, applicationId = "") {
+  const inquiries = Object.values(state.applicationInquiries || {})
+    .filter((inquiry) => inquiry.applicationId === applicationId);
+  const open = inquiries.filter((inquiry) => inquiry.status !== "resolved").length;
+  const latest = inquiries
+    .map((inquiry) => inquiry.createdAt || "")
+    .sort()
+    .at(-1) || "";
+  return {
+    total: inquiries.length,
+    open,
+    latestAt: latest
   };
 }
 
@@ -2611,6 +2651,9 @@ function applicationPlanForAccount(state, account = {}, options = {}) {
 
 function publicApplicationView(application = {}, state = null) {
   const payment = state?.payments?.[application.paymentId] || {};
+  const mainRoom = normalizeApplicationRoomPurpose(application.roomPurpose) === "game_room"
+    ? publicLinkedApplicationSummary(state || {}, state?.applications?.[application.linkedApplicationId])
+    : null;
   return {
     id: application.id || "",
     accountId: application.accountId || "",
@@ -2634,6 +2677,9 @@ function publicApplicationView(application = {}, state = null) {
       days: DEFAULT_SUBSCRIPTION_DAYS
     },
     payment: publicPaymentView(payment),
+    mainRoom,
+    linkedApplication: mainRoom,
+    inquirySummary: state ? applicationInquirySummary(state, application.id || "") : { total: 0, open: 0, latestAt: "" },
     licenseKey: application.licenseKey || "",
     createdAt: application.createdAt || "",
     approvedAt: application.approvedAt || "",
@@ -2700,6 +2746,20 @@ function bridgeConnectCodeForApplication(account = {}, application = {}) {
     app: application.id,
     email: account.email,
     room: application.roomName,
+    exp: Date.now() + BUYER_TOKEN_TTL_MS
+  });
+}
+
+function signedTokenHash(value = "") {
+  return createHmac("sha256", buyerTokenSecret()).update(normalizeText(value)).digest("hex");
+}
+
+function applicationInquiryTokenForApplication(application = {}, account = {}) {
+  return signTokenPayload({
+    kind: "application-inquiry",
+    sub: account.id,
+    app: application.id,
+    email: account.email,
     exp: Date.now() + BUYER_TOKEN_TTL_MS
   });
 }
@@ -2820,6 +2880,48 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     serverUrl: "https://pixgom.com/chat-event",
     bridgeConnectCode
   };
+}
+
+function roomModeSettingsPayload(state, baseApplication = {}, linkedGameApplications = []) {
+  const baseRoomState = state.rooms?.[roomKey(baseApplication.roomName)];
+  const gameStates = linkedGameApplications
+    .map((application) => state.rooms?.[roomKey(application.roomName)])
+    .filter(Boolean);
+  const generalRoomGameBlocked = normalizeRoomRole(baseRoomState?.settings?.roomRole) === "general";
+  const gameRoomOpsBlocked = gameStates.length
+    ? gameStates.every((roomState) => normalizeRoomRole(roomState.settings?.roomRole) === "game")
+    : true;
+  return {
+    enabled: linkedGameApplications.length > 0,
+    generalRoomGameBlocked,
+    gameRoomOpsBlocked,
+    sharedData: true,
+    description: "일반방과 게임방은 같은 포인트/가방/게임 데이터를 공유합니다."
+  };
+}
+
+function buyerRoomGroupsPayload(state, account = {}, approvedApplications = null) {
+  const applications = approvedApplications || approvedBuyerApplications(state, account);
+  const generalApplications = applications.filter((application) => normalizeApplicationRoomPurpose(application.roomPurpose) !== "game_room");
+  const baseIds = new Set(generalApplications.map((application) => application.id));
+  const groups = generalApplications.map((application) => {
+    const linkedGameApplications = gameRoomApplicationsForBase(state, account, application)
+      .filter((item) => item.status === "approved" && state.payments?.[item.paymentId]?.status === "paid");
+    return {
+      baseRoom: applicationRoomPayload(state, account, application),
+      gameRooms: linkedGameApplications.map((item) => applicationRoomPayload(state, account, item)),
+      roomModeSettings: roomModeSettingsPayload(state, application, linkedGameApplications)
+    };
+  });
+  for (const gameApplication of applications.filter((application) => normalizeApplicationRoomPurpose(application.roomPurpose) === "game_room")) {
+    if (baseIds.has(gameApplication.linkedApplicationId)) continue;
+    groups.push({
+      baseRoom: null,
+      gameRooms: [applicationRoomPayload(state, account, gameApplication)],
+      roomModeSettings: roomModeSettingsPayload(state, {}, [gameApplication])
+    });
+  }
+  return groups;
 }
 
 function buyerGuidePayload(state, account = {}) {
@@ -8249,6 +8351,7 @@ function createApplicationForAccount(state, account = {}, payload = {}, options 
   const applicationId = generateEntityId("app");
   const paymentId = generateEntityId("pay");
   const plan = applicationPlanForAccount(state, account, { roomPurpose });
+  const createdAt = nowIso();
   const application = {
     id: applicationId,
     accountId: account.id,
@@ -8264,8 +8367,8 @@ function createApplicationForAccount(state, account = {}, payload = {}, options 
     status: "pending_payment",
     plan,
     paymentId,
-    createdAt: nowIso(),
-    updatedAt: nowIso()
+    createdAt,
+    updatedAt: createdAt
   };
   const payment = {
     id: paymentId,
@@ -8274,19 +8377,27 @@ function createApplicationForAccount(state, account = {}, payload = {}, options 
     amountKrw: plan.monthlyPriceKrw,
     method: "manual_deposit",
     status: "awaiting_manual_deposit",
-    createdAt: nowIso(),
-    updatedAt: nowIso()
+    requestedAt: createdAt,
+    createdAt,
+    updatedAt: createdAt
   };
   state.applications[applicationId] = application;
   state.payments[paymentId] = payment;
   account.applicationIds ||= [];
   addUnique(account.applicationIds, applicationId);
-  account.updatedAt = nowIso();
+  account.updatedAt = createdAt;
+  const inquiryAccessToken = applicationInquiryTokenForApplication(application, account);
+  application.inquiryAccess = {
+    tokenHash: signedTokenHash(inquiryAccessToken),
+    expiresAt: new Date(Date.now() + BUYER_TOKEN_TTL_MS).toISOString(),
+    usedAt: ""
+  };
   return {
     ok: true,
     account: publicAccountView(account),
     application: publicApplicationView(application, state),
     payment: publicPaymentView(payment),
+    inquiryAccessToken,
     next: [
       `${plan.label} 월 이용금액 ${formatKrw(plan.monthlyPriceKrw)} 입금 확인 후 관리자가 승인합니다.`,
       "승인되면 방 등록, 라이선스 키, 30일 구독이 자동 생성됩니다."
@@ -8398,7 +8509,7 @@ function loginAccount(state, payload = {}) {
     buyerAccess,
     ownerAccess,
     ...(ownerAccess ? { ownerToken: ownerTokenForAccount(account), ownerNext: "/admin" } : {}),
-    ...(buyerAccess ? { guideToken: buyerTokenForAccount(account) } : {}),
+    guideToken: buyerTokenForAccount(account),
     ...(buyerAccess ? { buyerRooms: approvedApplications.map((application) => applicationRoomPayload(state, account, application)) } : {}),
     applications: applicationIds
       .map((id) => state.applications?.[id])
@@ -8472,6 +8583,7 @@ function buyerConsolePayload(state, account = {}) {
     .map((application) => publicApplicationView(application, state));
   const approvedApplications = approvedBuyerApplications(state, account);
   const rooms = approvedApplications.map((application) => applicationRoomPayload(state, account, application));
+  const roomGroups = buyerRoomGroupsPayload(state, account, approvedApplications);
   return {
     ok: true,
     version: APP_VERSION,
@@ -8479,6 +8591,7 @@ function buyerConsolePayload(state, account = {}) {
     testAppUrl: PLAY_INTERNAL_TEST_URL,
     applications,
     rooms,
+    roomGroups,
     canApplyGameRoom: rooms.some((room) => room.canApplyGameRoom),
     gameRoomApplyHelp: "승인된 일반방 카드에서 게임방 추가 신청을 누른 뒤, 승인 후 같은 브릿지 앱에 일반방/게임방 연결코드를 차례로 입력하세요.",
     plan: {
@@ -9386,6 +9499,133 @@ async function buyerConsoleFromRequest(state, req, body = {}) {
   return { ...buyerConsolePayload(state, auth.account), guideToken: buyerTokenForAccount(auth.account) };
 }
 
+function validateProfileNickname(payload = {}) {
+  const nickname = compactSpaces(payload.nickname || payload.displayName || payload.name || "");
+  if (nickname.length < 2 || nickname.length > 30 || /[\u0000-\u001f\u007f]/.test(nickname)) {
+    return { ok: false, status: 400, error: "nickname_invalid" };
+  }
+  return { ok: true, nickname };
+}
+
+async function buyerAccountProfileFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const validation = validateProfileNickname(body);
+  if (!validation.ok) return validation;
+  const account = auth.account;
+  account.nickname = validation.nickname;
+  if (account.auth) account.auth.name = validation.nickname;
+  account.updatedAt = nowIso();
+  return {
+    ok: true,
+    version: APP_VERSION,
+    account: publicAccountView(account),
+    guideToken: buyerTokenForAccount(account)
+  };
+}
+
+const APPLICATION_INQUIRY_TYPE_LABELS = Object.freeze({
+  deposit_check: "입금 확인 요청",
+  payment_check: "결제 확인 요청",
+  other: "기타 문의"
+});
+
+function normalizeApplicationInquiryType(value = "") {
+  const type = normalizeText(value);
+  return Object.hasOwn(APPLICATION_INQUIRY_TYPE_LABELS, type) ? type : "other";
+}
+
+function publicApplicationInquiryView(state = {}, inquiry = {}) {
+  const application = state.applications?.[inquiry.applicationId] || {};
+  return {
+    id: inquiry.id || "",
+    applicationId: inquiry.applicationId || "",
+    accountId: inquiry.accountId || "",
+    roomName: inquiry.roomName || application.roomName || "",
+    mainRoomName: inquiry.mainRoomName || publicLinkedApplicationSummary(state, state.applications?.[application.linkedApplicationId])?.roomName || "",
+    type: inquiry.type || "other",
+    typeLabel: APPLICATION_INQUIRY_TYPE_LABELS[inquiry.type] || APPLICATION_INQUIRY_TYPE_LABELS.other,
+    message: inquiry.message || "",
+    status: inquiry.status || "open",
+    statusLabel: inquiry.status === "resolved" ? "처리 완료" : "확인 대기",
+    createdAt: inquiry.createdAt || "",
+    resolvedAt: inquiry.resolvedAt || "",
+    resolvedBy: inquiry.resolvedBy || "",
+    resolution: inquiry.resolution || "",
+    application: publicApplicationView(application, state)
+  };
+}
+
+function inquiryAccessFromToken(state = {}, application = {}, token = "") {
+  const payload = verifyTokenPayload(token);
+  if (payload?.kind !== "application-inquiry" || payload.app !== application.id || payload.sub !== application.accountId) {
+    return { ok: false, status: 401, error: "invalid_inquiry_token" };
+  }
+  const access = application.inquiryAccess || {};
+  if (!access.tokenHash || access.tokenHash !== signedTokenHash(token)) {
+    return { ok: false, status: 401, error: "invalid_inquiry_token" };
+  }
+  if (access.usedAt) return { ok: false, status: 409, error: "inquiry_token_used" };
+  if (Date.parse(access.expiresAt || "") <= Date.now()) {
+    return { ok: false, status: 410, error: "inquiry_token_expired" };
+  }
+  return { ok: true, account: state.accounts?.[payload.sub], tokenAccess: access };
+}
+
+async function applicationInquiryAuthFromRequest(state, req, body = {}) {
+  const applicationId = normalizeText(body.applicationId || body.appId);
+  if (!applicationId) return { ok: false, status: 400, error: "application_id_required" };
+  const application = state.applications?.[applicationId];
+  if (!application) return { ok: false, status: 404, error: "application_not_found" };
+  const inquiryAccessToken = normalizeText(body.inquiryAccessToken || body.inquiryToken);
+  if (inquiryAccessToken) {
+    const tokenAccess = inquiryAccessFromToken(state, application, inquiryAccessToken);
+    if (!tokenAccess.ok) return tokenAccess;
+    return { ok: true, application, account: tokenAccess.account || state.accounts?.[application.accountId] || {}, tokenAccess: tokenAccess.tokenAccess };
+  }
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  if (application.accountId !== auth.account.id) {
+    return { ok: false, status: 403, error: "application_forbidden" };
+  }
+  return { ok: true, application, account: auth.account, tokenAccess: null };
+}
+
+async function createApplicationInquiryFromRequest(state, req, body = {}) {
+  const auth = await applicationInquiryAuthFromRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const message = previewText(body.message || body.memo || body.content || "", 1000);
+  if (!message) return { ok: false, status: 400, error: "inquiry_message_required" };
+  state.applicationInquiries ||= {};
+  const application = auth.application;
+  const mainRoom = publicLinkedApplicationSummary(state, state.applications?.[application.linkedApplicationId]);
+  const now = nowIso();
+  const inquiryId = generateEntityId("inq");
+  const inquiry = {
+    id: inquiryId,
+    applicationId: application.id,
+    accountId: application.accountId,
+    roomName: application.roomName,
+    mainRoomName: mainRoom?.roomName || "",
+    type: normalizeApplicationInquiryType(body.type || body.kind),
+    message,
+    status: "open",
+    createdAt: now,
+    updatedAt: now,
+    resolvedAt: "",
+    resolvedBy: "",
+    resolution: ""
+  };
+  state.applicationInquiries[inquiryId] = inquiry;
+  if (auth.tokenAccess) auth.tokenAccess.usedAt = now;
+  application.updatedAt = now;
+  return {
+    ok: true,
+    version: APP_VERSION,
+    inquiry: publicApplicationInquiryView(state, inquiry)
+  };
+}
+
 function publicRoomTransferView(transfer = {}, options = {}) {
   const status = roomTransferStatus(transfer);
   return {
@@ -9706,6 +9946,59 @@ async function buyerRoomCommandsFromRequest(state, req, body = {}) {
   };
 }
 
+function approvedBaseApplicationForRoomMode(state, account = {}, body = {}) {
+  const application = approvedApplicationForInstall(state, account, {
+    applicationId: body.applicationId || body.baseApplicationId || body.appId,
+    roomName: body.roomName || body.room
+  });
+  if (!application) return null;
+  if (normalizeApplicationRoomPurpose(application.roomPurpose) === "game_room") return null;
+  return application;
+}
+
+async function buyerRoomModeSettingsFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const baseApplication = approvedBaseApplicationForRoomMode(state, auth.account, body);
+  if (!baseApplication) return { ok: false, status: 404, error: "approved_base_room_not_found" };
+  const linkedGameApplications = gameRoomApplicationsForBase(state, auth.account, baseApplication)
+    .filter((application) => application.status === "approved" && state.payments?.[application.paymentId]?.status === "paid");
+  if (!linkedGameApplications.length) return { ok: false, status: 409, error: "game_room_not_connected" };
+
+  const generalRoomGameBlocked = body.generalRoomGameBlocked !== false;
+  const gameRoomOpsBlocked = body.gameRoomOpsBlocked !== false;
+  const updatedAt = nowIso();
+  const baseRoomState = ensureRoom(state, baseApplication.roomName);
+  baseRoomState.settings.roomRole = generalRoomGameBlocked ? "general" : "standard";
+  baseRoomState.settings.features = normalizeFeatureSettings(baseRoomState.settings.features || {});
+  baseRoomState.settings.features.games = true;
+  baseRoomState.settings.modeSplit = {
+    generalRoomGameBlocked,
+    gameRoomOpsBlocked,
+    sharedData: true,
+    updatedAt,
+    updatedBy: auth.account.email || auth.account.nickname || "buyer_console"
+  };
+
+  for (const gameApplication of linkedGameApplications) {
+    const gameRoomState = ensureRoom(state, gameApplication.roomName);
+    gameRoomState.settings.roomRole = gameRoomOpsBlocked ? "game" : "standard";
+    gameRoomState.settings.canonicalRoomKey = roomKey(baseRoomState.name);
+    gameRoomState.settings.canonicalRoomName = baseRoomState.name;
+    gameRoomState.settings.features = normalizeFeatureSettings(gameRoomState.settings.features || {});
+    gameRoomState.settings.features.games = true;
+    gameRoomState.settings.features.points = true;
+    gameRoomState.settings.features.shop = true;
+    gameRoomState.settings.features.customCommands = !gameRoomOpsBlocked;
+    gameRoomState.settings.modeSplit = { ...baseRoomState.settings.modeSplit };
+  }
+
+  return {
+    ...buyerConsolePayload(state, auth.account),
+    guideToken: buyerTokenForAccount(auth.account)
+  };
+}
+
 function roomStateFromAdminRequest(state, body = {}) {
   const roomName = normalizeText(body.room || body.roomName || body.name);
   const requestedRoomId = normalizeText(body.roomId);
@@ -9822,12 +10115,39 @@ async function handlePublicAccountApi(req, url) {
     return { status: 200, body: result };
   }
 
+  if (req.method === "POST" && url.pathname === "/api/buyer/account/profile") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerAccountProfileFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/application-inquiries") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await createApplicationInquiryFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
   if (req.method === "POST" && url.pathname === "/api/buyer/room-transfer/create") {
     const body = await readBody(req);
     const state = await loadState();
     const result = await buyerRoomTransferCreateFromRequest(state, req, body);
     await saveState(state);
     if (!result.ok) return { status: result.status || 400, body: result };
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/room-mode-settings") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerRoomModeSettingsFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
     return { status: 200, body: result };
   }
 
@@ -9925,6 +10245,48 @@ function adminApplicationsPayload(state) {
       approved: applications.filter((application) => application.status === "approved").length
     },
     applications
+  };
+}
+
+function adminApplicationInquiriesPayload(state, options = {}) {
+  const requestedStatus = normalizeText(options.status || "all");
+  const status = ["open", "resolved", "all"].includes(requestedStatus) ? requestedStatus : "all";
+  const inquiries = Object.values(state.applicationInquiries || {})
+    .map((inquiry) => publicApplicationInquiryView(state, inquiry))
+    .filter((inquiry) => status === "all" || inquiry.status === status)
+    .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
+  const all = Object.values(state.applicationInquiries || {});
+  return {
+    ok: true,
+    version: APP_VERSION,
+    generatedAt: nowIso(),
+    filter: { status },
+    summary: {
+      total: all.length,
+      open: all.filter((inquiry) => inquiry.status !== "resolved").length,
+      resolved: all.filter((inquiry) => inquiry.status === "resolved").length,
+      visible: inquiries.length
+    },
+    inquiries
+  };
+}
+
+function adminResolveApplicationInquiry(state, payload = {}, resolvedBy = "admin_console") {
+  const inquiryId = normalizeText(payload.inquiryId || payload.id);
+  if (!inquiryId) return { ok: false, status: 400, error: "inquiry_id_required" };
+  const inquiry = state.applicationInquiries?.[inquiryId];
+  if (!inquiry) return { ok: false, status: 404, error: "inquiry_not_found" };
+  if (inquiry.status !== "resolved") {
+    inquiry.status = "resolved";
+    inquiry.resolvedAt = nowIso();
+    inquiry.resolvedBy = resolvedBy;
+    inquiry.resolution = previewText(payload.resolution || payload.result || "처리 완료", 300);
+    inquiry.updatedAt = inquiry.resolvedAt;
+  }
+  return {
+    ok: true,
+    version: APP_VERSION,
+    inquiry: publicApplicationInquiryView(state, inquiry)
   };
 }
 
@@ -10182,6 +10544,13 @@ async function handleAdminApi(req, url) {
     return { status: 200, body: adminTransfersPayload(state, Object.fromEntries(url.searchParams.entries())) };
   }
 
+  if (req.method === "GET" && url.pathname === "/api/admin/application-inquiries") {
+    const auth = await requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return { status: 200, body: adminApplicationInquiriesPayload(state, Object.fromEntries(url.searchParams.entries())) };
+  }
+
   if (req.method === "POST" && url.pathname === "/api/admin/rooms") {
     const body = await readBody(req);
     const auth = await requireAdminConsole(req, url, body);
@@ -10210,6 +10579,17 @@ async function handleAdminApi(req, url) {
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     const result = adminResolveReport(state, body, auth.by || "admin_console");
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/application-inquiries/resolve") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminResolveApplicationInquiry(state, body, auth.by || "admin_console");
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -10539,6 +10919,9 @@ export async function requestHandler(req, res) {
       || pathname === "/api/login"
       || pathname === "/api/buyer/guide"
       || pathname === "/api/buyer/console"
+      || pathname === "/api/buyer/account/profile"
+      || pathname === "/api/application-inquiries"
+      || pathname === "/api/buyer/room-mode-settings"
       || pathname === "/api/buyer/room-transfer/create"
       || pathname === "/api/buyer/room-transfer/accept"
       || pathname === "/api/buyer/room-transfer/cancel"

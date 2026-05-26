@@ -3735,6 +3735,131 @@ a {
   cursor: not-allowed;
 }
 
+.account-main {
+  max-width: 760px;
+}
+
+.account-card {
+  margin: 0 auto;
+}
+
+.account-profile-summary,
+.apply-success-summary dl,
+.buyer-room-mode-settings {
+  display: grid;
+  gap: 10px;
+}
+
+.account-profile-summary {
+  padding: 14px;
+  border: 1px solid rgba(60, 47, 38, 0.16);
+  border-radius: 8px;
+  background: #fffaf2;
+}
+
+.account-profile-summary strong,
+.account-profile-summary span {
+  display: block;
+}
+
+.account-action-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.apply-success-card {
+  margin-top: 18px;
+  padding: 20px;
+  border: 1px solid rgba(60, 47, 38, 0.16);
+  border-radius: 8px;
+  background: #fffaf2;
+}
+
+.apply-success-card h2 {
+  margin: 0 0 14px;
+}
+
+.apply-success-summary dl {
+  margin: 0;
+}
+
+.apply-success-summary dl > div {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(60, 47, 38, 0.1);
+}
+
+.apply-success-summary dt {
+  font-weight: 800;
+  color: #6c5543;
+}
+
+.apply-success-summary dd {
+  margin: 0;
+}
+
+.apply-success-next,
+.application-inquiry-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.application-inquiry-form {
+  padding: 14px;
+  border: 1px solid rgba(60, 47, 38, 0.16);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.buyer-room-group-card {
+  display: grid;
+  gap: 14px;
+}
+
+.buyer-room-group-card > .buyer-room-card {
+  margin: 0;
+}
+
+.buyer-room-mode-settings {
+  padding: 16px;
+  border: 1px solid rgba(60, 47, 38, 0.14);
+  border-radius: 8px;
+  background: #fffaf2;
+}
+
+.buyer-room-mode-settings > div {
+  display: grid;
+  gap: 4px;
+}
+
+.buyer-game-room-details {
+  padding: 14px;
+  border: 1px solid rgba(60, 47, 38, 0.14);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.buyer-game-room-details summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.buyer-game-room-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.buyer-room-card.is-compact-room {
+  padding: 16px;
+  box-shadow: none;
+}
+
 .report-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);

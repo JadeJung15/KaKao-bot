@@ -53,6 +53,7 @@
         <button class="button button-secondary" type="button" data-load-applications>신청/결제 불러오기</button>
         <button class="button button-secondary" type="button" data-load-reports>신고 불러오기</button>
         <button class="button button-secondary" type="button" data-load-transfers>이관 내역 불러오기</button>
+        <button class="button button-secondary" type="button" data-load-application-inquiries>신청 문의 불러오기</button>
         <button class="button button-secondary" type="button" data-diagnostics>진단 새로고침</button>
         <button class="button button-secondary" type="button" data-backup>백업 JSON 받기</button>
       </section>
@@ -107,6 +108,27 @@
         </div>
         <div class="transfer-card-list" data-transfer-list>
           <p>이관 내역 불러오기를 누르면 방 소유권 이관 기록이 표시됩니다.</p>
+        </div>
+      </section>
+
+      <section class="admin-transfer-panel" aria-label="신청 문의">
+        <div class="admin-report-head">
+          <div>
+            <p class="section-kicker">Application Inquiries</p>
+            <h2>신청 문의</h2>
+            <p>서비스 신청 완료 화면에서 접수된 입금/결제 확인 문의를 확인하고 처리합니다.</p>
+          </div>
+          <label>
+            상태
+            <select id="application-inquiry-status-filter" name="applicationInquiryStatusFilter" data-application-inquiry-status-filter>
+              <option value="all">전체</option>
+              <option value="open">확인 대기</option>
+              <option value="resolved">처리 완료</option>
+            </select>
+          </label>
+        </div>
+        <div class="transfer-card-list" data-application-inquiry-list>
+          <p>신청 문의 불러오기를 누르면 문의가 표시됩니다.</p>
         </div>
       </section>
 
@@ -242,18 +264,21 @@
       const applicationList = document.querySelector("[data-application-list]");
       const reportList = document.querySelector("[data-report-list]");
       const transferList = document.querySelector("[data-transfer-list]");
+      const applicationInquiryList = document.querySelector("[data-application-inquiry-list]");
       const summary = document.querySelector("[data-summary]");
       const restoreInput = document.querySelector("[data-restore-json]");
       const searchInput = document.querySelector("[data-admin-search]");
       const roomStatusFilterInput = document.querySelector("[data-room-status-filter]");
       const reportStatusFilterInput = document.querySelector("[data-report-status-filter]");
       const transferStatusFilterInput = document.querySelector("[data-transfer-status-filter]");
+      const applicationInquiryStatusFilterInput = document.querySelector("[data-application-inquiry-status-filter]");
       const commandTriggerInput = document.querySelector("[data-command-trigger]");
       const commandResponseInput = document.querySelector("[data-command-response]");
       let rooms = [];
       let applications = [];
       let reports = [];
       let transfers = [];
+      let applicationInquiries = [];
       let selectedRoom = null;
       let ownerToken = sessionStorage.getItem("pixgomOwnerToken") || "";
 
@@ -376,6 +401,20 @@
           transfer.fromAccount?.nickname,
           transfer.toAccount?.email,
           transfer.toAccount?.nickname
+        ).includes(term);
+      }
+
+      function applicationInquiryMatchesSearch(inquiry, term) {
+        if (!term) return true;
+        return searchableText(
+          inquiry.id,
+          inquiry.roomName,
+          inquiry.mainRoomName,
+          inquiry.typeLabel,
+          inquiry.message,
+          inquiry.statusLabel,
+          inquiry.application?.email,
+          inquiry.application?.adminName
         ).includes(term);
       }
 
@@ -636,11 +675,17 @@
         for (const application of list) {
           const card = document.createElement("article");
           card.className = "application-card";
+          const isGameRoom = application.roomPurpose === "game_room";
+          const paymentRequestedAt = application.payment?.requestedAt || application.payment?.createdAt || "";
+          const inquiryText = application.inquirySummary?.open
+            ? `신청 문의 ${application.inquirySummary.open}건 대기`
+            : "신청 문의 없음";
           card.innerHTML = `
             <div>
               <strong>${escapeHtml(application.roomName || "방 이름 없음")}</strong>
               <span>${escapeHtml(application.email)} · ${escapeHtml(application.statusLabel)} · ${escapeHtml(application.payment?.statusLabel || "결제 미확인")}</span>
               <small>${escapeHtml(application.adminName || "")} · ${escapeHtml(application.roomLink || "")}</small>
+              <small>${isGameRoom ? `기준 일반방: ${escapeHtml(application.mainRoom?.roomName || "-")} · ` : ""}결제요청 일시: ${escapeHtml(paymentRequestedAt || "-")} · ${escapeHtml(inquiryText)}</small>
             </div>
             <div class="application-card-actions">
               <button class="button button-secondary" type="button" data-approve-application ${application.status === "approved" ? "disabled" : ""}>입금 승인</button>
@@ -718,6 +763,41 @@
         }
       }
 
+      function renderApplicationInquiries(data) {
+        if (Array.isArray(data.inquiries)) applicationInquiries = data.inquiries;
+        const term = searchTerm();
+        const visibleInquiries = applicationInquiries.filter((inquiry) => applicationInquiryMatchesSearch(inquiry, term));
+        applicationInquiryList.innerHTML = "";
+        if (!visibleInquiries.length) {
+          applicationInquiryList.innerHTML = `<p>${term ? "검색 결과가 없습니다." : "표시할 신청 문의가 없습니다."}</p>`;
+          return;
+        }
+        for (const inquiry of visibleInquiries.slice(0, 50)) {
+          const resolved = inquiry.status === "resolved";
+          const card = document.createElement("article");
+          card.className = "report-card transfer-card";
+          card.dataset.status = inquiry.status || "open";
+          card.innerHTML = `
+            <div class="report-card-body">
+              <div class="report-card-title">
+                <strong>${escapeHtml(inquiry.roomName || "방 이름 없음")} · ${escapeHtml(inquiry.typeLabel || inquiry.type || "문의")}</strong>
+                ${statusBadge(resolved ? "처리 완료" : "확인 대기", resolved ? "ok" : "warn")}
+              </div>
+              <span>${inquiry.mainRoomName ? `기준 일반방: ${escapeHtml(inquiry.mainRoomName)} · ` : ""}신청번호 ${escapeHtml(inquiry.applicationId || "-")}</span>
+              <p>${escapeHtml(inquiry.message || "-")}</p>
+              <small>접수 ${escapeHtml(inquiry.createdAt || "-")}${resolved ? ` · 처리 ${escapeHtml(inquiry.resolvedAt || "-")} · ${escapeHtml(inquiry.resolvedBy || "-")}` : ""}</small>
+              ${resolved ? `<small>처리 내용: ${escapeHtml(inquiry.resolution || "-")}</small>` : ""}
+            </div>
+            <div class="report-card-actions">
+              <textarea data-application-inquiry-resolution rows="3" placeholder="처리 내용">${resolved ? escapeHtml(inquiry.resolution || "") : ""}</textarea>
+              <button class="button button-secondary" type="button" data-resolve-application-inquiry ${resolved ? "disabled" : ""}>처리 완료</button>
+            </div>
+          `;
+          card.querySelector("[data-resolve-application-inquiry]")?.addEventListener("click", () => resolveApplicationInquiry(inquiry, card));
+          applicationInquiryList.appendChild(card);
+        }
+      }
+
       function compactPrintPayload(value) {
         if (!value || typeof value !== "object") return value;
         if (Array.isArray(value.rooms)) {
@@ -765,6 +845,22 @@
               to: transferAccountText(transfer.toAccount)
             })),
             hiddenTransfers: Math.max(0, value.transfers.length - 10)
+          };
+        }
+        if (Array.isArray(value.inquiries)) {
+          return {
+            ok: value.ok,
+            version: value.version,
+            summary: value.summary,
+            inquiriesPreview: value.inquiries.slice(0, 10).map((inquiry) => ({
+              id: inquiry.id,
+              roomName: inquiry.roomName,
+              mainRoomName: inquiry.mainRoomName,
+              type: inquiry.typeLabel,
+              status: inquiry.statusLabel,
+              createdAt: inquiry.createdAt
+            })),
+            hiddenInquiries: Math.max(0, value.inquiries.length - 10)
           };
         }
         if (value.state) {
@@ -818,6 +914,13 @@
         print(compactPrintPayload(json));
       }
 
+      async function loadApplicationInquiries() {
+        const status = applicationInquiryStatusFilterInput.value || "all";
+        const json = await requestJson(`/api/admin/application-inquiries?status=${encodeURIComponent(status)}`);
+        renderApplicationInquiries(json);
+        print(compactPrintPayload(json));
+      }
+
       async function resolveReport(report, card) {
         const resolution = card.querySelector("[data-report-resolution]")?.value?.trim() || "처리 완료";
         try {
@@ -832,6 +935,25 @@
           });
           print(json);
           await loadReports();
+        } catch (error) {
+          print(friendlyError(error));
+        }
+      }
+
+      async function resolveApplicationInquiry(inquiry, card) {
+        const resolution = card.querySelector("[data-application-inquiry-resolution]")?.value?.trim() || "처리 완료";
+        try {
+          const json = await requestJson("/api/admin/application-inquiries/resolve", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              inquiryId: inquiry.id,
+              resolution
+            })
+          });
+          print(json);
+          await loadApplicationInquiries();
+          await loadApplications();
         } catch (error) {
           print(friendlyError(error));
         }
@@ -929,6 +1051,10 @@
         loadTransfers().catch((error) => print(friendlyError(error)));
       });
 
+      document.querySelector("[data-load-application-inquiries]").addEventListener("click", () => {
+        loadApplicationInquiries().catch((error) => print(friendlyError(error)));
+      });
+
       document.querySelector("[data-add-command]").addEventListener("click", () => {
         upsertCommandLine(commandTriggerInput.value, commandResponseInput.value);
       });
@@ -938,6 +1064,7 @@
         renderApplications({ applications });
         renderReports({ reports });
         renderTransfers({ transfers });
+        renderApplicationInquiries({ inquiries: applicationInquiries });
       });
 
       roomStatusFilterInput.addEventListener("change", () => {
@@ -950,6 +1077,10 @@
 
       transferStatusFilterInput.addEventListener("change", () => {
         loadTransfers().catch((error) => print(friendlyError(error)));
+      });
+
+      applicationInquiryStatusFilterInput.addEventListener("change", () => {
+        loadApplicationInquiries().catch((error) => print(friendlyError(error)));
       });
 
       document.querySelector("[data-diagnostics]").addEventListener("click", async () => {

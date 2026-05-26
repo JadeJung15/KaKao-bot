@@ -77,6 +77,25 @@
           <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인 후 신청</button>
         </form>
         <pre class="form-status" data-apply-result aria-live="polite"></pre>
+        <section class="apply-success-card" data-apply-success hidden>
+          <p class="section-kicker">Apply Complete</p>
+          <h2>신청접수가 정상적으로 완료되었습니다.</h2>
+          <div class="apply-success-summary" data-apply-success-body></div>
+          <form class="application-inquiry-form" data-application-inquiry-form>
+            <strong>문의 작성</strong>
+            <span>입금이나 결제 확인 요청을 사이트에 남기면 운영자가 관리자 콘솔에서 확인합니다.</span>
+            <label>문의 종류
+              <select name="type">
+                <option value="deposit_check">입금 확인 요청</option>
+                <option value="payment_check">결제 확인 요청</option>
+                <option value="other">기타 문의</option>
+              </select>
+            </label>
+            <label>문의 내용<textarea name="message" rows="4" required placeholder="예: 방금 입금했습니다. 확인 부탁드립니다."></textarea></label>
+            <button class="button button-primary" type="submit">문의 접수</button>
+            <p data-inquiry-result></p>
+          </form>
+        </section>
         <div class="auth-links">
           <a href="/signup">계정 만들기</a>
           <a href="/login">신청 상태 확인</a>
@@ -88,6 +107,10 @@
     <script>
       const form = document.querySelector("[data-apply-form]");
       const result = document.querySelector("[data-apply-result]");
+      const successCard = document.querySelector("[data-apply-success]");
+      const successBody = document.querySelector("[data-apply-success-body]");
+      const inquiryForm = document.querySelector("[data-application-inquiry-form]");
+      const inquiryResult = document.querySelector("[data-inquiry-result]");
       const kakaoButton = document.querySelector("[data-kakao-login]");
       const accountIdentity = document.querySelector("[data-account-identity]");
       const emailField = document.querySelector("[data-email-field]");
@@ -103,6 +126,7 @@
       const initialRoomPurpose = initialParams.get("roomPurpose") === "game_room" ? "game_room" : "general_room";
       const initialLinkedApplicationId = initialParams.get("linkedApplicationId") || "";
       let loggedInPayload = {};
+      let lastApplyResult = null;
       if (savedEmail) form.elements.email.value = savedEmail;
       form.elements.roomPurpose.value = initialRoomPurpose;
 
@@ -133,6 +157,46 @@
         roomPurposeHelp.textContent = isGameRoom
           ? "게임방은 승인된 일반방을 기준으로 추가 신청합니다. 승인 후 같은 브릿지 앱에 일반방/게임방 연결코드를 모두 입력하세요."
           : "하나의 브릿지 앱에 일반방 연결코드와 게임방 연결코드를 차례로 입력하면 두 방을 함께 운영할 수 있습니다.";
+      }
+
+      function formatDateTime(value = "") {
+        if (!value) return "-";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
+      }
+
+      function selectedLinkedRoomLabel(json = {}) {
+        if (json.application?.mainRoom?.roomName) return json.application.mainRoom.roomName;
+        const selected = linkedApplicationSelect.selectedOptions?.[0]?.textContent || "";
+        return selected.replace(/\s+·.*$/, "");
+      }
+
+      function renderApplySuccess(json) {
+        lastApplyResult = json;
+        const isGameRoom = json.application?.roomPurpose === "game_room";
+        form.hidden = true;
+        successCard.hidden = false;
+        result.textContent = "";
+        successBody.innerHTML = `
+          <dl>
+            <div><dt>신청번호</dt><dd>${escapeHtml(json.application?.id || "-")}</dd></div>
+            <div><dt>신청 방</dt><dd>${escapeHtml(json.application?.roomName || "-")}</dd></div>
+            ${isGameRoom ? `<div><dt>기준 일반방</dt><dd>${escapeHtml(selectedLinkedRoomLabel(json) || "-")}</dd></div>` : ""}
+            <div><dt>신청 상태</dt><dd>${escapeHtml(json.application?.statusLabel || "-")}</dd></div>
+            <div><dt>결제 상태</dt><dd>${escapeHtml(json.payment?.statusLabel || "-")}</dd></div>
+            <div><dt>결제요청 일시</dt><dd>${escapeHtml(formatDateTime(json.payment?.requestedAt || json.payment?.createdAt))}</dd></div>
+            <div><dt>입금액</dt><dd>${escapeHtml(Number(json.payment?.amountKrw || 0).toLocaleString("ko-KR"))}원</dd></div>
+          </dl>
+          <div class="apply-success-next">
+            ${(json.next || []).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
+            <span>문의가 필요하면 아래 문의 작성 버튼으로 입금/결제 확인 요청을 남겨 주세요.</span>
+          </div>
+          <div class="account-action-row">
+            <a class="button button-secondary" href="/login">신청 상태 확인</a>
+            <a class="button button-secondary" href="/console">구매자 콘솔</a>
+          </div>
+        `;
       }
 
       async function loadBuyerRoomsForGameApply(payload = loggedInPayload) {
@@ -220,20 +284,38 @@
           });
           const json = await response.json();
           if (!response.ok || json.ok === false) throw new Error(json.error || "apply_failed");
-          result.textContent = [
-            "신청이 접수되었습니다.",
-            `신청번호: ${json.application.id}`,
-            `상태: ${json.application.statusLabel}`,
-            `결제: ${json.payment.statusLabel}`,
-            `금액: ${json.payment.amountKrw.toLocaleString("ko-KR")}원`,
-            "",
-            ...json.next,
-            "",
-            "다음 행동: 입금/승인 상태를 기다린 뒤 /login 또는 /console 에서 연결코드를 복사하세요."
-          ].join("\n");
+          renderApplySuccess(json);
           form.reset();
         } catch (error) {
           result.textContent = `신청 실패: ${window.PixelgomAuth.friendlyError(error)}`;
+        }
+      });
+
+      inquiryForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!lastApplyResult?.application?.id) return;
+        inquiryResult.textContent = "문의를 접수하는 중입니다.";
+        const values = Object.fromEntries(new FormData(inquiryForm).entries());
+        const inquiryAuth = Object.keys(loggedInPayload).length
+          ? loggedInPayload
+          : { inquiryAccessToken: lastApplyResult.inquiryAccessToken || "" };
+        try {
+          const response = await fetch("/api/application-inquiries", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              ...inquiryAuth,
+              applicationId: lastApplyResult.application.id,
+              type: values.type,
+              message: values.message
+            })
+          });
+          const json = await response.json();
+          if (!response.ok || json.ok === false) throw new Error(json.error || "inquiry_failed");
+          inquiryResult.textContent = "문의가 접수되었습니다. 운영자가 신청/입금 내역과 함께 확인합니다.";
+          inquiryForm.reset();
+        } catch (error) {
+          inquiryResult.textContent = `문의 실패: ${window.PixelgomAuth.friendlyError(error)}`;
         }
       });
 
