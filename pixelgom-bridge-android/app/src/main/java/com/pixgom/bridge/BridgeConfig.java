@@ -45,6 +45,7 @@ final class BridgeConfig {
     private static final String KEY_LAST_CONNECT_SUMMARY = "last_connect_summary";
     private static final String KEY_LAST_PROFILE_SYNC_SUMMARY = "last_profile_sync_summary";
     private static final String KEY_LAST_IGNORE_REASON = "last_ignore_reason";
+    private static final String EMPTY_ROOM_PROFILES = "__PIXGOM_EMPTY_ROOM_PROFILES__";
     private static final int MAX_LOG_LINES = 80;
 
     private BridgeConfig() {}
@@ -107,7 +108,9 @@ final class BridgeConfig {
     }
 
     static String roomProfilesText(Context context) {
-        return textOrDefault(prefs(context).getString(KEY_ROOM_PROFILES, defaultRoomProfilesText()), defaultRoomProfilesText());
+        String stored = prefs(context).getString(KEY_ROOM_PROFILES, defaultRoomProfilesText());
+        if (EMPTY_ROOM_PROFILES.equals(stored)) return EMPTY_ROOM_PROFILES;
+        return textOrDefault(stored, defaultRoomProfilesText());
     }
 
     static void setRoomProfilesText(Context context, String value) {
@@ -117,6 +120,22 @@ final class BridgeConfig {
 
     static String defaultRoomProfilesText() {
         return roomProfileLine(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, DEFAULT_ROOM_NAME, "");
+    }
+
+    static void clearServerSettings(Context context) {
+        prefs(context).edit()
+                .putBoolean(KEY_ENABLED, false)
+                .putString(KEY_SERVER_URL, DEFAULT_SERVER_URL)
+                .putString(KEY_ROOM_PROFILES, EMPTY_ROOM_PROFILES)
+                .remove(KEY_ROOM_NAME)
+                .remove(KEY_ROOM_ID)
+                .remove(KEY_ROOM_LINK)
+                .remove(KEY_DEVICE_LICENSE)
+                .remove(KEY_LAST_CONNECT_SUMMARY)
+                .remove(KEY_LAST_PROFILE_SYNC_SUMMARY)
+                .remove(KEY_LAST_IGNORE_REASON)
+                .apply();
+        appendLog(context, "서버 설정 초기화 / 등록 취소 완료");
     }
 
     static String deviceLicenseKey(Context context) {
@@ -178,7 +197,7 @@ final class BridgeConfig {
     static RoomProfile firstRoomProfile(Context context) {
         List<RoomProfile> profiles = roomProfiles(context);
         return profiles.isEmpty()
-                ? new RoomProfile(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, new String[]{ DEFAULT_ROOM_NAME }, deviceLicenseKey(context))
+                ? new RoomProfile(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, new String[]{ DEFAULT_ROOM_NAME }, "")
                 : profiles.get(0);
     }
 
@@ -371,6 +390,7 @@ final class BridgeConfig {
 
     private static List<RoomProfile> parseRoomProfiles(String value) {
         List<RoomProfile> profiles = new ArrayList<>();
+        if (EMPTY_ROOM_PROFILES.equals(value)) return profiles;
         String source = textOrDefault(value, defaultRoomProfilesText());
         for (String rawLine : source.split("\\r?\\n")) {
             String line = rawLine.trim();

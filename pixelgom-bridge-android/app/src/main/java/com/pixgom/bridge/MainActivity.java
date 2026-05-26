@@ -1,6 +1,7 @@
 package com.pixgom.bridge;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -177,6 +178,10 @@ public class MainActivity extends Activity {
         syncButton.setOnClickListener(v -> syncRoomProfiles());
         root.addView(syncButton);
 
+        Button resetButton = secondaryButton("서버 설정 초기화 / 등록 취소");
+        resetButton.setOnClickListener(v -> confirmResetServerSettings());
+        root.addView(resetButton);
+
         return scrollView;
     }
 
@@ -332,6 +337,14 @@ public class MainActivity extends Activity {
         Button profileSyncButton = secondaryButton("서버와 다시 동기화");
         profileSyncButton.setOnClickListener(v -> syncRoomProfiles());
         panel.addView(profileSyncButton);
+
+        TextView resetHelp = text("기기를 바꾸거나 다른 곳에 다시 등록할 때는 이 앱의 저장된 방/라이선스/동기화 기록만 초기화합니다. 구매자 계정과 서버 결제/신청 데이터는 삭제되지 않습니다.", 13, Color.rgb(111, 78, 49), false);
+        resetHelp.setPadding(0, dp(10), 0, 0);
+        panel.addView(resetHelp);
+
+        Button resetButton = secondaryButton("서버 설정 초기화 / 등록 취소");
+        resetButton.setOnClickListener(v -> confirmResetServerSettings());
+        panel.addView(resetButton);
 
         TextView roomTitle = text("대표 방 설정", 20, Color.rgb(58, 37, 24), true);
         roomTitle.setPadding(0, dp(16), 0, 0);
@@ -510,15 +523,21 @@ public class MainActivity extends Activity {
     private void saveSettings() {
         BridgeConfig.setEnabled(this, enabledSwitch.isChecked());
         BridgeConfig.setServerUrl(this, serverUrlInput.getText().toString());
-        BridgeConfig.setPrimaryRoomProfile(
-                this,
-                roomNameInput.getText().toString(),
-                roomIdInput.getText().toString(),
-                roomLinkInput.getText().toString(),
-                joinPhraseInput.getText().toString(),
-                adminsInput.getText().toString(),
-                licenseKeyInput.getText().toString()
-        );
+        String roomName = roomNameInput.getText().toString().trim();
+        String roomId = roomIdInput.getText().toString().trim();
+        String roomLink = roomLinkInput.getText().toString().trim();
+        String joinPhrase = joinPhraseInput.getText().toString().trim();
+        String admins = adminsInput.getText().toString().trim();
+        String licenseKey = licenseKeyInput.getText().toString().trim();
+        boolean hasRoomInput = !TextUtils.isEmpty(roomName)
+                || !TextUtils.isEmpty(roomId)
+                || !TextUtils.isEmpty(roomLink)
+                || !TextUtils.isEmpty(joinPhrase)
+                || !TextUtils.isEmpty(admins)
+                || !TextUtils.isEmpty(licenseKey);
+        if (BridgeConfig.roomProfileCount(this) > 0 || hasRoomInput) {
+            BridgeConfig.setPrimaryRoomProfile(this, roomName, roomId, roomLink, joinPhrase, admins, licenseKey);
+        }
         BridgeConfig.setAttendanceEnabled(this, attendanceFeatureSwitch.isChecked());
         BridgeConfig.setPointsEnabled(this, pointsFeatureSwitch.isChecked());
         BridgeConfig.setRankingsEnabled(this, rankingsFeatureSwitch.isChecked());
@@ -534,6 +553,10 @@ public class MainActivity extends Activity {
     }
 
     private void sendTestEvent() {
+        if (BridgeConfig.roomProfileCount(this) == 0) {
+            Toast.makeText(this, "등록된 방이 없습니다. 앱 연결코드를 먼저 입력하세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
         saveSettings();
         BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
         BridgeEvent event = new BridgeEvent();
@@ -627,6 +650,15 @@ public class MainActivity extends Activity {
     }
 
     private void syncRoomProfiles() {
+        if (BridgeConfig.roomProfileCount(this) == 0) {
+            BridgeConfig.setLastProfileSyncSummary(this, "등록된 방 없음 - 앱 연결코드를 먼저 입력하세요.");
+            BridgeConfig.appendLog(this, "서버 방 프로필 동기화 건너뜀: 등록된 방 없음");
+            refreshProfileSyncStatus();
+            refreshRoomProfilesSummary();
+            refreshLogs();
+            Toast.makeText(this, "등록된 방이 없습니다. 앱 연결코드를 먼저 입력하세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
         BridgeConfig.appendLog(this, "서버 방 프로필 동기화 시작");
         refreshLogs();
         executor.execute(() -> {
@@ -692,11 +724,12 @@ public class MainActivity extends Activity {
     private void refreshStatus() {
         if (permissionStatus == null) return;
         boolean permission = notificationPermissionEnabled();
+        String registeredRoom = BridgeConfig.roomProfileCount(this) == 0 ? "등록된 방 없음" : BridgeConfig.roomName(this);
         String permissionHelp = permission ? "" : "\n안내: 설정에서 픽셀곰 브릿지를 허용하고, 카카오톡 방 알림을 켜야 대화를 감지합니다.";
         permissionStatus.setText((permission ? "알림 접근 권한: 허용됨" : "알림 접근 권한: 필요")
                 + permissionHelp
                 + "\n브릿지: " + (BridgeConfig.isEnabled(this) ? "켜짐" : "꺼짐")
-                + "\n등록 방: " + BridgeConfig.roomName(this)
+                + "\n등록 방: " + registeredRoom
                 + "\n등록 방 수: " + BridgeConfig.roomProfileCount(this) + "개"
                 + "\n사용 기능: " + BridgeConfig.featureSummary(this));
         permissionStatus.setTextColor(permission ? Color.rgb(30, 104, 58) : Color.rgb(184, 74, 43));
@@ -755,6 +788,33 @@ public class MainActivity extends Activity {
         if (profileSyncStatus != null) {
             profileSyncStatus.setText("서버 동기화: " + safeText(BridgeConfig.lastProfileSyncSummary(this)));
         }
+    }
+
+    private void confirmResetServerSettings() {
+        new AlertDialog.Builder(this)
+                .setTitle("서버 설정 초기화")
+                .setMessage("이 앱에 저장된 등록 방, 라이선스 키, 최근 연결/동기화 기록을 삭제하고 브릿지를 끕니다.\n\n기기를 바꾸거나 다른 곳에 다시 등록할 때 사용하세요.\n\n구매자 계정과 서버 결제/신청 데이터는 삭제되지 않습니다.")
+                .setNegativeButton("취소", null)
+                .setPositiveButton("초기화", (dialog, which) -> resetServerSettings())
+                .show();
+    }
+
+    private void resetServerSettings() {
+        BridgeConfig.clearServerSettings(this);
+        if (enabledSwitch != null) enabledSwitch.setChecked(false);
+        if (serverUrlInput != null) serverUrlInput.setText(BridgeConfig.DEFAULT_SERVER_URL);
+        if (connectionCodeInput != null) connectionCodeInput.setText("");
+        if (roomNameInput != null) roomNameInput.setText("");
+        if (roomIdInput != null) roomIdInput.setText("");
+        if (roomLinkInput != null) roomLinkInput.setText("");
+        if (joinPhraseInput != null) joinPhraseInput.setText("");
+        if (adminsInput != null) adminsInput.setText("");
+        if (licenseKeyInput != null) licenseKeyInput.setText("");
+        refreshStatus();
+        refreshRoomProfilesSummary();
+        refreshProfileSyncStatus();
+        refreshLogs();
+        Toast.makeText(this, "서버 설정을 초기화했습니다. 새 연결코드를 입력해 다시 등록하세요.", Toast.LENGTH_LONG).show();
     }
 
     private void copyDiagnosis() {
