@@ -31,17 +31,52 @@ function isPaymentApprovalRequest(application = {}) {
   const lifecycleStatus = application.lifecycle?.status || "";
   const paymentStatus = application.payment?.status || application.lifecycle?.paymentStatus || "";
   return (
+    application.paymentReviewNeeded === true ||
     ["pending_payment", "approved_unpaid"].includes(applicationStatus) ||
     ["pending_payment", "approved_unpaid"].includes(lifecycleStatus) ||
     ["awaiting_manual_deposit", "payment_requested", "pending"].includes(paymentStatus) ||
-    application.paymentReviewNeeded === true ||
     application.lifecycle?.paymentReviewNeeded === true
   );
 }
 
-function adminSummaryItems(rooms = [], archivedRooms = [], applications = []) {
+function isPaymentInquiry(inquiry = {}) {
+  return ["deposit_check", "payment_check"].includes(inquiry.type) && inquiry.status !== "resolved";
+}
+
+function paymentInquiriesByApplication(inquiries = []) {
+  const map = new Map();
+  inquiries.filter(isPaymentInquiry).forEach((inquiry) => {
+    const applicationId = inquiry.applicationId || inquiry.application?.id || "";
+    if (!applicationId || map.has(applicationId)) return;
+    map.set(applicationId, inquiry);
+  });
+  return map;
+}
+
+function paymentApprovalQueueItems(applications = [], inquiries = []) {
+  const inquiryMap = paymentInquiriesByApplication(inquiries);
+  const byId = new Map();
+  applications.filter(isPaymentApprovalRequest).forEach((application) => {
+    const id = application.id || application.applicationId || "";
+    if (!id) return;
+    byId.set(id, { ...application, paymentInquiry: inquiryMap.get(id) || null });
+  });
+  inquiryMap.forEach((inquiry, applicationId) => {
+    if (byId.has(applicationId)) return;
+    if (inquiry.application?.id) {
+      byId.set(applicationId, { ...inquiry.application, paymentInquiry: inquiry, paymentReviewNeeded: true });
+    }
+  });
+  return [...byId.values()].sort((left, right) => {
+    const leftAt = left.paymentInquiry?.createdAt || left.payment?.requestedAt || left.createdAt || "";
+    const rightAt = right.paymentInquiry?.createdAt || right.payment?.requestedAt || right.createdAt || "";
+    return String(rightAt).localeCompare(String(leftAt));
+  });
+}
+
+function adminSummaryItems(rooms = [], archivedRooms = [], applications = [], inquiries = []) {
   const base = roomSummaries(rooms, archivedRooms);
-  const paymentReviewNeeded = applications.filter(isPaymentApprovalRequest).length;
+  const paymentReviewNeeded = paymentApprovalQueueItems(applications, inquiries).length;
   return base.map((item) => (
     item.label === "결제 확인"
       ? { ...item, value: Math.max(Number(item.value) || 0, paymentReviewNeeded), help: "신청/결제 승인 요청 기준" }
@@ -105,8 +140,11 @@ function AdminApp() {
   const selected = rows.find((row) => row.id === selectedId) || rows[0] || null;
   const baseRoom = selected?.raw?.baseRoom || selected?.raw?.room || {};
   const baseApp = selected?.raw?.baseApplication || {};
-  const paymentApprovalRequests = useMemo(() => (state.applications || []).filter(isPaymentApprovalRequest), [state.applications]);
-  const summaryItems = useMemo(() => adminSummaryItems(state.rooms, state.archivedRooms, state.applications), [state.rooms, state.archivedRooms, state.applications]);
+  const paymentApprovalRequests = useMemo(
+    () => paymentApprovalQueueItems(state.applications || [], state.inquiries || []),
+    [state.applications, state.inquiries]
+  );
+  const summaryItems = useMemo(() => adminSummaryItems(state.rooms, state.archivedRooms, state.applications, state.inquiries), [state.rooms, state.archivedRooms, state.applications, state.inquiries]);
   const logRoomOptions = useMemo(() => {
     const candidates = [baseRoom, ...(selected?.raw?.gameRooms || [])]
       .map((room) => room?.name)
@@ -567,6 +605,7 @@ function PaymentApprovalQueue({ applications = [], approvingApplicationId = "", 
           const id = application.id || application.applicationId || "";
           const requester = application.email || application.contact || application.account?.email || "-";
           const mainRoom = application.mainRoom?.roomName || application.linkedApplication?.roomName || application.linkedApplication?.roomNameSnapshot || "";
+          const paymentInquiry = application.paymentInquiry || null;
           return (
             <article className="console-card console-workflow-card console-payment-request-card" key={id || application.roomName}>
               <div>
@@ -576,6 +615,7 @@ function PaymentApprovalQueue({ applications = [], approvingApplicationId = "", 
                 </span>
                 <small>신청자 {requester} · 결제요청 일시 {formatDate(application.payment?.requestedAt || application.createdAt)}</small>
                 <small>입금액 {formatKrw(application.payment?.amountKrw || application.plan?.monthlyPriceKrw)} · 이용 상태 {application.lifecycle?.label || application.status}</small>
+                {paymentInquiry ? <small>결제 확인 문의: {paymentInquiry.typeLabel || "입금 확인 요청"} · {paymentInquiry.message || "문의 내용 없음"}</small> : null}
                 {mainRoom ? <small>기준 일반방: {mainRoom}</small> : null}
               </div>
               <div className="console-workflow-actions compact">

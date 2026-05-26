@@ -268,9 +268,9 @@ const INCIDENT_MESSAGES = Object.freeze({
   }
 });
 const MIN_ANDROID_VERSION = normalizeText(process.env.MIN_ANDROID_VERSION || "1.0.17");
-const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.23");
+const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.25");
 const MIN_ANDROID_VERSION_CODE = Math.max(1, Number(process.env.MIN_ANDROID_VERSION_CODE || 18));
-const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 24));
+const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 26));
 const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
 const SUPABASE_ANON_KEY = normalizeText(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 const SUPABASE_KAKAO_ENABLED = normalizeText(process.env.SUPABASE_KAKAO_ENABLED || "false") === "true";
@@ -2721,6 +2721,30 @@ function publicLinkedApplicationSummary(state = {}, application = {}) {
   };
 }
 
+function paymentReviewNeededForApplication(state = {}, application = {}) {
+  if (!application?.id || application.archivedAt || application.purgedAt) return false;
+  if (["cancelled", "rejected", "on_hold"].includes(application.status)) return false;
+  const payment = state.payments?.[application.paymentId] || {};
+  if (application.status !== "approved") return true;
+  return payment.status !== "paid";
+}
+
+function appConnectCodeStatusForApplication(state = {}, application = {}) {
+  if (!application?.id || application.purgedAt) return "unavailable";
+  if (application.archivedAt) return "archived";
+  if (applicationApprovedAndPaid(state, application)) return "ready";
+  return "pending_approval";
+}
+
+function appConnectCodeStatusLabel(status = "") {
+  return {
+    ready: "발급 완료",
+    pending_approval: "입금승인 후 발급",
+    archived: "이용 종료",
+    unavailable: "발급 불가"
+  }[status] || "확인 필요";
+}
+
 function applicationInquirySummary(state = {}, applicationId = "") {
   const inquiries = Object.values(state.applicationInquiries || {})
     .filter((inquiry) => inquiry.applicationId === applicationId);
@@ -2769,6 +2793,8 @@ function publicApplicationView(application = {}, state = null) {
   const payment = state?.payments?.[application.paymentId] || {};
   const roomState = state?.rooms?.[roomKey(application.roomName)] || null;
   const lifecycle = state ? applicationLifecycleSnapshot(state, application, roomState) : null;
+  const paymentReviewNeeded = state ? paymentReviewNeededForApplication(state, application) : false;
+  const appConnectCodeStatus = state ? appConnectCodeStatusForApplication(state, application) : "unavailable";
   const mainRoom = normalizeApplicationRoomPurpose(application.roomPurpose) === "game_room"
     ? publicLinkedApplicationSummary(state || {}, state?.applications?.[application.linkedApplicationId])
     : null;
@@ -2789,6 +2815,9 @@ function publicApplicationView(application = {}, state = null) {
     lifecycle,
     lifecycleStatus: lifecycle?.status || "",
     lifecycleLabel: lifecycle?.label || "",
+    paymentReviewNeeded,
+    appConnectCodeStatus,
+    appConnectCodeStatusLabel: appConnectCodeStatusLabel(appConnectCodeStatus),
     plan: application.plan || {
       type: "base_room",
       label: "기본 방",
@@ -9663,6 +9692,17 @@ function buyerConsolePayload(state, account = {}) {
     .map((application) => publicApplicationView(application, state));
   const approvedApplications = approvedBuyerApplications(state, account);
   const rooms = approvedApplications.map((application) => applicationRoomPayload(state, account, application));
+  const appConnectCodes = rooms
+    .filter((room) => room.bridgeConnectCode)
+    .map((room) => ({
+      applicationId: room.applicationId || "",
+      roomName: room.roomName || "",
+      roomRole: room.roomRole || "standard",
+      roomPurpose: room.roomPurpose || "general_room",
+      bridgeStatus: room.bridgeStatus || "needs_setup",
+      bridgeConnectCode: room.bridgeConnectCode || "",
+      setupUrl: "/console?from=android&view=setup#app-connect-code"
+    }));
   const roomGroups = buyerRoomGroupsPayload(state, account, approvedApplications);
   const lifecycleSummary = lifecycleSummaryFromApplications(applications);
   return {
@@ -9673,6 +9713,7 @@ function buyerConsolePayload(state, account = {}) {
     applications,
     lifecycleSummary,
     rooms,
+    appConnectCodes,
     roomGroups,
     canApplyGameRoom: rooms.some((room) => room.canApplyGameRoom),
     gameRoomApplyHelp: "승인된 일반방 카드에서 게임방 추가 신청을 누른 뒤, 승인 후 같은 브릿지 앱에 일반방/게임방 연결코드를 차례로 입력하세요.",

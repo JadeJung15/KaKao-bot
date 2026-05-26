@@ -4632,6 +4632,21 @@ a {
   white-space: normal;
 }
 
+.buyer-connect-code-pending {
+  display: grid;
+  gap: 6px;
+  border: 1px dashed #d8c39d;
+  border-radius: 8px;
+  background: #fffaf1;
+  color: #6a4a1f;
+  padding: 10px 12px;
+  font-size: 0.88rem;
+}
+
+.buyer-connect-code-pending span {
+  color: #7a5a2e;
+}
+
 .console-detail-panel button.danger {
   border-color: #b13c3c;
   background: #c94b4b;

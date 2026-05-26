@@ -143,10 +143,10 @@ try {
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(health.json.serverTimezone, "Asia/Seoul");
   assert.equal(health.json.minAndroidVersion, "1.0.17");
-  assert.equal(health.json.latestAndroidVersion, "1.0.23");
-  assert.equal(health.json.latestAndroidVersionCode, 24);
+  assert.equal(health.json.latestAndroidVersion, "1.0.25");
+  assert.equal(health.json.latestAndroidVersionCode, 26);
   assert.equal(health.json.minAndroidVersionCode, 18);
-  assert.equal(health.json.latestAndroidVersionCode, 24);
+  assert.equal(health.json.latestAndroidVersionCode, 26);
   assert.equal(health.json.appUpdateRequired, false);
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
@@ -678,6 +678,9 @@ try {
   assert.match(adminReactSource, /결제 승인 요청/);
   assert.match(adminReactSource, /입금승인/);
   assert.match(adminReactSource, /paymentReviewNeeded/);
+  assert.match(adminReactSource, /paymentInquiriesByApplication/);
+  assert.match(adminReactSource, /결제 확인 문의/);
+  assert.match(adminReactSource, /paymentInquiry/);
   assert.match(adminReactSource, /\/api\/admin\/rooms\/archive/);
   assert.match(adminReactSource, /\/api\/admin\/rooms\/bulk-archive/);
   assert.match(adminReactSource, /\/api\/admin\/rooms\/force-archive/);
@@ -1253,6 +1256,8 @@ try {
   assert.equal(adminApplications.json.lifecycleSummary.pendingPayment >= 1, true);
   assert.equal(adminApplications.json.applications.some((application) => application.id === apply.json.application.id && application.payment.requestedAt === apply.json.payment.requestedAt), true);
   assert.equal(adminApplications.json.applications.some((application) => application.id === apply.json.application.id && application.inquirySummary.open === 1), true);
+  assert.equal(adminApplications.json.applications.some((application) => application.id === apply.json.application.id && application.paymentReviewNeeded === true), true);
+  assert.equal(adminApplications.json.applications.some((application) => application.id === apply.json.application.id && application.appConnectCodeStatus === "pending_approval"), true);
   const pendingLifecycle = adminApplications.json.applications.find((application) => application.id === apply.json.application.id).lifecycle;
   assert.equal(pendingLifecycle.status, "pending_payment");
   assert.equal(pendingLifecycle.available, false);
@@ -1424,6 +1429,9 @@ try {
   assert.equal(buyerConsoleApproved.json.version, "0.4.99");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
+  assert.equal(buyerConsoleApproved.json.appConnectCodes.length >= 1, true);
+  assert.equal(buyerConsoleApproved.json.appConnectCodes.some((item) => item.applicationId === apply.json.application.id && /\./.test(item.bridgeConnectCode)), true);
+  assert.equal(buyerConsoleApproved.json.applications.some((application) => application.id === apply.json.application.id && application.appConnectCodeStatus === "ready"), true);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
   assert.equal(buyerConsoleApproved.json.plan.additionalRoomPriceKrw, 2200);
   assert.equal(buyerConsoleApproved.json.commandStore.total, commandTemplates.json.total);

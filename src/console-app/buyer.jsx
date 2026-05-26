@@ -114,6 +114,9 @@ function BuyerApp() {
   }
 
   const groups = useMemo(() => payload?.roomGroups || [], [payload]);
+  const appConnectCodeRooms = useMemo(() => (
+    payload?.appConnectCodes?.length ? payload.appConnectCodes : payload?.rooms || []
+  ), [payload?.appConnectCodes, payload?.rooms]);
   const restoreRequestsByArchive = useMemo(() => {
     const entries = (payload?.restoreRequests || []).map((request) => [request.archiveId, request]);
     return new Map(entries);
@@ -154,7 +157,7 @@ function BuyerApp() {
       </header>
       <BuyerConsoleTabs activeView={activeView} onChange={setActiveView} />
       {payload ? <SummaryGrid items={buyerSummaries(payload)} /> : null}
-      {payload ? <AppConnectCodePanel rooms={payload.rooms || []} onCopy={copyAppConnectCode} /> : null}
+      {payload ? <AppConnectCodePanel rooms={appConnectCodeRooms} applications={payload.applications || []} onCopy={copyAppConnectCode} /> : null}
       {payload ? <BuyerGuidePanel payload={payload} activeView={activeView} /> : null}
       <section className="buyer-room-grid">
         {(groups.length ? groups : payload?.rooms?.map((room) => ({ baseRoom: room, gameRooms: [], roomModeSettings: null })) || []).map((group) => (
@@ -226,8 +229,9 @@ function BuyerApp() {
   );
 }
 
-function AppConnectCodePanel({ rooms = [], onCopy }) {
+function AppConnectCodePanel({ rooms = [], applications = [], onCopy }) {
   const connectRooms = rooms.filter((room) => room.bridgeConnectCode);
+  const pendingApplications = applications.filter((application) => application.appConnectCodeStatus && application.appConnectCodeStatus !== "ready");
   return (
     <section className="buyer-connect-code-panel" id="app-connect-code" data-app-connect-code="true">
       <div className="console-section-head">
@@ -255,6 +259,14 @@ function AppConnectCodePanel({ rooms = [], onCopy }) {
         ))}
         {!connectRooms.length ? (
           <EmptyState title="아직 복사할 앱 연결 코드가 없습니다.">서비스 신청과 입금승인이 완료되면 승인된 방별 코드가 여기에 표시됩니다.</EmptyState>
+        ) : null}
+        {pendingApplications.length ? (
+          <div className="buyer-connect-code-pending">
+            <strong>발급 대기 신청</strong>
+            {pendingApplications.map((application) => (
+              <span key={application.id}>{application.roomName || "방명 미지정"} · {application.appConnectCodeStatusLabel || "입금승인 후 발급"}</span>
+            ))}
+          </div>
         ) : null}
       </div>
     </section>
