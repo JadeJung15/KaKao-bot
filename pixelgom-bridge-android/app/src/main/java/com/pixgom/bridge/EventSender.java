@@ -194,7 +194,9 @@ final class EventSender {
                 featureEnabled(features, "history", true),
                 featureEnabled(features, "profiles", true),
                 featureEnabled(features, "localJs", true),
-                featureEnabled(features, "games", false)
+                featureEnabled(features, "games", false),
+                room == null ? "" : room.optString("roomRole", ""),
+                room == null ? "" : room.optString("canonicalRoomName", "")
         );
     }
 
@@ -303,6 +305,8 @@ final class EventSender {
         final boolean profiles;
         final boolean localJs;
         final boolean games;
+        final String roomRole;
+        final String canonicalRoomName;
 
         RoomConnectResult(
                 String roomName,
@@ -318,7 +322,9 @@ final class EventSender {
                 boolean history,
                 boolean profiles,
                 boolean localJs,
-                boolean games
+                boolean games,
+                String roomRole,
+                String canonicalRoomName
         ) {
             this.roomName = roomName == null ? "" : roomName;
             this.roomId = roomId == null ? "" : roomId;
@@ -334,6 +340,8 @@ final class EventSender {
             this.profiles = profiles;
             this.localJs = localJs;
             this.games = games;
+            this.roomRole = roomRole == null ? "" : roomRole;
+            this.canonicalRoomName = canonicalRoomName == null ? "" : canonicalRoomName;
         }
     }
 

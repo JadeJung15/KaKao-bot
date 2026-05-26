@@ -40,16 +40,19 @@ public class PixelgomNotificationListener extends NotificationListenerService {
                 BridgeConfig.DEFAULT_ROOM_LINK
         );
         if (event == null) {
+            BridgeConfig.setLastIgnoreReason(this, "카카오 알림에서 방/메시지 추출 실패");
             BridgeConfig.appendLog(this, "무시: 카카오 알림에서 방/메시지 추출 실패");
             return;
         }
         BridgeConfig.RoomProfile profile = BridgeConfig.matchingProfile(this, event.rawRoom);
         if (profile == null) {
+            BridgeConfig.setLastIgnoreReason(this, "등록방 아님 rawRoom=" + event.rawRoom + " / 등록방=" + BridgeConfig.roomNames(this));
             BridgeConfig.appendLog(this, "무시: 등록방 아님 rawRoom=" + event.rawRoom);
             return;
         }
         BridgeConfig.applyRoomProfile(event, profile);
         if (!event.hasRequiredFields()) {
+            BridgeConfig.setLastIgnoreReason(this, "필수값 부족 sender=" + event.sender + " msg=" + event.message);
             BridgeConfig.appendLog(this, "무시: 필수값 부족 sender=" + event.sender + " msg=" + event.message);
             return;
         }

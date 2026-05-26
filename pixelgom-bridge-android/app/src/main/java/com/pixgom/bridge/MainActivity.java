@@ -553,9 +553,17 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 if (result.ok()) {
                     BridgeConfig.setServerUrl(this, TextUtils.isEmpty(result.serverUrl) ? BridgeConfig.DEFAULT_SERVER_URL : result.serverUrl);
+                    int generalRooms = 0;
+                    int gameRooms = 0;
                     for (EventSender.RoomConnectResult room : result.roomResults) {
-                        BridgeConfig.addOrUpdateRoomProfile(this, room.roomName, room.roomId, room.roomLink, room.joinPhrase, TextUtils.join(",", room.admins), room.licenseKey);
+                        BridgeConfig.addOrUpdateRoomProfile(this, room.roomName, room.roomId, room.roomLink, room.joinPhrase, TextUtils.join(",", room.admins), room.licenseKey, room.roomRole, room.canonicalRoomName);
+                        if ("game".equals(room.roomRole)) {
+                            gameRooms++;
+                        } else {
+                            generalRooms++;
+                        }
                     }
+                    BridgeConfig.setLastConnectSummary(this, "서버 응답 " + result.roomResults.size() + "개 / 저장 " + BridgeConfig.roomProfileCount(this) + "개 / 일반방 " + generalRooms + "개 / 게임방 " + gameRooms + "개");
                     BridgeConfig.setAttendanceEnabled(this, result.attendance);
                     BridgeConfig.setPointsEnabled(this, result.points);
                     BridgeConfig.setRankingsEnabled(this, result.rankings);

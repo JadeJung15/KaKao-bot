@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.93";
+export const APP_VERSION = "0.4.94";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -208,7 +208,10 @@ export const FEATURES = [
   "buyer-room-groups",
   "buyer-room-mode-settings",
   "bridge-connect-linked-room-batch",
-  "buyer-game-room-link"
+  "buyer-game-room-link",
+  "bridge-connect-diagnostics",
+  "admin-game-room-link",
+  "admin-room-rename"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -245,9 +248,9 @@ const INCIDENT_MESSAGES = Object.freeze({
   }
 });
 const MIN_ANDROID_VERSION = normalizeText(process.env.MIN_ANDROID_VERSION || "1.0.17");
-const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.22");
+const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.23");
 const MIN_ANDROID_VERSION_CODE = Math.max(1, Number(process.env.MIN_ANDROID_VERSION_CODE || 18));
-const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 23));
+const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 24));
 const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
 const SUPABASE_ANON_KEY = normalizeText(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 const SUPABASE_KAKAO_ENABLED = normalizeText(process.env.SUPABASE_KAKAO_ENABLED || "false") === "true";
@@ -2912,6 +2915,50 @@ function bridgeConnectApplicationsForApplication(state, account = {}, applicatio
 function bridgeConnectRoomsPayload(state, account = {}, application = {}) {
   return bridgeConnectApplicationsForApplication(state, account, application)
     .map((item) => applicationRoomPayload(state, account, item));
+}
+
+function bridgeConnectDiagnosticsPayload(state, account = {}, application = {}, rooms = null) {
+  const responseRooms = Array.isArray(rooms) ? rooms : bridgeConnectRoomsPayload(state, account, application);
+  const requestedRoomRole = normalizeApplicationRoomPurpose(application.roomPurpose) === "game_room" ? "game" : "general";
+  const baseApplication = requestedRoomRole === "game"
+    ? state.applications?.[application.linkedApplicationId]
+    : application;
+  const linkedGameApplications = baseApplication?.id
+    ? gameRoomApplicationsForBase(state, account, baseApplication).filter(applicationApprovedAndPaid.bind(null, state))
+    : [];
+  const linkedIds = new Set([
+    baseApplication?.id,
+    ...linkedGameApplications.map((item) => item.id)
+  ].filter(Boolean));
+  const unlinkedApprovedRoomCandidates = Object.values(state.applications || {})
+    .filter((item) => item.accountId === account.id)
+    .filter((item) => !linkedIds.has(item.id))
+    .filter((item) => normalizeApplicationRoomPurpose(item.roomPurpose) !== "game_room")
+    .filter((item) => applicationApprovedAndPaid(state, item))
+    .map((item) => publicLinkedApplicationSummary(state, item));
+  const issues = [];
+  if (requestedRoomRole === "game" && !baseApplication) issues.push("main_room_not_found");
+  if (requestedRoomRole === "general" && linkedGameApplications.length === 0 && unlinkedApprovedRoomCandidates.length > 0) {
+    issues.push("approved_room_candidates_not_linked");
+  }
+  if (linkedGameApplications.length > 0 && responseRooms.length < linkedGameApplications.length + 1) {
+    issues.push("bridge_rooms_missing");
+  }
+  if (requestedRoomRole === "game" && responseRooms.length < 2) issues.push("game_room_not_linked");
+  return {
+    requestedApplicationId: application.id || "",
+    requestedRoomName: application.roomName || "",
+    requestedRoomRole,
+    baseApplicationId: baseApplication?.id || "",
+    baseRoomName: baseApplication?.roomName || "",
+    responseRoomCount: responseRooms.length || 1,
+    expectedRoomCount: Math.max(1, 1 + linkedGameApplications.length),
+    linkedGameRoomCount: linkedGameApplications.length,
+    linkedGameRooms: linkedGameApplications.map((item) => publicLinkedApplicationSummary(state, item)),
+    unlinkedApprovedRoomCandidates,
+    issues,
+    ok: issues.length === 0
+  };
 }
 
 function roomModeSettingsPayload(state, baseApplication = {}, linkedGameApplications = []) {
@@ -8091,10 +8138,52 @@ function roomViewExpiringSoon(room, warningDays = 7) {
   return room.subscription?.status === "active" && Number.isFinite(remaining) && remaining >= 0 && remaining <= warningDays;
 }
 
+function adminRoomGroupsPayload(state, rooms = []) {
+  const roomByKey = new Map(rooms.map((room) => [roomKey(room.name), room]));
+  const applications = Object.values(state.applications || {}).filter((application) => applicationApprovedAndPaid(state, application));
+  const generalApplications = applications.filter((application) => normalizeApplicationRoomPurpose(application.roomPurpose) !== "game_room");
+  const groups = generalApplications.map((application) => {
+    const account = state.accounts?.[application.accountId] || {};
+    const linkedGameApplications = gameRoomApplicationsForBase(state, account, application)
+      .filter((item) => applicationApprovedAndPaid(state, item));
+    const roomPayload = applicationRoomPayload(state, account, application);
+    return {
+      baseApplication: publicApplicationView(application, state),
+      baseRoom: roomByKey.get(roomKey(application.roomName)) || roomAdminView(ensureRoom(state, application.roomName)),
+      gameApplications: linkedGameApplications.map((item) => publicApplicationView(item, state)),
+      gameRooms: linkedGameApplications.map((item) => roomByKey.get(roomKey(item.roomName)) || roomAdminView(ensureRoom(state, item.roomName))),
+      roomModeSettings: roomModeSettingsPayload(state, application, linkedGameApplications),
+      bridgeDiagnostics: bridgeConnectDiagnosticsPayload(state, account, application, bridgeConnectRoomsPayload(state, account, application)),
+      bridgeRoomsPreview: bridgeConnectRoomsPayload(state, account, application),
+      connectCode: roomPayload.bridgeConnectCode || ""
+    };
+  });
+  const groupedApplicationIds = new Set([
+    ...generalApplications.map((item) => item.id),
+    ...groups.flatMap((group) => group.gameApplications.map((item) => item.id))
+  ]);
+  for (const gameApplication of applications.filter((application) => normalizeApplicationRoomPurpose(application.roomPurpose) === "game_room")) {
+    if (groupedApplicationIds.has(gameApplication.id)) continue;
+    const account = state.accounts?.[gameApplication.accountId] || {};
+    groups.push({
+      baseApplication: null,
+      baseRoom: null,
+      gameApplications: [publicApplicationView(gameApplication, state)],
+      gameRooms: [roomByKey.get(roomKey(gameApplication.roomName)) || roomAdminView(ensureRoom(state, gameApplication.roomName))],
+      roomModeSettings: roomModeSettingsPayload(state, {}, [gameApplication]),
+      bridgeDiagnostics: bridgeConnectDiagnosticsPayload(state, account, gameApplication, bridgeConnectRoomsPayload(state, account, gameApplication)),
+      bridgeRoomsPreview: bridgeConnectRoomsPayload(state, account, gameApplication),
+      connectCode: applicationRoomPayload(state, account, gameApplication).bridgeConnectCode || ""
+    });
+  }
+  return groups.sort((left, right) => keyFor(left.baseRoom?.name || left.gameRooms?.[0]?.name).localeCompare(keyFor(right.baseRoom?.name || right.gameRooms?.[0]?.name)));
+}
+
 function adminRoomsPayload(state) {
   const rooms = Object.values(state.rooms || {})
     .map(roomAdminView)
     .sort((left, right) => keyFor(left.name).localeCompare(keyFor(right.name)));
+  const roomGroups = adminRoomGroupsPayload(state, rooms);
   return {
     ok: true,
     version: APP_VERSION,
@@ -8110,7 +8199,8 @@ function adminRoomsPayload(state) {
       bridgeProblemRooms: rooms.filter((room) => room.diagnostics?.bridgeStatus !== "ready").length,
       connectionIssueRooms: rooms.filter((room) => room.diagnostics?.connectionStatus === "no_events").length
     },
-    rooms
+    rooms,
+    roomGroups
   };
 }
 
@@ -8139,10 +8229,76 @@ function adminDeleteRoom(state, payload = {}) {
   };
 }
 
+function findRoomEntryForAdminRename(state, payload = {}) {
+  state.rooms ||= {};
+  const originalRoomName = normalizeText(payload.originalRoomName || payload.originalRoom || payload.previousRoomName || payload.previousRoom || payload.originalName);
+  const originalRoomId = normalizeText(payload.originalRoomId || payload.previousRoomId);
+  if (!originalRoomName && !originalRoomId) return null;
+  return Object.entries(state.rooms).find(([key, roomState]) => {
+    const ids = roomState.settings?.roomIds || [];
+    if (originalRoomName && (key === roomKey(originalRoomName) || keyFor(roomState.name) === keyFor(originalRoomName))) return true;
+    return Boolean(originalRoomId && ids.includes(originalRoomId));
+  }) || null;
+}
+
+function updateRoomNameReferences(state, oldName = "", newName = "", oldKey = "", newKey = "") {
+  const oldNameKey = keyFor(oldName);
+  for (const application of Object.values(state.applications || {})) {
+    if (keyFor(application.roomName) === oldNameKey) {
+      application.roomName = newName;
+      application.updatedAt = nowIso();
+    }
+  }
+  for (const roomState of Object.values(state.rooms || {})) {
+    const settings = roomState.settings || {};
+    if (settings.canonicalRoomKey === oldKey) {
+      settings.canonicalRoomKey = newKey;
+      settings.canonicalRoomName = newName;
+    }
+    if (keyFor(settings.canonicalRoomName) === oldNameKey) {
+      settings.canonicalRoomName = newName;
+    }
+    if (Array.isArray(settings.linkedGameRoomKeys)) {
+      settings.linkedGameRoomKeys = settings.linkedGameRoomKeys.map((key) => key === oldKey ? newKey : key);
+    }
+  }
+  for (const inquiry of Object.values(state.applicationInquiries || {})) {
+    if (keyFor(inquiry.roomName) === oldNameKey) inquiry.roomName = newName;
+    if (keyFor(inquiry.mainRoomName) === oldNameKey) inquiry.mainRoomName = newName;
+  }
+  for (const transfer of Object.values(state.roomTransfers || {})) {
+    if (keyFor(transfer.roomName) === oldNameKey) transfer.roomName = newName;
+  }
+}
+
 function adminUpsertRoom(state, payload = {}) {
   const roomName = normalizeText(payload.room || payload.name);
   if (!roomName) return { ok: false, status: 400, error: "room_required" };
-  const roomState = ensureRoom(state, roomName);
+  state.rooms ||= {};
+  const requestedKey = roomKey(roomName);
+  const renameIdentityProvided = Boolean(normalizeText(payload.originalRoomName || payload.originalRoom || payload.previousRoomName || payload.previousRoom || payload.originalName || payload.originalRoomId || payload.previousRoomId));
+  const originalEntry = findRoomEntryForAdminRename(state, payload);
+  if (renameIdentityProvided && !originalEntry) return { ok: false, status: 404, error: "original_room_not_found" };
+  let roomState = null;
+  if (originalEntry) {
+    const [originalKey, originalRoomState] = originalEntry;
+    roomState = originalRoomState;
+    if (originalKey !== requestedKey) {
+      const existingTarget = state.rooms[requestedKey];
+      if (existingTarget && existingTarget !== roomState) {
+        return { ok: false, status: 409, error: "room_name_conflict" };
+      }
+      const previousRoomName = originalRoomState.name || payload.originalRoomName || originalKey;
+      delete state.rooms[originalKey];
+      roomState.name = roomName;
+      state.rooms[requestedKey] = roomState;
+      updateRoomNameReferences(state, previousRoomName, roomName, originalKey, requestedKey);
+    } else {
+      roomState.name = roomName;
+    }
+  } else {
+    roomState = ensureRoom(state, roomName);
+  }
   const settings = roomState.settings;
   const roomId = payloadRoomId(payload);
   const link = normalizeText(payload.roomLink || payload.openChatLink || payload.link || "");
@@ -10045,7 +10201,7 @@ function buyerApplicationForGameLink(state, account = {}, id = "") {
   return { ok: true, application };
 }
 
-function linkApprovedRoomAsGameRoom(state, account = {}, body = {}) {
+function linkApprovedRoomAsGameRoom(state, account = {}, body = {}, options = {}) {
   const baseId = normalizeText(body.baseApplicationId || body.applicationId || body.baseAppId);
   const gameId = normalizeText(body.gameApplicationId || body.gameRoomApplicationId || body.linkApplicationId);
   if (!baseId || !gameId) return { ok: false, status: 400, error: "application_id_required" };
@@ -10087,9 +10243,9 @@ function linkApprovedRoomAsGameRoom(state, account = {}, body = {}) {
 
   const gameRoomState = applyApprovedRoomPurposeSettings(state, gameApplication);
   recordRoomEvent(gameRoomState, {
-    type: "buyer_game_room_linked",
+    type: options.eventType || "buyer_game_room_linked",
     baseRoom: baseApplication.roomName,
-    by: account.email || account.nickname || "buyer_console"
+    by: options.by || account.email || account.nickname || "buyer_console"
   });
 
   return {
@@ -10155,11 +10311,13 @@ function bridgeConnectFromRequest(state, body = {}) {
     };
   }
   const rooms = bridgeConnectRoomsPayload(state, account, application);
+  const bridgeDiagnostics = bridgeConnectDiagnosticsPayload(state, account, application, rooms);
   return {
     ok: true,
     version: APP_VERSION,
     room: applicationRoomPayload(state, account, application),
-    rooms: rooms.length ? rooms : [applicationRoomPayload(state, account, application)]
+    rooms: rooms.length ? rooms : [applicationRoomPayload(state, account, application)],
+    bridgeDiagnostics
   };
 }
 
@@ -10681,6 +10839,30 @@ async function handleAdminApi(req, url) {
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/game-room-link") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const baseApplication = state.applications?.[normalizeText(body.baseApplicationId || body.applicationId || body.baseAppId)];
+    if (!baseApplication) return { status: 404, body: { ok: false, error: "application_not_found" } };
+    const account = state.accounts?.[baseApplication.accountId];
+    if (!account) return { status: 404, body: { ok: false, error: "account_not_found" } };
+    const result = linkApprovedRoomAsGameRoom(state, account, body, {
+      by: auth.by || "admin_console",
+      eventType: "admin_game_room_linked"
+    });
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return {
+      status: 200,
+      body: {
+        ...result,
+        roomGroups: adminRoomGroupsPayload(state, Object.values(state.rooms || {}).map(roomAdminView))
+      }
+    };
   }
 
   if ((req.method === "DELETE" && url.pathname === "/api/admin/rooms") || (req.method === "POST" && url.pathname === "/api/admin/rooms/delete")) {

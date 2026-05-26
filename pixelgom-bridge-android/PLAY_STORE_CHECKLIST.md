@@ -10,7 +10,7 @@
 | 카테고리 | 도구 |
 | 배포 대상 | 픽셀곰 운영 관리자 |
 | 현재 Play 등록 | 1.0.22 (23) |
-| 다음 준비 AAB | 미정 |
+| 다음 준비 AAB | 1.0.23 (24) |
 
 ## 2026-05-25 비공개 테스트 기준
 
@@ -62,12 +62,21 @@ npm.cmd run android:bundle
 | 항목 | 기준 |
 |---|---|
 | track | `internal-testing` |
-| versionName | `1.0.22` |
-| versionCode | `23` |
+| versionName | `1.0.23` |
+| versionCode | `24` |
 | aabPath | `pixelgom-bridge-android/app/build/outputs/bundle/release/app-release.aab` |
 | sha256 | 비어 있지 않은 64자리 해시 |
 
 현재 Play Console 내부 테스트에 등록된 최신 버전은 `1.0.22 (23)`입니다. 비공개 테스트 Alpha의 기존 등록 이력에는 `1.0.21 (22)`가 남아 있습니다.
+
+## 2026-05-26 다음 내부 테스트 준비 2
+
+| 항목 | 상태 |
+|---|---|
+| 등록 버전 | `1.0.23 (24)` |
+| 업로드 대상 | 내부 테스트 트랙 등록 예정 |
+| 릴리스 노트 | 앱에서 일반방/게임방 연동 상태 표시, 게임방 무응답 진단 개선, 관리자 통합 방설정 개선 |
+| 변경 범위 | Android 앱 등록방 역할 표시, 최근 연결/무시 사유 표시, 서버 브릿지 연결 진단 |
 
 이번 Play Console 등록 대상은 **내부 테스트(Internal testing)** 트랙입니다. 비공개 테스트(Closed testing / Alpha)와 프로덕션 트랙에는 별도 지시 전까지 업로드하지 않습니다.
 

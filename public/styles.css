@@ -3659,6 +3659,7 @@ a {
 
 .room-card-list,
 .application-card-list,
+.room-group-list,
 .report-card-list,
 .transfer-card-list {
   display: grid;
@@ -3674,6 +3675,10 @@ a {
 
 .application-card-list {
   max-height: min(36vh, 420px);
+}
+
+.room-group-list {
+  max-height: min(46vh, 540px);
 }
 
 .report-card-list {
@@ -3733,6 +3738,58 @@ a {
 .application-card button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.room-group-card {
+  padding: 14px;
+  background: #fffaf2;
+  border: 1px solid #e2d1bd;
+  border-radius: 8px;
+}
+
+.room-group-card summary {
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.room-group-card summary strong,
+.room-group-card summary span {
+  display: block;
+}
+
+.room-group-card summary span,
+.room-group-card p {
+  color: var(--muted);
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.room-group-body,
+.room-group-subrooms,
+.admin-game-room-link-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.room-subroom-button {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  text-align: left;
+  color: var(--ink);
+  background: #eef8f4;
+  border: 1px solid #cce4d8;
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.room-subroom-button span {
+  color: #2d6c51;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .account-main {

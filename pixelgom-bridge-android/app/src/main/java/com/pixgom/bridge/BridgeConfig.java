@@ -39,6 +39,8 @@ final class BridgeConfig {
     private static final String KEY_FEATURE_GAMES = "feature_games";
     private static final String KEY_RECORD_ONLY_MIGRATION = "record_only_migration_v8";
     private static final String KEY_LOGS = "logs";
+    private static final String KEY_LAST_CONNECT_SUMMARY = "last_connect_summary";
+    private static final String KEY_LAST_IGNORE_REASON = "last_ignore_reason";
     private static final int MAX_LOG_LINES = 80;
 
     private BridgeConfig() {}
@@ -132,14 +134,18 @@ final class BridgeConfig {
         }
         List<String> lines = new ArrayList<>();
         for (RoomProfile profile : profiles) {
-            lines.add(roomProfileLine(profile.name, profile.roomId, profile.roomLink, profile.joinPhrase, TextUtils.join(",", profile.admins), profile.licenseKey));
+            lines.add(roomProfileLine(profile.name, profile.roomId, profile.roomLink, profile.joinPhrase, TextUtils.join(",", profile.admins), profile.licenseKey, profile.roomRole, profile.canonicalRoomName));
         }
         prefs(context).edit().putString(KEY_ROOM_PROFILES, TextUtils.join("\n", lines)).apply();
     }
 
     static void addOrUpdateRoomProfile(Context context, String name, String roomId, String roomLink, String joinPhrase, String admins, String licenseKey) {
+        addOrUpdateRoomProfile(context, name, roomId, roomLink, joinPhrase, admins, licenseKey, "", "");
+    }
+
+    static void addOrUpdateRoomProfile(Context context, String name, String roomId, String roomLink, String joinPhrase, String admins, String licenseKey, String roomRole, String canonicalRoomName) {
         List<RoomProfile> profiles = roomProfiles(context);
-        RoomProfile updated = new RoomProfile(name, roomId, roomLink, joinPhrase, adminList(admins), textOrDefault(licenseKey, deviceLicenseKey(context)));
+        RoomProfile updated = new RoomProfile(name, roomId, roomLink, joinPhrase, adminList(admins), textOrDefault(licenseKey, deviceLicenseKey(context)), roomRole, canonicalRoomName);
         List<RoomProfile> next = new ArrayList<>();
         next.add(updated);
 
@@ -152,7 +158,7 @@ final class BridgeConfig {
 
         List<String> lines = new ArrayList<>();
         for (RoomProfile profile : next) {
-            lines.add(roomProfileLine(profile.name, profile.roomId, profile.roomLink, profile.joinPhrase, TextUtils.join(",", profile.admins), profile.licenseKey));
+            lines.add(roomProfileLine(profile.name, profile.roomId, profile.roomLink, profile.joinPhrase, TextUtils.join(",", profile.admins), profile.licenseKey, profile.roomRole, profile.canonicalRoomName));
         }
         prefs(context).edit().putString(KEY_ROOM_PROFILES, TextUtils.join("\n", lines)).apply();
     }
@@ -184,9 +190,15 @@ final class BridgeConfig {
         List<String> rows = new ArrayList<>();
         int index = 1;
         for (RoomProfile profile : roomProfiles(context)) {
-            rows.add(index + ". " + profile.name + " / " + profile.roomId + " / " + profile.joinPhrase);
+            String roleLabel = profile.roleBadge();
+            String canonical = TextUtils.isEmpty(profile.canonicalRoomName) ? "" : " / 기준 " + profile.canonicalRoomName;
+            rows.add(index + ". " + roleLabel + " " + profile.name + " / " + profile.roomId + canonical + " / " + profile.joinPhrase);
             index++;
         }
+        String lastConnect = lastConnectSummary(context);
+        if (!TextUtils.isEmpty(lastConnect)) rows.add("최근 연결: " + lastConnect);
+        String lastIgnore = lastIgnoreReason(context);
+        if (!TextUtils.isEmpty(lastIgnore)) rows.add("최근 무시: " + lastIgnore);
         return rows.isEmpty() ? "등록된 방 없음" : TextUtils.join("\n", rows);
     }
 
@@ -345,7 +357,9 @@ final class BridgeConfig {
             String joinPhrase = parts.length > 3 ? textOrDefault(parts[3], DEFAULT_JOIN_PHRASE) : DEFAULT_JOIN_PHRASE;
             String adminsText = parts.length > 4 ? parts[4] : name;
             String licenseKey = parts.length > 5 ? parts[5] : "";
-            profiles.add(new RoomProfile(name, roomId, roomLink, joinPhrase, adminList(adminsText), licenseKey));
+            String roomRole = parts.length > 6 ? parts[6] : "";
+            String canonicalRoomName = parts.length > 7 ? parts[7] : "";
+            profiles.add(new RoomProfile(name, roomId, roomLink, joinPhrase, adminList(adminsText), licenseKey, roomRole, canonicalRoomName));
         }
         if (profiles.isEmpty()) {
             profiles.add(new RoomProfile(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, new String[]{ DEFAULT_ROOM_NAME }, ""));
@@ -365,12 +379,18 @@ final class BridgeConfig {
     }
 
     private static String roomProfileLine(String name, String roomId, String roomLink, String joinPhrase, String admins, String licenseKey) {
+        return roomProfileLine(name, roomId, roomLink, joinPhrase, admins, licenseKey, "", "");
+    }
+
+    private static String roomProfileLine(String name, String roomId, String roomLink, String joinPhrase, String admins, String licenseKey, String roomRole, String canonicalRoomName) {
         return textOrDefault(name, DEFAULT_ROOM_NAME) + "|"
                 + textOrDefault(roomId, DEFAULT_ROOM_ID) + "|"
                 + textOrDefault(roomLink, DEFAULT_ROOM_LINK) + "|"
                 + textOrDefault(joinPhrase, DEFAULT_JOIN_PHRASE) + "|"
                 + textOrDefault(admins, DEFAULT_ROOM_NAME) + "|"
-                + textOrDefault(licenseKey, "");
+                + textOrDefault(licenseKey, "") + "|"
+                + textOrDefault(roomRole, "") + "|"
+                + textOrDefault(canonicalRoomName, "");
     }
 
     private static boolean sameRoomProfile(RoomProfile left, RoomProfile right) {
@@ -408,6 +428,22 @@ final class BridgeConfig {
         return prefs(context).getString(KEY_LOGS, "");
     }
 
+    static void setLastConnectSummary(Context context, String value) {
+        prefs(context).edit().putString(KEY_LAST_CONNECT_SUMMARY, textOrDefault(value, "")).apply();
+    }
+
+    static String lastConnectSummary(Context context) {
+        return prefs(context).getString(KEY_LAST_CONNECT_SUMMARY, "");
+    }
+
+    static void setLastIgnoreReason(Context context, String value) {
+        prefs(context).edit().putString(KEY_LAST_IGNORE_REASON, textOrDefault(value, "")).apply();
+    }
+
+    static String lastIgnoreReason(Context context) {
+        return prefs(context).getString(KEY_LAST_IGNORE_REASON, "");
+    }
+
     static void clearLogs(Context context) {
         prefs(context).edit().remove(KEY_LOGS).apply();
     }
@@ -432,14 +468,34 @@ final class BridgeConfig {
         final String joinPhrase;
         final String[] admins;
         final String licenseKey;
+        final String roomRole;
+        final String canonicalRoomName;
 
         RoomProfile(String name, String roomId, String roomLink, String joinPhrase, String[] admins, String licenseKey) {
+            this(name, roomId, roomLink, joinPhrase, admins, licenseKey, "", "");
+        }
+
+        RoomProfile(String name, String roomId, String roomLink, String joinPhrase, String[] admins, String licenseKey, String roomRole, String canonicalRoomName) {
             this.name = textOrDefault(name, DEFAULT_ROOM_NAME);
             this.roomId = textOrDefault(roomId, DEFAULT_ROOM_ID);
             this.roomLink = textOrDefault(roomLink, DEFAULT_ROOM_LINK);
             this.joinPhrase = textOrDefault(joinPhrase, DEFAULT_JOIN_PHRASE);
             this.admins = admins == null || admins.length == 0 ? new String[]{ DEFAULT_ROOM_NAME } : admins;
             this.licenseKey = textOrDefault(licenseKey, "");
+            this.roomRole = textOrDefault(roomRole, "");
+            this.canonicalRoomName = textOrDefault(canonicalRoomName, "");
+        }
+
+        String roleLabel() {
+            if ("game".equals(roomRole)) return "게임방";
+            if ("general".equals(roomRole)) return "일반방";
+            return "일반방";
+        }
+
+        String roleBadge() {
+            if ("game".equals(roomRole)) return "[게임방]";
+            if ("general".equals(roomRole)) return "[일반방]";
+            return "[일반방]";
         }
     }
 
