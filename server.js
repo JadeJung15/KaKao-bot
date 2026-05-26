@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.92";
+export const APP_VERSION = "0.4.93";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -206,7 +206,9 @@ export const FEATURES = [
   "application-inquiry-workflow",
   "application-payment-requested-at",
   "buyer-room-groups",
-  "buyer-room-mode-settings"
+  "buyer-room-mode-settings",
+  "bridge-connect-linked-room-batch",
+  "buyer-game-room-link"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -243,9 +245,9 @@ const INCIDENT_MESSAGES = Object.freeze({
   }
 });
 const MIN_ANDROID_VERSION = normalizeText(process.env.MIN_ANDROID_VERSION || "1.0.17");
-const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.21");
+const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.22");
 const MIN_ANDROID_VERSION_CODE = Math.max(1, Number(process.env.MIN_ANDROID_VERSION_CODE || 18));
-const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 22));
+const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 23));
 const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
 const SUPABASE_ANON_KEY = normalizeText(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 const SUPABASE_KAKAO_ENABLED = normalizeText(process.env.SUPABASE_KAKAO_ENABLED || "false") === "true";
@@ -2793,6 +2795,10 @@ function approvedBuyerApplications(state, account = {}) {
     .filter((application) => state.payments?.[application.paymentId]?.status === "paid");
 }
 
+function applicationApprovedAndPaid(state, application = {}) {
+  return Boolean(application?.status === "approved" && state.payments?.[application.paymentId]?.status === "paid");
+}
+
 function applicationActiveForBilling(application = {}) {
   return Boolean(application && !["cancelled", "rejected"].includes(application.status));
 }
@@ -2880,6 +2886,32 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     serverUrl: "https://pixgom.com/chat-event",
     bridgeConnectCode
   };
+}
+
+function bridgeConnectApplicationsForApplication(state, account = {}, application = {}) {
+  const applications = [];
+  const addApplication = (item) => {
+    if (!item?.id || !applicationApprovedAndPaid(state, item)) return;
+    if (item.accountId !== account.id) return;
+    if (applications.some((existing) => existing.id === item.id)) return;
+    applications.push(item);
+  };
+  const isGameRoom = normalizeApplicationRoomPurpose(application.roomPurpose) === "game_room";
+  if (isGameRoom) {
+    addApplication(state.applications?.[application.linkedApplicationId]);
+    addApplication(application);
+    return applications;
+  }
+  addApplication(application);
+  for (const gameApplication of gameRoomApplicationsForBase(state, account, application)) {
+    addApplication(gameApplication);
+  }
+  return applications;
+}
+
+function bridgeConnectRoomsPayload(state, account = {}, application = {}) {
+  return bridgeConnectApplicationsForApplication(state, account, application)
+    .map((item) => applicationRoomPayload(state, account, item));
 }
 
 function roomModeSettingsPayload(state, baseApplication = {}, linkedGameApplications = []) {
@@ -7483,6 +7515,9 @@ const ACTIVE_GAME_ROOM_COMMANDS = new Set([
 const GAME_ROOM_ECONOMY_COMMANDS = new Set([
   "/포인트", "/내포인트", "/내정보", "/레벨", "/정보", "/가방", "/판매", "/구매내역", "/상점", "/구매"
 ]);
+const GAME_ROOM_DIAGNOSTIC_COMMANDS = new Set([
+  "/상태", "/status", "/브릿지", "/bridge", "/js상태", "/jsstatus", "/로컬상태", "/도움말", "/help", "/?", "/게임팩도움말"
+]);
 
 function commandForRoomRole(command) {
   const token = normalizeCommandToken(command);
@@ -7496,7 +7531,7 @@ function isActiveGameRoomCommand(command) {
 
 function isGameRoomAllowedCommand(command, customItem = null) {
   const token = commandForRoomRole(command);
-  if (ACTIVE_GAME_ROOM_COMMANDS.has(token) || GAME_ROOM_ECONOMY_COMMANDS.has(token)) return true;
+  if (ACTIVE_GAME_ROOM_COMMANDS.has(token) || GAME_ROOM_ECONOMY_COMMANDS.has(token) || GAME_ROOM_DIAGNOSTIC_COMMANDS.has(token)) return true;
   return Boolean(customItem?.proxyCommand && ACTIVE_GAME_ROOM_COMMANDS.has(commandForRoomRole(customItem.proxyCommand)));
 }
 
@@ -9999,6 +10034,81 @@ async function buyerRoomModeSettingsFromRequest(state, req, body = {}) {
   };
 }
 
+function buyerApplicationForGameLink(state, account = {}, id = "") {
+  const applicationId = normalizeText(id);
+  if (!applicationId) return { ok: false, status: 400, error: "application_id_required" };
+  const application = state.applications?.[applicationId];
+  if (!application) return { ok: false, status: 404, error: "application_not_found" };
+  if (application.accountId !== account.id || !(account.applicationIds || []).includes(application.id)) {
+    return { ok: false, status: 403, error: "application_forbidden" };
+  }
+  return { ok: true, application };
+}
+
+function linkApprovedRoomAsGameRoom(state, account = {}, body = {}) {
+  const baseId = normalizeText(body.baseApplicationId || body.applicationId || body.baseAppId);
+  const gameId = normalizeText(body.gameApplicationId || body.gameRoomApplicationId || body.linkApplicationId);
+  if (!baseId || !gameId) return { ok: false, status: 400, error: "application_id_required" };
+  if (baseId === gameId) return { ok: false, status: 400, error: "same_application" };
+
+  const baseResult = buyerApplicationForGameLink(state, account, baseId);
+  if (!baseResult.ok) return baseResult;
+  const gameResult = buyerApplicationForGameLink(state, account, gameId);
+  if (!gameResult.ok) return gameResult;
+  const baseApplication = baseResult.application;
+  const gameApplication = gameResult.application;
+
+  if (normalizeApplicationRoomPurpose(baseApplication.roomPurpose) === "game_room") {
+    return { ok: false, status: 400, error: "base_room_invalid" };
+  }
+  if (normalizeApplicationRoomPurpose(gameApplication.roomPurpose) === "game_room") {
+    return { ok: false, status: 409, error: "game_room_already_linked" };
+  }
+  if (!applicationApprovedAndPaid(state, baseApplication)) {
+    return { ok: false, status: 403, error: "base_room_approval_required" };
+  }
+  if (!applicationApprovedAndPaid(state, gameApplication)) {
+    return { ok: false, status: 403, error: "game_room_approval_required" };
+  }
+  const linkedGameApplications = gameRoomApplicationsForBase(state, account, baseApplication)
+    .filter(applicationActiveForBilling);
+  if (linkedGameApplications.length) {
+    return { ok: false, status: 409, error: "game_room_already_exists" };
+  }
+
+  const updatedAt = nowIso();
+  gameApplication.roomPurpose = "game_room";
+  gameApplication.linkedApplicationId = baseApplication.id;
+  gameApplication.plan ||= {};
+  gameApplication.plan.type = "game_room";
+  gameApplication.plan.monthlyPriceKrw = Number(gameApplication.plan.monthlyPriceKrw || ADDITIONAL_ROOM_PRICE_KRW);
+  gameApplication.updatedAt = updatedAt;
+  baseApplication.updatedAt = updatedAt;
+
+  const gameRoomState = applyApprovedRoomPurposeSettings(state, gameApplication);
+  recordRoomEvent(gameRoomState, {
+    type: "buyer_game_room_linked",
+    baseRoom: baseApplication.roomName,
+    by: account.email || account.nickname || "buyer_console"
+  });
+
+  return {
+    ok: true,
+    version: APP_VERSION,
+    application: publicApplicationView(gameApplication, state),
+    room: applicationRoomPayload(state, account, gameApplication),
+    ...buyerConsolePayload(state, account)
+  };
+}
+
+async function buyerGameRoomLinkFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const result = linkApprovedRoomAsGameRoom(state, auth.account, body);
+  if (!result.ok) return result;
+  return { ...result, guideToken: buyerTokenForAccount(auth.account) };
+}
+
 function roomStateFromAdminRequest(state, body = {}) {
   const roomName = normalizeText(body.room || body.roomName || body.name);
   const requestedRoomId = normalizeText(body.roomId);
@@ -10044,10 +10154,12 @@ function bridgeConnectFromRequest(state, body = {}) {
       }
     };
   }
+  const rooms = bridgeConnectRoomsPayload(state, account, application);
   return {
     ok: true,
     version: APP_VERSION,
-    room: applicationRoomPayload(state, account, application)
+    room: applicationRoomPayload(state, account, application),
+    rooms: rooms.length ? rooms : [applicationRoomPayload(state, account, application)]
   };
 }
 
@@ -10146,6 +10258,15 @@ async function handlePublicAccountApi(req, url) {
     const body = await readBody(req);
     const state = await loadState();
     const result = await buyerRoomModeSettingsFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/game-room-link") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerGameRoomLinkFromRequest(state, req, body);
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -10922,6 +11043,7 @@ export async function requestHandler(req, res) {
       || pathname === "/api/buyer/account/profile"
       || pathname === "/api/application-inquiries"
       || pathname === "/api/buyer/room-mode-settings"
+      || pathname === "/api/buyer/game-room-link"
       || pathname === "/api/buyer/room-transfer/create"
       || pathname === "/api/buyer/room-transfer/accept"
       || pathname === "/api/buyer/room-transfer/cancel"

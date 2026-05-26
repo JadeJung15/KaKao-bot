@@ -288,7 +288,7 @@
         <div class="buyer-room-action-strip">
           <div>
             <strong>다음 할 일</strong>
-            <span>${firstInstall ? "앱 연결코드 복사, 설치 안내 확인, 운영 기본팩 설치 명령어 복사 순서로 진행하세요." : "설치된 팩을 기준으로 필요한 명령어를 검색하거나 스토어에서 추가하세요."} 일반방과 게임방은 같은 브릿지 앱에 방별 연결코드를 차례대로 입력합니다.</span>
+            <span>${firstInstall ? "앱 연결코드 복사, 설치 안내 확인, 운영 기본팩 설치 명령어 복사 순서로 진행하세요." : "설치된 팩을 기준으로 필요한 명령어를 검색하거나 스토어에서 추가하세요."} Android 1.0.22 이상은 일반방 연결코드 1번으로 연결된 게임방까지 자동 등록됩니다.</span>
           </div>
           <button class="button button-primary" type="button" data-copy="${escapeHtml(room.bridgeConnectCode || "")}" data-copy-label="앱 연결코드">앱 연결코드 복사</button>
           <a class="button button-secondary" href="/setup">설치 안내 보기</a>
@@ -349,6 +349,46 @@
     `;
   }
 
+  function gameRoomLinkCandidates(baseRoom = {}, rooms = [], group = {}) {
+    const linkedIds = new Set((group.gameRooms || []).map((room) => room.applicationId).filter(Boolean));
+    return (rooms || []).filter((room) => {
+      if (!room?.applicationId || room.applicationId === baseRoom.applicationId) return false;
+      if (linkedIds.has(room.applicationId)) return false;
+      if (room.roomPurpose === "game_room") return false;
+      return room.status === "approved" && room.paymentStatus === "paid";
+    });
+  }
+
+  function renderGameRoomLinkForm(group = {}, rooms = []) {
+    const baseRoom = group.baseRoom || {};
+    if (!baseRoom.applicationId || baseRoom.roomPurpose === "game_room") return "";
+    const gameRooms = group.gameRooms || [];
+    if (gameRooms.length) {
+      return `<p class="buyer-room-note">이미 연결된 게임방이 있습니다. Android 1.0.22 이상에서는 일반방 연결코드를 앱에 다시 입력하면 연결된 게임방까지 자동 등록됩니다.</p>`;
+    }
+    const candidates = gameRoomLinkCandidates(baseRoom, rooms, group);
+    if (!candidates.length) {
+      return `<p class="buyer-room-note">기존 승인 방을 게임방으로 연결하려면 같은 계정의 입금승인 완료 방이 하나 더 필요합니다. 새 게임방은 이 카드의 게임방 추가 신청으로 접수할 수 있습니다.</p>`;
+    }
+    return `
+      <form class="buyer-room-mode-settings buyer-game-room-link-form" data-game-room-link-form data-base-application-id="${escapeHtml(baseRoom.applicationId || "")}">
+        <div>
+          <strong>기존 승인 방을 게임방으로 연결</strong>
+          <span>같은 계정의 승인/입금완료 방만 선택할 수 있습니다. 연결 후 포인트와 가방 데이터는 기준 일반방과 공유됩니다.</span>
+        </div>
+        <label>
+          <span>게임방으로 바꿀 방</span>
+          <select name="gameApplicationId" required>
+            ${candidates.map((room) => `<option value="${escapeHtml(room.applicationId)}">${escapeHtml(room.roomName || room.applicationId)} · ${escapeHtml(room.paymentStatusLabel || "입금승인 완료")}</option>`).join("")}
+          </select>
+        </label>
+        <p class="buyer-room-note">Android 1.0.22 이상은 일반방 연결코드 1번으로 연결된 게임방까지 자동 등록됩니다.</p>
+        <button class="button button-secondary" type="submit">게임방으로 연결</button>
+        <p data-game-room-link-output></p>
+      </form>
+    `;
+  }
+
   function renderRoomGroups(groups = [], rooms = []) {
     if (!groups.length) return renderRooms(rooms);
     return groups.map((group) => {
@@ -358,6 +398,7 @@
       return `
         <article class="buyer-room-group-card">
           ${renderRoomCard(baseRoom, { hideLinkedGameRooms: true })}
+          ${renderGameRoomLinkForm(group, rooms)}
           ${renderRoomModeSettings(group)}
           <details class="buyer-game-room-details" ${gameRooms.length ? "" : "open"}>
             <summary>게임방 ${gameRooms.length ? `${gameRooms.length}개 연결됨` : "추가 전"}</summary>
@@ -683,6 +724,27 @@
         } catch (error) {
           if (output) output.textContent = window.PixelgomAuth.friendlyError(error);
           statusBox.textContent = window.PixelgomAuth.friendlyError(error);
+        }
+      });
+    });
+    content.querySelectorAll("[data-game-room-link-form]").forEach((linkForm) => {
+      linkForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const output = linkForm.querySelector("[data-game-room-link-output]");
+        const values = Object.fromEntries(new FormData(linkForm).entries());
+        try {
+          if (output) output.textContent = "기존 승인 방을 게임방으로 연결하는 중입니다.";
+          await requestBuyerAction("/api/buyer/game-room-link", {
+            baseApplicationId: linkForm.dataset.baseApplicationId || "",
+            gameApplicationId: values.gameApplicationId || ""
+          });
+          if (output) output.textContent = "게임방 연결이 완료되었습니다. Android 1.0.22 이상에서는 일반방 연결코드를 앱에 다시 입력하면 함께 등록됩니다.";
+          statusBox.textContent = "기존 승인 방을 게임방으로 연결했습니다.";
+          await requestConsole(buyerTokenPayload());
+        } catch (error) {
+          const message = window.PixelgomAuth.friendlyError(error);
+          if (output) output.textContent = message;
+          statusBox.textContent = message;
         }
       });
     });

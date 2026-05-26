@@ -64,13 +64,13 @@ try {
   const file = await stat(aabPath);
   const report = {
     ok: true,
-    track: "closed-testing",
+    track: "internal-testing",
     versionName: version.versionName,
     versionCode: version.versionCode,
     aabPath,
     sizeBytes: file.size,
     sha256: await sha256(aabPath),
-    note: "Play Console 업로드 기본 트랙은 비공개 테스트입니다."
+    note: "Play Console 업로드 기본 트랙은 내부 테스트입니다."
   };
   console.log(JSON.stringify(report, null, 2));
 } catch (error) {

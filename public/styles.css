@@ -3745,7 +3745,8 @@ a {
 
 .account-profile-summary,
 .apply-success-summary dl,
-.buyer-room-mode-settings {
+.buyer-room-mode-settings,
+.buyer-game-room-link-form {
   display: grid;
   gap: 10px;
 }
@@ -3825,16 +3826,29 @@ a {
   margin: 0;
 }
 
-.buyer-room-mode-settings {
+.buyer-room-mode-settings,
+.buyer-game-room-link-form {
   padding: 16px;
   border: 1px solid rgba(60, 47, 38, 0.14);
   border-radius: 8px;
   background: #fffaf2;
 }
 
-.buyer-room-mode-settings > div {
+.buyer-room-mode-settings > div,
+.buyer-game-room-link-form > div,
+.buyer-game-room-link-form label {
   display: grid;
   gap: 4px;
+}
+
+.buyer-game-room-link-form select {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid rgba(60, 47, 38, 0.22);
+  border-radius: 8px;
+  background: #fff;
+  color: #3c2f26;
 }
 
 .buyer-game-room-details {

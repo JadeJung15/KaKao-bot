@@ -10,7 +10,7 @@
 | 카테고리 | 도구 |
 | 배포 대상 | 픽셀곰 운영 관리자 |
 | 현재 Play 등록 | 1.0.21 (22) |
-| 다음 준비 AAB | 미정 |
+| 다음 준비 AAB | 1.0.22 (23) |
 
 ## 2026-05-25 비공개 테스트 기준
 
@@ -42,6 +42,15 @@
 | 프로덕션 액세스 조건 | 비공개 테스트 버전 게시 완료, 12명 이상 참여 선택 완료, 14일 이상 운영 대기 중 |
 | 현재 경과 | 12명 테스터가 1일 동안 참여 선택 |
 
+## 2026-05-26 다음 내부 테스트 준비
+
+| 항목 | 상태 |
+|---|---|
+| 준비 버전 | `1.0.22 (23)` |
+| 업로드 대상 | 내부 테스트 트랙 |
+| 릴리스 노트 | 일반방 연결코드로 연결된 게임방까지 자동 등록, 게임방 무응답 개선 |
+| 변경 범위 | Android 다중 방 연결코드 파싱, 서버 `rooms[]` 응답 호환 |
+
 ## 다음 AAB 생성/검증
 
 ```powershell
@@ -52,15 +61,15 @@ npm.cmd run android:bundle
 
 | 항목 | 기준 |
 |---|---|
-| track | `closed-testing` |
-| versionName | `1.0.21` |
-| versionCode | `22` |
+| track | `internal-testing` |
+| versionName | `1.0.22` |
+| versionCode | `23` |
 | aabPath | `pixelgom-bridge-android/app/build/outputs/bundle/release/app-release.aab` |
 | sha256 | 비어 있지 않은 64자리 해시 |
 
-현재 Play Console 내부 테스트와 비공개 테스트 Alpha에 등록된 최신 버전은 `1.0.21 (22)`입니다.
+현재 Play Console 내부 테스트와 비공개 테스트 Alpha에 등록된 최신 등록 버전은 `1.0.21 (22)`이며, 이번 내부 테스트 업로드 대상은 `1.0.22 (23)`입니다.
 
-Play Console 등록 대상은 **내부 테스트(Internal testing)** 및 **비공개 테스트(Closed testing / Alpha)** 트랙입니다. 프로덕션 트랙에는 14일 테스트 요건과 프로덕션 액세스 승인 전까지 업로드하지 않습니다.
+이번 Play Console 등록 대상은 **내부 테스트(Internal testing)** 트랙입니다. 비공개 테스트(Closed testing / Alpha)와 프로덕션 트랙에는 별도 지시 전까지 업로드하지 않습니다.
 
 남은 Play Console 항목:
 

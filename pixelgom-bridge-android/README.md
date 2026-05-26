@@ -21,7 +21,7 @@
 | targetSdk | 35 |
 | 배포 형식 | Android App Bundle `.aab` |
 | 현재 Play 등록 | `1.0.21` / versionCode `22` |
-| 다음 준비 AAB | 미정 |
+| 다음 준비 AAB | `1.0.22` / versionCode `23` |
 
 ## 로컬 빌드
 
@@ -39,7 +39,7 @@ Release 업로드 전에는 Play Console용 서명 설정을 별도로 연결해
 
 ## Play 업로드 키
 
-Play Console 비공개 테스트에 올릴 `.aab`는 디버그 키가 아니라 업로드 키로 서명해야 합니다.
+Play Console 내부 테스트에 올릴 `.aab`는 디버그 키가 아니라 업로드 키로 서명해야 합니다.
 
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
@@ -65,7 +65,7 @@ npm.cmd run android:release-report
 4. `알림 접근 권한 열기`에서 `픽셀곰 브릿지` 알림 접근 허용
 5. `https://pixgom.com/buyer-guide` 구매자 전용 가이드에서 앱 연결코드 복사
 6. 앱의 `연결코드로 자동 설정` 실행
-7. 일반방+게임방은 같은 앱에서 방별 연결코드를 차례로 붙여넣어 등록
+7. Android 1.0.22 이상에서는 일반방 연결코드 1번으로 연결된 게임방까지 자동 등록
 8. 필요하면 대표 방 설정에서 방 이름, roomId, 링크, 입장확인 문구, 관리자, 라이선스 키를 직접 수정
 9. 추가 방은 `https://pixgom.com/admin` 관리 콘솔에서 등록
 10. 방별 기능 ON/OFF에서 출석, 포인트, 랭킹, 히스토리, 게임 사용 여부 설정
@@ -105,7 +105,7 @@ function response(room, msg, sender, isGroupChat, replier, imageDB, packageName)
 ## Play Store 준비
 
 - 개인정보처리방침 URL: `https://pixgom.com/privacy`
-- 업로드 트랙: 비공개 테스트(Closed testing)
+- 업로드 트랙: 내부 테스트(Internal testing)
 - AAB 생성 후 `npm.cmd run android:release-report`로 경로, versionName, versionCode, SHA256을 확인
 - Data safety: 카카오 알림의 방 이름, 발신자명, 메시지 내용을 서버로 전송한다고 명시
 - 앱 설명에는 "등록된 픽셀곰 운영방 메시지를 운영봇 서버로 전달하는 관리자용 브릿지"라고 제한적으로 설명

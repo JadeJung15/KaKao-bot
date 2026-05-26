@@ -137,15 +137,16 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.92");
+  assert.equal(health.json.version, "0.4.93");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(health.json.serverTimezone, "Asia/Seoul");
   assert.equal(health.json.minAndroidVersion, "1.0.17");
-  assert.equal(health.json.latestAndroidVersion, "1.0.21");
+  assert.equal(health.json.latestAndroidVersion, "1.0.22");
+  assert.equal(health.json.latestAndroidVersionCode, 23);
   assert.equal(health.json.minAndroidVersionCode, 18);
-  assert.equal(health.json.latestAndroidVersionCode, 22);
+  assert.equal(health.json.latestAndroidVersionCode, 23);
   assert.equal(health.json.appUpdateRequired, false);
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
@@ -290,6 +291,8 @@ try {
   assert.match(health.json.features.join(","), /application-inquiry-workflow/);
   assert.match(health.json.features.join(","), /buyer-room-groups/);
   assert.match(health.json.features.join(","), /buyer-room-mode-settings/);
+  assert.match(health.json.features.join(","), /bridge-connect-linked-room-batch/);
+  assert.match(health.json.features.join(","), /buyer-game-room-link/);
   assert.equal(health.json.incidentMessages.SERVER_ERROR.code, "server_error");
   assert.equal(health.json.incidentMessages.DB_ERROR.code, "db_error");
   assert.equal(health.json.incidentMessages.AUTH_ERROR.code, "auth_error");
@@ -397,7 +400,7 @@ try {
   assert.match(homeText, /첫 명령어 설치/);
   assert.match(homeText, /하나의 브릿지로 일반방\+게임방 운영/);
   assert.match(homeText, /게임방 추가 신청/);
-  assert.match(homeText, /일반방 연결코드와 게임방 연결코드를 차례로 입력/);
+  assert.match(homeText, /일반방 연결코드 1번만 입력해도 연결된 게임방까지/);
 
   for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup", "/forgot-password", "/reset-password", "/apply", "/account", "/console", "/my-rooms", "/setup", "/license", "/status", "/command-store", "/help/pet", "/help/rpg", "/help/monster", "/help/attendance", "/help/ranking", "/help/games", "/help/shop"]) {
     const page = await fetch(`${baseUrl}${pagePath}`);
@@ -503,7 +506,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.92");
+  assert.equal(commandTemplates.json.version, "0.4.93");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -532,7 +535,7 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.4.92");
+  assert.equal(commandPacks.json.version, "0.4.93");
   assert.equal(commandPacks.json.total, 13);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.fixedCommands.includes("/상태") && pack.fixedCommands.includes("/운세") && pack.fixedCommands.includes("/신고")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.installCode === "pk.001" && pack.installCodeType === "pack"), true);
@@ -604,6 +607,10 @@ try {
   assert.match(buyerConsoleScriptText, /일반방\+게임방 통합 설정/);
   assert.match(buyerConsoleScriptText, /\/api\/buyer\/room-mode-settings/);
   assert.match(buyerConsoleScriptText, /data-room-mode-form/);
+  assert.match(buyerConsoleScriptText, /기존 승인 방을 게임방으로 연결/);
+  assert.match(buyerConsoleScriptText, /\/api\/buyer\/game-room-link/);
+  assert.match(buyerConsoleScriptText, /data-game-room-link-form/);
+  assert.match(buyerConsoleScriptText, /Android 1\.0\.22/);
 
   const commandStorePageText = await (await fetch(`${baseUrl}/command-store`)).text();
   assert.match(commandStorePageText, /명령어 팩/);
@@ -674,19 +681,26 @@ try {
   assert.match(sessionNavText, /href = "\/account"/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.4.92");
+  assert.equal(packageJson.version, "0.4.93");
   assert.equal(packageJson.scripts["check:deploy"], "node scripts/predeploy-check.js");
   assert.equal(packageJson.scripts["smoke:local"], "node scripts/smoke-check.js");
   assert.equal(packageJson.scripts["smoke:prod"], "node scripts/smoke-check.js https://pixgom.com");
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
   assert.equal(packageJson.scripts["android:release-report"], "node scripts/android-release-bundle.js --report-only");
   const androidGradle = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "build.gradle"), "utf8");
-  assert.match(androidGradle, /versionCode 22/);
-  assert.match(androidGradle, /versionName "1\.0\.21"/);
+  assert.match(androidGradle, /versionCode 23/);
+  assert.match(androidGradle, /versionName "1\.0\.22"/);
+  const androidEventSender = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "EventSender.java"), "utf8");
+  assert.match(androidEventSender, /optJSONArray\("rooms"\)/);
+  assert.match(androidEventSender, /roomResults/);
+  const androidMainActivity = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "MainActivity.java"), "utf8");
+  assert.match(androidMainActivity, /for \(EventSender\.RoomConnectResult room/);
+  assert.match(androidMainActivity, /addOrUpdateRoomProfile/);
+  assert.match(androidMainActivity, /연결된 게임방까지 자동 등록/);
   const androidChecklist = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "PLAY_STORE_CHECKLIST.md"), "utf8");
   assert.match(androidChecklist, /비공개 테스트/);
-  assert.match(androidChecklist, /1\.0\.20 \(21\)/);
   assert.match(androidChecklist, /1\.0\.21 \(22\)/);
+  assert.match(androidChecklist, /1\.0\.22 \(23\)/);
 
   const adminUnauthorized = await request("/api/admin/rooms");
   assert.equal(adminUnauthorized.response.status, 401);
@@ -874,7 +888,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.4.92");
+  assert.equal(adminDiagnostics.json.version, "0.4.93");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -885,7 +899,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.4.92");
+  assert.equal(adminBackup.json.version, "0.4.93");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -1218,7 +1232,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.92");
+  assert.equal(buyerGuideApproved.json.version, "0.4.93");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -1233,7 +1247,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.92");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.93");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -1685,6 +1699,31 @@ try {
   assert.equal(consoleRoomGroup.roomModeSettings.generalRoomGameBlocked, true);
   assert.equal(consoleRoomGroup.roomModeSettings.gameRoomOpsBlocked, true);
 
+  const bridgeConnectBaseWithGame = await request("/api/bridge/connect", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: consoleGeneralRoom.bridgeConnectCode })
+  });
+  assert.equal(bridgeConnectBaseWithGame.response.status, 200);
+  assert.equal(bridgeConnectBaseWithGame.json.room.roomName, "판매신청방");
+  assert.equal(Array.isArray(bridgeConnectBaseWithGame.json.rooms), true);
+  assert.deepEqual(
+    bridgeConnectBaseWithGame.json.rooms.map((room) => room.roomName).sort(),
+    ["판매게임방", "판매신청방"].sort()
+  );
+  assert.equal(bridgeConnectBaseWithGame.json.rooms.find((room) => room.roomName === "판매게임방").roomRole, "game");
+
+  const bridgeConnectGameWithBase = await request("/api/bridge/connect", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: consoleGameRoom.bridgeConnectCode })
+  });
+  assert.equal(bridgeConnectGameWithBase.response.status, 200);
+  assert.deepEqual(
+    bridgeConnectGameWithBase.json.rooms.map((room) => room.roomName).sort(),
+    ["판매게임방", "판매신청방"].sort()
+  );
+
   const generalRoomGameBlocked = await chatPayload({
     registeredRoom: false,
     room: "판매신청방",
@@ -1796,6 +1835,184 @@ try {
     })
   });
   assert.equal(roomModeEnabled.response.status, 200);
+
+  const linkerEmail = `linker-${process.pid}@pixgom.test`;
+  const linkSignup = await request("/api/signup", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      nickname: "연결테스터",
+      email: linkerEmail,
+      password: "password123",
+      passwordConfirm: "password123",
+      termsAgreed: true,
+      privacyAgreed: true
+    })
+  });
+  assert.equal(linkSignup.response.status, 200);
+  const linkBaseApply = await request("/api/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: linkerEmail,
+      password: "password123",
+      roomName: "기존일반방",
+      roomLink: "https://open.kakao.com/o/linkBase1",
+      adminName: "연결관리자",
+      contact: "link-contact"
+    })
+  });
+  assert.equal(linkBaseApply.response.status, 200);
+  const linkCandidateApply = await request("/api/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: linkerEmail,
+      password: "password123",
+      roomName: "기존승인게임후보",
+      roomLink: "https://open.kakao.com/o/linkGame1",
+      adminName: "연결관리자",
+      contact: "link-contact"
+    })
+  });
+  assert.equal(linkCandidateApply.response.status, 200);
+  const linkPendingApply = await request("/api/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: linkerEmail,
+      password: "password123",
+      roomName: "기존미승인게임후보",
+      roomLink: "https://open.kakao.com/o/linkPending1",
+      adminName: "연결관리자",
+      contact: "link-contact"
+    })
+  });
+  assert.equal(linkPendingApply.response.status, 200);
+  const approvedLinkBase = await request("/api/admin/applications/approve", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({ applicationId: linkBaseApply.json.application.id, months: 1 })
+  });
+  assert.equal(approvedLinkBase.response.status, 200);
+  const approvedLinkCandidate = await request("/api/admin/applications/approve", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin-token" },
+    body: JSON.stringify({ applicationId: linkCandidateApply.json.application.id, months: 1 })
+  });
+  assert.equal(approvedLinkCandidate.response.status, 200);
+  const linkLogin = await request("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: linkerEmail, password: "password123" })
+  });
+  assert.equal(linkLogin.response.status, 200);
+  const gameRoomLinkSelf = await request("/api/buyer/game-room-link", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: linkLogin.json.guideToken,
+      baseApplicationId: linkBaseApply.json.application.id,
+      gameApplicationId: linkBaseApply.json.application.id
+    })
+  });
+  assert.equal(gameRoomLinkSelf.response.status, 400);
+  assert.equal(gameRoomLinkSelf.json.error, "same_application");
+  const gameRoomLinkPending = await request("/api/buyer/game-room-link", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: linkLogin.json.guideToken,
+      baseApplicationId: linkBaseApply.json.application.id,
+      gameApplicationId: linkPendingApply.json.application.id
+    })
+  });
+  assert.equal(gameRoomLinkPending.response.status, 403);
+  assert.equal(gameRoomLinkPending.json.error, "game_room_approval_required");
+  const gameRoomLinkForbidden = await request("/api/buyer/game-room-link", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      baseApplicationId: linkBaseApply.json.application.id,
+      gameApplicationId: linkCandidateApply.json.application.id
+    })
+  });
+  assert.equal(gameRoomLinkForbidden.response.status, 403);
+  assert.equal(gameRoomLinkForbidden.json.error, "application_forbidden");
+  const gameRoomLink = await request("/api/buyer/game-room-link", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: linkLogin.json.guideToken,
+      baseApplicationId: linkBaseApply.json.application.id,
+      gameApplicationId: linkCandidateApply.json.application.id
+    })
+  });
+  assert.equal(gameRoomLink.response.status, 200);
+  assert.equal(gameRoomLink.json.application.roomPurpose, "game_room");
+  assert.equal(gameRoomLink.json.application.linkedApplicationId, linkBaseApply.json.application.id);
+  const linkedRoomGroup = gameRoomLink.json.roomGroups.find((group) => group.baseRoom.applicationId === linkBaseApply.json.application.id);
+  assert.equal(linkedRoomGroup.roomModeSettings.enabled, true);
+  assert.equal(linkedRoomGroup.gameRooms.some((room) => room.applicationId === linkCandidateApply.json.application.id), true);
+  const gameRoomLinkAgain = await request("/api/buyer/game-room-link", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: linkLogin.json.guideToken,
+      baseApplicationId: linkBaseApply.json.application.id,
+      gameApplicationId: linkCandidateApply.json.application.id
+    })
+  });
+  assert.equal(gameRoomLinkAgain.response.status, 409);
+  assert.equal(gameRoomLinkAgain.json.error, "game_room_already_linked");
+  const linkedGameDice = await chatPayload({
+    registeredRoom: false,
+    room: "기존승인게임후보",
+    msg: "/주사위",
+    sender: "연결참여자",
+    roomId: "linkGame1",
+    roomLink: "https://open.kakao.com/o/linkGame1",
+    licenseKey: approvedLinkCandidate.json.room.licenseKey
+  });
+  assert.match(linkedGameDice.json.reply, /주사위 게임/);
+  const linkedGameStatus = await chatPayload({
+    registeredRoom: false,
+    room: "기존승인게임후보",
+    msg: "/상태",
+    sender: "연결참여자",
+    roomId: "linkGame1",
+    roomLink: "https://open.kakao.com/o/linkGame1",
+    licenseKey: approvedLinkCandidate.json.room.licenseKey
+  });
+  assert.match(linkedGameStatus.json.reply, /서버 정상/);
+  const linkConsoleAfter = await request("/api/buyer/console", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: linkLogin.json.guideToken })
+  });
+  const linkBaseRoom = linkConsoleAfter.json.rooms.find((room) => room.applicationId === linkBaseApply.json.application.id);
+  const linkGameRoom = linkConsoleAfter.json.rooms.find((room) => room.applicationId === linkCandidateApply.json.application.id);
+  const linkedBridgeConnect = await request("/api/bridge/connect", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: linkBaseRoom.bridgeConnectCode })
+  });
+  assert.equal(linkedBridgeConnect.response.status, 200);
+  assert.deepEqual(
+    linkedBridgeConnect.json.rooms.map((room) => room.roomName).sort(),
+    ["기존승인게임후보", "기존일반방"].sort()
+  );
+  const linkedGameBridgeConnect = await request("/api/bridge/connect", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: linkGameRoom.bridgeConnectCode })
+  });
+  assert.equal(linkedGameBridgeConnect.response.status, 200);
+  assert.deepEqual(
+    linkedGameBridgeConnect.json.rooms.map((room) => room.roomName).sort(),
+    ["기존승인게임후보", "기존일반방"].sort()
+  );
 
   const adminCommandSearch = await request("/api/admin/room-commands", {
     method: "POST",

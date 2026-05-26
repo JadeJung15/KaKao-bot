@@ -12,6 +12,8 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 final class EventSender {
     private EventSender() {}
@@ -78,24 +80,16 @@ final class EventSender {
             }
             JSONObject room = response.optJSONObject("room");
             if (room == null) return new ConnectResult(status, "room_missing");
-            JSONObject features = room.optJSONObject("features");
-            return new ConnectResult(
-                    status,
-                    room.optString("roomName", BridgeConfig.DEFAULT_ROOM_NAME),
-                    room.optString("roomId", BridgeConfig.DEFAULT_ROOM_ID),
-                    room.optString("roomLink", BridgeConfig.DEFAULT_ROOM_LINK),
-                    room.optString("joinPhrase", BridgeConfig.DEFAULT_JOIN_PHRASE),
-                    room.optString("licenseKey", ""),
-                    stringArray(room.optJSONArray("roomAdmins")),
-                    room.optString("serverUrl", BridgeConfig.DEFAULT_SERVER_URL),
-                    featureEnabled(features, "attendance", true),
-                    featureEnabled(features, "points", true),
-                    featureEnabled(features, "rankings", true),
-                    featureEnabled(features, "history", true),
-                    featureEnabled(features, "profiles", true),
-                    featureEnabled(features, "localJs", true),
-                    featureEnabled(features, "games", false)
-            );
+            JSONArray roomsArray = response.optJSONArray("rooms");
+            List<RoomConnectResult> roomResults = new ArrayList<>();
+            if (roomsArray != null && roomsArray.length() > 0) {
+                for (int index = 0; index < roomsArray.length(); index++) {
+                    JSONObject item = roomsArray.optJSONObject(index);
+                    if (item != null) roomResults.add(roomConnectResult(item));
+                }
+            }
+            if (roomResults.isEmpty()) roomResults.add(roomConnectResult(room));
+            return new ConnectResult(status, roomResults);
         } catch (Exception error) {
             return new ConnectResult(0, error.getClass().getSimpleName() + ": " + error.getMessage());
         } finally {
@@ -184,6 +178,26 @@ final class EventSender {
         return features.optBoolean(key, fallback);
     }
 
+    private static RoomConnectResult roomConnectResult(JSONObject room) {
+        JSONObject features = room == null ? null : room.optJSONObject("features");
+        return new RoomConnectResult(
+                room == null ? BridgeConfig.DEFAULT_ROOM_NAME : room.optString("roomName", BridgeConfig.DEFAULT_ROOM_NAME),
+                room == null ? BridgeConfig.DEFAULT_ROOM_ID : room.optString("roomId", BridgeConfig.DEFAULT_ROOM_ID),
+                room == null ? BridgeConfig.DEFAULT_ROOM_LINK : room.optString("roomLink", BridgeConfig.DEFAULT_ROOM_LINK),
+                room == null ? BridgeConfig.DEFAULT_JOIN_PHRASE : room.optString("joinPhrase", BridgeConfig.DEFAULT_JOIN_PHRASE),
+                room == null ? "" : room.optString("licenseKey", ""),
+                stringArray(room == null ? null : room.optJSONArray("roomAdmins")),
+                room == null ? BridgeConfig.DEFAULT_SERVER_URL : room.optString("serverUrl", BridgeConfig.DEFAULT_SERVER_URL),
+                featureEnabled(features, "attendance", true),
+                featureEnabled(features, "points", true),
+                featureEnabled(features, "rankings", true),
+                featureEnabled(features, "history", true),
+                featureEnabled(features, "profiles", true),
+                featureEnabled(features, "localJs", true),
+                featureEnabled(features, "games", false)
+        );
+    }
+
     private static String cleanReply(JSONObject response) {
         if (response == null || !response.has("reply") || response.isNull("reply")) return "";
         String value = response.optString("reply", "").trim();
@@ -212,6 +226,7 @@ final class EventSender {
     static final class ConnectResult {
         final int status;
         final String error;
+        final List<RoomConnectResult> roomResults;
         final String roomName;
         final String roomId;
         final String roomLink;
@@ -230,6 +245,7 @@ final class EventSender {
         ConnectResult(int status, String error) {
             this.status = status;
             this.error = error;
+            this.roomResults = new ArrayList<>();
             this.roomName = "";
             this.roomId = "";
             this.roomLink = "";
@@ -246,8 +262,49 @@ final class EventSender {
             this.games = false;
         }
 
-        ConnectResult(
-                int status,
+        ConnectResult(int status, List<RoomConnectResult> roomResults) {
+            this.status = status;
+            this.error = null;
+            this.roomResults = roomResults == null ? new ArrayList<>() : roomResults;
+            RoomConnectResult first = this.roomResults.isEmpty() ? null : this.roomResults.get(0);
+            this.roomName = first == null ? "" : first.roomName;
+            this.roomId = first == null ? "" : first.roomId;
+            this.roomLink = first == null ? "" : first.roomLink;
+            this.joinPhrase = first == null ? "" : first.joinPhrase;
+            this.licenseKey = first == null ? "" : first.licenseKey;
+            this.admins = first == null ? new String[0] : first.admins;
+            this.serverUrl = first == null ? "" : first.serverUrl;
+            this.attendance = first == null || first.attendance;
+            this.points = first == null || first.points;
+            this.rankings = first == null || first.rankings;
+            this.history = first == null || first.history;
+            this.profiles = first == null || first.profiles;
+            this.localJs = first == null || first.localJs;
+            this.games = first != null && first.games;
+        }
+
+        boolean ok() {
+            return error == null && status >= 200 && status < 300;
+        }
+    }
+
+    static final class RoomConnectResult {
+        final String roomName;
+        final String roomId;
+        final String roomLink;
+        final String joinPhrase;
+        final String licenseKey;
+        final String[] admins;
+        final String serverUrl;
+        final boolean attendance;
+        final boolean points;
+        final boolean rankings;
+        final boolean history;
+        final boolean profiles;
+        final boolean localJs;
+        final boolean games;
+
+        RoomConnectResult(
                 String roomName,
                 String roomId,
                 String roomLink,
@@ -263,8 +320,6 @@ final class EventSender {
                 boolean localJs,
                 boolean games
         ) {
-            this.status = status;
-            this.error = null;
             this.roomName = roomName == null ? "" : roomName;
             this.roomId = roomId == null ? "" : roomId;
             this.roomLink = roomLink == null ? "" : roomLink;
@@ -279,10 +334,6 @@ final class EventSender {
             this.profiles = profiles;
             this.localJs = localJs;
             this.games = games;
-        }
-
-        boolean ok() {
-            return error == null && status >= 200 && status < 300;
         }
     }
 

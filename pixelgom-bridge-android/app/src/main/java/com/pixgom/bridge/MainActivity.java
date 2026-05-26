@@ -297,7 +297,7 @@ public class MainActivity extends Activity {
         connectTitle.setPadding(0, dp(16), 0, 0);
         panel.addView(connectTitle);
 
-        TextView connectHelp = text("구매자 가이드에서 복사한 앱 연결코드를 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 추가됩니다. 일반방+게임방은 같은 앱에서 방별 연결코드를 차례로 붙여넣으면 함께 등록됩니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView connectHelp = text("구매자 가이드에서 복사한 앱 연결코드를 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 추가됩니다. Android 1.0.22 이상은 일반방 연결코드 1번으로 연결된 게임방까지 자동 등록됩니다.", 13, Color.rgb(111, 78, 49), false);
         connectHelp.setPadding(0, dp(8), 0, 0);
         panel.addView(connectHelp);
 
@@ -553,7 +553,9 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 if (result.ok()) {
                     BridgeConfig.setServerUrl(this, TextUtils.isEmpty(result.serverUrl) ? BridgeConfig.DEFAULT_SERVER_URL : result.serverUrl);
-                    BridgeConfig.addOrUpdateRoomProfile(this, result.roomName, result.roomId, result.roomLink, result.joinPhrase, TextUtils.join(",", result.admins), result.licenseKey);
+                    for (EventSender.RoomConnectResult room : result.roomResults) {
+                        BridgeConfig.addOrUpdateRoomProfile(this, room.roomName, room.roomId, room.roomLink, room.joinPhrase, TextUtils.join(",", room.admins), room.licenseKey);
+                    }
                     BridgeConfig.setAttendanceEnabled(this, result.attendance);
                     BridgeConfig.setPointsEnabled(this, result.points);
                     BridgeConfig.setRankingsEnabled(this, result.rankings);
@@ -561,7 +563,7 @@ public class MainActivity extends Activity {
                     BridgeConfig.setProfilesEnabled(this, result.profiles);
                     BridgeConfig.setScriptEnabled(this, result.localJs);
                     BridgeConfig.setGamesEnabled(this, result.games);
-                    BridgeConfig.appendLog(this, "앱 자동 연결 완료: " + result.roomName + " / " + result.roomId + " / 등록방 " + BridgeConfig.roomProfileCount(this) + "개");
+                    BridgeConfig.appendLog(this, "앱 자동 연결 완료: " + result.roomName + " / " + result.roomId + " / 연결코드 응답 " + result.roomResults.size() + "개 / 등록방 " + BridgeConfig.roomProfileCount(this) + "개 / 연결된 게임방까지 자동 등록");
                     if (serverUrlInput != null) serverUrlInput.setText(BridgeConfig.serverUrl(this));
                     if (roomNameInput != null) roomNameInput.setText(result.roomName);
                     if (roomIdInput != null) roomIdInput.setText(result.roomId);
