@@ -4547,6 +4547,35 @@ a {
   text-decoration: none;
 }
 
+.buyer-console-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 18px;
+}
+
+.buyer-console-tabs button {
+  border: 1px solid rgba(80, 55, 35, 0.18);
+  background: #fffaf1;
+  color: #3a2518;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.buyer-console-tabs button.is-active {
+  background: #3a2518;
+  border-color: #3a2518;
+  color: #fffaf1;
+}
+
+.buyer-guide-react-panel {
+  display: grid;
+  gap: 14px;
+  margin: 0 0 18px;
+}
+
 .console-detail-panel button.danger {
   border-color: #b13c3c;
   background: #c94b4b;

@@ -4,6 +4,9 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.text.TextUtils;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -40,6 +43,7 @@ final class BridgeConfig {
     private static final String KEY_RECORD_ONLY_MIGRATION = "record_only_migration_v8";
     private static final String KEY_LOGS = "logs";
     private static final String KEY_LAST_CONNECT_SUMMARY = "last_connect_summary";
+    private static final String KEY_LAST_PROFILE_SYNC_SUMMARY = "last_profile_sync_summary";
     private static final String KEY_LAST_IGNORE_REASON = "last_ignore_reason";
     private static final int MAX_LOG_LINES = 80;
 
@@ -197,9 +201,31 @@ final class BridgeConfig {
         }
         String lastConnect = lastConnectSummary(context);
         if (!TextUtils.isEmpty(lastConnect)) rows.add("최근 연결: " + lastConnect);
+        String lastSync = lastProfileSyncSummary(context);
+        if (!TextUtils.isEmpty(lastSync)) rows.add("최근 서버 동기화: " + lastSync);
         String lastIgnore = lastIgnoreReason(context);
         if (!TextUtils.isEmpty(lastIgnore)) rows.add("최근 무시: " + lastIgnore);
         return rows.isEmpty() ? "등록된 방 없음" : TextUtils.join("\n", rows);
+    }
+
+    static String roomProfilesJson(Context context) {
+        JSONArray rooms = new JSONArray();
+        try {
+            for (RoomProfile profile : roomProfiles(context)) {
+                JSONObject room = new JSONObject();
+                room.put("roomName", profile.name);
+                room.put("roomId", profile.roomId);
+                room.put("roomLink", profile.roomLink);
+                room.put("joinPhrase", profile.joinPhrase);
+                room.put("licenseKey", profile.licenseKey);
+                room.put("roomRole", profile.roomRole);
+                room.put("canonicalRoomName", profile.canonicalRoomName);
+                rooms.put(room);
+            }
+        } catch (Exception ignored) {
+            return "[]";
+        }
+        return rooms.toString();
     }
 
     static RoomProfile matchingProfile(Context context, String rawRoom) {
@@ -434,6 +460,14 @@ final class BridgeConfig {
 
     static String lastConnectSummary(Context context) {
         return prefs(context).getString(KEY_LAST_CONNECT_SUMMARY, "");
+    }
+
+    static void setLastProfileSyncSummary(Context context, String value) {
+        prefs(context).edit().putString(KEY_LAST_PROFILE_SYNC_SUMMARY, textOrDefault(value, "")).apply();
+    }
+
+    static String lastProfileSyncSummary(Context context) {
+        return prefs(context).getString(KEY_LAST_PROFILE_SYNC_SUMMARY, "");
     }
 
     static void setLastIgnoreReason(Context context, String value) {

@@ -131,6 +131,50 @@ final class EventSender {
         }
     }
 
+    static ProfileSyncResult roomProfileSync(Context context) {
+        HttpURLConnection connection = null;
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("rooms", new JSONArray(BridgeConfig.roomProfilesJson(context)));
+
+            URL url = roomProfileSyncUrl(context);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            writeJson(connection, payload);
+
+            int status = connection.getResponseCode();
+            JSONObject response = new JSONObject(readBody(connection, status));
+            if (status < 200 || status >= 300 || !response.optBoolean("ok", false)) {
+                return new ProfileSyncResult(status, response.optString("error", "room_profile_sync_failed"));
+            }
+            JSONArray roomsArray = response.optJSONArray("rooms");
+            List<RoomConnectResult> roomResults = new ArrayList<>();
+            if (roomsArray != null) {
+                for (int index = 0; index < roomsArray.length(); index++) {
+                    JSONObject item = roomsArray.optJSONObject(index);
+                    if (item != null) roomResults.add(roomConnectResult(item));
+                }
+            }
+            JSONObject summary = response.optJSONObject("summary");
+            JSONObject guideUrls = response.optJSONObject("guideUrls");
+            return new ProfileSyncResult(
+                    status,
+                    roomResults,
+                    summary == null ? 0 : summary.optInt("requestedRoomCount", 0),
+                    summary == null ? roomResults.size() : summary.optInt("syncedRoomCount", roomResults.size()),
+                    guideUrls == null ? "" : guideUrls.optString("android", "")
+            );
+        } catch (Exception error) {
+            return new ProfileSyncResult(0, error.getClass().getSimpleName() + ": " + error.getMessage());
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
     private static void writeJson(HttpURLConnection connection, JSONObject payload) throws Exception {
         byte[] bytes = payload.toString().getBytes(StandardCharsets.UTF_8);
         try (OutputStream output = connection.getOutputStream()) {
@@ -162,6 +206,12 @@ final class EventSender {
         String port = serverUrl.getPort() > 0 ? ":" + serverUrl.getPort() : "";
         String query = "versionCode=" + BuildConfig.VERSION_CODE;
         return new URL(serverUrl.getProtocol() + "://" + serverUrl.getHost() + port + "/health?" + query);
+    }
+
+    private static URL roomProfileSyncUrl(Context context) throws Exception {
+        URL serverUrl = new URL(BridgeConfig.serverUrl(context));
+        String port = serverUrl.getPort() > 0 ? ":" + serverUrl.getPort() : "";
+        return new URL(serverUrl.getProtocol() + "://" + serverUrl.getHost() + port + "/api/bridge/room-profile-sync");
     }
 
     private static String[] stringArray(JSONArray array) {
@@ -395,6 +445,37 @@ final class EventSender {
             this.dbOk = dbOk;
             this.storageLabel = storageLabel == null ? "" : storageLabel;
             this.serverTime = serverTime == null ? "" : serverTime;
+        }
+
+        boolean ok() {
+            return error == null && status >= 200 && status < 300;
+        }
+    }
+
+    static final class ProfileSyncResult {
+        final int status;
+        final String error;
+        final List<RoomConnectResult> roomResults;
+        final int requestedRoomCount;
+        final int syncedRoomCount;
+        final String androidGuideUrl;
+
+        ProfileSyncResult(int status, String error) {
+            this.status = status;
+            this.error = error;
+            this.roomResults = new ArrayList<>();
+            this.requestedRoomCount = 0;
+            this.syncedRoomCount = 0;
+            this.androidGuideUrl = "";
+        }
+
+        ProfileSyncResult(int status, List<RoomConnectResult> roomResults, int requestedRoomCount, int syncedRoomCount, String androidGuideUrl) {
+            this.status = status;
+            this.error = null;
+            this.roomResults = roomResults == null ? new ArrayList<>() : roomResults;
+            this.requestedRoomCount = requestedRoomCount;
+            this.syncedRoomCount = syncedRoomCount;
+            this.androidGuideUrl = androidGuideUrl == null ? "" : androidGuideUrl;
         }
 
         boolean ok() {

@@ -28,9 +28,12 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final String WEBSITE_URL = "https://pixgom.com";
+    private static final String BUYER_CONSOLE_URL = WEBSITE_URL + "/console";
+    private static final String BUYER_SETUP_URL = WEBSITE_URL + "/console?from=android&view=setup";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private TextView homeDiagnosticsStatus;
+    private TextView profileSyncStatus;
     private TextView permissionStatus;
     private TextView logView;
     private EditText serverUrlInput;
@@ -121,8 +124,9 @@ public class MainActivity extends Activity {
         infoPanel.addView(labelValue("라이선스 키", TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey));
         infoPanel.addView(labelValue("월 이용금액", "5,500원 / 방 1개 / 30일"));
         infoPanel.addView(labelValue("사용 기능", BridgeConfig.featureSummary(this)));
-        infoPanel.addView(labelValue("관리 콘솔", WEBSITE_URL + "/admin"));
-        infoPanel.addView(labelValue("구매자 가이드", WEBSITE_URL + "/buyer-guide"));
+        infoPanel.addView(labelValue("구매자 콘솔", BUYER_CONSOLE_URL));
+        infoPanel.addView(labelValue("설치 안내", BUYER_SETUP_URL));
+        infoPanel.addView(labelValue("서버 동기화", BridgeConfig.lastProfileSyncSummary(this)));
         homeDiagnosticsStatus = text("서버 진단: 확인 중", 14, Color.rgb(111, 78, 49), true);
         homeDiagnosticsStatus.setPadding(0, dp(12), 0, 0);
         infoPanel.addView(homeDiagnosticsStatus);
@@ -132,8 +136,8 @@ public class MainActivity extends Activity {
         root.addView(stepsPanel);
         stepsPanel.addView(text("처음 설정 순서", 18, Color.rgb(58, 37, 24), true));
         stepsPanel.addView(stepText("1", "알림 접근 권한을 허용합니다."));
-        stepsPanel.addView(stepText("2", "구매자 가이드에서 앱 연결코드를 복사해 자동 설정합니다."));
-        stepsPanel.addView(stepText("3", "일반방+게임방은 같은 앱에서 방별 연결코드를 차례로 등록합니다."));
+        stepsPanel.addView(stepText("2", "구매자 콘솔의 설치 안내에서 앱 연결코드를 복사해 자동 설정합니다."));
+        stepsPanel.addView(stepText("3", "일반방 연결코드 1번으로 연결된 게임방까지 함께 등록되는지 확인합니다."));
         stepsPanel.addView(stepText("4", "서버 테스트 전송 후 각 카카오방에서 /브릿지를 확인합니다."));
 
         Button startButton = primaryButton("시작하기");
@@ -160,13 +164,17 @@ public class MainActivity extends Activity {
         websiteButton.setOnClickListener(v -> openUrl(WEBSITE_URL));
         root.addView(websiteButton);
 
-        Button guideButton = secondaryButton("구매자 가이드 열기");
-        guideButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/buyer-guide"));
+        Button guideButton = secondaryButton("구매자 콘솔 열기");
+        guideButton.setOnClickListener(v -> openUrl(BUYER_CONSOLE_URL));
         root.addView(guideButton);
 
-        Button consoleButton = secondaryButton("관리 콘솔 열기");
-        consoleButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/admin"));
-        root.addView(consoleButton);
+        Button setupButton = secondaryButton("설치 안내 열기");
+        setupButton.setOnClickListener(v -> openUrl(BUYER_SETUP_URL));
+        root.addView(setupButton);
+
+        Button syncButton = secondaryButton("서버와 다시 동기화");
+        syncButton.setOnClickListener(v -> syncRoomProfiles());
+        root.addView(syncButton);
 
         return scrollView;
     }
@@ -218,8 +226,8 @@ public class MainActivity extends Activity {
         root.addView(troublePanel);
         troublePanel.addView(text("문제 해결", 20, Color.rgb(58, 37, 24), true));
         troublePanel.addView(stepText("1", "응답이 없으면 알림 접근 권한과 카카오톡 알림 표시를 먼저 확인합니다."));
-        troublePanel.addView(stepText("2", "방이 다르면 구매자 가이드의 방별 연결코드를 다시 붙여넣습니다."));
-        troublePanel.addView(stepText("3", "라이선스 오류가 나오면 관리 콘솔의 라이선스 키와 앱의 키가 같은지 확인합니다."));
+        troublePanel.addView(stepText("2", "방이 다르면 구매자 콘솔의 설치 안내에서 연결코드를 다시 확인하거나 서버와 다시 동기화합니다."));
+        troublePanel.addView(stepText("3", "라이선스 오류가 나오면 구매자 콘솔의 라이선스 키와 앱의 키가 같은지 확인합니다."));
         troublePanel.addView(stepText("4", "입장 확인은 방장봇 환영 문구가 입장확인 문구와 일치해야 합니다."));
         troublePanel.addView(stepText("5", "이 앱은 화면 감지/접근성 권한을 사용하지 않습니다. 화면을 켜두는 방식으로 운영하지 않습니다."));
 
@@ -227,13 +235,17 @@ public class MainActivity extends Activity {
         copyButton.setOnClickListener(v -> copyText("픽셀곰 테스트 체크리스트", checklistText()));
         root.addView(copyButton);
 
-        Button guideButton = secondaryButton("구매자 가이드 열기");
-        guideButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/buyer-guide"));
+        Button guideButton = secondaryButton("구매자 콘솔 열기");
+        guideButton.setOnClickListener(v -> openUrl(BUYER_CONSOLE_URL));
         root.addView(guideButton);
 
-        Button consoleButton = secondaryButton("관리 콘솔 열기");
-        consoleButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/admin"));
-        root.addView(consoleButton);
+        Button setupButton = secondaryButton("설치 안내 열기");
+        setupButton.setOnClickListener(v -> openUrl(BUYER_SETUP_URL));
+        root.addView(setupButton);
+
+        Button syncButton = secondaryButton("서버와 다시 동기화");
+        syncButton.setOnClickListener(v -> syncRoomProfiles());
+        root.addView(syncButton);
 
         Button settingButton = secondaryButton("설정 화면으로 이동");
         settingButton.setOnClickListener(v -> showMain());
@@ -297,7 +309,7 @@ public class MainActivity extends Activity {
         connectTitle.setPadding(0, dp(16), 0, 0);
         panel.addView(connectTitle);
 
-        TextView connectHelp = text("구매자 가이드에서 복사한 앱 연결코드를 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 추가됩니다. Android 1.0.22 이상은 일반방 연결코드 1번으로 연결된 게임방까지 자동 등록됩니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView connectHelp = text("구매자 콘솔 설치 안내에서 복사한 앱 연결코드를 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 추가됩니다. Android 1.0.24 이상은 서버와 다시 동기화로 저장된 방의 최신 설정도 확인합니다.", 13, Color.rgb(111, 78, 49), false);
         connectHelp.setPadding(0, dp(8), 0, 0);
         panel.addView(connectHelp);
 
@@ -307,6 +319,14 @@ public class MainActivity extends Activity {
         Button connectButton = secondaryButton("연결코드로 방 추가/갱신");
         connectButton.setOnClickListener(v -> connectWithCode());
         panel.addView(connectButton);
+
+        profileSyncStatus = text("서버 동기화: " + safeText(BridgeConfig.lastProfileSyncSummary(this)), 13, Color.rgb(111, 78, 49), false);
+        profileSyncStatus.setPadding(0, dp(8), 0, 0);
+        panel.addView(profileSyncStatus);
+
+        Button profileSyncButton = secondaryButton("서버와 다시 동기화");
+        profileSyncButton.setOnClickListener(v -> syncRoomProfiles());
+        panel.addView(profileSyncButton);
 
         TextView roomTitle = text("대표 방 설정", 20, Color.rgb(58, 37, 24), true);
         roomTitle.setPadding(0, dp(16), 0, 0);
@@ -335,7 +355,7 @@ public class MainActivity extends Activity {
         licenseKeyInput = input("라이선스 키", TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey);
         panel.addView(licenseKeyInput);
 
-        TextView roomHelp = text("대표 방 설정은 목록 첫 번째 방을 직접 수정할 때만 사용하세요. 여러 방은 구매자 가이드의 방별 연결코드를 차례대로 붙여넣으면 됩니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView roomHelp = text("대표 방 설정은 목록 첫 번째 방을 직접 수정할 때만 사용하세요. 여러 방은 구매자 콘솔의 설치 안내에서 연결코드를 확인하거나 서버와 다시 동기화하면 됩니다.", 13, Color.rgb(111, 78, 49), false);
         roomHelp.setPadding(0, dp(10), 0, 0);
         panel.addView(roomHelp);
 
@@ -376,13 +396,13 @@ public class MainActivity extends Activity {
         privacyButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/privacy"));
         panel.addView(privacyButton);
 
-        Button guideButton = secondaryButton("구매자 가이드 열기");
-        guideButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/buyer-guide"));
+        Button guideButton = secondaryButton("구매자 콘솔 열기");
+        guideButton.setOnClickListener(v -> openUrl(BUYER_CONSOLE_URL));
         panel.addView(guideButton);
 
-        Button consoleButton = secondaryButton("관리 콘솔 열기");
-        consoleButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/admin"));
-        panel.addView(consoleButton);
+        Button setupButton = secondaryButton("설치 안내 열기");
+        setupButton.setOnClickListener(v -> openUrl(BUYER_SETUP_URL));
+        panel.addView(setupButton);
 
         TextView scriptTitle = text("로컬 JS 자동응답", 20, Color.rgb(58, 37, 24), true);
         scriptTitle.setPadding(0, dp(18), 0, dp(8));
@@ -459,6 +479,7 @@ public class MainActivity extends Activity {
 
     private void clearMainRefs() {
         homeDiagnosticsStatus = null;
+        profileSyncStatus = null;
         permissionStatus = null;
         logView = null;
         serverUrlInput = null;
@@ -564,6 +585,7 @@ public class MainActivity extends Activity {
                         }
                     }
                     BridgeConfig.setLastConnectSummary(this, "서버 응답 " + result.roomResults.size() + "개 / 저장 " + BridgeConfig.roomProfileCount(this) + "개 / 일반방 " + generalRooms + "개 / 게임방 " + gameRooms + "개");
+                    BridgeConfig.setLastProfileSyncSummary(this, "연결코드 응답 " + result.roomResults.size() + "개 / 앱 저장 " + BridgeConfig.roomProfileCount(this) + "개");
                     BridgeConfig.setAttendanceEnabled(this, result.attendance);
                     BridgeConfig.setPointsEnabled(this, result.points);
                     BridgeConfig.setRankingsEnabled(this, result.rankings);
@@ -588,10 +610,47 @@ public class MainActivity extends Activity {
                     if (gamesFeatureSwitch != null) gamesFeatureSwitch.setChecked(result.games);
                     refreshStatus();
                     refreshRoomProfilesSummary();
+                    refreshProfileSyncStatus();
                     Toast.makeText(this, "방 설정이 추가/갱신되었습니다.", Toast.LENGTH_SHORT).show();
                 } else {
                     BridgeConfig.appendLog(this, "앱 자동 연결 실패: " + result.error);
                     Toast.makeText(this, "연결코드를 확인하세요.", Toast.LENGTH_SHORT).show();
+                }
+                refreshLogs();
+            });
+        });
+    }
+
+    private void syncRoomProfiles() {
+        BridgeConfig.appendLog(this, "서버 방 프로필 동기화 시작");
+        refreshLogs();
+        executor.execute(() -> {
+            EventSender.ProfileSyncResult result = EventSender.roomProfileSync(this);
+            runOnUiThread(() -> {
+                if (result.ok()) {
+                    int generalRooms = 0;
+                    int gameRooms = 0;
+                    for (EventSender.RoomConnectResult room : result.roomResults) {
+                        BridgeConfig.addOrUpdateRoomProfile(this, room.roomName, room.roomId, room.roomLink, room.joinPhrase, TextUtils.join(",", room.admins), room.licenseKey, room.roomRole, room.canonicalRoomName);
+                        if ("game".equals(room.roomRole)) gameRooms++;
+                        else generalRooms++;
+                    }
+                    String summary = "요청 " + result.requestedRoomCount
+                            + "개 / 서버 응답 " + result.syncedRoomCount
+                            + "개 / 앱 저장 " + BridgeConfig.roomProfileCount(this)
+                            + "개 / 일반방 " + generalRooms + "개 / 게임방 " + gameRooms + "개";
+                    BridgeConfig.setLastProfileSyncSummary(this, summary);
+                    BridgeConfig.appendLog(this, "서버 방 프로필 동기화 완료: " + summary);
+                    refreshStatus();
+                    refreshRoomProfilesSummary();
+                    refreshProfileSyncStatus();
+                    Toast.makeText(this, "서버와 다시 동기화했습니다.", Toast.LENGTH_SHORT).show();
+                } else {
+                    String summary = "실패: " + result.error;
+                    BridgeConfig.setLastProfileSyncSummary(this, summary);
+                    BridgeConfig.appendLog(this, "서버 방 프로필 동기화 실패: " + result.error);
+                    refreshProfileSyncStatus();
+                    Toast.makeText(this, "동기화 실패: 등록 방과 라이선스를 확인하세요.", Toast.LENGTH_SHORT).show();
                 }
                 refreshLogs();
             });
@@ -626,6 +685,7 @@ public class MainActivity extends Activity {
     }
 
     private void refreshStatus() {
+        if (permissionStatus == null) return;
         boolean permission = notificationPermissionEnabled();
         String permissionHelp = permission ? "" : "\n안내: 설정에서 픽셀곰 브릿지를 허용하고, 카카오톡 방 알림을 켜야 대화를 감지합니다.";
         permissionStatus.setText((permission ? "알림 접근 권한: 허용됨" : "알림 접근 권한: 필요")
@@ -675,6 +735,7 @@ public class MainActivity extends Activity {
     }
 
     private void refreshLogs() {
+        if (logView == null) return;
         String logs = BridgeConfig.logs(this);
         logView.setText(TextUtils.isEmpty(logs) ? "아직 전송 로그가 없습니다." : logs);
     }
@@ -682,6 +743,12 @@ public class MainActivity extends Activity {
     private void refreshRoomProfilesSummary() {
         if (roomProfilesSummaryView != null) {
             roomProfilesSummaryView.setText("등록 방 목록\n" + BridgeConfig.roomProfilesSummary(this));
+        }
+    }
+
+    private void refreshProfileSyncStatus() {
+        if (profileSyncStatus != null) {
+            profileSyncStatus.setText("서버 동기화: " + safeText(BridgeConfig.lastProfileSyncSummary(this)));
         }
     }
 
@@ -753,8 +820,8 @@ public class MainActivity extends Activity {
                 + "5. /게임, /주사위\n\n"
                 + "문제 해결\n"
                 + "- 응답 없음: 알림 접근 권한, 카카오톡 알림 표시, 서버 URL 확인\n"
-                + "- 방 불일치: 구매자 가이드의 방별 연결코드 재적용\n"
-                + "- 라이선스 오류: 관리 콘솔과 앱의 라이선스 키 일치 확인\n"
+                + "- 방 불일치: 구매자 콘솔 설치 안내의 연결코드 재적용 또는 서버와 다시 동기화\n"
+                + "- 라이선스 오류: 구매자 콘솔과 앱의 라이선스 키 일치 확인\n"
                 + "- 입장 감지: 방장봇 환영 문구와 입장확인 문구 일치 확인\n"
                 + "- 화면 감지: 사용 안 함";
     }

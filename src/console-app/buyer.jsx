@@ -4,9 +4,20 @@ import { buyerLogin, buyerRequest, buyerToken, formatError } from "./api.js";
 import { bridgeLabel, buyerSummaries, formatDate, formatKrw, roomRoleLabel, snapshot } from "./domain.js";
 import { EmptyState, FieldRow, StatusBadge, SummaryGrid, ToastHost } from "./ui.jsx";
 
+function consoleViewFromLocation() {
+  const params = new URLSearchParams(window.location.search || "");
+  const explicit = params.get("view") || document.body?.dataset?.consoleView || "";
+  if (["setup", "rooms", "license", "requests"].includes(explicit)) return explicit;
+  if (window.location.pathname === "/setup" || window.location.pathname === "/buyer-guide") return "setup";
+  if (window.location.pathname === "/my-rooms") return "rooms";
+  if (window.location.pathname === "/license") return "license";
+  return "overview";
+}
+
 function BuyerApp() {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeView, setActiveView] = useState(consoleViewFromLocation);
   const [login, setLogin] = useState({ email: "", password: "" });
   const [toast, setToast] = useState(null);
   const [inquiryForm, setInquiryForm] = useState({ applicationId: "", type: "payment_check", message: "" });
@@ -110,7 +121,9 @@ function BuyerApp() {
           <button type="button" onClick={() => load()}>새로고침</button>
         </div>
       </header>
+      <BuyerConsoleTabs activeView={activeView} onChange={setActiveView} />
       {payload ? <SummaryGrid items={buyerSummaries(payload)} /> : null}
+      {payload ? <BuyerGuidePanel payload={payload} activeView={activeView} /> : null}
       <section className="buyer-room-grid">
         {(groups.length ? groups : payload?.rooms?.map((room) => ({ baseRoom: room, gameRooms: [], roomModeSettings: null })) || []).map((group) => (
           <RoomGroupCard key={group.baseRoom?.applicationId || group.baseRoom?.roomName || group.baseApplication?.id} group={group} onReload={load} setToast={setToast} />
@@ -178,6 +191,73 @@ function BuyerApp() {
       </section>
       <ToastHost message={toast?.message} tone={toast?.tone} onClose={() => setToast(null)} />
     </main>
+  );
+}
+
+function BuyerConsoleTabs({ activeView, onChange }) {
+  const tabs = [
+    ["overview", "요약"],
+    ["setup", "설치 안내"],
+    ["rooms", "내 방"],
+    ["license", "라이선스"],
+    ["requests", "문의/복구"]
+  ];
+  return (
+    <nav className="buyer-console-tabs" aria-label="구매자 콘솔 보기">
+      {tabs.map(([value, label]) => (
+        <button key={value} type="button" className={activeView === value ? "is-active" : ""} onClick={() => onChange(value)}>
+          {label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function BuyerGuidePanel({ payload = {}, activeView }) {
+  const guideUrls = payload.guideUrls || {};
+  const roomCount = payload.rooms?.length || 0;
+  const readyRooms = (payload.rooms || []).filter((room) => room.bridgeStatus === "ready").length;
+  const guideSections = payload.guideSections || [];
+  return (
+    <section className={`buyer-guide-react-panel view-${activeView}`}>
+      <article className="console-compact-section">
+        <div>
+          <p className="console-eyebrow">앱 연결 상태</p>
+          <h2>{activeView === "setup" ? "설치 안내와 서버 동기화" : "앱과 콘솔 상태를 같은 기준으로 확인"}</h2>
+          <p>앱은 서버와 상시 push 연결이 아니라 연결코드 입력, 앱 실행/복귀, 수동 새로고침 시 최신 방 상태를 다시 맞추는 방식으로 동기화합니다.</p>
+        </div>
+        <div className="console-status-list">
+          <strong>요약</strong>
+          <span>승인 방 {roomCount}개 · 앱 연결 준비 {readyRooms}개</span>
+          <span>설치 안내: {guideUrls.setup || "/console?view=setup"}</span>
+          <span>Android 앱 진입: {guideUrls.android || "/console?from=android&view=setup"}</span>
+        </div>
+        <div className="console-action-row">
+          <a href="/console?view=setup">설치 안내 열기</a>
+          <a href="/console?view=rooms">내 방 상태</a>
+          <button type="button" onClick={() => window.location.reload()}>서버와 다시 동기화</button>
+        </div>
+      </article>
+      {(activeView === "setup" || activeView === "overview") ? (
+        <div className="buyer-guide-grid">
+          {guideSections.map((section) => (
+            <article className="buyer-guide-section" key={section.title}>
+              <h3>{section.title}</h3>
+              <ol>{(section.items || []).map((item) => <li key={item}>{item}</li>)}</ol>
+            </article>
+          ))}
+          <article className="buyer-guide-section">
+            <h3>처음 해야 할 순서</h3>
+            <ol>
+              <li>서비스 신청과 입금승인 상태를 확인합니다.</li>
+              <li>앱에서 구매자 콘솔 버튼을 눌러 설치 안내를 엽니다.</li>
+              <li>일반방 연결코드를 입력하고 게임방이 함께 등록되는지 확인합니다.</li>
+              <li>각 방에서 /브릿지, /상태, /js상태를 확인합니다.</li>
+            </ol>
+          </article>
+        </div>
+      ) : null}
+    </section>
   );
 }
 

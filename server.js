@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.98";
+export const APP_VERSION = "0.4.99";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -225,7 +225,10 @@ export const FEATURES = [
   "buyer-request-status-dashboard",
   "console-home-navigation",
   "admin-console-command-admin-tools",
-  "admin-room-bulk-archive"
+  "admin-room-bulk-archive",
+  "unified-buyer-guide",
+  "bridge-room-profile-sync",
+  "android-buyer-console-routing"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -2868,6 +2871,18 @@ function bridgeConnectCodeForApplication(account = {}, application = {}) {
   });
 }
 
+function buyerGuideUrlsPayload({ absolute = false } = {}) {
+  const urls = {
+    console: "/console",
+    setup: "/console?view=setup",
+    rooms: "/console?view=rooms",
+    license: "/console?view=license",
+    android: "/console?from=android&view=setup"
+  };
+  if (!absolute) return urls;
+  return Object.fromEntries(Object.entries(urls).map(([key, value]) => [key, `${PUBLIC_SITE_URL}${value}`]));
+}
+
 function signedTokenHash(value = "") {
   return createHmac("sha256", buyerTokenSecret()).update(normalizeText(value)).digest("hex");
 }
@@ -3163,20 +3178,24 @@ function buyerRoomGroupsPayload(state, account = {}, approvedApplications = null
 function buyerGuidePayload(state, account = {}) {
   const applications = approvedBuyerApplications(state, account);
   if (!applications.length) return { ok: false, status: 403, error: "buyer_approval_required" };
-  const rooms = applications.map((application) => applicationRoomPayload(state, account, application));
+  const console = buyerConsolePayload(state, account);
+  const rooms = console.rooms || applications.map((application) => applicationRoomPayload(state, account, application));
   return {
     ok: true,
     version: APP_VERSION,
     account: publicAccountView(account),
     testAppUrl: PLAY_INTERNAL_TEST_URL,
     rooms,
+    roomGroups: console.roomGroups || [],
+    console,
+    guideUrls: buyerGuideUrlsPayload(),
     sections: [
       {
         title: "처음 시작",
         items: [
           `픽셀곰 브릿지 앱을 봇폰에 설치합니다. 내부 테스트 링크: ${PLAY_INTERNAL_TEST_URL}`,
           "앱 첫 화면에서 알림 접근 권한을 허용합니다.",
-          "구매자 가이드의 승인된 방 카드에서 연결코드를 복사합니다.",
+          "구매자 콘솔의 설치 안내에서 승인된 방 연결코드를 확인합니다.",
           "앱에서 연결코드 자동 설정을 실행하면 방 이름, roomId, 오픈채팅 링크, 라이선스 키가 자동 입력됩니다.",
           "앱에서 서버 테스트 전송 후 카카오방에서 /브릿지, /상태를 확인합니다."
         ]
@@ -3184,7 +3203,7 @@ function buyerGuidePayload(state, account = {}) {
       {
         title: "PC에서 접속",
         items: [
-          "https://pixgom.com/login 으로 로그인해 구매 상태를 확인합니다.",
+          "https://pixgom.com/console 으로 로그인해 구매 상태, 설치 상태, 문의 상태를 확인합니다.",
           "관리자는 https://pixgom.com/admin 에서 방 등록, 구독, 커스텀 명령어를 관리합니다.",
           "운영자 어드민은 등록된 운영자 이메일 로그인으로만 접근합니다."
         ]
@@ -3192,7 +3211,7 @@ function buyerGuidePayload(state, account = {}) {
       {
         title: "모바일에서 접속",
         items: [
-          "휴대폰 브라우저에서 https://pixgom.com/buyer-guide 를 열고 로그인합니다.",
+          "휴대폰 브라우저에서 https://pixgom.com/console?view=setup 을 열고 로그인합니다.",
           "연결코드는 승인된 방마다 별도로 발급됩니다.",
           "Android Chrome은 메뉴에서 '홈 화면에 추가'를 선택해 바로가기를 만들 수 있습니다.",
           "iPhone Safari는 공유 버튼에서 '홈 화면에 추가'를 선택합니다."
@@ -8147,6 +8166,9 @@ export async function healthPayload(options = {}) {
     monthlyPriceKrw: MONTHLY_PRICE_KRW,
     additionalRoomPriceKrw: ADDITIONAL_ROOM_PRICE_KRW,
     defaultSubscriptionDays: DEFAULT_SUBSCRIPTION_DAYS,
+    buyerConsoleUrl: `${PUBLIC_SITE_URL}/console`,
+    buyerSetupUrl: `${PUBLIC_SITE_URL}/console?view=setup`,
+    androidBuyerGuideUrl: `${PUBLIC_SITE_URL}/console?from=android&view=setup`,
     adminConsoleEnabled: OWNER_ADMIN_EMAILS.length > 0,
     incidentMessages: incidentMessagesPayload(),
     features: FEATURES
@@ -9666,6 +9688,25 @@ function buyerConsolePayload(state, account = {}) {
     reports: buyerRoomReportsPayload(state, account),
     archivedRooms: buyerArchivedRoomsPayload(state, account),
     restoreRequests: buyerRestoreRequestsPayload(state, account),
+    guideUrls: buyerGuideUrlsPayload(),
+    guideSections: [
+      {
+        title: "구매자 콘솔에서 먼저 확인",
+        items: [
+          "설치 안내 탭에서 앱 연결코드와 일반방/게임방 연결 상태를 확인합니다.",
+          "앱에서는 구매자 콘솔 버튼으로 /console?from=android&view=setup 화면을 엽니다.",
+          "연결코드를 다시 입력하거나 앱의 서버와 다시 동기화 버튼으로 최신 방 설정을 맞춥니다."
+        ]
+      },
+      {
+        title: "앱 연결 상태",
+        items: [
+          "서버 응답 방 수와 앱 저장 방 수가 같아야 합니다.",
+          "게임방이 있으면 일반방과 게임방 역할이 앱 등록 방 목록에 함께 표시되어야 합니다.",
+          "최근 무시 사유가 등록방 아님이면 카카오 알림의 방 이름과 콘솔 방 이름을 비교합니다."
+        ]
+      }
+    ],
     ownerAdminNotice: "/admin 은 판매자 운영자 전용입니다. 구매자는 /console, /my-rooms, /setup, /license 화면만 사용합니다."
   };
 }
@@ -11315,6 +11356,97 @@ function bridgeConnectFromRequest(state, body = {}) {
   };
 }
 
+function bridgeRoomProfileSyncFromRequest(state, body = {}) {
+  const requestedRooms = Array.isArray(body.rooms)
+    ? body.rooms
+    : Array.isArray(body.profiles)
+      ? body.profiles
+      : [];
+  const requestedProfiles = requestedRooms
+    .map((item) => ({
+      roomName: normalizeText(item.roomName || item.name || item.room),
+      roomId: normalizeText(item.roomId || item.id),
+      licenseKey: normalizeLicenseKey(item.licenseKey || item.roomLicenseKey || item.bridgeLicenseKey)
+    }))
+    .filter((item) => item.roomName || item.roomId || item.licenseKey);
+
+  if (!requestedProfiles.length) {
+    return { ok: false, status: 400, error: "room_profiles_required" };
+  }
+
+  const applications = Object.values(state.applications || {})
+    .filter((application) => applicationApprovedAndPaid(state, application));
+  const matchedApplications = [];
+  const addMatchedApplication = (application) => {
+    if (!application?.id || matchedApplications.some((item) => item.id === application.id)) return;
+    matchedApplications.push(application);
+  };
+
+  for (const profile of requestedProfiles) {
+    for (const application of applications) {
+      const account = state.accounts?.[application.accountId] || {};
+      const roomPayload = applicationRoomPayload(state, account, application);
+      const roomIds = [roomPayload.roomId, application.roomId, ...(roomPayload.roomStatusSnapshot?.bridge?.roomIds || [])]
+        .map((value) => normalizeText(value))
+        .filter(Boolean);
+      const roomNames = [roomPayload.roomName, application.roomName]
+        .map((value) => keyFor(value))
+        .filter(Boolean);
+      const licenseMatches = Boolean(profile.licenseKey && normalizeLicenseKey(roomPayload.licenseKey) === profile.licenseKey);
+      const roomIdMatches = Boolean(profile.roomId && roomIds.includes(profile.roomId));
+      const roomNameMatches = Boolean(profile.roomName && roomNames.includes(keyFor(profile.roomName)));
+      if (licenseMatches && (roomIdMatches || roomNameMatches)) {
+        addMatchedApplication(application);
+      }
+    }
+  }
+
+  if (!matchedApplications.length) {
+    return {
+      ok: false,
+      status: 403,
+      error: "valid_room_profile_required",
+      summary: {
+        requestedRoomCount: requestedProfiles.length,
+        syncedRoomCount: 0
+      }
+    };
+  }
+
+  const syncedApplications = [];
+  const addSyncedApplication = (application) => {
+    if (!application?.id || syncedApplications.some((item) => item.id === application.id)) return;
+    syncedApplications.push(application);
+  };
+  for (const application of matchedApplications) {
+    const account = state.accounts?.[application.accountId];
+    if (!account) continue;
+    for (const item of bridgeConnectApplicationsForApplication(state, account, application)) {
+      addSyncedApplication(item);
+    }
+  }
+
+  const rooms = syncedApplications
+    .map((application) => applicationRoomPayload(state, state.accounts?.[application.accountId] || {}, application));
+
+  return {
+    ok: true,
+    version: APP_VERSION,
+    guideUrls: buyerGuideUrlsPayload(),
+    summary: {
+      requestedRoomCount: requestedProfiles.length,
+      matchedRoomCount: matchedApplications.length,
+      syncedRoomCount: rooms.length,
+      generatedAt: nowIso()
+    },
+    rooms,
+    diagnostics: matchedApplications.map((application) => {
+      const account = state.accounts?.[application.accountId] || {};
+      return bridgeConnectDiagnosticsPayload(state, account, application);
+    })
+  };
+}
+
 async function handlePublicAccountApi(req, url) {
   if (req.method === "GET" && url.pathname === "/api/auth/config") {
     return { status: 200, body: authConfigPayload() };
@@ -11506,6 +11638,13 @@ async function handlePublicAccountApi(req, url) {
     const body = await readBody(req);
     const state = await loadState();
     const result = bridgeConnectFromRequest(state, body);
+    return { status: result.status || 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/bridge/room-profile-sync") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = bridgeRoomProfileSyncFromRequest(state, body);
     return { status: result.status || 200, body: result };
   }
 
@@ -12367,7 +12506,8 @@ export async function requestHandler(req, res) {
       || pathname === "/api/buyer/custom-commands"
       || pathname === "/api/buyer/room-commands"
       || pathname === "/api/buyer/custom-commands/delete"
-      || pathname === "/api/bridge/connect";
+      || pathname === "/api/bridge/connect"
+      || pathname === "/api/bridge/room-profile-sync";
 
     if (adminApi) {
       const adminResult = await handleAdminApi(req, url);
