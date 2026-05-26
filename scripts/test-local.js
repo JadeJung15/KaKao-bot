@@ -665,6 +665,11 @@ try {
   assert.match(adminReactSource, /\/api\/admin\/restore-requests\/resolve/);
   assert.match(adminReactSource, /\/api\/admin\/reports\/resolve/);
   assert.match(adminReactSource, /\/api\/admin\/application-inquiries\/resolve/);
+  assert.match(adminReactSource, /PaymentApprovalQueue/);
+  assert.match(adminReactSource, /\/api\/admin\/applications\/approve/);
+  assert.match(adminReactSource, /결제 승인 요청/);
+  assert.match(adminReactSource, /입금승인/);
+  assert.match(adminReactSource, /paymentReviewNeeded/);
   assert.match(adminReactSource, /\/api\/admin\/rooms\/archive/);
   assert.match(adminReactSource, /\/api\/admin\/rooms\/bulk-archive/);
   assert.match(adminReactSource, /\/api\/admin\/rooms\/force-archive/);

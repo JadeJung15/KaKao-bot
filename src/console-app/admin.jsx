@@ -26,6 +26,29 @@ function roomMatches(row, search, filter) {
   return true;
 }
 
+function isPaymentApprovalRequest(application = {}) {
+  const applicationStatus = application.status || "";
+  const lifecycleStatus = application.lifecycle?.status || "";
+  const paymentStatus = application.payment?.status || application.lifecycle?.paymentStatus || "";
+  return (
+    ["pending_payment", "approved_unpaid"].includes(applicationStatus) ||
+    ["pending_payment", "approved_unpaid"].includes(lifecycleStatus) ||
+    ["awaiting_manual_deposit", "payment_requested", "pending"].includes(paymentStatus) ||
+    application.paymentReviewNeeded === true ||
+    application.lifecycle?.paymentReviewNeeded === true
+  );
+}
+
+function adminSummaryItems(rooms = [], archivedRooms = [], applications = []) {
+  const base = roomSummaries(rooms, archivedRooms);
+  const paymentReviewNeeded = applications.filter(isPaymentApprovalRequest).length;
+  return base.map((item) => (
+    item.label === "결제 확인"
+      ? { ...item, value: Math.max(Number(item.value) || 0, paymentReviewNeeded), help: "신청/결제 승인 요청 기준" }
+      : item
+  ));
+}
+
 function AdminApp() {
   const [state, setState] = useState({ loading: true, rooms: [], roomGroups: [], applications: [], reports: [], transfers: [], inquiries: [], archivedRooms: [], restoreRequests: [] });
   const [search, setSearch] = useState("");
@@ -37,6 +60,7 @@ function AdminApp() {
   const [actionForms, setActionForms] = useState({});
   const [logState, setLogState] = useState({ loading: false, logs: [], rooms: [], summary: null, error: "" });
   const [logFilters, setLogFilters] = useState({ room: "", q: "", command: "", type: "", limit: "100" });
+  const [approvingApplicationId, setApprovingApplicationId] = useState("");
 
   async function load() {
     setState((current) => ({ ...current, loading: true }));
@@ -81,6 +105,8 @@ function AdminApp() {
   const selected = rows.find((row) => row.id === selectedId) || rows[0] || null;
   const baseRoom = selected?.raw?.baseRoom || selected?.raw?.room || {};
   const baseApp = selected?.raw?.baseApplication || {};
+  const paymentApprovalRequests = useMemo(() => (state.applications || []).filter(isPaymentApprovalRequest), [state.applications]);
+  const summaryItems = useMemo(() => adminSummaryItems(state.rooms, state.archivedRooms, state.applications), [state.rooms, state.archivedRooms, state.applications]);
   const logRoomOptions = useMemo(() => {
     const candidates = [baseRoom, ...(selected?.raw?.gameRooms || [])]
       .map((room) => room?.name)
@@ -295,6 +321,24 @@ function AdminApp() {
     }
   }
 
+  async function approveApplication(application) {
+    const applicationId = application?.id || application?.applicationId || "";
+    if (!applicationId || approvingApplicationId) return;
+    setApprovingApplicationId(applicationId);
+    try {
+      await adminRequest("/api/admin/applications/approve", {
+        method: "POST",
+        body: { applicationId, months: 1 }
+      });
+      setToast({ tone: "good", message: "입금승인을 완료했습니다. 방 이용 상태를 갱신했습니다." });
+      await load();
+    } catch (error) {
+      setToast({ tone: "bad", message: formatError(error) });
+    } finally {
+      setApprovingApplicationId("");
+    }
+  }
+
   if (!ownerToken() && state.error) {
     return (
       <main className="console-app-shell">
@@ -323,7 +367,12 @@ function AdminApp() {
           <button type="button" onClick={load}>새로고침</button>
         </div>
       </header>
-      <SummaryGrid items={roomSummaries(state.rooms, state.archivedRooms)} />
+      <SummaryGrid items={summaryItems} />
+      <PaymentApprovalQueue
+        applications={paymentApprovalRequests}
+        approvingApplicationId={approvingApplicationId}
+        onApprove={approveApplication}
+      />
       <section className="console-layout">
         <aside className="console-sidebar" aria-label="운영 메뉴">
           {["운영현황", "일반방", "신청/결제", "신고", "이관", "문의", "방별 로그", "종료 보관", "백업/복구"].map((item) => <a href={`#${item}`} key={item}>{item}</a>)}
@@ -500,6 +549,49 @@ function parseQuickCommand(value = "", trigger = "", response = "") {
 
 function commandKey(trigger = "") {
   return String(trigger || "").trim();
+}
+
+function PaymentApprovalQueue({ applications = [], approvingApplicationId = "", onApprove }) {
+  return (
+    <section className="console-payment-approval-panel" id="신청/결제" data-payment-approval-queue="true">
+      <div className="console-section-head">
+        <div>
+          <p className="console-eyebrow">Payment Review</p>
+          <h2>결제 승인 요청</h2>
+          <p>구매자가 신청 접수 후 입금 확인이 필요한 건을 방 목록과 별도로 표시합니다.</p>
+        </div>
+        <StatusBadge label={`${applications.length}건`} status={applications.length ? "pending_payment" : "ok"} />
+      </div>
+      <div className="console-card-list compact">
+        {applications.map((application) => {
+          const id = application.id || application.applicationId || "";
+          const requester = application.email || application.contact || application.account?.email || "-";
+          const mainRoom = application.mainRoom?.roomName || application.linkedApplication?.roomName || application.linkedApplication?.roomNameSnapshot || "";
+          return (
+            <article className="console-card console-workflow-card console-payment-request-card" key={id || application.roomName}>
+              <div>
+                <strong>{application.roomName || "방명 미지정"}</strong>
+                <span>
+                  신청번호 {id || "-"} · {application.payment?.statusLabel || application.lifecycle?.paymentStatusLabel || "결제 확인 필요"}
+                </span>
+                <small>신청자 {requester} · 결제요청 일시 {formatDate(application.payment?.requestedAt || application.createdAt)}</small>
+                <small>입금액 {formatKrw(application.payment?.amountKrw || application.plan?.monthlyPriceKrw)} · 이용 상태 {application.lifecycle?.label || application.status}</small>
+                {mainRoom ? <small>기준 일반방: {mainRoom}</small> : null}
+              </div>
+              <div className="console-workflow-actions compact">
+                <button type="button" onClick={() => onApprove(application)} disabled={approvingApplicationId === id}>
+                  {approvingApplicationId === id ? "승인 중" : "입금승인"}
+                </button>
+              </div>
+            </article>
+          );
+        })}
+        {!applications.length && (
+          <EmptyState title="결제 승인 요청이 없습니다.">신규 신청 또는 입금 확인이 필요한 건이 접수되면 여기에 바로 표시됩니다.</EmptyState>
+        )}
+      </div>
+    </section>
+  );
 }
 
 function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setToast }) {

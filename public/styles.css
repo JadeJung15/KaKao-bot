@@ -4470,6 +4470,7 @@ a {
 .console-main-panel,
 .console-detail-panel,
 .console-archive-panel,
+.console-payment-approval-panel,
 .buyer-room-card,
 .buyer-actions-panel article,
 .console-card,
@@ -4646,9 +4647,36 @@ a {
 .console-main-panel,
 .console-detail-panel,
 .console-archive-panel,
+.console-payment-approval-panel,
 .buyer-room-card,
 .buyer-actions-panel article {
   padding: 14px;
+}
+
+.console-payment-approval-panel {
+  margin: 0 0 16px;
+}
+
+.console-payment-approval-panel .console-section-head h2 {
+  margin: 2px 0 4px;
+  font-size: 1.12rem;
+  letter-spacing: 0;
+}
+
+.console-payment-approval-panel .console-section-head p {
+  margin: 0;
+  color: #657080;
+}
+
+.console-payment-request-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.console-workflow-actions.compact {
+  width: auto;
+  align-self: center;
 }
 
 .console-toolbar {
