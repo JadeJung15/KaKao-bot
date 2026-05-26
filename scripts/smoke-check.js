@@ -49,10 +49,12 @@ try {
 
   const admin = await text(baseUrl, "/admin");
   assert(admin.includes("픽셀곰 운영자 어드민"), "/admin title missing");
-  assert(admin.includes("복구 dry-run 확인"), "/admin backup dry-run missing");
+  assert(admin.includes("일반방 중심 통합 운영 콘솔"), "/admin console shell missing");
+  assert(admin.includes("/console-ui/assets/admin.js"), "/admin react asset missing");
 
   const consolePage = await text(baseUrl, "/console");
-  assert(consolePage.includes("구매자 콘솔") || consolePage.includes("픽셀곰 콘솔"), "/console content missing");
+  assert(consolePage.includes("구매자 셀프 관리 콘솔") || consolePage.includes("픽셀곰 콘솔"), "/console content missing");
+  assert(consolePage.includes("/console-ui/assets/buyer.js"), "/console react asset missing");
 
   const myRooms = await text(baseUrl, "/my-rooms");
   assert(myRooms.includes("내 방") || myRooms.includes("구매자 콘솔"), "/my-rooms content missing");

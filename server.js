@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.94";
+export const APP_VERSION = "0.4.95";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -211,7 +211,15 @@ export const FEATURES = [
   "buyer-game-room-link",
   "bridge-connect-diagnostics",
   "admin-game-room-link",
-  "admin-room-rename"
+  "admin-room-rename",
+  "react-admin-console",
+  "react-buyer-console",
+  "room-status-snapshot",
+  "archived-room-lifecycle",
+  "buyer-restore-request",
+  "unified-room-lifecycle",
+  "admin-workflow-panels",
+  "buyer-request-status-dashboard"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -373,12 +381,17 @@ const ROOM_TRANSFER_CODE_TTL_MS = 30 * 60 * 1000;
 const APPLICATION_STATUS_LABELS = Object.freeze({
   pending_payment: "결제 대기",
   approved: "승인 완료",
-  rejected: "반려"
+  rejected: "반려",
+  on_hold: "보류",
+  ended: "이용 종료",
+  archived: "이용 종료 보관"
 });
 const PAYMENT_STATUS_LABELS = Object.freeze({
   awaiting_manual_deposit: "입금 대기",
   paid: "입금 확인",
-  rejected: "반려"
+  rejected: "반려",
+  on_hold: "보류",
+  ended: "이용 종료"
 });
 const FIXED_COMMAND_GROUPS = Object.freeze([
   {
@@ -1198,6 +1211,8 @@ const initialState = {
   accounts: {},
   applications: {},
   payments: {},
+  archivedRooms: {},
+  restoreRequests: {},
   updatedAt: null
 };
 
@@ -2106,6 +2121,8 @@ function normalizeState(state) {
   state.payments ||= {};
   state.roomTransfers ||= {};
   state.applicationInquiries ||= {};
+  state.archivedRooms ||= {};
+  state.restoreRequests ||= {};
   return state;
 }
 
@@ -2593,9 +2610,90 @@ function publicPaymentView(payment = {}) {
   };
 }
 
+function lifecycleTone(status = "") {
+  if (["active", "approved_paid"].includes(status)) return "good";
+  if (["pending_payment", "payment_required", "approved_unpaid", "expiring_soon", "needs_setup"].includes(status)) return "warn";
+  if (["expired", "rejected", "on_hold", "archived", "purged", "cancelled"].includes(status)) return "bad";
+  return "neutral";
+}
+
+function applicationLifecycleSnapshot(state = {}, application = {}, roomState = null, options = {}) {
+  const payment = state.payments?.[application.paymentId] || {};
+  const room = roomState || state.rooms?.[roomKey(application.roomName)];
+  const subscription = room ? updateSubscriptionStatus(room) : {};
+  let status = "pending_payment";
+  let label = "결제 대기";
+  let available = false;
+  let actionRequired = "입금 확인 대기";
+  if (options.archivedRecord || application.archivedAt) {
+    status = "archived";
+    label = "이용 종료 보관";
+    actionRequired = "복구 요청 또는 관리자 복구";
+  } else if (application.purgedAt) {
+    status = "purged";
+    label = "완전 삭제";
+    actionRequired = "재신청 필요";
+  } else if (["rejected", "cancelled"].includes(application.status)) {
+    status = application.status;
+    label = APPLICATION_STATUS_LABELS[application.status] || "반려";
+    actionRequired = "신청 정보 확인";
+  } else if (application.status === "on_hold" || payment.status === "on_hold") {
+    status = "on_hold";
+    label = "보류";
+    actionRequired = "관리자 확인 필요";
+  } else if (application.status !== "approved") {
+    status = "pending_payment";
+    label = APPLICATION_STATUS_LABELS[application.status] || "결제 대기";
+    actionRequired = "입금 또는 승인 대기";
+  } else if (payment.status !== "paid") {
+    status = "approved_unpaid";
+    label = "승인 대기";
+    actionRequired = "입금 확인 필요";
+  } else if (subscription.status === "expired") {
+    status = "expired";
+    label = "만료";
+    actionRequired = "연장 결제 필요";
+  } else if (room?.settings?.enabled === false) {
+    status = "on_hold";
+    label = "보류";
+    actionRequired = "방 사용 설정 확인";
+  } else if (!room?.settings?.registered) {
+    status = "needs_setup";
+    label = "설정 필요";
+    actionRequired = "방 등록 및 앱 연결 필요";
+  } else {
+    status = "active";
+    label = "이용 중";
+    available = true;
+    actionRequired = "정상 운영";
+  }
+  const remainingDays = Number(subscription.remainingDays);
+  if (status === "active" && Number.isFinite(remainingDays) && remainingDays >= 0 && remainingDays <= 7) {
+    status = "expiring_soon";
+    label = "만료 임박";
+    actionRequired = "연장 결제 권장";
+  }
+  return {
+    status,
+    label,
+    tone: lifecycleTone(status),
+    available,
+    actionRequired,
+    applicationStatus: application.status || "pending_payment",
+    applicationStatusLabel: APPLICATION_STATUS_LABELS[application.status] || application.status || "결제 대기",
+    paymentStatus: payment.status || "awaiting_manual_deposit",
+    paymentStatusLabel: PAYMENT_STATUS_LABELS[payment.status] || payment.status || "입금 대기",
+    subscriptionStatus: subscription.status || "unset",
+    expiresAt: subscription.expiresAt || "",
+    remainingDays: Number.isFinite(remainingDays) ? remainingDays : null
+  };
+}
+
 function publicLinkedApplicationSummary(state = {}, application = {}) {
   if (!application?.id) return null;
   const payment = state.payments?.[application.paymentId] || {};
+  const roomState = state.rooms?.[roomKey(application.roomName)];
+  const lifecycle = applicationLifecycleSnapshot(state, application, roomState);
   return {
     id: application.id || "",
     roomName: application.roomName || "",
@@ -2606,7 +2704,8 @@ function publicLinkedApplicationSummary(state = {}, application = {}) {
     statusLabel: APPLICATION_STATUS_LABELS[application.status] || application.status || "결제 대기",
     paymentStatus: payment.status || "awaiting_manual_deposit",
     paymentStatusLabel: PAYMENT_STATUS_LABELS[payment.status] || payment.status || "입금 대기",
-    paymentRequestedAt: payment.requestedAt || payment.createdAt || ""
+    paymentRequestedAt: payment.requestedAt || payment.createdAt || "",
+    lifecycle
   };
 }
 
@@ -2656,6 +2755,8 @@ function applicationPlanForAccount(state, account = {}, options = {}) {
 
 function publicApplicationView(application = {}, state = null) {
   const payment = state?.payments?.[application.paymentId] || {};
+  const roomState = state?.rooms?.[roomKey(application.roomName)] || null;
+  const lifecycle = state ? applicationLifecycleSnapshot(state, application, roomState) : null;
   const mainRoom = normalizeApplicationRoomPurpose(application.roomPurpose) === "game_room"
     ? publicLinkedApplicationSummary(state || {}, state?.applications?.[application.linkedApplicationId])
     : null;
@@ -2673,6 +2774,9 @@ function publicApplicationView(application = {}, state = null) {
     linkedApplicationId: application.linkedApplicationId || "",
     status: application.status || "pending_payment",
     statusLabel: APPLICATION_STATUS_LABELS[application.status] || application.status || "결제 대기",
+    lifecycle,
+    lifecycleStatus: lifecycle?.status || "",
+    lifecycleLabel: lifecycle?.label || "",
     plan: application.plan || {
       type: "base_room",
       label: "기본 방",
@@ -2794,12 +2898,13 @@ function approvedBuyerApplications(state, account = {}) {
   return (account.applicationIds || [])
     .map((id) => state.applications?.[id])
     .filter(Boolean)
+    .filter((application) => !application.archivedAt)
     .filter((application) => application.status === "approved")
     .filter((application) => state.payments?.[application.paymentId]?.status === "paid");
 }
 
 function applicationApprovedAndPaid(state, application = {}) {
-  return Boolean(application?.status === "approved" && state.payments?.[application.paymentId]?.status === "paid");
+  return Boolean(application?.status === "approved" && !application.archivedAt && state.payments?.[application.paymentId]?.status === "paid");
 }
 
 function applicationActiveForBilling(application = {}) {
@@ -2818,7 +2923,7 @@ function gameRoomApplicationsForBase(state, account = {}, baseApplication = {}) 
 
 function gameRoomSummaryPayload(state, account = {}, application = {}) {
   const roomState = state.rooms?.[roomKey(application.roomName)];
-  const roomView = roomState ? roomAdminView(roomState) : null;
+  const roomView = roomState ? roomAdminView(roomState, state, { application }) : null;
   const payment = state.payments?.[application.paymentId] || {};
   const approved = application.status === "approved" && payment.status === "paid";
   return {
@@ -2840,7 +2945,7 @@ function gameRoomSummaryPayload(state, account = {}, application = {}) {
 
 function applicationRoomPayload(state, account = {}, application = {}) {
   const roomState = state.rooms?.[roomKey(application.roomName)];
-  const roomView = roomState ? roomAdminView(roomState) : null;
+  const roomView = roomState ? roomAdminView(roomState, state, { application, account }) : null;
   const roomPurpose = application.roomPurpose || "general_room";
   const isGameRoom = normalizeApplicationRoomPurpose(roomPurpose) === "game_room";
   const linkedGameRooms = isGameRoom ? [] : gameRoomApplicationsForBase(state, account, application);
@@ -2884,6 +2989,7 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     commandCount: customCommands.length,
     commandPacks: commandPackStatePayload(roomView?.commandPacks || {}),
     gameSettings: roomView?.gameSettings || DEFAULT_GAME_SETTINGS,
+    roomStatusSnapshot: roomView?.roomStatusSnapshot || (roomState ? roomStatusSnapshot(state, roomState, { application, account }) : null),
     subscription,
     monthlyPriceKrw: roomView?.subscription?.monthlyPriceKrw || application.plan?.monthlyPriceKrw || MONTHLY_PRICE_KRW,
     serverUrl: "https://pixgom.com/chat-event",
@@ -2961,20 +3067,62 @@ function bridgeConnectDiagnosticsPayload(state, account = {}, application = {}, 
   };
 }
 
+function boolFromPayload(value, fallback = true) {
+  if (value === true || value === false) return value;
+  const normalized = normalizeText(value).toLowerCase();
+  if (["true", "1", "yes", "y", "on", "켜기", "차단"].includes(normalized)) return true;
+  if (["false", "0", "no", "n", "off", "끄기", "허용"].includes(normalized)) return false;
+  return fallback;
+}
+
+function normalizedModeSplit(mode = {}, fallback = {}) {
+  const blockGamesFallback = fallback.blockGamesInGeneralRoom ?? fallback.generalRoomGameBlocked ?? true;
+  const blockOpsFallback = fallback.blockOpsInGameRoom ?? fallback.gameRoomOpsBlocked ?? true;
+  const shareFallback = fallback.sharePointsAndInventory ?? fallback.sharedData ?? true;
+  return {
+    blockGamesInGeneralRoom: boolFromPayload(mode.blockGamesInGeneralRoom ?? mode.generalRoomGameBlocked, blockGamesFallback),
+    blockOpsInGameRoom: boolFromPayload(mode.blockOpsInGameRoom ?? mode.gameRoomOpsBlocked, blockOpsFallback),
+    sharePointsAndInventory: boolFromPayload(mode.sharePointsAndInventory ?? mode.sharedData, shareFallback),
+    updatedAt: normalizeText(mode.updatedAt || fallback.updatedAt),
+    updatedBy: normalizeText(mode.updatedBy || fallback.updatedBy)
+  };
+}
+
+function modeSplitFromPayload(payload = {}, current = {}, updatedBy = "") {
+  const source = payload.modeSplit && typeof payload.modeSplit === "object" ? payload.modeSplit : payload;
+  const fallback = normalizedModeSplit(current);
+  return {
+    ...normalizedModeSplit(source, fallback),
+    updatedAt: nowIso(),
+    updatedBy: updatedBy || normalizeText(source.updatedBy || payload.updatedBy || payload.by)
+  };
+}
+
 function roomModeSettingsPayload(state, baseApplication = {}, linkedGameApplications = []) {
   const baseRoomState = state.rooms?.[roomKey(baseApplication.roomName)];
   const gameStates = linkedGameApplications
     .map((application) => state.rooms?.[roomKey(application.roomName)])
     .filter(Boolean);
-  const generalRoomGameBlocked = normalizeRoomRole(baseRoomState?.settings?.roomRole) === "general";
-  const gameRoomOpsBlocked = gameStates.length
+  const fallbackBlockGames = normalizeRoomRole(baseRoomState?.settings?.roomRole) === "general";
+  const fallbackBlockOps = gameStates.length
     ? gameStates.every((roomState) => normalizeRoomRole(roomState.settings?.roomRole) === "game")
     : true;
+  const mode = normalizedModeSplit(baseRoomState?.settings?.modeSplit, {
+    blockGamesInGeneralRoom: fallbackBlockGames,
+    blockOpsInGameRoom: fallbackBlockOps,
+    sharePointsAndInventory: true
+  });
   return {
     enabled: linkedGameApplications.length > 0,
-    generalRoomGameBlocked,
-    gameRoomOpsBlocked,
-    sharedData: true,
+    blockGamesInGeneralRoom: mode.blockGamesInGeneralRoom,
+    blockOpsInGameRoom: mode.blockOpsInGameRoom,
+    sharePointsAndInventory: mode.sharePointsAndInventory,
+    generalRoomGameBlocked: mode.blockGamesInGeneralRoom,
+    gameRoomOpsBlocked: mode.blockOpsInGameRoom,
+    sharedData: mode.sharePointsAndInventory,
+    updatedAt: mode.updatedAt || "",
+    updatedBy: mode.updatedBy || "",
+    lastSavedAt: mode.updatedAt || roomLastSettingsSavedAt(baseRoomState || {}),
     description: "일반방과 게임방은 같은 포인트/가방/게임 데이터를 공유합니다."
   };
 }
@@ -8033,7 +8181,100 @@ async function requireAdminConsole(req, url, body = {}) {
   return { ok: false, status: 403, error: "owner_only" };
 }
 
-function roomAdminView(roomState) {
+function applicationForRoomState(state = {}, roomState = {}) {
+  const targetKey = roomKey(roomState.name);
+  return Object.values(state.applications || {})
+    .filter((application) => !application.archivedAt)
+    .find((application) => roomKey(application.roomName) === targetKey) || null;
+}
+
+function roomLastSettingsSavedAt(roomState = {}) {
+  const settings = roomState.settings || {};
+  const event = [...(roomState.events || []), ...(roomState.rawEvents || [])]
+    .filter((item) => ["admin_console_room_saved", "buyer_room_mode_settings_updated", "room_mode_settings_updated", "admin_game_room_linked"].includes(item?.type))
+    .sort((left, right) => String(right.at || "").localeCompare(String(left.at || "")))[0];
+  return settings.modeSplit?.updatedAt
+    || settings.lastSavedAt
+    || settings.license?.updatedAt
+    || event?.at
+    || settings.registeredAt
+    || "";
+}
+
+function roomLifecycleSnapshot(state = {}, roomState = {}, application = null, archivedRecord = null) {
+  if (application) {
+    return applicationLifecycleSnapshot(state, application, roomState, { archivedRecord });
+  }
+  const subscription = updateSubscriptionStatus(roomState);
+  if (archivedRecord || roomState.settings?.archivedAt) {
+    return { status: "archived", label: "이용 종료 보관", tone: "bad", available: false, actionRequired: "복구 요청 또는 관리자 복구", reason: archivedRecord?.reason || roomState.settings?.archivedReason || "" };
+  }
+  if (subscription.status === "expired") return { status: "expired", label: "만료", tone: "bad", available: false, actionRequired: "연장 결제 필요" };
+  if (roomState.settings?.enabled === false) return { status: "on_hold", label: "보류", tone: "bad", available: false, actionRequired: "방 사용 설정 확인" };
+  if (!roomState.settings?.registered) return { status: "needs_setup", label: "설정 필요", tone: "warn", available: false, actionRequired: "방 등록 및 앱 연결 필요" };
+  return { status: "active", label: "이용 중", tone: "good", available: true, actionRequired: "정상 운영" };
+}
+
+function roomStatusSnapshot(state = {}, roomState = {}, options = {}) {
+  const application = options.application || applicationForRoomState(state, roomState);
+  const subscription = updateSubscriptionStatus(roomState);
+  const diagnostics = roomDiagnostics(roomState);
+  const license = licenseSettings(roomState);
+  const settings = roomState.settings || {};
+  const role = normalizeRoomRole(settings.roomRole);
+  const bridgeReady = Boolean(license.key && (settings.roomIds || []).length && settings.registered !== false);
+  const modeSplit = normalizedModeSplit(settings.modeSplit, {
+    blockGamesInGeneralRoom: role === "general",
+    blockOpsInGameRoom: role === "game",
+    sharePointsAndInventory: true
+  });
+  return {
+    roomName: roomState.name || "",
+    role,
+    roleLabel: role === "general" ? "일반방" : role === "game" ? "게임방" : "단일방",
+    canonicalRoomKey: settings.canonicalRoomKey || "",
+    canonicalRoomName: settings.canonicalRoomName || "",
+    linkedGameRoomKeys: settings.linkedGameRoomKeys || [],
+    lifecycle: roomLifecycleSnapshot(state, roomState, application, options.archivedRecord),
+    subscription: {
+      status: subscription.status || "unset",
+      label: subscription.statusLabel || subscriptionStatusLabel(subscription.status || "unset", subscription.remainingDays),
+      expiresAt: subscription.expiresAt || "",
+      remainingDays: subscription.remainingDays
+    },
+    payment: application ? publicPaymentView(state.payments?.[application.paymentId] || {}) : null,
+    license: {
+      status: license.key ? license.status || "active" : "missing",
+      hasKey: Boolean(license.key)
+    },
+    bridge: {
+      status: bridgeReady ? "ready" : "needs_setup",
+      label: bridgeReady ? "연동 가능" : "연동 확인 필요",
+      roomIds: settings.roomIds || [],
+      roomLinks: settings.roomLinks || []
+    },
+    settings: {
+      enabled: settings.enabled !== false,
+      registered: Boolean(settings.registered),
+      lastSavedAt: roomLastSettingsSavedAt(roomState),
+      modeSplit: {
+        ...modeSplit,
+        generalRoomGameBlocked: modeSplit.blockGamesInGeneralRoom,
+        gameRoomOpsBlocked: modeSplit.blockOpsInGameRoom,
+        sharedData: modeSplit.sharePointsAndInventory
+      },
+      issues: diagnostics.problems || [],
+      history: (settings.settingsHistory || []).slice(-10).reverse()
+    },
+    permissions: {
+      buyerEditable: ["modeSplit", "commandPacks", "inquiries", "transfers", "restoreRequests"],
+      adminOnly: ["roomName", "license", "payment", "subscription", "admins"]
+    },
+    diagnostics
+  };
+}
+
+function roomAdminView(roomState, state = null, options = {}) {
   const settings = roomState.settings || {};
   const subscription = updateSubscriptionStatus(roomState);
   const license = licenseSettings(roomState);
@@ -8066,6 +8307,8 @@ function roomAdminView(roomState) {
     commandCount: customCommandsList.length,
     commandPacks: commandPackStatePayload(settings.commandPacks || {}),
     gameSettings: gameSettings(roomState),
+    settingsHistory: (settings.settingsHistory || []).slice(-20).reverse(),
+    lastSettingsSavedAt: roomLastSettingsSavedAt(roomState),
     subscription: {
       status: subscription.status || "unset",
       statusLabel: subscription.statusLabel || subscriptionStatusLabel(subscription.status || "unset", subscription.remainingDays),
@@ -8075,7 +8318,8 @@ function roomAdminView(roomState) {
       remainingDays: subscription.remainingDays,
       notice: subscription.notice || subscriptionNoticeText(subscription.status || "unset", subscription.remainingDays)
     },
-    diagnostics: roomDiagnostics(roomState)
+    diagnostics: roomDiagnostics(roomState),
+    roomStatusSnapshot: state && typeof state === "object" ? roomStatusSnapshot(state, roomState, options) : null
   };
 }
 
@@ -8149,9 +8393,9 @@ function adminRoomGroupsPayload(state, rooms = []) {
     const roomPayload = applicationRoomPayload(state, account, application);
     return {
       baseApplication: publicApplicationView(application, state),
-      baseRoom: roomByKey.get(roomKey(application.roomName)) || roomAdminView(ensureRoom(state, application.roomName)),
+      baseRoom: roomByKey.get(roomKey(application.roomName)) || roomAdminView(ensureRoom(state, application.roomName), state, { application }),
       gameApplications: linkedGameApplications.map((item) => publicApplicationView(item, state)),
-      gameRooms: linkedGameApplications.map((item) => roomByKey.get(roomKey(item.roomName)) || roomAdminView(ensureRoom(state, item.roomName))),
+      gameRooms: linkedGameApplications.map((item) => roomByKey.get(roomKey(item.roomName)) || roomAdminView(ensureRoom(state, item.roomName), state, { application: item })),
       roomModeSettings: roomModeSettingsPayload(state, application, linkedGameApplications),
       bridgeDiagnostics: bridgeConnectDiagnosticsPayload(state, account, application, bridgeConnectRoomsPayload(state, account, application)),
       bridgeRoomsPreview: bridgeConnectRoomsPayload(state, account, application),
@@ -8169,7 +8413,7 @@ function adminRoomGroupsPayload(state, rooms = []) {
       baseApplication: null,
       baseRoom: null,
       gameApplications: [publicApplicationView(gameApplication, state)],
-      gameRooms: [roomByKey.get(roomKey(gameApplication.roomName)) || roomAdminView(ensureRoom(state, gameApplication.roomName))],
+      gameRooms: [roomByKey.get(roomKey(gameApplication.roomName)) || roomAdminView(ensureRoom(state, gameApplication.roomName), state, { application: gameApplication })],
       roomModeSettings: roomModeSettingsPayload(state, {}, [gameApplication]),
       bridgeDiagnostics: bridgeConnectDiagnosticsPayload(state, account, gameApplication, bridgeConnectRoomsPayload(state, account, gameApplication)),
       bridgeRoomsPreview: bridgeConnectRoomsPayload(state, account, gameApplication),
@@ -8181,7 +8425,7 @@ function adminRoomGroupsPayload(state, rooms = []) {
 
 function adminRoomsPayload(state) {
   const rooms = Object.values(state.rooms || {})
-    .map(roomAdminView)
+    .map((roomState) => roomAdminView(roomState, state))
     .sort((left, right) => keyFor(left.name).localeCompare(keyFor(right.name)));
   const roomGroups = adminRoomGroupsPayload(state, rooms);
   return {
@@ -8197,34 +8441,253 @@ function adminRoomsPayload(state) {
       expiringRooms: rooms.filter((room) => roomViewExpiringSoon(room)).length,
       problemRooms: rooms.filter((room) => !room.diagnostics?.ok).length,
       bridgeProblemRooms: rooms.filter((room) => room.diagnostics?.bridgeStatus !== "ready").length,
-      connectionIssueRooms: rooms.filter((room) => room.diagnostics?.connectionStatus === "no_events").length
+      connectionIssueRooms: rooms.filter((room) => room.diagnostics?.connectionStatus === "no_events").length,
+      archivedRooms: Object.keys(state.archivedRooms || {}).length
     },
+    lifecycleSummary: lifecycleSummaryFromApplications(Object.values(state.applications || {}).map((application) => publicApplicationView(application, state))),
     rooms,
     roomGroups
   };
 }
 
-function adminDeleteRoom(state, payload = {}) {
+function lifecycleSummaryFromApplications(applications = []) {
+  const summary = {
+    total: applications.length,
+    active: 0,
+    pendingPayment: 0,
+    approvedUnpaid: 0,
+    expiringSoon: 0,
+    expired: 0,
+    onHold: 0,
+    archived: 0,
+    rejected: 0
+  };
+  for (const application of applications) {
+    const status = application.lifecycle?.status || application.lifecycleStatus || application.status;
+    if (status === "active") summary.active += 1;
+    else if (status === "pending_payment") summary.pendingPayment += 1;
+    else if (status === "approved_unpaid") summary.approvedUnpaid += 1;
+    else if (status === "expiring_soon") summary.expiringSoon += 1;
+    else if (status === "expired") summary.expired += 1;
+    else if (status === "on_hold") summary.onHold += 1;
+    else if (status === "archived") summary.archived += 1;
+    else if (status === "rejected") summary.rejected += 1;
+  }
+  summary.paymentReviewNeeded = summary.pendingPayment + summary.approvedUnpaid;
+  summary.unavailable = summary.expired + summary.onHold + summary.archived + summary.rejected;
+  return summary;
+}
+
+function applicationsForRoomName(state = {}, roomName = "") {
+  const targetKey = roomKey(roomName);
+  return Object.values(state.applications || {}).filter((application) => roomKey(application.roomName) === targetKey);
+}
+
+function publicArchivedRoomView(state = {}, archive = {}) {
+  const roomState = archive.room || {};
+  return {
+    id: archive.id || "",
+    roomName: archive.roomName || roomState.name || "",
+    roomKey: archive.roomKey || roomKey(roomState.name),
+    reason: archive.reason || "",
+    archivedAt: archive.archivedAt || "",
+    archivedBy: archive.archivedBy || "",
+    affectedApplicationIds: archive.affectedApplicationIds || [],
+    applicationSummaries: (archive.affectedApplicationIds || [])
+      .map((id) => state.applications?.[id] || archive.applicationSnapshots?.[id])
+      .filter(Boolean)
+      .map((application) => publicApplicationView(application, state)),
+    room: roomState?.name ? roomAdminView(roomState, state, { archivedRecord: archive }) : null,
+    roomStatusSnapshot: roomState?.name ? roomStatusSnapshot(state, roomState, { archivedRecord: archive }) : null
+  };
+}
+
+function adminArchivedRoomsPayload(state) {
+  const archivedRooms = Object.values(state.archivedRooms || {})
+    .map((archive) => publicArchivedRoomView(state, archive))
+    .sort((left, right) => String(right.archivedAt || "").localeCompare(String(left.archivedAt || "")));
+  return {
+    ok: true,
+    version: APP_VERSION,
+    summary: {
+      archivedRooms: archivedRooms.length,
+      restoreRequests: Object.keys(state.restoreRequests || {}).length
+    },
+    archivedRooms
+  };
+}
+
+function adminRestoreRequestsPayload(state, options = {}) {
+  const requestedStatus = normalizeText(options.status || "all");
+  const requests = Object.values(state.restoreRequests || {})
+    .map((request) => publicRestoreRequestView(state, request))
+    .filter((request) => requestedStatus === "all" || request.status === requestedStatus)
+    .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
+  return {
+    ok: true,
+    version: APP_VERSION,
+    filter: { status: requestedStatus },
+    summary: {
+      total: Object.keys(state.restoreRequests || {}).length,
+      visible: requests.length,
+      open: Object.values(state.restoreRequests || {}).filter((request) => request.status !== "resolved").length
+    },
+    requests
+  };
+}
+
+function findActiveRoomEntry(state = {}, payload = {}) {
   state.rooms ||= {};
   const roomName = normalizeText(payload.room || payload.name || payload.roomName);
   const roomId = payloadRoomId(payload);
-  if (!roomName && !roomId) return { ok: false, status: 400, error: "room_required" };
+  if (!roomName && !roomId) return null;
 
-  const target = Object.entries(state.rooms).find(([key, roomState]) => {
+  return Object.entries(state.rooms).find(([key, roomState]) => {
     const ids = roomState.settings?.roomIds || [];
     if (roomName && (key === roomKey(roomName) || keyFor(roomState.name) === keyFor(roomName))) return true;
     return Boolean(roomId && ids.includes(roomId));
-  });
+  }) || null;
+}
 
-  if (!target) return { ok: false, status: 404, error: "room_not_found" };
+function adminArchiveRoom(state, payload = {}, archivedBy = "admin_console") {
+  state.rooms ||= {};
+  state.archivedRooms ||= {};
+  const target = findActiveRoomEntry(state, payload);
+  if (!target) {
+    const roomName = normalizeText(payload.room || payload.name || payload.roomName);
+    const roomId = payloadRoomId(payload);
+    if (!roomName && !roomId) return { ok: false, status: 400, error: "room_required" };
+    return { ok: false, status: 404, error: "room_not_found" };
+  }
   const [key, roomState] = target;
-  const deletedRoom = roomAdminView(roomState);
+  const affectedApplications = applicationsForRoomName(state, roomState.name);
+  const archivedAt = nowIso();
+  const archiveId = generateEntityId("arch");
+  const reason = previewText(payload.reason || payload.archiveReason || "관리자 보관 처리", 180);
+  const archivedRoomState = JSON.parse(JSON.stringify(roomState));
+  archivedRoomState.settings ||= {};
+  archivedRoomState.settings.archivedAt = archivedAt;
+  archivedRoomState.settings.archivedBy = archivedBy;
+  archivedRoomState.settings.archivedReason = reason;
+  const applicationSnapshots = {};
+  for (const application of affectedApplications) {
+    applicationSnapshots[application.id] = JSON.parse(JSON.stringify(application));
+    application.archivedAt = archivedAt;
+    application.archivedBy = archivedBy;
+    application.archivedReason = reason;
+    application.updatedAt = archivedAt;
+  }
+  state.archivedRooms[archiveId] = {
+    id: archiveId,
+    roomKey: key,
+    roomName: roomState.name || "",
+    reason,
+    archivedAt,
+    archivedBy,
+    affectedApplicationIds: affectedApplications.map((application) => application.id),
+    applicationSnapshots,
+    room: archivedRoomState
+  };
   delete state.rooms[key];
+  const archivedRoom = publicArchivedRoomView(state, state.archivedRooms[archiveId]);
   return {
     ok: true,
-    deletedRoom,
+    deletedRoom: archivedRoom.room,
+    archivedRoom,
     summary: {
-      rooms: Object.keys(state.rooms).length
+      rooms: Object.keys(state.rooms).length,
+      archivedRooms: Object.keys(state.archivedRooms).length
+    }
+  };
+}
+
+function adminDeleteRoom(state, payload = {}, deletedBy = "admin_console") {
+  return adminArchiveRoom(state, payload, deletedBy);
+}
+
+function findArchivedRoomEntry(state = {}, payload = {}) {
+  const archiveId = normalizeText(payload.archiveId || payload.id);
+  const roomName = normalizeText(payload.room || payload.name || payload.roomName);
+  return Object.entries(state.archivedRooms || {}).find(([id, archive]) => {
+    if (archiveId && id === archiveId) return true;
+    return Boolean(roomName && keyFor(archive.roomName) === keyFor(roomName));
+  }) || null;
+}
+
+function adminRestoreArchivedRoom(state, payload = {}, restoredBy = "admin_console") {
+  state.rooms ||= {};
+  state.archivedRooms ||= {};
+  const target = findArchivedRoomEntry(state, payload);
+  if (!target) return { ok: false, status: 404, error: "archived_room_not_found" };
+  const [archiveId, archive] = target;
+  const roomState = JSON.parse(JSON.stringify(archive.room || {}));
+  if (!roomState.name) return { ok: false, status: 400, error: "archived_room_invalid" };
+  const key = roomKey(roomState.name);
+  if (state.rooms[key]) return { ok: false, status: 409, error: "room_name_conflict" };
+  roomState.settings ||= {};
+  delete roomState.settings.archivedAt;
+  delete roomState.settings.archivedBy;
+  delete roomState.settings.archivedReason;
+  recordRoomEvent(roomState, { type: "admin_archived_room_restored", by: restoredBy, archiveId });
+  state.rooms[key] = roomState;
+  for (const applicationId of archive.affectedApplicationIds || []) {
+    const application = state.applications?.[applicationId];
+    if (!application) continue;
+    delete application.archivedAt;
+    delete application.archivedBy;
+    delete application.archivedReason;
+    application.updatedAt = nowIso();
+  }
+  for (const request of Object.values(state.restoreRequests || {})) {
+    if (request.archiveId !== archiveId || request.status === "resolved") continue;
+    request.status = "resolved";
+    request.resolvedAt = nowIso();
+    request.resolvedBy = restoredBy;
+    request.resolution = previewText(payload.resolution || "관리자 복구 완료", 300);
+    request.updatedAt = request.resolvedAt;
+  }
+  delete state.archivedRooms[archiveId];
+  return {
+    ok: true,
+    restoredRoom: roomAdminView(roomState, state),
+    archivedRoomId: archiveId,
+    summary: {
+      rooms: Object.keys(state.rooms).length,
+      archivedRooms: Object.keys(state.archivedRooms).length
+    }
+  };
+}
+
+function adminPurgeArchivedRoom(state, payload = {}, purgedBy = "admin_console") {
+  const target = findArchivedRoomEntry(state, payload);
+  if (!target) return { ok: false, status: 404, error: "archived_room_not_found" };
+  const [archiveId, archive] = target;
+  const confirmRoomName = normalizeText(payload.confirmRoomName);
+  const confirmPermanentDelete = normalizeText(payload.confirmPermanentDelete || payload.confirm);
+  if (keyFor(confirmRoomName) !== keyFor(archive.roomName) || confirmPermanentDelete !== "PERMANENT_DELETE") {
+    return { ok: false, status: 400, error: "purge_confirmation_required" };
+  }
+  delete state.archivedRooms[archiveId];
+  for (const applicationId of archive.affectedApplicationIds || []) {
+    const application = state.applications?.[applicationId];
+    if (!application) continue;
+    application.purgedAt = nowIso();
+    application.purgedBy = purgedBy;
+    application.updatedAt = application.purgedAt;
+  }
+  for (const request of Object.values(state.restoreRequests || {})) {
+    if (request.archiveId !== archiveId || request.status === "resolved") continue;
+    request.status = "resolved";
+    request.resolvedAt = nowIso();
+    request.resolvedBy = purgedBy;
+    request.resolution = previewText(payload.resolution || "완전 삭제 처리", 300);
+    request.updatedAt = request.resolvedAt;
+  }
+  return {
+    ok: true,
+    purgedRoom: { id: archiveId, roomName: archive.roomName },
+    summary: {
+      archivedRooms: Object.keys(state.archivedRooms || {}).length
     }
   };
 }
@@ -8269,6 +8732,81 @@ function updateRoomNameReferences(state, oldName = "", newName = "", oldKey = ""
   for (const transfer of Object.values(state.roomTransfers || {})) {
     if (keyFor(transfer.roomName) === oldNameKey) transfer.roomName = newName;
   }
+}
+
+function recordSettingsHistory(roomState, entry = {}) {
+  roomState.settings ||= {};
+  const settings = roomState.settings;
+  settings.settingsHistory ||= [];
+  settings.lastSavedAt = entry.at || nowIso();
+  settings.lastSavedBy = entry.by || "admin_console";
+  settings.settingsHistory.push({
+    type: entry.type || "settings_saved",
+    by: settings.lastSavedBy,
+    at: settings.lastSavedAt,
+    changedFields: entry.changedFields || [],
+    summary: previewText(entry.summary || "", 160)
+  });
+  if (settings.settingsHistory.length > 80) settings.settingsHistory = settings.settingsHistory.slice(-80);
+}
+
+function modeSplitPayloadProvided(payload = {}) {
+  if (payload.modeSplit && typeof payload.modeSplit === "object") return true;
+  return ["blockGamesInGeneralRoom", "blockOpsInGameRoom", "sharePointsAndInventory", "generalRoomGameBlocked", "gameRoomOpsBlocked", "sharedData"]
+    .some((key) => Object.hasOwn(payload, key));
+}
+
+function applyRoomModeSplit(state, baseRoomState, baseApplication = {}, linkedGameApplications = [], payload = {}, updatedBy = "admin_console") {
+  if (!baseRoomState) return null;
+  baseRoomState.settings ||= {};
+  const mode = modeSplitFromPayload(payload, baseRoomState.settings.modeSplit || {}, updatedBy);
+  baseRoomState.settings.modeSplit = mode;
+  baseRoomState.settings.roomRole = mode.blockGamesInGeneralRoom ? "general" : "standard";
+  baseRoomState.settings.features = normalizeFeatureSettings(baseRoomState.settings.features || {});
+  baseRoomState.settings.features.games = true;
+  recordSettingsHistory(baseRoomState, {
+    type: "room_mode_settings_saved",
+    by: updatedBy,
+    at: mode.updatedAt,
+    changedFields: ["modeSplit", "roomRole", "features.games"],
+    summary: "일반방/게임방 분리 설정 저장"
+  });
+  recordRoomEvent(baseRoomState, {
+    type: "room_mode_settings_updated",
+    by: updatedBy,
+    blockGamesInGeneralRoom: mode.blockGamesInGeneralRoom,
+    blockOpsInGameRoom: mode.blockOpsInGameRoom,
+    sharePointsAndInventory: mode.sharePointsAndInventory
+  });
+  for (const gameApplication of linkedGameApplications) {
+    const gameRoomState = ensureRoom(state, gameApplication.roomName);
+    gameRoomState.settings ||= {};
+    gameRoomState.settings.roomRole = mode.blockOpsInGameRoom ? "game" : "standard";
+    gameRoomState.settings.canonicalRoomKey = roomKey(baseRoomState.name);
+    gameRoomState.settings.canonicalRoomName = baseRoomState.name;
+    gameRoomState.settings.features = normalizeFeatureSettings(gameRoomState.settings.features || {});
+    gameRoomState.settings.features.games = true;
+    gameRoomState.settings.features.points = true;
+    gameRoomState.settings.features.shop = true;
+    gameRoomState.settings.features.customCommands = !mode.blockOpsInGameRoom;
+    gameRoomState.settings.modeSplit = { ...mode };
+    recordSettingsHistory(gameRoomState, {
+      type: "room_mode_settings_saved",
+      by: updatedBy,
+      at: mode.updatedAt,
+      changedFields: ["modeSplit", "roomRole", "canonicalRoomKey", "features"],
+      summary: `기준 일반방 ${baseRoomState.name} 분리 설정 동기화`
+    });
+    recordRoomEvent(gameRoomState, {
+      type: "room_mode_settings_updated",
+      by: updatedBy,
+      baseRoomName: baseRoomState.name,
+      blockGamesInGeneralRoom: mode.blockGamesInGeneralRoom,
+      blockOpsInGameRoom: mode.blockOpsInGameRoom,
+      sharePointsAndInventory: mode.sharePointsAndInventory
+    });
+  }
+  return mode;
 }
 
 function adminUpsertRoom(state, payload = {}) {
@@ -8341,8 +8879,25 @@ function adminUpsertRoom(state, payload = {}) {
   }
   subscription.status = isSubscriptionExpired(roomState) ? "expired" : "active";
 
+  const changedFields = ["registered", "enabled", "joinPhrase", "license", "subscription"];
+  if (modeSplitPayloadProvided(payload)) {
+    const application = applicationForRoomState(state, roomState);
+    const account = state.accounts?.[application?.accountId] || {};
+    const linkedGameApplications = application && normalizeApplicationRoomPurpose(application.roomPurpose) !== "game_room"
+      ? gameRoomApplicationsForBase(state, account, application).filter((item) => item.status === "approved" && state.payments?.[item.paymentId]?.status === "paid")
+      : [];
+    applyRoomModeSplit(state, roomState, application || {}, linkedGameApplications, payload, "admin_console");
+    changedFields.push("modeSplit");
+  }
+
+  recordSettingsHistory(roomState, {
+    type: "admin_console_room_saved",
+    by: "admin_console",
+    changedFields,
+    summary: "관리자 콘솔 방 설정 저장"
+  });
   recordRoomEvent(roomState, { type: "admin_console_room_saved", by: "admin_console", joinPhrase, licenseKey: maskedLicenseKey(license.key) });
-  return { ok: true, room: roomAdminView(roomState) };
+  return { ok: true, room: roomAdminView(roomState, state) };
 }
 
 function restoreRoomFromAdminPayload(state, roomPayload = {}) {
@@ -8775,12 +9330,14 @@ function buyerConsolePayload(state, account = {}) {
   const approvedApplications = approvedBuyerApplications(state, account);
   const rooms = approvedApplications.map((application) => applicationRoomPayload(state, account, application));
   const roomGroups = buyerRoomGroupsPayload(state, account, approvedApplications);
+  const lifecycleSummary = lifecycleSummaryFromApplications(applications);
   return {
     ok: true,
     version: APP_VERSION,
     account: publicAccountView(account),
     testAppUrl: PLAY_INTERNAL_TEST_URL,
     applications,
+    lifecycleSummary,
     rooms,
     roomGroups,
     canApplyGameRoom: rooms.some((room) => room.canApplyGameRoom),
@@ -8793,7 +9350,140 @@ function buyerConsolePayload(state, account = {}) {
     commandStore: commandTemplateCatalogPayload(),
     commandPacks: commandPackCatalogPayload(),
     transfers: buyerRoomTransfersPayload(state, account),
+    inquiries: buyerApplicationInquiriesPayload(state, account),
+    reports: buyerRoomReportsPayload(state, account),
+    archivedRooms: buyerArchivedRoomsPayload(state, account),
+    restoreRequests: buyerRestoreRequestsPayload(state, account),
     ownerAdminNotice: "/admin 은 판매자 운영자 전용입니다. 구매자는 /console, /my-rooms, /setup, /license 화면만 사용합니다."
+  };
+}
+
+function buyerApplicationInquiriesPayload(state, account = {}) {
+  return Object.values(state.applicationInquiries || {})
+    .filter((inquiry) => inquiry.accountId === account.id)
+    .map((inquiry) => publicApplicationInquiryView(state, inquiry))
+    .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
+}
+
+function buyerRoomReportsPayload(state, account = {}) {
+  const ownedRoomNames = new Set((account.applicationIds || [])
+    .map((id) => state.applications?.[id])
+    .filter(Boolean)
+    .map((application) => keyFor(application.roomName)));
+  const reports = [];
+  for (const roomState of Object.values(state.rooms || {})) {
+    if (!ownedRoomNames.has(keyFor(roomState.name))) continue;
+    roomState.reports = normalizeReports(roomState.reports || []);
+    for (const report of roomState.reports) {
+      reports.push(publicAdminReportView(roomState, report));
+    }
+  }
+  return reports.sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
+}
+
+function buyerArchivedRoomsPayload(state, account = {}) {
+  const ownedApplicationIds = new Set(account.applicationIds || []);
+  return Object.values(state.archivedRooms || {})
+    .filter((archive) => (archive.affectedApplicationIds || []).some((id) => ownedApplicationIds.has(id)))
+    .map((archive) => publicArchivedRoomView(state, archive))
+    .sort((left, right) => String(right.archivedAt || "").localeCompare(String(left.archivedAt || "")));
+}
+
+function publicRestoreRequestView(state = {}, request = {}) {
+  const archive = state.archivedRooms?.[request.archiveId] || {};
+  const status = request.status || "open";
+  return {
+    id: request.id || "",
+    archiveId: request.archiveId || "",
+    roomName: request.roomName || archive.roomName || "",
+    accountId: request.accountId || "",
+    status,
+    statusLabel: status === "resolved" ? "완료" : status === "in_review" ? "확인중" : "접수",
+    reason: request.reason || "",
+    createdAt: request.createdAt || "",
+    updatedAt: request.updatedAt || "",
+    resolvedAt: request.resolvedAt || "",
+    resolvedBy: request.resolvedBy || "",
+    resolution: request.resolution || "",
+    archivedRoomExists: Boolean(archive.id)
+  };
+}
+
+function buyerRestoreRequestsPayload(state, account = {}) {
+  return Object.values(state.restoreRequests || {})
+    .filter((request) => request.accountId === account.id)
+    .map((request) => publicRestoreRequestView(state, request))
+    .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
+}
+
+async function buyerRestoreRequestFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const archiveId = normalizeText(body.archiveId || body.id);
+  const archive = state.archivedRooms?.[archiveId];
+  if (!archive) return { ok: false, status: 404, error: "archived_room_not_found" };
+  const ownedApplicationIds = new Set(auth.account.applicationIds || []);
+  if (!(archive.affectedApplicationIds || []).some((id) => ownedApplicationIds.has(id))) {
+    return { ok: false, status: 403, error: "restore_request_forbidden" };
+  }
+  state.restoreRequests ||= {};
+  const existing = Object.values(state.restoreRequests).find((request) => (
+    request.archiveId === archiveId
+    && request.accountId === auth.account.id
+    && request.status !== "resolved"
+  ));
+  if (existing) {
+    return {
+      ok: true,
+      version: APP_VERSION,
+      duplicate: true,
+      request: publicRestoreRequestView(state, existing),
+      ...buyerConsolePayload(state, auth.account)
+    };
+  }
+  const requestId = generateEntityId("restore");
+  state.restoreRequests[requestId] = {
+    id: requestId,
+    archiveId,
+    roomName: archive.roomName || "",
+    accountId: auth.account.id,
+    status: "open",
+    reason: previewText(body.reason || body.memo || "복구 요청", 300),
+    createdAt: nowIso(),
+    updatedAt: nowIso()
+  };
+  return {
+    ok: true,
+    version: APP_VERSION,
+    request: publicRestoreRequestView(state, state.restoreRequests[requestId]),
+    ...buyerConsolePayload(state, auth.account)
+  };
+}
+
+function adminResolveRestoreRequest(state, payload = {}, resolvedBy = "admin_console") {
+  state.restoreRequests ||= {};
+  const requestId = normalizeText(payload.requestId || payload.id || payload.restoreRequestId);
+  const request = state.restoreRequests[requestId];
+  if (!request) return { ok: false, status: 404, error: "restore_request_not_found" };
+  const nextStatus = normalizeText(payload.status || "resolved");
+  if (!["open", "in_review", "resolved"].includes(nextStatus)) {
+    return { ok: false, status: 400, error: "invalid_restore_request_status" };
+  }
+  const now = nowIso();
+  request.status = nextStatus;
+  request.updatedAt = now;
+  if (nextStatus === "resolved") {
+    request.resolvedAt = now;
+    request.resolvedBy = resolvedBy;
+    request.resolution = previewText(payload.resolution || payload.memo || "관리자 처리 완료", 300);
+  } else {
+    request.resolution = previewText(payload.resolution || request.resolution || "", 300);
+  }
+  return {
+    ok: true,
+    version: APP_VERSION,
+    request: publicRestoreRequestView(state, request),
+    summary: adminRestoreRequestsPayload(state).summary
   };
 }
 
@@ -9728,6 +10418,7 @@ function normalizeApplicationInquiryType(value = "") {
 
 function publicApplicationInquiryView(state = {}, inquiry = {}) {
   const application = state.applications?.[inquiry.applicationId] || {};
+  const status = inquiry.status || "open";
   return {
     id: inquiry.id || "",
     applicationId: inquiry.applicationId || "",
@@ -9737,9 +10428,10 @@ function publicApplicationInquiryView(state = {}, inquiry = {}) {
     type: inquiry.type || "other",
     typeLabel: APPLICATION_INQUIRY_TYPE_LABELS[inquiry.type] || APPLICATION_INQUIRY_TYPE_LABELS.other,
     message: inquiry.message || "",
-    status: inquiry.status || "open",
-    statusLabel: inquiry.status === "resolved" ? "처리 완료" : "확인 대기",
+    status,
+    statusLabel: status === "resolved" ? "처리 완료" : status === "in_review" ? "확인중" : "접수",
     createdAt: inquiry.createdAt || "",
+    updatedAt: inquiry.updatedAt || "",
     resolvedAt: inquiry.resolvedAt || "",
     resolvedBy: inquiry.resolvedBy || "",
     resolution: inquiry.resolution || "",
@@ -10150,42 +10842,32 @@ function approvedBaseApplicationForRoomMode(state, account = {}, body = {}) {
 async function buyerRoomModeSettingsFromRequest(state, req, body = {}) {
   const auth = await accountFromBuyerRequest(state, req, body);
   if (!auth.ok) return auth;
+  const forbiddenFields = ["licenseKey", "licenseStatus", "subscriptionExpiresAt", "subscriptionStatus", "monthlyPriceKrw", "paymentStatus", "roomAdmins", "admins", "features", "gameSettings", "customCommands", "roomRole"];
+  const forbiddenField = forbiddenFields.find((key) => Object.hasOwn(body, key));
+  if (forbiddenField) return { ok: false, status: 403, error: "buyer_field_not_allowed", field: forbiddenField };
   const baseApplication = approvedBaseApplicationForRoomMode(state, auth.account, body);
   if (!baseApplication) return { ok: false, status: 404, error: "approved_base_room_not_found" };
   const linkedGameApplications = gameRoomApplicationsForBase(state, auth.account, baseApplication)
     .filter((application) => application.status === "approved" && state.payments?.[application.paymentId]?.status === "paid");
   if (!linkedGameApplications.length) return { ok: false, status: 409, error: "game_room_not_connected" };
 
-  const generalRoomGameBlocked = body.generalRoomGameBlocked !== false;
-  const gameRoomOpsBlocked = body.gameRoomOpsBlocked !== false;
-  const updatedAt = nowIso();
   const baseRoomState = ensureRoom(state, baseApplication.roomName);
-  baseRoomState.settings.roomRole = generalRoomGameBlocked ? "general" : "standard";
-  baseRoomState.settings.features = normalizeFeatureSettings(baseRoomState.settings.features || {});
-  baseRoomState.settings.features.games = true;
-  baseRoomState.settings.modeSplit = {
-    generalRoomGameBlocked,
-    gameRoomOpsBlocked,
-    sharedData: true,
-    updatedAt,
-    updatedBy: auth.account.email || auth.account.nickname || "buyer_console"
-  };
-
-  for (const gameApplication of linkedGameApplications) {
-    const gameRoomState = ensureRoom(state, gameApplication.roomName);
-    gameRoomState.settings.roomRole = gameRoomOpsBlocked ? "game" : "standard";
-    gameRoomState.settings.canonicalRoomKey = roomKey(baseRoomState.name);
-    gameRoomState.settings.canonicalRoomName = baseRoomState.name;
-    gameRoomState.settings.features = normalizeFeatureSettings(gameRoomState.settings.features || {});
-    gameRoomState.settings.features.games = true;
-    gameRoomState.settings.features.points = true;
-    gameRoomState.settings.features.shop = true;
-    gameRoomState.settings.features.customCommands = !gameRoomOpsBlocked;
-    gameRoomState.settings.modeSplit = { ...baseRoomState.settings.modeSplit };
-  }
+  const savedModeSplit = applyRoomModeSplit(
+    state,
+    baseRoomState,
+    baseApplication,
+    linkedGameApplications,
+    body,
+    auth.account.email || auth.account.nickname || "buyer_console"
+  );
 
   return {
     ...buyerConsolePayload(state, auth.account),
+    savedSettings: {
+      applicationId: baseApplication.id,
+      modeSplit: savedModeSplit,
+      roomStatusSnapshot: roomStatusSnapshot(state, baseRoomState, { application: baseApplication, account: auth.account })
+    },
     guideToken: buyerTokenForAccount(auth.account)
   };
 }
@@ -10430,6 +11112,15 @@ async function handlePublicAccountApi(req, url) {
     return { status: 200, body: result };
   }
 
+  if (req.method === "POST" && url.pathname === "/api/buyer/restore-requests") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerRestoreRequestFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
   if (req.method === "POST" && url.pathname === "/api/buyer/room-transfer/accept") {
     const body = await readBody(req);
     const state = await loadState();
@@ -10513,6 +11204,7 @@ function adminApplicationsPayload(state) {
   const applications = Object.values(state.applications || {})
     .map((application) => publicApplicationView(application, state))
     .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
+  const lifecycleSummary = lifecycleSummaryFromApplications(applications);
   return {
     ok: true,
     version: APP_VERSION,
@@ -10521,15 +11213,22 @@ function adminApplicationsPayload(state) {
     summary: {
       applications: applications.length,
       pending: applications.filter((application) => application.status === "pending_payment").length,
-      approved: applications.filter((application) => application.status === "approved").length
+      approved: applications.filter((application) => application.status === "approved").length,
+      active: lifecycleSummary.active,
+      paymentReviewNeeded: lifecycleSummary.paymentReviewNeeded,
+      expiringSoon: lifecycleSummary.expiringSoon,
+      expired: lifecycleSummary.expired,
+      onHold: lifecycleSummary.onHold,
+      archived: lifecycleSummary.archived
     },
+    lifecycleSummary,
     applications
   };
 }
 
 function adminApplicationInquiriesPayload(state, options = {}) {
   const requestedStatus = normalizeText(options.status || "all");
-  const status = ["open", "resolved", "all"].includes(requestedStatus) ? requestedStatus : "all";
+  const status = ["open", "in_review", "resolved", "all"].includes(requestedStatus) ? requestedStatus : "all";
   const inquiries = Object.values(state.applicationInquiries || {})
     .map((inquiry) => publicApplicationInquiryView(state, inquiry))
     .filter((inquiry) => status === "all" || inquiry.status === status)
@@ -10543,6 +11242,7 @@ function adminApplicationInquiriesPayload(state, options = {}) {
     summary: {
       total: all.length,
       open: all.filter((inquiry) => inquiry.status !== "resolved").length,
+      inReview: all.filter((inquiry) => inquiry.status === "in_review").length,
       resolved: all.filter((inquiry) => inquiry.status === "resolved").length,
       visible: inquiries.length
     },
@@ -10555,12 +11255,19 @@ function adminResolveApplicationInquiry(state, payload = {}, resolvedBy = "admin
   if (!inquiryId) return { ok: false, status: 400, error: "inquiry_id_required" };
   const inquiry = state.applicationInquiries?.[inquiryId];
   if (!inquiry) return { ok: false, status: 404, error: "inquiry_not_found" };
-  if (inquiry.status !== "resolved") {
+  const nextStatus = normalizeText(payload.status || "resolved");
+  if (!["open", "in_review", "resolved"].includes(nextStatus)) {
+    return { ok: false, status: 400, error: "invalid_inquiry_status" };
+  }
+  inquiry.status = nextStatus;
+  inquiry.updatedAt = nowIso();
+  if (nextStatus === "resolved") {
     inquiry.status = "resolved";
-    inquiry.resolvedAt = nowIso();
+    inquiry.resolvedAt = inquiry.updatedAt;
     inquiry.resolvedBy = resolvedBy;
     inquiry.resolution = previewText(payload.resolution || payload.result || "처리 완료", 300);
-    inquiry.updatedAt = inquiry.resolvedAt;
+  } else {
+    inquiry.resolution = previewText(payload.resolution || payload.result || inquiry.resolution || "", 300);
   }
   return {
     ok: true,
@@ -10665,6 +11372,13 @@ function applyApprovedRoomPurposeSettings(state, application = {}) {
   roomState.settings.features.points = true;
   roomState.settings.features.shop = true;
   roomState.settings.features.customCommands = false;
+  applyRoomModeSplit(state, baseRoomState, baseApplication, [application], {
+    modeSplit: {
+      blockGamesInGeneralRoom: true,
+      blockOpsInGameRoom: true,
+      sharePointsAndInventory: true
+    }
+  }, "admin_console");
   return roomState;
 }
 
@@ -10710,7 +11424,7 @@ function adminApproveApplication(state, payload = {}, approvedBy = "admin_consol
   application.approvedAt = nowIso();
   application.approvedBy = approvedBy;
   const approvedRoomState = applyApprovedRoomPurposeSettings(state, application);
-  const approvedRoom = roomAdminView(approvedRoomState);
+  const approvedRoom = roomAdminView(approvedRoomState, state, { application });
   application.licenseKey = approvedRoom.licenseKey;
   application.roomId = approvedRoom.roomIds?.[0] || application.roomId;
   application.updatedAt = nowIso();
@@ -10742,6 +11456,13 @@ async function handleAdminApi(req, url) {
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     return { status: 200, body: adminRoomsPayload(state) };
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/archived-rooms") {
+    const auth = await requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return { status: 200, body: adminArchivedRoomsPayload(state) };
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/room-commands") {
@@ -10830,6 +11551,24 @@ async function handleAdminApi(req, url) {
     return { status: 200, body: adminApplicationInquiriesPayload(state, Object.fromEntries(url.searchParams.entries())) };
   }
 
+  if (req.method === "GET" && url.pathname === "/api/admin/restore-requests") {
+    const auth = await requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return { status: 200, body: adminRestoreRequestsPayload(state, Object.fromEntries(url.searchParams.entries())) };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/restore-requests/resolve") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminResolveRestoreRequest(state, body, auth.by || "admin_console");
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
   if (req.method === "POST" && url.pathname === "/api/admin/rooms") {
     const body = await readBody(req);
     const auth = await requireAdminConsole(req, url, body);
@@ -10860,7 +11599,7 @@ async function handleAdminApi(req, url) {
       status: 200,
       body: {
         ...result,
-        roomGroups: adminRoomGroupsPayload(state, Object.values(state.rooms || {}).map(roomAdminView))
+        roomGroups: adminRoomGroupsPayload(state, Object.values(state.rooms || {}).map((roomState) => roomAdminView(roomState, state)))
       }
     };
   }
@@ -10870,7 +11609,40 @@ async function handleAdminApi(req, url) {
     const auth = await requireAdminConsole(req, url, body);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
-    const result = adminDeleteRoom(state, body);
+    const result = adminDeleteRoom(state, body, auth.by || "admin_console");
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/rooms/archive") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminArchiveRoom(state, body, auth.by || "admin_console");
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/rooms/restore") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminRestoreArchivedRoom(state, body, auth.by || "admin_console");
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/rooms/purge") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminPurgeArchivedRoom(state, body, auth.by || "admin_console");
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -11226,6 +11998,7 @@ export async function requestHandler(req, res) {
       || pathname === "/api/application-inquiries"
       || pathname === "/api/buyer/room-mode-settings"
       || pathname === "/api/buyer/game-room-link"
+      || pathname === "/api/buyer/restore-requests"
       || pathname === "/api/buyer/room-transfer/create"
       || pathname === "/api/buyer/room-transfer/accept"
       || pathname === "/api/buyer/room-transfer/cancel"

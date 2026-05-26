@@ -1,11 +1,14 @@
 {
   "name": "kakao-room-ops-bot",
-  "version": "0.4.94",
+  "version": "0.4.95",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "check:deploy": "node scripts/predeploy-check.js",
+    "build": "npm run build:console",
+    "build:console": "vite build --config vite.console.config.mjs",
+    "dev:console": "vite --config vite.console.config.mjs",
+    "check:deploy": "npm run build:console && node scripts/predeploy-check.js",
     "smoke:local": "node scripts/smoke-check.js",
     "smoke:prod": "node scripts/smoke-check.js https://pixgom.com",
     "android:bundle": "node scripts/android-release-bundle.js",
@@ -18,5 +21,11 @@
   },
   "dependencies": {
     "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.2",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "vite": "^8.0.14"
   }
 }

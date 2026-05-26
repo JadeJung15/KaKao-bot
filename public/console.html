@@ -1,44 +1,24 @@
 <!doctype html>
 <html lang="ko">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>구매자 콘솔 | 픽셀곰</title>
-    <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-silent-auth">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>픽셀곰 콘솔 - 구매자 셀프 관리 콘솔</title>
+    <meta name="description" content="픽셀곰 구매자와 방 운영자를 위한 셀프 관리 콘솔입니다." />
+    <link rel="stylesheet" href="/styles.css?v=20260526-console-react" />
   </head>
-  <body class="sub-page buyer-console-page" data-console-view="overview">
-    <header class="site-header" aria-label="구매자 콘솔 메뉴">
-      <a class="brand" href="/" aria-label="픽셀곰 홈"><img src="/assets/pixgom-closeup.png" alt=""><span>픽셀곰</span></a>
-      <nav class="nav-links" aria-label="페이지 이동">
-        <a href="/console">콘솔</a>
-        <a href="/my-rooms">내 방</a>
-        <a href="/command-store">명령어 스토어</a>
-        <a href="/setup">설치</a>
-        <a href="/license">라이선스</a>
-        <button class="nav-button" type="button" data-sign-out hidden>로그아웃</button>
-      </nav>
-    </header>
-    <main class="document-main buyer-console-main">
-      <section class="buyer-gate is-auth-checking" data-console-gate>
-        <div>
-          <p class="section-kicker">Customer Portal</p>
-          <h1>구매자 콘솔</h1>
-          <p>승인된 구매자만 자기 방의 라이선스, 연결코드, 설치 순서를 확인합니다. 운영자 전체 관리 화면은 노출하지 않습니다.</p>
-          <small data-auth-mode>로그인 방식을 확인 중입니다.</small>
-        </div>
-        <form data-console-login>
-          <label>이메일<input name="email" type="email" autocomplete="email" required placeholder="pixelgom@example.com"></label>
-          <label>비밀번호<input name="password" type="password" autocomplete="current-password" required placeholder="비밀번호"></label>
-          <button class="button button-primary" type="submit">콘솔 열기</button>
-          <button class="button kakao-button" type="button" data-kakao-login hidden>카카오로 로그인</button>
-        </form>
-        <pre class="form-status" data-console-status aria-live="polite"></pre>
-      </section>
-      <section data-console-content hidden></section>
-    </main>
-    <script src="/auth.js?v=20260525-silent-auth"></script>
-    <script src="/buyer-console.js?v=20260525-silent-auth"></script>
+  <body class="console-shell-page">
+    <noscript>구매자 콘솔은 JavaScript가 필요합니다.</noscript>
+    <div id="pixgom-console-root" data-console-app="buyer">
+      <main class="console-app-shell">
+        <section class="console-login-panel">
+          <h1>구매자 셀프 관리 콘솔</h1>
+          <p>내 방 상태, 결제/라이선스, 게임방 접기/펼치기, 문의/이관/복구 요청 화면을 불러오는 중입니다.</p>
+        </section>
+      </main>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/auth.js?v=20260526-console-react"></script>
+    <script type="module" src="/console-ui/assets/buyer.js?v=20260526-console-react"></script>
   </body>
 </html>

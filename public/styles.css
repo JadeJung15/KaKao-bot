@@ -4453,3 +4453,709 @@ a {
     width: 100%;
   }
 }
+/* React admin/buyer console shell */
+.console-shell-page {
+  background: #f6f7f9;
+  color: #17202a;
+}
+
+.console-app-shell {
+  width: min(1440px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 48px;
+}
+
+.console-hero,
+.console-login-panel,
+.console-main-panel,
+.console-detail-panel,
+.console-archive-panel,
+.buyer-room-card,
+.buyer-actions-panel article,
+.console-card,
+.console-summary-card {
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(23, 32, 42, 0.06);
+}
+
+.console-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px;
+}
+
+.console-hero h1,
+.console-login-panel h1 {
+  margin: 4px 0 8px;
+  font-size: clamp(1.45rem, 2vw, 2rem);
+  letter-spacing: 0;
+}
+
+.console-hero p,
+.console-login-panel p {
+  margin: 0;
+  color: #5d6673;
+}
+
+.console-eyebrow {
+  margin: 0;
+  color: #317463;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.console-hero button,
+.console-table button,
+.console-detail-panel button,
+.console-card button,
+.console-login-form button,
+.console-settings-strip button,
+.console-primary-link {
+  min-height: 38px;
+  border: 1px solid #1f6f5f;
+  border-radius: 6px;
+  background: #267d6c;
+  color: #ffffff;
+  padding: 8px 12px;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.console-detail-panel button.danger {
+  border-color: #b13c3c;
+  background: #c94b4b;
+}
+
+.console-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.console-summary-card {
+  padding: 16px;
+}
+
+.console-summary-card span,
+.console-summary-card small {
+  display: block;
+  color: #657080;
+}
+
+.console-summary-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1.8rem;
+  letter-spacing: 0;
+}
+
+.console-summary-good {
+  border-left: 4px solid #2c8c6f;
+}
+
+.console-summary-warn {
+  border-left: 4px solid #d6982f;
+}
+
+.console-summary-bad {
+  border-left: 4px solid #c94b4b;
+}
+
+.console-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) 360px;
+  gap: 14px;
+  align-items: start;
+}
+
+.console-sidebar {
+  position: sticky;
+  top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.console-sidebar a,
+.console-action-row a {
+  display: block;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #25313f;
+  padding: 10px 12px;
+  text-decoration: none;
+  font-weight: 800;
+}
+
+.console-main-panel,
+.console-detail-panel,
+.console-archive-panel,
+.buyer-room-card,
+.buyer-actions-panel article {
+  padding: 16px;
+}
+
+.console-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.console-search,
+.console-filter,
+.console-login-form label {
+  display: grid;
+  gap: 6px;
+  color: #5d6673;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.console-search {
+  flex: 1;
+}
+
+.console-search input,
+.console-filter select,
+.console-login-form input {
+  min-height: 38px;
+  border: 1px solid #cbd3de;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #17202a;
+  background: #ffffff;
+}
+
+.console-table-wrap {
+  overflow-x: auto;
+}
+
+.console-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.console-table th,
+.console-table td {
+  border-bottom: 1px solid #e6ebf1;
+  padding: 11px 10px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.console-table th {
+  color: #657080;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.console-table tr.selected td {
+  background: #edf7f4;
+}
+
+.console-table small {
+  display: block;
+  margin-top: 4px;
+  color: #657080;
+}
+
+.console-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.console-status-good {
+  background: #e4f5ee;
+  color: #1c6b54;
+}
+
+.console-status-warn {
+  background: #fff1d9;
+  color: #8a5a12;
+}
+
+.console-status-bad {
+  background: #fde5e3;
+  color: #a53d38;
+}
+
+.console-status-neutral {
+  background: #edf1f6;
+  color: #4d5968;
+}
+
+.console-detail-head,
+.buyer-room-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.console-detail-head h2,
+.buyer-room-card h2,
+.buyer-actions-panel h2,
+.console-archive-panel h2 {
+  margin: 2px 0 0;
+  font-size: 1.15rem;
+  letter-spacing: 0;
+}
+
+.console-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.console-tabs button {
+  min-height: 34px;
+  border: 1px solid #d6dde7;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #25313f;
+  padding: 6px 10px;
+}
+
+.console-tabs button.active {
+  border-color: #267d6c;
+  background: #e4f5ee;
+  color: #185d4d;
+}
+
+.console-detail-section,
+.console-field-grid,
+.console-card-list {
+  display: grid;
+  gap: 10px;
+}
+
+.console-field-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.console-field-row {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e3e8ef;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.console-field-row span {
+  color: #657080;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.console-field-row strong {
+  color: #17202a;
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+
+.console-game-rooms {
+  margin-top: 14px;
+  border: 1px solid #e3e8ef;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.console-game-rooms summary {
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.console-linked-room {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid #eef2f6;
+  padding: 10px 0 0;
+  margin-top: 10px;
+}
+
+.console-archive-panel,
+.buyer-actions-panel {
+  margin-top: 16px;
+}
+
+.console-card-list.compact {
+  gap: 8px;
+}
+
+.console-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+}
+
+.console-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+
+.console-section-head h3 {
+  margin: 2px 0 0;
+  font-size: 1rem;
+  letter-spacing: 0;
+}
+
+.console-restore-panel {
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 12px;
+  margin: 14px 0;
+}
+
+.console-restore-card,
+.console-archive-card {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.console-restore-card small,
+.console-archive-summary small,
+.console-linked-room small {
+  display: block;
+  margin-top: 4px;
+  color: #657080;
+  font-size: 0.82rem;
+}
+
+.console-danger-zone {
+  width: 100%;
+  border-top: 1px solid #eef2f6;
+  padding-top: 10px;
+}
+
+.console-danger-zone summary {
+  cursor: pointer;
+  color: #a53d38;
+  font-weight: 900;
+}
+
+.console-danger-zone label,
+.console-backup-panel label {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  color: #5d6673;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.console-danger-zone input,
+.console-backup-panel textarea {
+  width: 100%;
+  border: 1px solid #cbd3de;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17202a;
+  padding: 8px 10px;
+}
+
+.console-backup-panel textarea {
+  min-height: 130px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.84rem;
+}
+
+.console-preview-box,
+.console-restore-status-list,
+.console-status-list {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #e3e8ef;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.console-restore-status-list {
+  margin-top: 12px;
+}
+
+.console-status-list {
+  margin-top: 14px;
+}
+
+.console-status-list span {
+  color: #657080;
+  font-size: 0.85rem;
+}
+
+.console-inline-filter,
+.console-mini-form {
+  display: grid;
+  gap: 8px;
+}
+
+.console-inline-filter {
+  max-width: 220px;
+}
+
+.console-inline-filter span,
+.console-mini-form span,
+.console-workflow-actions span {
+  color: #657080;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.console-inline-filter select,
+.console-mini-form select,
+.console-mini-form textarea,
+.console-workflow-actions textarea {
+  width: 100%;
+  border: 1px solid #cbd3de;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17202a;
+  padding: 8px 10px;
+}
+
+.console-mini-form {
+  margin-top: 14px;
+}
+
+.console-mini-form textarea,
+.console-workflow-actions textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.console-mini-form button,
+.console-workflow-actions button {
+  min-height: 36px;
+  border: 1px solid #1f6f5f;
+  border-radius: 6px;
+  background: #267d6c;
+  color: #ffffff;
+  padding: 7px 11px;
+  font-weight: 800;
+}
+
+.console-mini-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.console-workflow-card {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.console-workflow-card small {
+  display: block;
+  margin-top: 4px;
+  color: #657080;
+  font-size: 0.82rem;
+}
+
+.console-workflow-actions {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+}
+
+.console-empty {
+  border: 1px dashed #cbd3de;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fbfcfd;
+  color: #657080;
+}
+
+.console-empty strong {
+  display: block;
+  color: #25313f;
+}
+
+.console-login-panel {
+  max-width: 520px;
+  margin: 80px auto;
+  padding: 24px;
+}
+
+.console-login-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.buyer-room-grid,
+.buyer-actions-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.console-settings-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.console-settings-strip label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #d9dee7;
+  border-radius: 999px;
+  background: #f8fafc;
+  padding: 7px 10px;
+  font-weight: 800;
+}
+
+.console-settings-strip input:disabled + span,
+.console-settings-strip label:has(input:disabled) {
+  opacity: 0.65;
+}
+
+.console-settings-form label {
+  display: grid;
+  gap: 6px;
+  color: #5d6673;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.console-settings-form input[type="text"],
+.console-settings-form input:not([type]) {
+  min-height: 38px;
+  border: 1px solid #cbd3de;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #17202a;
+}
+
+.console-action-row button:disabled,
+.console-settings-strip button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.console-history-list {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #e3e8ef;
+  border-radius: 6px;
+  background: #fbfcfd;
+  padding: 10px;
+}
+
+.console-history-list strong {
+  color: #25313f;
+}
+
+.console-history-list span,
+.console-settings-note {
+  color: #657080;
+  font-size: 0.85rem;
+}
+
+.console-settings-note {
+  margin: 10px 0 0;
+}
+
+.console-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.console-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(420px, calc(100vw - 36px));
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  background: #17202a;
+  color: #ffffff;
+  padding: 12px 14px;
+  box-shadow: 0 14px 36px rgba(23, 32, 42, 0.2);
+}
+
+.console-toast button {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  background: transparent;
+  color: #ffffff;
+  padding: 5px 8px;
+}
+
+@media (max-width: 1080px) {
+  .console-layout,
+  .buyer-room-grid,
+  .buyer-actions-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .console-sidebar {
+    position: static;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .console-detail-panel {
+    order: 3;
+  }
+}
+
+@media (max-width: 720px) {
+  .console-app-shell {
+    width: min(100% - 20px, 720px);
+    padding-top: 12px;
+  }
+
+  .console-hero,
+  .console-toolbar,
+  .console-detail-head,
+  .buyer-room-card-head,
+  .console-card,
+  .console-linked-room {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .console-summary-grid,
+  .console-field-grid,
+  .console-sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .console-table {
+    min-width: 640px;
+  }
+}

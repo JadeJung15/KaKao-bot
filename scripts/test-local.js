@@ -137,7 +137,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.94");
+  assert.equal(health.json.version, "0.4.95");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -189,6 +189,13 @@ try {
   assert.match(health.json.features.join(","), /license-key-guard/);
   assert.match(health.json.features.join(","), /admin-console-api/);
   assert.match(health.json.features.join(","), /admin-room-delete/);
+  assert.match(health.json.features.join(","), /react-admin-console/);
+  assert.match(health.json.features.join(","), /react-buyer-console/);
+  assert.match(health.json.features.join(","), /room-status-snapshot/);
+  assert.match(health.json.features.join(","), /archived-room-lifecycle/);
+  assert.match(health.json.features.join(","), /buyer-restore-request/);
+  assert.match(health.json.features.join(","), /admin-workflow-panels/);
+  assert.match(health.json.features.join(","), /buyer-request-status-dashboard/);
   assert.match(health.json.features.join(","), /room-feature-toggles/);
   assert.match(health.json.features.join(","), /subscription-reminders/);
   assert.match(health.json.features.join(","), /admin-diagnostics-api/);
@@ -509,7 +516,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.94");
+  assert.equal(commandTemplates.json.version, "0.4.95");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -538,7 +545,7 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.4.94");
+  assert.equal(commandPacks.json.version, "0.4.95");
   assert.equal(commandPacks.json.total, 13);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.fixedCommands.includes("/상태") && pack.fixedCommands.includes("/운세") && pack.fixedCommands.includes("/신고")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.installCode === "pk.001" && pack.installCodeType === "pack"), true);
@@ -585,35 +592,22 @@ try {
   assert.doesNotMatch(statusPageText, /"features"/);
 
   const consolePageText = await (await fetch(`${baseUrl}/console`)).text();
-  assert.match(consolePageText, /구매자 콘솔/);
-  assert.match(consolePageText, /20260525-silent-auth/);
-  assert.match(consolePageText, /buyer-gate is-auth-checking/);
-  assert.doesNotMatch(consolePageText, /로그인 세션을 확인 중입니다/);
-  const buyerConsoleScriptText = await (await fetch(`${baseUrl}/buyer-console.js`)).text();
-  assert.match(buyerConsoleScriptText, /buyer-onboarding/);
-  assert.match(buyerConsoleScriptText, /처음 시작 체크리스트/);
-  assert.match(buyerConsoleScriptText, /renderNextAction/);
-  assert.match(buyerConsoleScriptText, /다음 할 일/);
-  assert.match(buyerConsoleScriptText, /\/api\/buyer\/room-commands/);
-  assert.match(buyerConsoleScriptText, /명령어 검색/);
-  assert.match(buyerConsoleScriptText, /장착된 명령어 팩/);
-  assert.match(buyerConsoleScriptText, /showConsoleGate/);
-  assert.match(buyerConsoleScriptText, /운영 기본팩 설치 명령어 복사/);
-  assert.match(buyerConsoleScriptText, /\/명령어설치 pk\.001/);
-  assert.match(buyerConsoleScriptText, /방 소유권 이관/);
-  assert.match(buyerConsoleScriptText, /\/api\/buyer\/room-transfer\/create/);
-  assert.match(buyerConsoleScriptText, /\/api\/buyer\/room-transfer\/accept/);
-  assert.match(buyerConsoleScriptText, /\/api\/buyer\/room-transfer\/cancel/);
-  assert.match(buyerConsoleScriptText, /이관 내역/);
-  assert.match(buyerConsoleScriptText, /renderTransferHistory/);
-  assert.match(buyerConsoleScriptText, /renderRoomGroups/);
-  assert.match(buyerConsoleScriptText, /일반방\+게임방 통합 설정/);
-  assert.match(buyerConsoleScriptText, /\/api\/buyer\/room-mode-settings/);
-  assert.match(buyerConsoleScriptText, /data-room-mode-form/);
-  assert.match(buyerConsoleScriptText, /기존 승인 방을 게임방으로 연결/);
-  assert.match(buyerConsoleScriptText, /\/api\/buyer\/game-room-link/);
-  assert.match(buyerConsoleScriptText, /data-game-room-link-form/);
-  assert.match(buyerConsoleScriptText, /Android 1\.0\.22/);
+  assert.match(consolePageText, /구매자 셀프 관리 콘솔/);
+  assert.match(consolePageText, /data-console-app="buyer"/);
+  assert.match(consolePageText, /\/console-ui\/assets\/buyer\.js/);
+  assert.match(consolePageText, /게임방 접기\/펼치기/);
+  assert.match(consolePageText, /문의\/이관\/복구 요청/);
+  const buyerReactSource = await readFile(path.join(repoRoot, "src", "console-app", "buyer.jsx"), "utf8");
+  assert.match(buyerReactSource, /\/api\/buyer\/console/);
+  assert.match(buyerReactSource, /\/api\/buyer\/room-mode-settings/);
+  assert.match(buyerReactSource, /\/api\/buyer\/restore-requests/);
+  assert.match(buyerReactSource, /\/api\/application-inquiries/);
+  assert.match(buyerReactSource, /구매자가 직접 수정 가능한 항목/);
+  assert.match(buyerReactSource, /문의 등록/);
+  assert.match(buyerReactSource, /내 신고 상태/);
+  assert.match(buyerReactSource, /이관 요청 상태/);
+  assert.match(buyerReactSource, /복구 요청 상태/);
+  assert.match(buyerReactSource, /요청 접수됨/);
 
   const commandStorePageText = await (await fetch(`${baseUrl}/command-store`)).text();
   assert.match(commandStorePageText, /명령어 팩/);
@@ -628,44 +622,32 @@ try {
   const adminPage = await fetch(`${baseUrl}/admin`);
   assert.equal(adminPage.status, 200);
   const adminPageText = await adminPage.text();
-  assert.match(adminPageText, /픽셀곰 콘솔/);
-  assert.match(adminPageText, /방별 기능 ON\/OFF/);
-  assert.match(adminPageText, /admin-status-badge/);
-  assert.match(adminPageText, /백업 복구/);
-  assert.match(adminPageText, /복구 dry-run 확인/);
-  assert.match(adminPageText, /\/api\/admin\/backup\/validate/);
+  assert.match(adminPageText, /픽셀곰 운영자 어드민/);
+  assert.match(adminPageText, /일반방 중심 통합 운영 콘솔/);
   assert.match(adminPageText, /신청\/결제/);
-  assert.match(adminPageText, /명령어 추가\/수정/);
-  assert.match(adminPageText, /게임 시즌\/보상 설정/);
-  assert.match(adminPageText, /선택 방 삭제/);
-  assert.match(adminPageText, /기록 삭제/);
-  assert.match(adminPageText, /슬래시\(\/\) 없이도 등록 가능/);
-  assert.match(adminPageText, /만료 임박 7일/);
-  assert.match(adminPageText, /문제 방/);
-  assert.match(adminPageText, /브릿지 확인/);
-  assert.match(adminPageText, /시즌 시작일/);
-  assert.match(adminPageText, /방, 관리자, 라이선스/);
-  assert.match(adminPageText, /운영자 로그인 확인/);
-  assert.match(adminPageText, /room-delete-button/);
-  assert.match(adminPageText, /신고 관리/);
-  assert.match(adminPageText, /data-load-reports/);
-  assert.match(adminPageText, /data-report-status-filter/);
-  assert.match(adminPageText, /\/api\/admin\/reports\/resolve/);
+  assert.match(adminPageText, /종료 보관/);
+  assert.match(adminPageText, /백업\/복구/);
+  assert.match(adminPageText, /data-console-app="admin"/);
+  assert.match(adminPageText, /\/console-ui\/assets\/admin\.js/);
+  assert.match(adminPageText, /신고/);
   assert.match(adminPageText, /이관 내역/);
-  assert.match(adminPageText, /data-load-transfers/);
-  assert.match(adminPageText, /data-transfer-status-filter/);
-  assert.match(adminPageText, /\/api\/admin\/transfers/);
-  assert.match(adminPageText, /신청 문의/);
-  assert.match(adminPageText, /data-load-application-inquiries/);
-  assert.match(adminPageText, /\/api\/admin\/application-inquiries/);
-  assert.match(adminPageText, /결제요청 일시/);
-  assert.match(adminPageText, /기준 일반방/);
-  assert.match(adminPageText, /session-nav\.js/);
-  assert.match(adminPageText, /name="originalRoomName"/);
-  assert.match(adminPageText, /일반방 중심 통합 설정/);
-  assert.match(adminPageText, /data-admin-room-groups/);
-  assert.match(adminPageText, /data-admin-game-room-link/);
-  assert.match(adminPageText, /\/api\/admin\/game-room-link/);
+  const adminReactSource = await readFile(path.join(repoRoot, "src", "console-app", "admin.jsx"), "utf8");
+  assert.match(adminReactSource, /\/api\/admin\/rooms/);
+  assert.match(adminReactSource, /\/api\/admin\/archived-rooms/);
+  assert.match(adminReactSource, /\/api\/admin\/restore-requests\?status=all/);
+  assert.match(adminReactSource, /\/api\/admin\/restore-requests\/resolve/);
+  assert.match(adminReactSource, /\/api\/admin\/reports\/resolve/);
+  assert.match(adminReactSource, /\/api\/admin\/application-inquiries\/resolve/);
+  assert.match(adminReactSource, /\/api\/admin\/rooms\/archive/);
+  assert.match(adminReactSource, /\/api\/admin\/rooms\/restore/);
+  assert.match(adminReactSource, /\/api\/admin\/rooms\/purge/);
+  assert.match(adminReactSource, /\/api\/admin\/backup\/validate/);
+  assert.match(adminReactSource, /신고 상태/);
+  assert.match(adminReactSource, /문의 상태/);
+  assert.match(adminReactSource, /이관 상태/);
+  assert.match(adminReactSource, /완전 삭제 확인/);
+  assert.match(adminReactSource, /복구 dry-run 검증/);
+  assert.match(adminReactSource, /roomStatusSnapshot|snapshot/);
   assert.doesNotMatch(adminPageText, /ADMIN_CONSOLE_TOKEN/);
 
   const authScript = await fetch(`${baseUrl}/auth.js`);
@@ -689,8 +671,10 @@ try {
   assert.match(sessionNavText, /href = "\/account"/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.4.94");
-  assert.equal(packageJson.scripts["check:deploy"], "node scripts/predeploy-check.js");
+  assert.equal(packageJson.version, "0.4.95");
+  assert.equal(packageJson.scripts["build:console"], "vite build --config vite.console.config.mjs");
+  assert.equal(packageJson.scripts["dev:console"], "vite --config vite.console.config.mjs");
+  assert.equal(packageJson.scripts["check:deploy"], "npm run build:console && node scripts/predeploy-check.js");
   assert.equal(packageJson.scripts["smoke:local"], "node scripts/smoke-check.js");
   assert.equal(packageJson.scripts["smoke:prod"], "node scripts/smoke-check.js https://pixgom.com");
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
@@ -881,6 +865,8 @@ try {
   assert.match(JSON.stringify(adminRooms.json.rooms), /콘솔방/);
   assert.equal(adminRooms.json.summary.rooms >= 1, true);
   assert.equal(typeof adminRooms.json.summary.expiringRooms, "number");
+  assert.ok(adminRooms.json.rooms.find((room) => room.name === "콘솔방")?.roomStatusSnapshot);
+  assert.equal(adminRooms.json.rooms.find((room) => room.name === "콘솔방")?.roomStatusSnapshot.permissions.adminOnly.includes("license"), true);
 
   const adminDeleteSeed = await request("/api/admin/rooms", {
     method: "POST",
@@ -901,12 +887,44 @@ try {
   });
   assert.equal(adminDelete.response.status, 200);
   assert.equal(adminDelete.json.deletedRoom.name, "삭제테스트방");
+  assert.equal(adminDelete.json.archivedRoom.roomName, "삭제테스트방");
   const adminRoomsAfterDelete = await request("/api/admin/rooms?token=test-admin-token");
   assert.doesNotMatch(JSON.stringify(adminRoomsAfterDelete.json.rooms), /삭제테스트방/);
+  const adminArchivedRooms = await request("/api/admin/archived-rooms?token=test-admin-token");
+  assert.equal(adminArchivedRooms.response.status, 200);
+  assert.match(JSON.stringify(adminArchivedRooms.json.archivedRooms), /삭제테스트방/);
+  assert.equal(adminArchivedRooms.json.archivedRooms[0].roomStatusSnapshot.lifecycle.status, "archived");
+  const adminRestoreArchived = await request("/api/admin/rooms/restore?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ archiveId: adminDelete.json.archivedRoom.id })
+  });
+  assert.equal(adminRestoreArchived.response.status, 200);
+  assert.equal(adminRestoreArchived.json.restoredRoom.name, "삭제테스트방");
+  const adminArchiveAgain = await request("/api/admin/rooms/archive?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ room: "삭제테스트방", reason: "purge 회귀 테스트" })
+  });
+  assert.equal(adminArchiveAgain.response.status, 200);
+  const purgeBlocked = await request("/api/admin/rooms/purge?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ archiveId: adminArchiveAgain.json.archivedRoom.id, confirmRoomName: "삭제테스트방" })
+  });
+  assert.equal(purgeBlocked.response.status, 400);
+  assert.equal(purgeBlocked.json.error, "purge_confirmation_required");
+  const purgeConfirmed = await request("/api/admin/rooms/purge?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ archiveId: adminArchiveAgain.json.archivedRoom.id, confirmRoomName: "삭제테스트방", confirmPermanentDelete: "PERMANENT_DELETE" })
+  });
+  assert.equal(purgeConfirmed.response.status, 200);
+  assert.equal(purgeConfirmed.json.purgedRoom.roomName, "삭제테스트방");
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.4.94");
+  assert.equal(adminDiagnostics.json.version, "0.4.95");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -917,7 +935,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.4.94");
+  assert.equal(adminBackup.json.version, "0.4.95");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -1108,8 +1126,14 @@ try {
   assert.equal(adminApplications.response.status, 200);
   assert.match(JSON.stringify(adminApplications.json.applications), /판매신청방/);
   assert.equal(adminApplications.json.summary.pending >= 1, true);
+  assert.equal(adminApplications.json.summary.paymentReviewNeeded >= 1, true);
+  assert.equal(adminApplications.json.lifecycleSummary.pendingPayment >= 1, true);
   assert.equal(adminApplications.json.applications.some((application) => application.id === apply.json.application.id && application.payment.requestedAt === apply.json.payment.requestedAt), true);
   assert.equal(adminApplications.json.applications.some((application) => application.id === apply.json.application.id && application.inquirySummary.open === 1), true);
+  const pendingLifecycle = adminApplications.json.applications.find((application) => application.id === apply.json.application.id).lifecycle;
+  assert.equal(pendingLifecycle.status, "pending_payment");
+  assert.equal(pendingLifecycle.available, false);
+  assert.match(pendingLifecycle.actionRequired, /입금|승인/);
   const adminApplicationInquiries = await request("/api/admin/application-inquiries?token=test-admin-token");
   assert.equal(adminApplicationInquiries.response.status, 200);
   assert.equal(adminApplicationInquiries.json.inquiries.some((inquiry) => inquiry.applicationId === apply.json.application.id && inquiry.status === "open"), true);
@@ -1150,7 +1174,10 @@ try {
   });
   assert.equal(approvedApplication.response.status, 200);
   assert.equal(approvedApplication.json.application.status, "approved");
+  assert.equal(approvedApplication.json.application.lifecycle.status, "active");
+  assert.equal(approvedApplication.json.application.lifecycle.available, true);
   assert.equal(approvedApplication.json.payment.status, "paid");
+  assert.equal(approvedApplication.json.room.roomStatusSnapshot.lifecycle.status, "active");
   assert.match(approvedApplication.json.room.licenseKey, /^PXG-/);
 
   const approvedLogin = await request("/api/login", {
@@ -1250,7 +1277,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.94");
+  assert.equal(buyerGuideApproved.json.version, "0.4.95");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -1265,7 +1292,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.94");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.95");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -1276,12 +1303,175 @@ try {
   assert.equal(buyerConsoleApproved.json.rooms[0].subscriptionStatusLabel, "정상");
   assert.match(buyerConsoleApproved.json.rooms[0].subscriptionNotice, /정상/);
   assert.equal(buyerConsoleApproved.json.rooms[0].bridgeStatus, "ready");
+  assert.equal(buyerConsoleApproved.json.rooms[0].roomStatusSnapshot.lifecycle.status, "active");
+  assert.equal(buyerConsoleApproved.json.rooms[0].roomStatusSnapshot.lifecycle.available, true);
+  assert.equal(buyerConsoleApproved.json.lifecycleSummary.active >= 1, true);
+  assert.equal(buyerConsoleApproved.json.lifecycleSummary.paymentReviewNeeded >= 1, true);
+  assert.equal(buyerConsoleApproved.json.rooms[0].roomStatusSnapshot.bridge.status, "ready");
+  assert.deepEqual(buyerConsoleApproved.json.rooms[0].roomStatusSnapshot.permissions.buyerEditable.includes("modeSplit"), true);
   assert.equal(buyerConsoleApproved.json.rooms[0].commandCount, 0);
   assert.equal(buyerConsoleApproved.json.canApplyGameRoom, true);
   assert.equal(buyerConsoleApproved.json.rooms[0].canApplyGameRoom, true);
   assert.match(buyerConsoleApproved.json.rooms[0].gameRoomApplyUrl, /\/apply\?roomPurpose=game_room/);
   assert.match(buyerConsoleApproved.json.rooms[0].gameRoomApplyUrl, new RegExp(buyerConsoleApproved.json.rooms[0].applicationId));
   assert.deepEqual(buyerConsoleApproved.json.rooms[0].linkedGameRooms, []);
+
+  const buyerConsoleInquiry = await request("/api/application-inquiries", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      type: "payment_check",
+      message: "구매자 콘솔 문의 회귀"
+    })
+  });
+  assert.equal(buyerConsoleInquiry.response.status, 200);
+  assert.equal(buyerConsoleInquiry.json.inquiry.status, "open");
+  const adminInquiryReview = await request("/api/admin/application-inquiries/resolve?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ inquiryId: buyerConsoleInquiry.json.inquiry.id, status: "in_review", resolution: "관리자 확인중" })
+  });
+  assert.equal(adminInquiryReview.response.status, 200);
+  assert.equal(adminInquiryReview.json.inquiry.status, "in_review");
+  assert.equal(adminInquiryReview.json.inquiry.statusLabel, "확인중");
+  const adminInReviewInquiries = await request("/api/admin/application-inquiries?token=test-admin-token&status=in_review");
+  assert.equal(adminInReviewInquiries.response.status, 200);
+  assert.equal(adminInReviewInquiries.json.inquiries.some((inquiry) => inquiry.id === buyerConsoleInquiry.json.inquiry.id), true);
+  const buyerRoomReport = await chatPayload({
+    room: "판매신청방",
+    msg: "/신고 문제회원 구매자 콘솔 신고 상태 확인",
+    sender: "구매자신고자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.equal(buyerRoomReport.response.status, 200);
+  const buyerRoomReportId = buyerRoomReport.json.reply.match(/R\d{4}/)?.[0];
+  assert.ok(buyerRoomReportId);
+  const buyerConsoleWorkflow = await request("/api/buyer/console", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: approvedLogin.json.guideToken })
+  });
+  assert.equal(buyerConsoleWorkflow.json.inquiries.some((inquiry) => inquiry.id === buyerConsoleInquiry.json.inquiry.id && inquiry.status === "in_review"), true);
+  assert.equal(buyerConsoleWorkflow.json.reports.some((report) => report.id === buyerRoomReportId && report.roomName === "판매신청방"), true);
+  assert.equal(buyerConsoleWorkflow.json.transfers.length >= 0, true);
+
+  const buyerRoomArchive = await request("/api/admin/rooms/archive?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ room: "판매신청방", reason: "구매자 복구 요청 회귀" })
+  });
+  assert.equal(buyerRoomArchive.response.status, 200);
+  assert.equal(buyerRoomArchive.json.archivedRoom.roomName, "판매신청방");
+  const buyerConsoleArchived = await request("/api/buyer/console", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: approvedLogin.json.guideToken })
+  });
+  assert.equal(buyerConsoleArchived.response.status, 200);
+  assert.equal(buyerConsoleArchived.json.archivedRooms.some((archive) => archive.id === buyerRoomArchive.json.archivedRoom.id), true);
+  const buyerRestoreRequest = await request("/api/buyer/restore-requests", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: approvedLogin.json.guideToken, archiveId: buyerRoomArchive.json.archivedRoom.id, reason: "실수로 종료된 방 복구 요청" })
+  });
+  assert.equal(buyerRestoreRequest.response.status, 200);
+  assert.equal(buyerRestoreRequest.json.request.status, "open");
+  assert.equal(buyerRestoreRequest.json.request.archivedRoomExists, true);
+  const duplicateRestoreRequest = await request("/api/buyer/restore-requests", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: approvedLogin.json.guideToken, archiveId: buyerRoomArchive.json.archivedRoom.id, reason: "중복 복구 요청" })
+  });
+  assert.equal(duplicateRestoreRequest.response.status, 200);
+  assert.equal(duplicateRestoreRequest.json.duplicate, true);
+  assert.equal(duplicateRestoreRequest.json.restoreRequests.filter((request) => request.archiveId === buyerRoomArchive.json.archivedRoom.id && request.status !== "resolved").length, 1);
+  const adminRestoreRequests = await request("/api/admin/restore-requests?token=test-admin-token&status=all");
+  assert.equal(adminRestoreRequests.response.status, 200);
+  assert.equal(adminRestoreRequests.json.requests.some((request) => request.id === buyerRestoreRequest.json.request.id), true);
+  const reviewRestoreRequest = await request("/api/admin/restore-requests/resolve?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ requestId: buyerRestoreRequest.json.request.id, status: "in_review", resolution: "확인중" })
+  });
+  assert.equal(reviewRestoreRequest.response.status, 200);
+  assert.equal(reviewRestoreRequest.json.request.status, "in_review");
+  const restoreBuyerRoom = await request("/api/admin/rooms/restore?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ archiveId: buyerRoomArchive.json.archivedRoom.id, restoreRequestId: buyerRestoreRequest.json.request.id, resolution: "복구 요청 승인" })
+  });
+  assert.equal(restoreBuyerRoom.response.status, 200);
+  assert.equal(restoreBuyerRoom.json.restoredRoom.name, "판매신청방");
+  const adminRestoreRequestsAfter = await request("/api/admin/restore-requests?token=test-admin-token&status=all");
+  assert.equal(adminRestoreRequestsAfter.json.requests.find((request) => request.id === buyerRestoreRequest.json.request.id).status, "resolved");
+  const buyerConsoleRestored = await request("/api/buyer/console", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: approvedLogin.json.guideToken })
+  });
+  assert.equal(buyerConsoleRestored.json.rooms.some((room) => room.roomName === "판매신청방"), true);
+  assert.equal(buyerConsoleRestored.json.archivedRooms.some((archive) => archive.id === buyerRoomArchive.json.archivedRoom.id), false);
+
+  const adminModeSplitSave = await request("/api/admin/rooms?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      originalRoomName: "판매신청방",
+      room: "판매신청방",
+      roomId: "salesRoom1",
+      roomLink: "https://open.kakao.com/o/salesRoom1",
+      roomAdmins: ["신청관리자"],
+      licenseKey: approvedApplication.json.room.licenseKey,
+      subscriptionExpiresAt: "2099-12-31",
+      modeSplit: {
+        blockGamesInGeneralRoom: false,
+        blockOpsInGameRoom: true,
+        sharePointsAndInventory: true
+      }
+    })
+  });
+  assert.equal(adminModeSplitSave.response.status, 200);
+  assert.equal(adminModeSplitSave.json.room.roomStatusSnapshot.settings.modeSplit.blockGamesInGeneralRoom, false);
+  assert.equal(adminModeSplitSave.json.room.roomStatusSnapshot.settings.modeSplit.gameRoomOpsBlocked, true);
+  assert.match(adminModeSplitSave.json.room.roomStatusSnapshot.settings.lastSavedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(adminModeSplitSave.json.room.roomStatusSnapshot.settings.history.some((item) => item.type === "admin_console_room_saved"), true);
+
+  const buyerConsoleAfterAdminModeSave = await request("/api/buyer/console", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: approvedLogin.json.guideToken })
+  });
+  assert.equal(
+    buyerConsoleAfterAdminModeSave.json.rooms[0].roomStatusSnapshot.settings.modeSplit.blockGamesInGeneralRoom,
+    adminModeSplitSave.json.room.roomStatusSnapshot.settings.modeSplit.blockGamesInGeneralRoom
+  );
+  const bridgeAfterAdminModeSave = await request("/api/bridge/connect", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: buyerConsoleApproved.json.rooms[0].bridgeConnectCode })
+  });
+  assert.equal(bridgeAfterAdminModeSave.response.status, 200);
+  assert.equal(
+    bridgeAfterAdminModeSave.json.room.roomStatusSnapshot.settings.modeSplit.blockGamesInGeneralRoom,
+    adminModeSplitSave.json.room.roomStatusSnapshot.settings.modeSplit.blockGamesInGeneralRoom
+  );
+
+  const buyerForbiddenModeSave = await request("/api/buyer/room-mode-settings", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      licenseKey: "PXG-HACK-0000",
+      blockGamesInGeneralRoom: true
+    })
+  });
+  assert.equal(buyerForbiddenModeSave.response.status, 403);
+  assert.equal(buyerForbiddenModeSave.json.error, "buyer_field_not_allowed");
 
   const fixedTemplate = commandTemplates.json.templates.find((template) => template.trigger === "/출석");
   const fixedTemplateInstall = await request("/api/buyer/command-templates/install", {
@@ -1716,6 +1906,8 @@ try {
   assert.equal(consoleRoomGroup.gameRooms.some((room) => room.applicationId === gameRoomApply.json.application.id), true);
   assert.equal(consoleRoomGroup.roomModeSettings.generalRoomGameBlocked, true);
   assert.equal(consoleRoomGroup.roomModeSettings.gameRoomOpsBlocked, true);
+  assert.equal(consoleRoomGroup.roomModeSettings.blockGamesInGeneralRoom, true);
+  assert.equal(consoleRoomGroup.roomModeSettings.blockOpsInGameRoom, true);
 
   const bridgeConnectBaseWithGame = await request("/api/bridge/connect", {
     method: "POST",
@@ -1828,6 +2020,10 @@ try {
   const disabledGroup = roomModeDisabled.json.roomGroups.find((group) => group.baseRoom.applicationId === buyerConsoleApproved.json.rooms[0].applicationId);
   assert.equal(disabledGroup.roomModeSettings.generalRoomGameBlocked, false);
   assert.equal(disabledGroup.roomModeSettings.gameRoomOpsBlocked, false);
+  assert.equal(disabledGroup.roomModeSettings.blockGamesInGeneralRoom, false);
+  assert.equal(disabledGroup.roomModeSettings.blockOpsInGameRoom, false);
+  assert.equal(roomModeDisabled.json.savedSettings.modeSplit.blockGamesInGeneralRoom, false);
+  assert.match(roomModeDisabled.json.savedSettings.roomStatusSnapshot.settings.lastSavedAt, /^\d{4}-\d{2}-\d{2}T/);
   const generalRoomGameAllowedAfterToggle = await chatPayload({
     registeredRoom: false,
     room: "판매신청방",
@@ -1859,6 +2055,8 @@ try {
     })
   });
   assert.equal(roomModeEnabled.response.status, 200);
+  assert.equal(roomModeEnabled.json.savedSettings.modeSplit.blockGamesInGeneralRoom, true);
+  assert.equal(roomModeEnabled.json.savedSettings.modeSplit.blockOpsInGameRoom, true);
 
   const linkerEmail = `linker-${process.pid}@pixgom.test`;
   const linkSignup = await request("/api/signup", {
@@ -2612,6 +2810,8 @@ try {
   assert.equal(bridgeConnect.json.room.roomName, "판매신청방");
   assert.equal(bridgeConnect.json.room.roomId, "salesRoom1");
   assert.match(bridgeConnect.json.room.licenseKey, /^PXG-/);
+  assert.equal(bridgeConnect.json.room.roomStatusSnapshot.lifecycle.status, "active");
+  assert.equal(bridgeConnect.json.room.roomStatusSnapshot.bridge.status, "ready");
 
   const sourceTransferRoom = buyerConsoleWithAdditionalRoom.json.rooms.find((room) => room.roomName === "판매신청방");
   assert.ok(sourceTransferRoom?.applicationId);

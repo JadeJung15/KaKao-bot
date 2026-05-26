@@ -32,8 +32,9 @@
 - Play Console 업로드는 비공개 테스트만 사용합니다.
 - Play Console 로그인, AAB 업로드, 변경사항 게시는 Codex 자동화 테스트 Chrome, Playwright, Chrome DevTools, browser-use로 진행하지 않습니다.
 - Google 로그인은 자동화 제어 Chrome을 안전하지 않은 브라우저로 감지하여 차단할 수 있습니다.
-- Play Console 작업은 실제 로그인된 일반 Chrome을 우선 사용합니다.
-- Codex가 브라우저 조작을 보조해야 하는 경우에는 자동화 테스트 브라우저 대신 Codex Chrome Extension을 사용합니다.
+- Play Console 작업의 1순위 방식은 이미 로그인된 일반 Chrome 창을 Codex Chrome Extension(Control Chrome with Codex)으로 직접 조작하는 방식입니다.
+- Codex가 브라우저 조작을 보조해야 하는 경우에는 자동화 테스트 브라우저, Chrome DevTools/CDP, Playwright 브라우저, browser-use 대신 Codex Chrome Extension으로 기존 Chrome 탭을 잡아 진행합니다.
+- Codex Chrome Extension 연결이 되지 않으면 다른 브라우저 자동화로 우회하지 말고 사용자에게 중단 사유와 필요한 조치를 먼저 보고합니다.
 - Codex는 업로드 전 검증, AAB 경로, SHA256, 버전 확인, 업로드 후 체크리스트 안내를 수행할 수 있습니다.
 - 반복 자동화가 필요하면 Play Developer API와 서비스 계정 방식으로 별도 승인 후 진행합니다.
 
