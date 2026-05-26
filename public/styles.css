@@ -4983,6 +4983,64 @@ a {
   gap: 8px;
 }
 
+.console-log-panel {
+  align-content: start;
+}
+
+.console-log-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.console-log-filters label {
+  display: grid;
+  gap: 6px;
+  color: #5d6673;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.console-log-filters input,
+.console-log-filters select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #cbd3de;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17202a;
+  padding: 8px 10px;
+}
+
+.console-log-card {
+  align-items: flex-start;
+}
+
+.console-log-card > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.console-log-card small {
+  color: #657080;
+  font-size: 0.82rem;
+  word-break: break-word;
+}
+
+.console-log-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 150px;
+}
+
+.console-log-meta small {
+  flex-basis: 100%;
+  text-align: right;
+}
+
 .console-empty {
   border: 1px dashed #cbd3de;
   border-radius: 8px;
@@ -5144,15 +5202,22 @@ a {
   .console-detail-head,
   .buyer-room-card-head,
   .console-card,
-  .console-linked-room {
+  .console-linked-room,
+  .console-log-card,
+  .console-log-meta {
     align-items: stretch;
     flex-direction: column;
   }
 
   .console-summary-grid,
   .console-field-grid,
+  .console-log-filters,
   .console-sidebar {
     grid-template-columns: 1fr;
+  }
+
+  .console-log-meta small {
+    text-align: left;
   }
 
   .console-table {

@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.96";
+export const APP_VERSION = "0.4.97";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -54,6 +54,7 @@ export const FEATURES = [
   "member-rankings",
   "raw-event-log",
   "room-analytics-log-retention",
+  "admin-room-log-browser",
   "stable-user-ids",
   "admin-identity-reset",
   "bridge-auto-extract",

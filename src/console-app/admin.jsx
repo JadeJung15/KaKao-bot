@@ -11,6 +11,7 @@ const DETAIL_TABS = [
   { id: "reports", label: "신고" },
   { id: "transfers", label: "이관" },
   { id: "inquiries", label: "문의" },
+  { id: "logs", label: "방별 로그" },
   { id: "backup", label: "백업/복구" },
   { id: "history", label: "이력" }
 ];
@@ -34,6 +35,8 @@ function AdminApp() {
   const [toast, setToast] = useState(null);
   const [purgeForms, setPurgeForms] = useState({});
   const [actionForms, setActionForms] = useState({});
+  const [logState, setLogState] = useState({ loading: false, logs: [], rooms: [], summary: null, error: "" });
+  const [logFilters, setLogFilters] = useState({ room: "", q: "", command: "", type: "", limit: "100" });
 
   async function load() {
     setState((current) => ({ ...current, loading: true }));
@@ -78,6 +81,46 @@ function AdminApp() {
   const selected = rows.find((row) => row.id === selectedId) || rows[0] || null;
   const baseRoom = selected?.raw?.baseRoom || selected?.raw?.room || {};
   const baseApp = selected?.raw?.baseApplication || {};
+  const logRoomOptions = useMemo(() => {
+    const candidates = [baseRoom, ...(selected?.raw?.gameRooms || [])]
+      .map((room) => room?.name)
+      .filter(Boolean);
+    return [...new Set(candidates)];
+  }, [baseRoom.name, selected?.id, selected?.raw?.gameRooms]);
+
+  async function loadRoomLogs(overrides = {}) {
+    const nextFilters = { ...logFilters, ...overrides };
+    const roomName = nextFilters.room || baseRoom.name || selected?.name || "";
+    if (!roomName) return;
+    const params = new URLSearchParams({
+      room: roomName,
+      limit: nextFilters.limit || "100"
+    });
+    if (nextFilters.q) params.set("q", nextFilters.q);
+    if (nextFilters.command) params.set("command", nextFilters.command);
+    if (nextFilters.type) params.set("type", nextFilters.type);
+    setLogState((current) => ({ ...current, loading: true, error: "" }));
+    try {
+      const result = await adminRequest(`/api/admin/room-logs?${params.toString()}`);
+      setLogFilters({ ...nextFilters, room: roomName });
+      setLogState({
+        loading: false,
+        logs: result.logs || [],
+        rooms: result.rooms || [],
+        summary: result.summary || {},
+        error: ""
+      });
+    } catch (error) {
+      setLogState((current) => ({ ...current, loading: false, error: formatError(error) }));
+    }
+  }
+
+  useEffect(() => {
+    if (tab !== "logs" || !selected) return;
+    loadRoomLogs({ room: baseRoom.name || selected.name });
+    // The log panel should refresh when the selected room changes; filter edits are applied by the explicit 조회 button.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, selected?.id]);
 
   async function archiveSelected() {
     if (!baseRoom.name) return;
@@ -206,7 +249,7 @@ function AdminApp() {
       <SummaryGrid items={roomSummaries(state.rooms, state.archivedRooms)} />
       <section className="console-layout">
         <aside className="console-sidebar" aria-label="운영 메뉴">
-          {["운영현황", "일반방", "신청/결제", "신고", "이관", "문의", "종료 보관", "백업/복구"].map((item) => <a href={`#${item}`} key={item}>{item}</a>)}
+          {["운영현황", "일반방", "신청/결제", "신고", "이관", "문의", "방별 로그", "종료 보관", "백업/복구"].map((item) => <a href={`#${item}`} key={item}>{item}</a>)}
         </aside>
         <section className="console-main-panel" id="일반방">
           <Toolbar search={search} onSearch={setSearch} filter={filter} onFilter={setFilter} />
@@ -296,11 +339,22 @@ function AdminApp() {
                   onResolve={(item) => updateInquiry(item, "resolved")}
                 />
               )}
+              {tab === "logs" && (
+                <RoomLogsPanel
+                  roomOptions={logRoomOptions}
+                  filters={logFilters}
+                  setFilters={setLogFilters}
+                  logState={logState}
+                  onLoad={loadRoomLogs}
+                />
+              )}
               {tab === "backup" && (
                 <BackupPanel baseRoom={baseRoom} setToast={setToast} />
               )}
               {tab === "history" && (
                 <section className="console-detail-section">
+                  <FieldRow label="장기 분석 로그">{baseRoom.diagnostics?.analyticsLogCount || 0}건</FieldRow>
+                  <FieldRow label="최근 분석 로그">{formatDate(baseRoom.diagnostics?.lastAnalyticsLogAt)}</FieldRow>
                   <FieldRow label="최근 이벤트">{formatDate(baseRoom.diagnostics?.lastEventAt)}</FieldRow>
                   <FieldRow label="최근 원본 이벤트">{formatDate(baseRoom.diagnostics?.lastRawEventAt)}</FieldRow>
                 </section>
@@ -535,6 +589,79 @@ function TransfersPanel({ items = [] }) {
           </article>
         ))}
         {!visible.length && <EmptyState title="표시할 이관 내역이 없습니다.">상태 필터를 바꾸거나 다른 방을 선택해 주세요.</EmptyState>}
+      </div>
+    </section>
+  );
+}
+
+function RoomLogsPanel({ roomOptions = [], filters = {}, setFilters, logState = {}, onLoad }) {
+  const update = (patch) => setFilters((current) => ({ ...current, ...patch }));
+  return (
+    <section className="console-detail-section console-log-panel" id="방별 로그">
+      <div className="console-section-head">
+        <div>
+          <p className="console-eyebrow">Room Analytics</p>
+          <h3>방별 로그</h3>
+        </div>
+        <StatusBadge label={`${logState.summary?.matchedLogs || 0}건 표시`} status="ok" />
+      </div>
+      <div className="console-log-filters" aria-label="방별 로그 필터">
+        <label>
+          <span>방 선택</span>
+          <select value={filters.room || roomOptions[0] || ""} onChange={(event) => update({ room: event.target.value })}>
+            {roomOptions.map((roomName) => <option value={roomName} key={roomName}>{roomName}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>로그 검색</span>
+          <input value={filters.q || ""} onChange={(event) => update({ q: event.target.value })} placeholder="발신자, 메시지, 명령어 검색" />
+        </label>
+        <label>
+          <span>명령어 필터</span>
+          <input value={filters.command || ""} onChange={(event) => update({ command: event.target.value })} placeholder="/포인트" />
+        </label>
+        <label>
+          <span>이벤트 타입</span>
+          <input value={filters.type || ""} onChange={(event) => update({ type: event.target.value })} placeholder="entered, left 등" />
+        </label>
+        <label>
+          <span>조회 수</span>
+          <select value={filters.limit || "100"} onChange={(event) => update({ limit: event.target.value })}>
+            <option value="50">50건</option>
+            <option value="100">100건</option>
+            <option value="300">300건</option>
+            <option value="500">500건</option>
+          </select>
+        </label>
+      </div>
+      <div className="console-action-row">
+        <button type="button" onClick={() => onLoad()} disabled={logState.loading || !roomOptions.length}>
+          {logState.loading ? "조회 중" : "로그 조회"}
+        </button>
+      </div>
+      <div className="console-field-grid">
+        <FieldRow label="보관 방 수">{logState.summary?.rooms || 0}</FieldRow>
+        <FieldRow label="전체 로그">{logState.summary?.totalLogs || 0}건</FieldRow>
+        <FieldRow label="필터 결과">{logState.summary?.matchedLogs || 0}건</FieldRow>
+        <FieldRow label="현재 방">{filters.room || roomOptions[0] || "-"}</FieldRow>
+      </div>
+      {logState.error ? <EmptyState title="로그 조회 실패">{logState.error}</EmptyState> : null}
+      <div className="console-card-list compact">
+        {(logState.logs || []).map((log) => (
+          <article className="console-card console-log-card" key={`${log.at}-${log.messageHash}-${log.senderHash}`}>
+            <div>
+              <strong>{log.command || log.eventType || "채팅"} · {formatDate(log.at)}</strong>
+              <span>{log.room || "-"} · {log.sender || "익명"} · 길이 {log.messageLength || 0}</span>
+              <small>{log.messagePreview || "메시지 없음"}</small>
+            </div>
+            <div className="console-log-meta">
+              <StatusBadge label={log.isCommand ? "명령어" : "일반"} status={log.isCommand ? "ok" : "neutral"} />
+              {log.eventType ? <StatusBadge label={log.eventType} status="open" /> : null}
+              <small>msg {log.messageHash || "-"} · sender {log.senderHash || "-"}</small>
+            </div>
+          </article>
+        ))}
+        {!logState.loading && !logState.logs?.length ? <EmptyState title="표시할 로그가 없습니다.">방을 선택하고 로그 조회를 눌러 주세요.</EmptyState> : null}
       </div>
     </section>
   );
