@@ -4571,6 +4571,84 @@ a {
   color: #fffaf1;
 }
 
+.buyer-step-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.buyer-step-overview .buyer-step-card {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  min-height: 0;
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+  box-shadow: 0 4px 14px rgba(23, 32, 42, 0.04);
+}
+
+.buyer-step-overview .buyer-step-card > span {
+  color: #657080;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.buyer-step-overview .buyer-step-card > strong {
+  display: block;
+  width: auto;
+  height: auto;
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #17202a;
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.buyer-step-overview .buyer-step-card > p {
+  margin: 0;
+  color: #4d5968;
+  line-height: 1.45;
+}
+
+.buyer-step-overview .buyer-step-good {
+  border-left: 4px solid #2c8c6f;
+}
+
+.buyer-step-overview .buyer-step-warn {
+  border-left: 4px solid #c9822a;
+}
+
+.buyer-step-overview .buyer-step-neutral {
+  border-left: 4px solid #7a8797;
+}
+
+.buyer-step-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.buyer-step-action a,
+.buyer-step-action button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border: 1px solid #cbd3de;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #25313f;
+  padding: 7px 10px;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
 .buyer-guide-react-panel {
   display: grid;
   gap: 14px;
@@ -5414,6 +5492,7 @@ a {
 
   .console-summary-grid,
   .console-field-grid,
+  .buyer-step-overview,
   .buyer-connect-code-card,
   .console-log-filters,
   .console-two-column-form,

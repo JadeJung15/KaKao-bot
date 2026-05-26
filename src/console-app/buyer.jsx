@@ -157,6 +157,7 @@ function BuyerApp() {
       </header>
       <BuyerConsoleTabs activeView={activeView} onChange={setActiveView} />
       {payload ? <SummaryGrid items={buyerSummaries(payload)} /> : null}
+      {payload ? <BuyerStepOverview payload={payload} onRefresh={() => load()} /> : null}
       {payload ? <AppConnectCodePanel rooms={appConnectCodeRooms} applications={payload.applications || []} onCopy={copyAppConnectCode} /> : null}
       {payload ? <BuyerGuidePanel payload={payload} activeView={activeView} /> : null}
       <section className="buyer-room-grid">
@@ -165,7 +166,7 @@ function BuyerApp() {
         ))}
         {!loading && payload && !payload.rooms?.length && <EmptyState title="이용 중인 방이 없습니다.">신청/결제가 완료되면 이곳에 방 상태가 표시됩니다.</EmptyState>}
       </section>
-      <section className="buyer-actions-panel">
+      <section className="buyer-actions-panel" id="requests">
         <article>
           <h2>문의 / 이관 / 복구 요청</h2>
           <p>구매자가 직접 수정 가능한 항목은 게임방 분리 설정, 명령어팩, 문의, 이관, 복구 요청으로 제한됩니다.</p>
@@ -226,6 +227,52 @@ function BuyerApp() {
       </section>
       <ToastHost message={toast?.message} tone={toast?.tone} onClose={() => setToast(null)} />
     </main>
+  );
+}
+
+function BuyerStepOverview({ payload = {}, onRefresh }) {
+  const applications = payload.applications || [];
+  const rooms = payload.rooms || [];
+  const appConnectCodes = payload.appConnectCodes || [];
+  const pendingCount = applications.filter((application) => (
+    application.paymentReviewNeeded || application.appConnectCodeStatus === "pending_approval"
+  )).length;
+  const approvedCount = appConnectCodes.length;
+  const connectedCount = rooms.filter((room) => room.bridgeStatus === "ready" || snapshot(room).bridge?.status === "ready").length;
+  const steps = [
+    {
+      title: "승인 전",
+      value: pendingCount ? `${pendingCount}건 대기` : "대기 없음",
+      text: "입금 후 결제 확인 요청",
+      tone: pendingCount ? "warn" : "good",
+      action: <a href="#requests">문의 등록</a>
+    },
+    {
+      title: "승인 후",
+      value: approvedCount ? `${approvedCount}개 코드` : "코드 대기",
+      text: "앱 연결 코드 복사",
+      tone: approvedCount ? "good" : "warn",
+      action: <a href="#app-connect-code">코드 보기</a>
+    },
+    {
+      title: "앱 연결 완료",
+      value: connectedCount ? `${connectedCount}개 준비` : "동기화 필요",
+      text: "앱에서 붙여넣고 동기화",
+      tone: connectedCount ? "good" : "neutral",
+      action: <button type="button" onClick={onRefresh}>새로고침</button>
+    }
+  ];
+  return (
+    <section className="buyer-step-overview" data-buyer-step-overview="true" aria-label="구매자 진행 단계">
+      {steps.map((step) => (
+        <article className={`buyer-step-card buyer-step-${step.tone}`} key={step.title}>
+          <span>{step.title}</span>
+          <strong>{step.value}</strong>
+          <p>{step.text}</p>
+          <div className="buyer-step-action">{step.action}</div>
+        </article>
+      ))}
+    </section>
   );
 }
 
