@@ -625,6 +625,7 @@ try {
   assert.match(buyerReactSource, /앱 연결 상태/);
   assert.match(buyerReactSource, /AppConnectCodePanel/);
   assert.match(buyerReactSource, /data-app-connect-code/);
+  assert.match(buyerReactSource, /id="app-connect-code"/);
   assert.match(buyerReactSource, /앱 연결 코드/);
   assert.match(buyerReactSource, /연결 코드 복사/);
   assert.match(buyerReactSource, /앱에서 붙여넣기/);
@@ -738,8 +739,8 @@ try {
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
   assert.equal(packageJson.scripts["android:release-report"], "node scripts/android-release-bundle.js --report-only");
   const androidGradle = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "build.gradle"), "utf8");
-  assert.match(androidGradle, /versionCode 25/);
-  assert.match(androidGradle, /versionName "1\.0\.24"/);
+  assert.match(androidGradle, /versionCode 26/);
+  assert.match(androidGradle, /versionName "1\.0\.25"/);
   const androidEventSender = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "EventSender.java"), "utf8");
   assert.match(androidEventSender, /optJSONArray\("rooms"\)/);
   assert.match(androidEventSender, /roomResults/);
@@ -754,7 +755,11 @@ try {
   assert.match(androidMainActivity, /setLastConnectSummary/);
   assert.match(androidMainActivity, /서버와 다시 동기화/);
   assert.match(androidMainActivity, /syncRoomProfiles/);
+  assert.match(androidMainActivity, /BUYER_CONNECT_CODE_URL/);
   assert.match(androidMainActivity, /\/console\?from=android&view=setup/);
+  assert.match(androidMainActivity, /#app-connect-code/);
+  assert.match(androidMainActivity, /연결코드 찾기\/복사/);
+  assert.match(androidMainActivity, /connectionCodeInput = input\("앱 연결코드"[\s\S]*연결코드 찾기\/복사[\s\S]*연결코드로 방 추가\/갱신/);
   assert.doesNotMatch(androidMainActivity, /openUrl\(WEBSITE_URL \+ "\/buyer-guide"\)/);
   assert.doesNotMatch(androidMainActivity, /openUrl\(WEBSITE_URL \+ "\/admin"\)/);
   const androidBridgeConfig = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "BridgeConfig.java"), "utf8");

@@ -30,6 +30,7 @@ public class MainActivity extends Activity {
     private static final String WEBSITE_URL = "https://pixgom.com";
     private static final String BUYER_CONSOLE_URL = WEBSITE_URL + "/console";
     private static final String BUYER_SETUP_URL = WEBSITE_URL + "/console?from=android&view=setup";
+    private static final String BUYER_CONNECT_CODE_URL = BUYER_SETUP_URL + "#app-connect-code";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private TextView homeDiagnosticsStatus;
@@ -309,12 +310,16 @@ public class MainActivity extends Activity {
         connectTitle.setPadding(0, dp(16), 0, 0);
         panel.addView(connectTitle);
 
-        TextView connectHelp = text("구매자 콘솔 설치 안내에서 복사한 앱 연결코드를 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 추가됩니다. Android 1.0.24 이상은 서버와 다시 동기화로 저장된 방의 최신 설정도 확인합니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView connectHelp = text("앱 연결코드 입력칸 아래의 연결코드 찾기/복사 버튼을 누르면 외부 브라우저에서 구매자 콘솔의 앱 연결 코드 카드가 열립니다. 코드를 복사해 여기에 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 추가됩니다. Android 1.0.25 이상은 서버와 다시 동기화로 저장된 방의 최신 설정도 확인합니다.", 13, Color.rgb(111, 78, 49), false);
         connectHelp.setPadding(0, dp(8), 0, 0);
         panel.addView(connectHelp);
 
         connectionCodeInput = input("앱 연결코드", "");
         panel.addView(connectionCodeInput);
+
+        Button findConnectCodeButton = secondaryButton("연결코드 찾기/복사");
+        findConnectCodeButton.setOnClickListener(v -> openUrl(BUYER_CONNECT_CODE_URL));
+        panel.addView(findConnectCodeButton);
 
         Button connectButton = secondaryButton("연결코드로 방 추가/갱신");
         connectButton.setOnClickListener(v -> connectWithCode());

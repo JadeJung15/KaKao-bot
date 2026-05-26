@@ -229,12 +229,12 @@ function BuyerApp() {
 function AppConnectCodePanel({ rooms = [], onCopy }) {
   const connectRooms = rooms.filter((room) => room.bridgeConnectCode);
   return (
-    <section className="buyer-connect-code-panel" data-app-connect-code="true">
+    <section className="buyer-connect-code-panel" id="app-connect-code" data-app-connect-code="true">
       <div className="console-section-head">
         <div>
           <p className="console-eyebrow">App Connect Code</p>
           <h2>앱 연결 코드</h2>
-          <p>앱에서 구매자 콘솔을 열면 이 카드의 코드를 복사해 바로 붙여넣을 수 있습니다.</p>
+          <p>앱의 연결코드 입력칸 옆에서 이 위치를 외부 브라우저로 열고, 코드를 복사해 앱에 바로 붙여넣을 수 있습니다.</p>
         </div>
         <StatusBadge label={`${connectRooms.length}개 발급`} status={connectRooms.length ? "ready" : "needs_setup"} />
       </div>
@@ -249,7 +249,7 @@ function AppConnectCodePanel({ rooms = [], onCopy }) {
             <code>{room.bridgeConnectCode}</code>
             <div className="console-action-row">
               <button type="button" onClick={() => onCopy?.(room)}>연결 코드 복사</button>
-              <a href="/console?from=android&view=setup">앱에서 붙여넣기 안내</a>
+              <a href="/console?from=android&view=setup#app-connect-code">앱에서 붙여넣기 안내</a>
             </div>
           </article>
         ))}
