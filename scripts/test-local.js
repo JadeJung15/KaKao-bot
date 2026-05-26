@@ -137,7 +137,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.99");
+  assert.equal(health.json.version, "0.5.00");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -411,6 +411,9 @@ try {
   const homeNavText = homeText.match(/<nav class="nav-links"[\s\S]*?<\/nav>/)?.[0] || "";
   assert.doesNotMatch(homeNavText, /href="\/store"/);
   assert.match(homeNavText, /href="\/login">로그인<\/a>/);
+  assert.match(homeText, /0\.5\.00/);
+  assert.match(homeText, /앱 연결 코드 표시 안정화/);
+  assert.match(homeText, /결제 승인 요청 노출 개선/);
   assert.match(homeText, /0\.4\.82/);
   assert.match(homeText, /0\.4\.81/);
   assert.match(homeText, /0\.4\.70/);
@@ -434,6 +437,9 @@ try {
   const noticePageText = await (await fetch(`${baseUrl}/notice`)).text();
   assert.match(noticePageText, /장애 대응 기준/);
   const updatesPageText = await (await fetch(`${baseUrl}/updates`)).text();
+  assert.match(updatesPageText, /픽셀곰 0\.5\.00/);
+  assert.match(updatesPageText, /앱 연결 코드 표시 안정화/);
+  assert.match(updatesPageText, /결제 승인 요청 노출 개선/);
   assert.match(updatesPageText, /픽셀곰 0\.4\.97/);
   assert.match(updatesPageText, /픽셀곰 0\.4\.84/);
   assert.match(updatesPageText, /픽셀곰 0\.4\.92/);
@@ -471,6 +477,8 @@ try {
   assert.match(applyPageText, /data-apply-success/);
   assert.match(applyPageText, /data-application-inquiry-form/);
   assert.match(applyPageText, /결제요청 일시/);
+  assert.match(applyPageText, /입금승인 후 앱 연결 코드가 발급됩니다/);
+  assert.match(applyPageText, /결제 확인 요청은 관리자 콘솔의 결제 승인 요청에 함께 표시됩니다/);
   assert.match(applyPageText, /기준 일반방/);
   assert.match(applyPageText, /\/api\/application-inquiries/);
   const accountPageText = await (await fetch(`${baseUrl}/account`)).text();
@@ -530,7 +538,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.99");
+  assert.equal(commandTemplates.json.version, "0.5.00");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -559,7 +567,7 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.4.99");
+  assert.equal(commandPacks.json.version, "0.5.00");
   assert.equal(commandPacks.json.total, 13);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.fixedCommands.includes("/상태") && pack.fixedCommands.includes("/운세") && pack.fixedCommands.includes("/신고")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.installCode === "pk.001" && pack.installCodeType === "pack"), true);
@@ -733,7 +741,7 @@ try {
   assert.match(sessionNavText, /href = "\/account"/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.4.99");
+  assert.equal(packageJson.version, "0.5.00");
   assert.equal(packageJson.scripts["build:console"], "vite build --config vite.console.config.mjs");
   assert.equal(packageJson.scripts["dev:console"], "vite --config vite.console.config.mjs");
   assert.equal(packageJson.scripts["check:deploy"], "npm run build:console && node scripts/predeploy-check.js");
@@ -1050,7 +1058,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.4.99");
+  assert.equal(adminDiagnostics.json.version, "0.5.00");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -1061,7 +1069,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.4.99");
+  assert.equal(adminBackup.json.version, "0.5.00");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -1405,7 +1413,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.99");
+  assert.equal(buyerGuideApproved.json.version, "0.5.00");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -1426,7 +1434,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.99");
+  assert.equal(buyerConsoleApproved.json.version, "0.5.00");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.appConnectCodes.length >= 1, true);
@@ -2105,7 +2113,7 @@ try {
   });
   assert.equal(validProfileSync.response.status, 200);
   assert.equal(validProfileSync.json.ok, true);
-  assert.equal(validProfileSync.json.version, "0.4.99");
+  assert.equal(validProfileSync.json.version, "0.5.00");
   assert.equal(validProfileSync.json.summary.requestedRoomCount, 1);
   assert.equal(validProfileSync.json.summary.syncedRoomCount, 2);
   assert.deepEqual(
@@ -4743,7 +4751,7 @@ try {
   });
   assert.equal(roomLogs.response.status, 200);
   assert.equal(roomLogs.json.ok, true);
-  assert.equal(roomLogs.json.version, "0.4.99");
+  assert.equal(roomLogs.json.version, "0.5.00");
   assert.ok(roomLogs.json.summary.totalLogs >= 1);
   assert.ok(Number.isFinite(roomLogs.json.summary.recent24h));
   assert.ok(Number.isFinite(roomLogs.json.summary.commandLogs));

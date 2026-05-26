@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.99";
+export const APP_VERSION = "0.5.00";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
