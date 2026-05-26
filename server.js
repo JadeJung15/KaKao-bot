@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.97";
+export const APP_VERSION = "0.4.98";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -55,6 +55,7 @@ export const FEATURES = [
   "raw-event-log",
   "room-analytics-log-retention",
   "admin-room-log-browser",
+  "admin-room-log-export",
   "stable-user-ids",
   "admin-identity-reset",
   "bridge-auto-extract",
@@ -221,7 +222,10 @@ export const FEATURES = [
   "buyer-restore-request",
   "unified-room-lifecycle",
   "admin-workflow-panels",
-  "buyer-request-status-dashboard"
+  "buyer-request-status-dashboard",
+  "console-home-navigation",
+  "admin-console-command-admin-tools",
+  "admin-room-bulk-archive"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -8474,6 +8478,25 @@ function adminRoomLogsPayload(state = {}, query = {}) {
       lastAt: logs.at(-1)?.at || ""
     };
   });
+  const now = Date.now();
+  const recent24h = filtered.filter((log) => {
+    const time = new Date(log.at || 0).getTime();
+    return Number.isFinite(time) && now - time <= 24 * 60 * 60 * 1000;
+  }).length;
+  const commandLogs = filtered.filter((log) => log.isCommand || log.command);
+  const errorLogs = filtered.filter((log) => {
+    const text = `${log.eventType || ""} ${log.command || ""} ${log.messagePreview || ""}`.toLowerCase();
+    return /error|fail|exception|오류|실패|에러/.test(text);
+  });
+  const commandCounts = new Map();
+  for (const log of commandLogs) {
+    const command = log.command || "명령어";
+    commandCounts.set(command, (commandCounts.get(command) || 0) + 1);
+  }
+  const topCommands = [...commandCounts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 5)
+    .map(([command, count]) => ({ command, count }));
   return {
     ok: true,
     version: APP_VERSION,
@@ -8489,10 +8512,53 @@ function adminRoomLogsPayload(state = {}, query = {}) {
     summary: {
       rooms: roomSummaries.length,
       totalLogs: roomSummaries.reduce((sum, room) => sum + room.count, 0),
-      matchedLogs: filtered.length
+      matchedLogs: filtered.length,
+      recent24h,
+      commandLogs: commandLogs.length,
+      errorLogs: errorLogs.length,
+      topCommands
     },
     rooms: roomSummaries,
     logs: filtered.slice(0, limit)
+  };
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function roomLogsCsv(logs = []) {
+  const headers = ["at", "room", "sender", "eventType", "command", "isCommand", "messagePreview", "messageHash", "senderHash"];
+  return [
+    headers.join(","),
+    ...logs.map((log) => headers.map((key) => csvCell(log[key])).join(","))
+  ].join("\n");
+}
+
+function adminRoomLogsExportPayload(state = {}, query = {}) {
+  const payload = adminRoomLogsPayload(state, query);
+  const format = normalizeText(query.format || "json").toLowerCase() === "csv" ? "csv" : "json";
+  const roomSlug = keyFor(payload.filters.room || "all-rooms").replace(/[^a-z0-9_-]/g, "") || "all-rooms";
+  const exportedAt = nowIso().replace(/[:.]/g, "-");
+  const filename = `pixgom-room-logs-${roomSlug}-${exportedAt}.${format}`;
+  const exportBody = {
+    ok: true,
+    version: APP_VERSION,
+    generatedAt: payload.generatedAt,
+    filters: payload.filters,
+    summary: payload.summary,
+    rooms: payload.rooms,
+    logs: payload.logs
+  };
+  return {
+    ok: true,
+    version: APP_VERSION,
+    format,
+    filename,
+    contentType: format === "csv" ? "text/csv; charset=utf-8" : "application/json; charset=utf-8",
+    content: format === "csv" ? roomLogsCsv(payload.logs) : JSON.stringify(exportBody, null, 2),
+    summary: payload.summary
   };
 }
 
@@ -8722,6 +8788,129 @@ function adminArchiveRoom(state, payload = {}, archivedBy = "admin_console") {
 
 function adminDeleteRoom(state, payload = {}, deletedBy = "admin_console") {
   return adminArchiveRoom(state, payload, deletedBy);
+}
+
+function adminBulkArchiveRooms(state, payload = {}, archivedBy = "admin_console") {
+  state.rooms ||= {};
+  state.accounts ||= {};
+  const confirm = normalizeText(payload.confirmBulkArchive || payload.confirm || "");
+  if (confirm !== "ARCHIVE_ALL_ROOMS") {
+    return { ok: false, status: 400, error: "bulk_archive_confirmation_required" };
+  }
+  const roomNames = Object.values(state.rooms || {})
+    .map((roomState) => roomState.name)
+    .filter(Boolean);
+  const archivedRooms = [];
+  const skipped = [];
+  for (const roomName of roomNames) {
+    const result = adminArchiveRoom(state, {
+      roomName,
+      reason: payload.reason || "고객 0명 초기화 보관 처리"
+    }, archivedBy);
+    if (result.ok) archivedRooms.push(result.archivedRoom);
+    else skipped.push({ roomName, error: result.error || "archive_failed" });
+  }
+  return {
+    ok: true,
+    archivedRooms,
+    skipped,
+    summary: {
+      accountsPreserved: Object.keys(state.accounts || {}).length,
+      archivedCount: archivedRooms.length,
+      skippedCount: skipped.length,
+      activeRooms: Object.keys(state.rooms || {}).length,
+      archivedRooms: Object.keys(state.archivedRooms || {}).length
+    }
+  };
+}
+
+function adminForceArchiveRoom(state, payload = {}, archivedBy = "admin_console") {
+  const target = findActiveRoomEntry(state, payload);
+  if (target) return adminArchiveRoom(state, payload, archivedBy);
+  const roomName = normalizeText(payload.room || payload.name || payload.roomName);
+  if (!roomName) return { ok: false, status: 400, error: "room_required" };
+  const affectedApplications = applicationsForRoomName(state, roomName);
+  if (!affectedApplications.length) return { ok: false, status: 404, error: "room_not_found" };
+  state.archivedRooms ||= {};
+  const archivedAt = nowIso();
+  const archiveId = generateEntityId("arch");
+  const reason = previewText(payload.reason || payload.archiveReason || "관리자 강제 보관 처리", 180);
+  const roomState = {
+    name: roomName,
+    admins: [],
+    people: {},
+    events: [],
+    rawEvents: [],
+    analyticsLogs: [],
+    settings: {
+      registered: false,
+      enabled: false,
+      archivedAt,
+      archivedBy,
+      archivedReason: reason
+    }
+  };
+  const applicationSnapshots = {};
+  for (const application of affectedApplications) {
+    applicationSnapshots[application.id] = JSON.parse(JSON.stringify(application));
+    application.archivedAt = archivedAt;
+    application.archivedBy = archivedBy;
+    application.archivedReason = reason;
+    application.updatedAt = archivedAt;
+  }
+  state.archivedRooms[archiveId] = {
+    id: archiveId,
+    roomKey: roomKey(roomName),
+    roomName,
+    reason,
+    archivedAt,
+    archivedBy,
+    affectedApplicationIds: affectedApplications.map((application) => application.id),
+    applicationSnapshots,
+    room: roomState
+  };
+  return {
+    ok: true,
+    forced: true,
+    deletedRoom: publicArchivedRoomView(state, state.archivedRooms[archiveId]).room,
+    archivedRoom: publicArchivedRoomView(state, state.archivedRooms[archiveId]),
+    summary: {
+      rooms: Object.keys(state.rooms || {}).length,
+      archivedRooms: Object.keys(state.archivedRooms || {}).length
+    }
+  };
+}
+
+function adminForceDeleteRoom(state, payload = {}, purgedBy = "admin_console") {
+  const confirmRoomName = normalizeText(payload.confirmRoomName || payload.room || payload.name || payload.roomName);
+  const confirmPermanentDelete = normalizeText(payload.confirmPermanentDelete || payload.confirm);
+  if (!confirmRoomName || confirmPermanentDelete !== "PERMANENT_DELETE") {
+    return { ok: false, status: 400, error: "purge_confirmation_required" };
+  }
+  const archivedTarget = findArchivedRoomEntry(state, payload);
+  if (archivedTarget) {
+    return adminPurgeArchivedRoom(state, {
+      archiveId: archivedTarget[0],
+      confirmRoomName,
+      confirmPermanentDelete,
+      resolution: payload.resolution || "관리자 강제 완전 삭제"
+    }, purgedBy);
+  }
+  const activeTarget = findActiveRoomEntry(state, payload);
+  if (activeTarget) {
+    const archiveResult = adminArchiveRoom(state, {
+      roomName: activeTarget[1].name,
+      reason: payload.reason || "완전 삭제 전 자동 보관"
+    }, purgedBy);
+    if (!archiveResult.ok) return archiveResult;
+    return adminPurgeArchivedRoom(state, {
+      archiveId: archiveResult.archivedRoom.id,
+      confirmRoomName,
+      confirmPermanentDelete,
+      resolution: payload.resolution || "관리자 강제 완전 삭제"
+    }, purgedBy);
+  }
+  return { ok: false, status: 404, error: "room_not_found" };
 }
 
 function findArchivedRoomEntry(state = {}, payload = {}) {
@@ -8973,7 +9162,11 @@ function adminUpsertRoom(state, payload = {}) {
   if (link) addUnique(settings.roomLinks, link);
 
   const admins = payloadAdminNames(payload);
-  if (admins.length) roomState.admins = admins;
+  if (Object.hasOwn(payload, "roomAdmins") || Object.hasOwn(payload, "admins") || Object.hasOwn(payload, "adminNames")) {
+    roomState.admins = admins;
+  } else if (admins.length) {
+    roomState.admins = admins;
+  }
 
   const license = licenseSettings(roomState);
   license.key = normalizeLicenseKey(payload.licenseKey) || license.key || generateLicenseKey(roomState);
@@ -11622,6 +11815,13 @@ async function handleAdminApi(req, url) {
     return { status: 200, body: adminRoomLogsPayload(state, Object.fromEntries(url.searchParams.entries())) };
   }
 
+  if (req.method === "GET" && url.pathname === "/api/admin/room-logs/export") {
+    const auth = await requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return { status: 200, body: adminRoomLogsExportPayload(state, Object.fromEntries(url.searchParams.entries())) };
+  }
+
   if (req.method === "GET" && url.pathname === "/api/admin/backup") {
     const auth = await requireAdminConsole(req, url);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
@@ -11747,6 +11947,39 @@ async function handleAdminApi(req, url) {
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     const result = adminArchiveRoom(state, body, auth.by || "admin_console");
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/rooms/bulk-archive") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminBulkArchiveRooms(state, body, auth.by || "admin_console");
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/rooms/force-archive") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminForceArchiveRoom(state, body, auth.by || "admin_console");
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/rooms/force-delete") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminForceDeleteRoom(state, body, auth.by || "admin_console");
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };

@@ -4477,7 +4477,7 @@ a {
   border: 1px solid #d9dee7;
   border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 10px 28px rgba(23, 32, 42, 0.06);
+  box-shadow: 0 4px 14px rgba(23, 32, 42, 0.04);
 }
 
 .console-hero {
@@ -4485,7 +4485,7 @@ a {
   align-items: flex-end;
   justify-content: space-between;
   gap: 20px;
-  padding: 24px;
+  padding: 20px;
 }
 
 .console-hero h1,
@@ -4524,6 +4524,27 @@ a {
   font-weight: 800;
   text-decoration: none;
   cursor: pointer;
+}
+
+.console-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.console-secondary-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border: 1px solid #cbd3de;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #25313f;
+  padding: 8px 12px;
+  font-weight: 800;
+  text-decoration: none;
 }
 
 .console-detail-panel button.danger {
@@ -4569,7 +4590,7 @@ a {
 
 .console-layout {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr) 360px;
+  grid-template-columns: 170px minmax(0, 1fr) minmax(420px, 0.42fr);
   gap: 14px;
   align-items: start;
 }
@@ -4598,7 +4619,7 @@ a {
 .console-archive-panel,
 .buyer-room-card,
 .buyer-actions-panel article {
-  padding: 16px;
+  padding: 14px;
 }
 
 .console-toolbar {
@@ -4753,9 +4774,8 @@ a {
 .console-field-row {
   display: grid;
   gap: 4px;
-  border: 1px solid #e3e8ef;
-  border-radius: 6px;
-  padding: 10px;
+  border-bottom: 1px solid #e8edf3;
+  padding: 8px 0;
 }
 
 .console-field-row span {
@@ -4772,9 +4792,10 @@ a {
 
 .console-game-rooms {
   margin-top: 14px;
-  border: 1px solid #e3e8ef;
+  border: 1px solid #e8edf3;
   border-radius: 6px;
   padding: 10px;
+  background: #fbfcfd;
 }
 
 .console-game-rooms summary {
@@ -4807,6 +4828,7 @@ a {
   justify-content: space-between;
   gap: 10px;
   padding: 12px;
+  box-shadow: none;
 }
 
 .console-section-head {
@@ -4824,7 +4846,7 @@ a {
 }
 
 .console-restore-panel {
-  border: 1px solid #e3e8ef;
+  border: 1px solid #e8edf3;
   border-radius: 8px;
   background: #fbfcfd;
   padding: 12px;
@@ -4859,7 +4881,10 @@ a {
 }
 
 .console-danger-zone label,
-.console-backup-panel label {
+.console-backup-panel label,
+.console-command-form label,
+.console-admin-form label,
+.console-admin-archive-tools label {
   display: grid;
   gap: 6px;
   margin-top: 10px;
@@ -4869,7 +4894,10 @@ a {
 }
 
 .console-danger-zone input,
-.console-backup-panel textarea {
+.console-backup-panel textarea,
+.console-command-form input,
+.console-admin-form input,
+.console-admin-archive-tools input {
   width: 100%;
   border: 1px solid #cbd3de;
   border-radius: 6px;
@@ -4928,6 +4956,7 @@ a {
 }
 
 .console-inline-filter select,
+.console-mini-form input,
 .console-mini-form select,
 .console-mini-form textarea,
 .console-workflow-actions textarea {
@@ -4989,7 +5018,7 @@ a {
 
 .console-log-filters {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -5069,7 +5098,7 @@ a {
 .buyer-room-grid,
 .buyer-actions-panel {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
   gap: 14px;
 }
 
@@ -5149,6 +5178,51 @@ a {
   gap: 8px;
 }
 
+.console-utility-panel {
+  align-content: start;
+}
+
+.console-compact-stats {
+  margin-bottom: 8px;
+}
+
+.console-two-column-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.console-compact-list {
+  display: grid;
+  gap: 8px;
+}
+
+.console-compact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid #eef2f6;
+  padding-top: 8px;
+}
+
+.console-compact-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.console-compact-row span {
+  color: #657080;
+  font-size: 0.84rem;
+  word-break: break-word;
+}
+
+.console-admin-archive-tools {
+  margin: 14px 0;
+  background: #fffdf8;
+}
+
 .console-toast {
   position: fixed;
   right: 18px;
@@ -5200,8 +5274,10 @@ a {
   .console-hero,
   .console-toolbar,
   .console-detail-head,
+  .console-hero-actions,
   .buyer-room-card-head,
   .console-card,
+  .console-compact-row,
   .console-linked-room,
   .console-log-card,
   .console-log-meta {
@@ -5212,6 +5288,7 @@ a {
   .console-summary-grid,
   .console-field-grid,
   .console-log-filters,
+  .console-two-column-form,
   .console-sidebar {
     grid-template-columns: 1fr;
   }

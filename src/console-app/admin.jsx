@@ -7,7 +7,7 @@ import { DetailTabs, EmptyState, FieldRow, StatusBadge, SummaryGrid, ToastHost, 
 const DETAIL_TABS = [
   { id: "settings", label: "설정" },
   { id: "billing", label: "신청/결제" },
-  { id: "commands", label: "명령어" },
+  { id: "commands", label: "명령어/운영자" },
   { id: "reports", label: "신고" },
   { id: "transfers", label: "이관" },
   { id: "inquiries", label: "문의" },
@@ -88,6 +88,22 @@ function AdminApp() {
     return [...new Set(candidates)];
   }, [baseRoom.name, selected?.id, selected?.raw?.gameRooms]);
 
+  function roomSavePayload(overrides = {}) {
+    return {
+      originalRoomName: baseRoom.name,
+      room: baseRoom.name,
+      roomId: baseRoom.roomIds?.[0] || baseApp.roomId || "",
+      roomLink: baseRoom.roomLinks?.[0] || baseApp.roomLink || "",
+      roomAdmins: baseRoom.admins || [],
+      licenseKey: baseRoom.licenseKey || "",
+      subscriptionExpiresAt: baseRoom.subscription?.expiresAt || "",
+      registered: baseRoom.registered !== false,
+      enabled: baseRoom.enabled !== false,
+      features: baseRoom.features || {},
+      ...overrides
+    };
+  }
+
   async function loadRoomLogs(overrides = {}) {
     const nextFilters = { ...logFilters, ...overrides };
     const roomName = nextFilters.room || baseRoom.name || selected?.name || "";
@@ -127,6 +143,61 @@ function AdminApp() {
     try {
       await adminRequest("/api/admin/rooms/archive", { method: "POST", body: { roomName: baseRoom.name, reason: "관리자 콘솔 보관" } });
       setToast({ tone: "good", message: "방을 이용 종료 보관으로 이동했습니다." });
+      await load();
+    } catch (error) {
+      setToast({ tone: "bad", message: formatError(error) });
+    }
+  }
+
+  async function bulkArchiveRooms() {
+    const form = actionForms.bulkArchive || {};
+    try {
+      const result = await adminRequest("/api/admin/rooms/bulk-archive", {
+        method: "POST",
+        body: {
+          confirmBulkArchive: form.confirm || "",
+          reason: form.reason || "고객 0명 초기화 보관 처리"
+        }
+      });
+      setToast({ tone: "good", message: `활성 방 ${result.summary?.archivedCount || 0}개를 보관했습니다. 회원 계정은 유지됩니다.` });
+      updateActionForm("bulkArchive", { confirm: "", reason: "" });
+      await load();
+    } catch (error) {
+      setToast({ tone: "bad", message: formatError(error) });
+    }
+  }
+
+  async function forceArchiveRoom() {
+    const form = actionForms.forceArchive || {};
+    try {
+      await adminRequest("/api/admin/rooms/force-archive", {
+        method: "POST",
+        body: {
+          roomName: form.roomName || "",
+          reason: form.reason || "관리자 강제 보관 처리"
+        }
+      });
+      setToast({ tone: "good", message: "대상 방을 강제 보관 처리했습니다." });
+      updateActionForm("forceArchive", { roomName: "", reason: "" });
+      await load();
+    } catch (error) {
+      setToast({ tone: "bad", message: formatError(error) });
+    }
+  }
+
+  async function forceDeleteRoom() {
+    const form = actionForms.forceDelete || {};
+    try {
+      await adminRequest("/api/admin/rooms/force-delete", {
+        method: "POST",
+        body: {
+          roomName: form.roomName || "",
+          confirmRoomName: form.confirmRoomName || "",
+          confirmPermanentDelete: form.confirmPermanentDelete || ""
+        }
+      });
+      setToast({ tone: "good", message: "대상 방을 완전 삭제 처리했습니다." });
+      updateActionForm("forceDelete", { roomName: "", confirmRoomName: "", confirmPermanentDelete: "" });
       await load();
     } catch (error) {
       setToast({ tone: "bad", message: formatError(error) });
@@ -230,7 +301,10 @@ function AdminApp() {
         <section className="console-login-panel">
           <h1>일반방 중심 통합 운영 콘솔</h1>
           <p>운영자 로그인이 필요합니다. 로그인 후 다시 접속해 주세요.</p>
-          <a className="console-primary-link" href="/login">로그인</a>
+          <div className="console-action-row">
+            <a className="console-secondary-link" href="/">홈으로</a>
+            <a className="console-primary-link" href="/login">로그인</a>
+          </div>
         </section>
       </main>
     );
@@ -244,7 +318,10 @@ function AdminApp() {
           <h1>일반방 중심 통합 운영 콘솔</h1>
           <p>신청, 결제, 설정, 신고, 이관, 문의, 백업/복구를 방 단위로 한 화면에서 관리합니다.</p>
         </div>
-        <button type="button" onClick={load}>새로고침</button>
+        <div className="console-hero-actions">
+          <a className="console-secondary-link" href="/">홈으로</a>
+          <button type="button" onClick={load}>새로고침</button>
+        </div>
       </header>
       <SummaryGrid items={roomSummaries(state.rooms, state.archivedRooms)} />
       <section className="console-layout">
@@ -316,10 +393,13 @@ function AdminApp() {
                 </section>
               )}
               {tab === "commands" && (
-                <section className="console-detail-section">
-                  <FieldRow label="설치 명령어">{baseRoom.commandCount || 0}개</FieldRow>
-                  <FieldRow label="장착 팩">{(baseRoom.commandPacks?.installedPacks || []).length || 0}개</FieldRow>
-                </section>
+                <AdminCommandToolsPanel
+                  baseRoom={baseRoom}
+                  baseApp={baseApp}
+                  roomSavePayload={roomSavePayload}
+                  onSaved={load}
+                  setToast={setToast}
+                />
               )}
               {tab === "reports" && (
                 <ReportsPanel
@@ -383,6 +463,13 @@ function AdminApp() {
           onResolve={(request) => resolveRestoreRequest(request, "resolved")}
           onRestore={(request) => restoreArchived({ id: request.archiveId }, { restoreRequestId: request.id, resolution: "구매자 복구 요청 승인" })}
         />
+        <AdminArchiveToolsPanel
+          forms={actionForms}
+          onChange={updateActionForm}
+          onBulkArchive={bulkArchiveRooms}
+          onForceArchive={forceArchiveRoom}
+          onForceDelete={forceDeleteRoom}
+        />
         <div className="console-card-list">
           {(state.archivedRooms || []).map((archive) => (
             <ArchivedRoomCard
@@ -399,6 +486,209 @@ function AdminApp() {
       </section>
       <ToastHost message={toast?.message || state.error} tone={toast?.tone || "bad"} onClose={() => setToast(null)} />
     </main>
+  );
+}
+
+function parseQuickCommand(value = "", trigger = "", response = "") {
+  const text = value.trim();
+  if (text.includes("=")) {
+    const [left, ...right] = text.split("=");
+    return { trigger: left.trim(), response: right.join("=").trim() };
+  }
+  return { trigger: trigger.trim(), response: response.trim() };
+}
+
+function commandKey(trigger = "") {
+  return String(trigger || "").trim();
+}
+
+function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setToast }) {
+  const [commandForm, setCommandForm] = useState({ quick: "", trigger: "", response: "" });
+  const [adminName, setAdminName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const commands = baseRoom.customCommands || [];
+  const admins = baseRoom.admins || [];
+
+  useEffect(() => {
+    setCommandForm({ quick: "", trigger: "", response: "" });
+    setAdminName("");
+  }, [baseRoom.name]);
+
+  async function saveRoomPatch(patch, successMessage) {
+    if (saving || !baseRoom.name) return;
+    setSaving(true);
+    try {
+      await adminRequest("/api/admin/rooms", {
+        method: "POST",
+        body: roomSavePayload(patch)
+      });
+      setToast({ tone: "good", message: successMessage });
+      await onSaved();
+    } catch (error) {
+      setToast({ tone: "bad", message: formatError(error) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveCommand(event) {
+    event.preventDefault();
+    const parsed = parseQuickCommand(commandForm.quick, commandForm.trigger, commandForm.response);
+    if (!parsed.trigger || !parsed.response) {
+      setToast({ tone: "bad", message: "명령어와 응답을 입력해 주세요. 예: 사과=맛있어" });
+      return;
+    }
+    const nextCommand = {
+      trigger: parsed.trigger,
+      response: parsed.response,
+      updatedAt: new Date().toISOString(),
+      updatedBy: "admin_console"
+    };
+    const nextCommands = commands.filter((item) => commandKey(item.trigger) !== commandKey(parsed.trigger));
+    nextCommands.push(nextCommand);
+    await saveRoomPatch({ customCommands: nextCommands }, "커스텀 명령어를 저장했습니다.");
+    setCommandForm({ quick: "", trigger: "", response: "" });
+  }
+
+  async function deleteCommand(trigger) {
+    const nextCommands = commands.filter((item) => commandKey(item.trigger) !== commandKey(trigger));
+    await saveRoomPatch({ customCommands: nextCommands }, `${trigger} 명령어를 삭제했습니다.`);
+  }
+
+  async function addAdmin(event) {
+    event.preventDefault();
+    const name = adminName.trim();
+    if (!name) {
+      setToast({ tone: "bad", message: "등록할 관리자 닉네임을 입력해 주세요." });
+      return;
+    }
+    const nextAdmins = [...new Set([...admins, name])];
+    await saveRoomPatch({ roomAdmins: nextAdmins }, "관리자를 등록했습니다.");
+    setAdminName("");
+  }
+
+  async function deleteAdmin(name) {
+    const nextAdmins = admins.filter((item) => item !== name);
+    await saveRoomPatch({ roomAdmins: nextAdmins }, "관리자를 삭제했습니다.");
+  }
+
+  return (
+    <section className="console-detail-section console-utility-panel">
+      <div className="console-section-head">
+        <div>
+          <p className="console-eyebrow">Commands & Admins</p>
+          <h3>커스텀 명령어 / 관리자</h3>
+        </div>
+        <StatusBadge label={`${commands.length}개 명령어 · ${admins.length}명 관리자`} status="ok" />
+      </div>
+      <div className="console-field-grid console-compact-stats">
+        <FieldRow label="설치 명령어">{baseRoom.commandCount || commands.length || 0}개</FieldRow>
+        <FieldRow label="장착 팩">{(baseRoom.commandPacks?.installedPacks || []).length || 0}개</FieldRow>
+      </div>
+      <form className="console-mini-form console-command-form" onSubmit={saveCommand}>
+        <label>
+          <span>빠른 등록</span>
+          <input value={commandForm.quick} onChange={(event) => setCommandForm({ ...commandForm, quick: event.target.value })} placeholder="사과=맛있어" />
+        </label>
+        <div className="console-two-column-form">
+          <label>
+            <span>명령어</span>
+            <input value={commandForm.trigger} onChange={(event) => setCommandForm({ ...commandForm, trigger: event.target.value })} placeholder="사과 또는 /공지" />
+          </label>
+          <label>
+            <span>응답</span>
+            <input value={commandForm.response} onChange={(event) => setCommandForm({ ...commandForm, response: event.target.value })} placeholder="맛있어" />
+          </label>
+        </div>
+        <button type="submit" disabled={saving}>{saving ? "저장 중" : "명령어 저장"}</button>
+      </form>
+      <div className="console-compact-list" aria-label="커스텀 명령어 목록">
+        {commands.map((command) => (
+          <div className="console-compact-row" key={command.trigger}>
+            <div>
+              <strong>{command.trigger}</strong>
+              <span>{command.response}</span>
+            </div>
+            <button type="button" onClick={() => deleteCommand(command.trigger)} disabled={saving}>명령어 삭제</button>
+          </div>
+        ))}
+        {!commands.length ? <EmptyState title="등록된 커스텀 명령어가 없습니다.">예: 사과=맛있어 형식으로 바로 추가할 수 있습니다.</EmptyState> : null}
+      </div>
+      <form className="console-mini-form console-admin-form" onSubmit={addAdmin}>
+        <label>
+          <span>관리자 등록</span>
+          <input value={adminName} onChange={(event) => setAdminName(event.target.value)} placeholder="카카오 닉네임" />
+        </label>
+        <button type="submit" disabled={saving}>관리자 등록</button>
+      </form>
+      <div className="console-compact-list" aria-label="관리자 목록">
+        {admins.map((name) => (
+          <div className="console-compact-row" key={name}>
+            <div>
+              <strong>{name}</strong>
+              <span>방 관리자</span>
+            </div>
+            <button type="button" onClick={() => deleteAdmin(name)} disabled={saving}>관리자 삭제</button>
+          </div>
+        ))}
+        {!admins.length ? <EmptyState title="등록된 관리자가 없습니다.">관리자 닉네임을 등록하면 채팅 관리자 명령어를 사용할 수 있습니다.</EmptyState> : null}
+      </div>
+    </section>
+  );
+}
+
+function AdminArchiveToolsPanel({ forms = {}, onChange, onBulkArchive, onForceArchive, onForceDelete }) {
+  const bulk = forms.bulkArchive || {};
+  const forceArchive = forms.forceArchive || {};
+  const forceDelete = forms.forceDelete || {};
+  return (
+    <details className="console-danger-zone console-admin-archive-tools">
+      <summary>방 보관 / 고객 0명 초기화 도구</summary>
+      <p>회원 계정은 유지하고 방과 신청/결제 연결만 보관 처리합니다. 전체 초기화는 `ARCHIVE_ALL_ROOMS` 확인값이 필요합니다.</p>
+      <div className="console-two-column-form">
+        <label>
+          <span>전체 보관 확인</span>
+          <input value={bulk.confirm || ""} onChange={(event) => onChange("bulkArchive", { confirm: event.target.value })} placeholder="ARCHIVE_ALL_ROOMS" />
+        </label>
+        <label>
+          <span>보관 사유</span>
+          <input value={bulk.reason || ""} onChange={(event) => onChange("bulkArchive", { reason: event.target.value })} placeholder="고객 0명 초기화 보관 처리" />
+        </label>
+      </div>
+      <div className="console-action-row">
+        <button type="button" className="danger" onClick={onBulkArchive}>전체 방 보관</button>
+      </div>
+      <div className="console-two-column-form">
+        <label>
+          <span>강제 보관 방명</span>
+          <input value={forceArchive.roomName || ""} onChange={(event) => onChange("forceArchive", { roomName: event.target.value })} placeholder="방명" />
+        </label>
+        <label>
+          <span>강제 보관 사유</span>
+          <input value={forceArchive.reason || ""} onChange={(event) => onChange("forceArchive", { reason: event.target.value })} placeholder="미연동/오류 복구용 보관" />
+        </label>
+      </div>
+      <div className="console-action-row">
+        <button type="button" onClick={onForceArchive}>강제 보관</button>
+      </div>
+      <div className="console-two-column-form">
+        <label>
+          <span>강제 삭제 방명</span>
+          <input value={forceDelete.roomName || ""} onChange={(event) => onChange("forceDelete", { roomName: event.target.value })} placeholder="방명" />
+        </label>
+        <label>
+          <span>방명 재입력</span>
+          <input value={forceDelete.confirmRoomName || ""} onChange={(event) => onChange("forceDelete", { confirmRoomName: event.target.value })} placeholder="동일 방명" />
+        </label>
+        <label>
+          <span>삭제 확인 문구</span>
+          <input value={forceDelete.confirmPermanentDelete || ""} onChange={(event) => onChange("forceDelete", { confirmPermanentDelete: event.target.value })} placeholder="PERMANENT_DELETE" />
+        </label>
+      </div>
+      <div className="console-action-row">
+        <button type="button" className="danger" onClick={onForceDelete}>강제 완전 삭제</button>
+      </div>
+    </details>
   );
 }
 
@@ -596,6 +886,30 @@ function TransfersPanel({ items = [] }) {
 
 function RoomLogsPanel({ roomOptions = [], filters = {}, setFilters, logState = {}, onLoad }) {
   const update = (patch) => setFilters((current) => ({ ...current, ...patch }));
+  function logCsv(logs = []) {
+    const headers = ["at", "room", "sender", "eventType", "command", "isCommand", "messagePreview", "messageHash", "senderHash"];
+    const cell = (value) => {
+      const text = String(value ?? "");
+      return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    return [headers.join(","), ...logs.map((log) => headers.map((key) => cell(log[key])).join(","))].join("\n");
+  }
+  function downloadLogs(format) {
+    const logs = logState.logs || [];
+    const roomName = filters.room || roomOptions[0] || "all-rooms";
+    const fileSafeRoom = roomName.replace(/[^\w가-힣-]+/g, "-") || "all-rooms";
+    const filename = `pixgom-room-logs-${fileSafeRoom}.${format}`;
+    const content = format === "csv"
+      ? logCsv(logs)
+      : JSON.stringify({ summary: logState.summary || {}, filters, logs }, null, 2);
+    const blob = new Blob([content], { type: format === "csv" ? "text/csv;charset=utf-8" : "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
   return (
     <section className="console-detail-section console-log-panel" id="방별 로그">
       <div className="console-section-head">
@@ -638,12 +952,22 @@ function RoomLogsPanel({ roomOptions = [], filters = {}, setFilters, logState = 
         <button type="button" onClick={() => onLoad()} disabled={logState.loading || !roomOptions.length}>
           {logState.loading ? "조회 중" : "로그 조회"}
         </button>
+        <button type="button" onClick={() => downloadLogs("csv")} disabled={logState.loading || !logState.logs?.length}>CSV 다운로드</button>
+        <button type="button" onClick={() => downloadLogs("json")} disabled={logState.loading || !logState.logs?.length}>JSON 다운로드</button>
       </div>
       <div className="console-field-grid">
         <FieldRow label="보관 방 수">{logState.summary?.rooms || 0}</FieldRow>
         <FieldRow label="전체 로그">{logState.summary?.totalLogs || 0}건</FieldRow>
         <FieldRow label="필터 결과">{logState.summary?.matchedLogs || 0}건</FieldRow>
+        <FieldRow label="최근 24시간">{logState.summary?.recent24h || 0}건</FieldRow>
+        <FieldRow label="명령어 로그">{logState.summary?.commandLogs || 0}건</FieldRow>
+        <FieldRow label="오류 로그">{logState.summary?.errorLogs || 0}건</FieldRow>
         <FieldRow label="현재 방">{filters.room || roomOptions[0] || "-"}</FieldRow>
+      </div>
+      <div className="console-preview-box">
+        <strong>상위 명령어</strong>
+        {(logState.summary?.topCommands || []).map((item) => <span key={item.command}>{item.command} · {item.count}건</span>)}
+        {!logState.summary?.topCommands?.length ? <span>아직 집계된 명령어가 없습니다.</span> : null}
       </div>
       {logState.error ? <EmptyState title="로그 조회 실패">{logState.error}</EmptyState> : null}
       <div className="console-card-list compact">

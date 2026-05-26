@@ -83,6 +83,9 @@ function BuyerApp() {
         <section className="console-login-panel">
           <h1>구매자 셀프 관리 콘솔</h1>
           <p>내 방 상태, 결제/라이선스, 게임방 연결, 문의와 복구 요청을 확인하려면 로그인해 주세요.</p>
+          <div className="console-action-row">
+            <a className="console-secondary-link" href="/">홈으로</a>
+          </div>
           <form onSubmit={submitLogin} className="console-login-form">
             <label>이메일<input value={login.email} onChange={(event) => setLogin({ ...login, email: event.target.value })} autoComplete="email" /></label>
             <label>비밀번호<input value={login.password} onChange={(event) => setLogin({ ...login, password: event.target.value })} type="password" autoComplete="current-password" /></label>
@@ -102,7 +105,10 @@ function BuyerApp() {
           <h1>구매자 셀프 관리 콘솔</h1>
           <p>방 상태, 결제/라이선스, 앱 연결 상태, 게임방 분리 설정과 문의 흐름을 한곳에서 확인합니다.</p>
         </div>
-        <button type="button" onClick={() => load()}>새로고침</button>
+        <div className="console-hero-actions">
+          <a className="console-secondary-link" href="/">홈으로</a>
+          <button type="button" onClick={() => load()}>새로고침</button>
+        </div>
       </header>
       {payload ? <SummaryGrid items={buyerSummaries(payload)} /> : null}
       <section className="buyer-room-grid">
