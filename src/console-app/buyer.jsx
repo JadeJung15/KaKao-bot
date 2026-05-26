@@ -14,6 +14,25 @@ function consoleViewFromLocation() {
   return "overview";
 }
 
+async function copyTextToClipboard(value = "") {
+  const text = String(value || "");
+  if (!text) return false;
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "readonly");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-1000px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+  return copied;
+}
+
 function BuyerApp() {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -82,6 +101,18 @@ function BuyerApp() {
     }
   }
 
+  async function copyAppConnectCode(room) {
+    try {
+      const copied = await copyTextToClipboard(room?.bridgeConnectCode || "");
+      setToast({
+        tone: copied ? "good" : "bad",
+        message: copied ? `${room?.roomName || "방"} 앱 연결 코드를 복사했습니다.` : "복사에 실패했습니다. 코드를 길게 눌러 직접 복사해 주세요."
+      });
+    } catch (error) {
+      setToast({ tone: "bad", message: "복사에 실패했습니다. 코드를 길게 눌러 직접 복사해 주세요." });
+    }
+  }
+
   const groups = useMemo(() => payload?.roomGroups || [], [payload]);
   const restoreRequestsByArchive = useMemo(() => {
     const entries = (payload?.restoreRequests || []).map((request) => [request.archiveId, request]);
@@ -123,6 +154,7 @@ function BuyerApp() {
       </header>
       <BuyerConsoleTabs activeView={activeView} onChange={setActiveView} />
       {payload ? <SummaryGrid items={buyerSummaries(payload)} /> : null}
+      {payload ? <AppConnectCodePanel rooms={payload.rooms || []} onCopy={copyAppConnectCode} /> : null}
       {payload ? <BuyerGuidePanel payload={payload} activeView={activeView} /> : null}
       <section className="buyer-room-grid">
         {(groups.length ? groups : payload?.rooms?.map((room) => ({ baseRoom: room, gameRooms: [], roomModeSettings: null })) || []).map((group) => (
@@ -191,6 +223,41 @@ function BuyerApp() {
       </section>
       <ToastHost message={toast?.message} tone={toast?.tone} onClose={() => setToast(null)} />
     </main>
+  );
+}
+
+function AppConnectCodePanel({ rooms = [], onCopy }) {
+  const connectRooms = rooms.filter((room) => room.bridgeConnectCode);
+  return (
+    <section className="buyer-connect-code-panel" data-app-connect-code="true">
+      <div className="console-section-head">
+        <div>
+          <p className="console-eyebrow">App Connect Code</p>
+          <h2>앱 연결 코드</h2>
+          <p>앱에서 구매자 콘솔을 열면 이 카드의 코드를 복사해 바로 붙여넣을 수 있습니다.</p>
+        </div>
+        <StatusBadge label={`${connectRooms.length}개 발급`} status={connectRooms.length ? "ready" : "needs_setup"} />
+      </div>
+      <div className="buyer-connect-code-list">
+        {connectRooms.map((room) => (
+          <article className="buyer-connect-code-card" key={room.applicationId || room.roomName}>
+            <div className="buyer-connect-code-meta">
+              <span>{roomRoleLabel(room)}</span>
+              <strong>{room.roomName || "방명 미지정"}</strong>
+              <small>{room.roomRole === "game" ? "게임방만 다시 등록할 때 사용합니다." : "일반방 코드를 먼저 입력하면 연결된 게임방까지 함께 등록됩니다."}</small>
+            </div>
+            <code>{room.bridgeConnectCode}</code>
+            <div className="console-action-row">
+              <button type="button" onClick={() => onCopy?.(room)}>연결 코드 복사</button>
+              <a href="/console?from=android&view=setup">앱에서 붙여넣기 안내</a>
+            </div>
+          </article>
+        ))}
+        {!connectRooms.length ? (
+          <EmptyState title="아직 복사할 앱 연결 코드가 없습니다.">서비스 신청과 입금승인이 완료되면 승인된 방별 코드가 여기에 표시됩니다.</EmptyState>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

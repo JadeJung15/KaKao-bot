@@ -4577,6 +4577,61 @@ a {
   margin: 0 0 18px;
 }
 
+.buyer-connect-code-panel {
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(23, 32, 42, 0.04);
+  padding: 14px;
+  margin: 0 0 16px;
+}
+
+.buyer-connect-code-list {
+  display: grid;
+  gap: 10px;
+}
+
+.buyer-connect-code-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.32fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #e6ebf1;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.buyer-connect-code-meta {
+  display: grid;
+  gap: 3px;
+}
+
+.buyer-connect-code-meta span,
+.buyer-connect-code-meta small {
+  color: #657080;
+  font-size: 0.82rem;
+}
+
+.buyer-connect-code-meta strong {
+  color: #17202a;
+}
+
+.buyer-connect-code-card code {
+  display: block;
+  max-height: 72px;
+  overflow: auto;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17202a;
+  padding: 9px 10px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .console-detail-panel button.danger {
   border-color: #b13c3c;
   background: #c94b4b;
@@ -5344,6 +5399,7 @@ a {
 
   .console-summary-grid,
   .console-field-grid,
+  .buyer-connect-code-card,
   .console-log-filters,
   .console-two-column-form,
   .console-sidebar {

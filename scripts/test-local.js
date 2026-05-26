@@ -623,6 +623,13 @@ try {
   assert.match(buyerReactSource, /홈으로/);
   assert.match(buyerReactSource, /consoleViewFromLocation/);
   assert.match(buyerReactSource, /앱 연결 상태/);
+  assert.match(buyerReactSource, /AppConnectCodePanel/);
+  assert.match(buyerReactSource, /data-app-connect-code/);
+  assert.match(buyerReactSource, /앱 연결 코드/);
+  assert.match(buyerReactSource, /연결 코드 복사/);
+  assert.match(buyerReactSource, /앱에서 붙여넣기/);
+  assert.match(buyerReactSource, /copyTextToClipboard/);
+  assert.match(buyerReactSource, /navigator\.clipboard/);
   assert.match(buyerReactSource, /서버와 다시 동기화/);
   assert.match(buyerReactSource, /\/console\?view=setup/);
   assert.match(buyerReactSource, /\/api\/buyer\/room-mode-settings/);
@@ -1426,6 +1433,7 @@ try {
   assert.equal(buyerConsoleApproved.json.lifecycleSummary.paymentReviewNeeded >= 1, true);
   assert.equal(buyerConsoleApproved.json.guideUrls.android, "/console?from=android&view=setup");
   assert.match(JSON.stringify(buyerConsoleApproved.json.guideSections), /구매자 콘솔/);
+  assert.match(JSON.stringify(buyerConsoleApproved.json.guideSections), /앱 연결 코드 카드/);
   assert.equal(buyerConsoleApproved.json.rooms[0].roomStatusSnapshot.bridge.status, "ready");
   assert.deepEqual(buyerConsoleApproved.json.rooms[0].roomStatusSnapshot.permissions.buyerEditable.includes("modeSplit"), true);
   assert.equal(buyerConsoleApproved.json.rooms[0].commandCount, 0);
