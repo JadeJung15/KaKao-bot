@@ -20,8 +20,8 @@
 | 월 이용금액 | `5,500원` |
 | targetSdk | 35 |
 | 배포 형식 | Android App Bundle `.aab` |
-| 현재 Play 등록 | `1.0.20` / versionCode `21` |
-| 다음 준비 AAB | `1.0.21` / versionCode `22` |
+| 현재 Play 등록 | `1.0.21` / versionCode `22` |
+| 다음 준비 AAB | 미정 |
 
 ## 로컬 빌드
 
