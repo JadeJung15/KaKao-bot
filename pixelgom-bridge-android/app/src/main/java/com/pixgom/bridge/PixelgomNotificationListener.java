@@ -157,7 +157,13 @@ public class PixelgomNotificationListener extends NotificationListenerService {
 
     private boolean isDuplicate(BridgeEvent event) {
         long now = System.currentTimeMillis();
-        String key = event.room + "|" + event.rawRoom + "|" + event.sender + "|" + event.message;
+        String senderKey = normalize(event.sender);
+        String identityKey = normalize(event.senderId);
+        if (identityKey.isEmpty()) identityKey = normalize(event.senderPersonKeyHash);
+        if (identityKey.isEmpty()) identityKey = normalize(event.senderPersonUriHash);
+        if (identityKey.isEmpty()) identityKey = senderKey;
+        String postedKey = "미정".equals(senderKey) && event.postedAtMs > 0 ? "|" + event.postedAtMs : "";
+        String key = event.room + "|" + event.rawRoom + "|" + identityKey + "|" + event.sender + "|" + event.message + postedKey;
         synchronized (RECENT_LOCK) {
             Iterator<Map.Entry<String, Long>> iterator = RECENT_EVENTS.entrySet().iterator();
             while (iterator.hasNext()) {

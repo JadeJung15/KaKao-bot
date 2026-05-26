@@ -315,7 +315,7 @@ public class MainActivity extends Activity {
         connectTitle.setPadding(0, dp(16), 0, 0);
         panel.addView(connectTitle);
 
-        TextView connectHelp = text("앱 연결코드 입력칸 아래의 연결코드 찾기/복사 버튼을 누르면 외부 브라우저에서 구매자 콘솔의 앱 연결 코드 카드가 열립니다. 코드를 복사해 여기에 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 추가됩니다. Android 1.0.25 이상은 서버와 다시 동기화로 저장된 방의 최신 설정도 확인합니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView connectHelp = text("앱 연결코드 입력칸 아래의 연결코드 찾기/복사 버튼을 누르면 외부 브라우저에서 구매자 콘솔의 앱 연결 코드 카드가 열립니다. 코드를 복사해 여기에 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 추가됩니다. Android 1.0.27 이상은 서버와 다시 동기화로 저장된 방의 최신 설정도 확인하고, 게임방 알림의 발신자명도 보강합니다.", 13, Color.rgb(111, 78, 49), false);
         connectHelp.setPadding(0, dp(8), 0, 0);
         panel.addView(connectHelp);
 

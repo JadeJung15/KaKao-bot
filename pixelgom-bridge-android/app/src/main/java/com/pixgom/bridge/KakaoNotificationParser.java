@@ -34,8 +34,9 @@ final class KakaoNotificationParser {
         if (TextUtils.isEmpty(room)) return null;
 
         ParsedMessage parsed = parseSenderMessage(rawText);
-        String sender = firstText(lastMessageSender(extras), parsed.sender);
-        String text = firstText(parsed.message, rawText);
+        ParsedMessage lineParsed = parseSenderMessage(lastTextLine(extras));
+        String sender = firstText(lastMessageSender(extras), parsed.sender, lineParsed.sender);
+        String text = firstText(parsed.message, lineParsed.message, rawText);
 
         if (TextUtils.isEmpty(sender) && !roomTitleMatches(title, configuredRoom)) sender = title;
         if (BridgeConfig.normalized(sender).equals(BridgeConfig.normalized(room)) && !TextUtils.isEmpty(parsed.sender)) {
@@ -56,6 +57,7 @@ final class KakaoNotificationParser {
         event.message = text;
         event.packageName = statusBarNotification.getPackageName();
         event.groupChat = group;
+        event.postedAtMs = statusBarNotification.getPostTime();
         fillDiagnosticIdentity(event, statusBarNotification, extras);
         fillSystemEvent(event);
         return event;

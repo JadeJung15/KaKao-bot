@@ -137,16 +137,16 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.5.01");
+  assert.equal(health.json.version, "0.5.02");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(health.json.serverTimezone, "Asia/Seoul");
   assert.equal(health.json.minAndroidVersion, "1.0.17");
-  assert.equal(health.json.latestAndroidVersion, "1.0.25");
-  assert.equal(health.json.latestAndroidVersionCode, 26);
+  assert.equal(health.json.latestAndroidVersion, "1.0.27");
+  assert.equal(health.json.latestAndroidVersionCode, 28);
   assert.equal(health.json.minAndroidVersionCode, 18);
-  assert.equal(health.json.latestAndroidVersionCode, 26);
+  assert.equal(health.json.latestAndroidVersionCode, 28);
   assert.equal(health.json.appUpdateRequired, false);
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
@@ -204,6 +204,8 @@ try {
   assert.match(health.json.features.join(","), /admin-room-bulk-archive/);
   assert.match(health.json.features.join(","), /unified-buyer-guide/);
   assert.match(health.json.features.join(","), /bridge-room-profile-sync/);
+  assert.match(health.json.features.join(","), /game-room-admin-sync/);
+  assert.match(health.json.features.join(","), /android-notification-sender-fallback/);
   assert.equal(health.json.buyerConsoleUrl, "https://pixgom.com/console");
   assert.equal(health.json.buyerSetupUrl, "https://pixgom.com/console?view=setup");
   assert.equal(health.json.androidBuyerGuideUrl, "https://pixgom.com/console?from=android&view=setup");
@@ -544,7 +546,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.5.01");
+  assert.equal(commandTemplates.json.version, "0.5.02");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -573,7 +575,7 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.5.01");
+  assert.equal(commandPacks.json.version, "0.5.02");
   assert.equal(commandPacks.json.total, 13);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.fixedCommands.includes("/상태") && pack.fixedCommands.includes("/운세") && pack.fixedCommands.includes("/신고")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.installCode === "pk.001" && pack.installCodeType === "pack"), true);
@@ -753,7 +755,7 @@ try {
   assert.match(sessionNavText, /href = "\/account"/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.5.01");
+  assert.equal(packageJson.version, "0.5.02");
   assert.equal(packageJson.scripts["build:console"], "vite build --config vite.console.config.mjs");
   assert.equal(packageJson.scripts["dev:console"], "vite --config vite.console.config.mjs");
   assert.equal(packageJson.scripts["check:deploy"], "npm run build:console && node scripts/predeploy-check.js");
@@ -762,8 +764,8 @@ try {
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
   assert.equal(packageJson.scripts["android:release-report"], "node scripts/android-release-bundle.js --report-only");
   const androidGradle = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "build.gradle"), "utf8");
-  assert.match(androidGradle, /versionCode 27/);
-  assert.match(androidGradle, /versionName "1\.0\.26"/);
+  assert.match(androidGradle, /versionCode 28/);
+  assert.match(androidGradle, /versionName "1\.0\.27"/);
   const androidEventSender = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "EventSender.java"), "utf8");
   assert.match(androidEventSender, /optJSONArray\("rooms"\)/);
   assert.match(androidEventSender, /roomResults/);
@@ -801,9 +803,17 @@ try {
   assert.match(androidBridgeConfig, /roomProfilesJson/);
   assert.match(androidBridgeConfig, /등록된 방 없음/);
   assert.match(androidBridgeConfig, /\[게임방\]/);
+  const androidBridgeEvent = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "BridgeEvent.java"), "utf8");
+  assert.match(androidBridgeEvent, /long postedAtMs/);
+  const androidKakaoParser = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "KakaoNotificationParser.java"), "utf8");
+  assert.match(androidKakaoParser, /ParsedMessage lineParsed = parseSenderMessage\(lastTextLine\(extras\)\)/);
+  assert.match(androidKakaoParser, /firstText\(lastMessageSender\(extras\), parsed\.sender, lineParsed\.sender\)/);
+  assert.match(androidKakaoParser, /event\.postedAtMs = statusBarNotification\.getPostTime\(\)/);
   const androidNotificationListener = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "PixelgomNotificationListener.java"), "utf8");
   assert.match(androidNotificationListener, /setLastIgnoreReason/);
   assert.match(androidNotificationListener, /등록방 아님 rawRoom/);
+  assert.match(androidNotificationListener, /event\.senderId/);
+  assert.match(androidNotificationListener, /event\.postedAtMs/);
   const androidChecklist = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "PLAY_STORE_CHECKLIST.md"), "utf8");
   assert.match(androidChecklist, /비공개 테스트/);
   assert.match(androidChecklist, /1\.0\.22 \(23\)/);
@@ -1080,7 +1090,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.5.01");
+  assert.equal(adminDiagnostics.json.version, "0.5.02");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -1091,7 +1101,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.5.01");
+  assert.equal(adminBackup.json.version, "0.5.02");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -1435,7 +1445,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.5.01");
+  assert.equal(buyerGuideApproved.json.version, "0.5.02");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -1456,7 +1466,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.5.01");
+  assert.equal(buyerConsoleApproved.json.version, "0.5.02");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.appConnectCodes.length >= 1, true);
@@ -2056,6 +2066,17 @@ try {
   assert.equal(stateGameRoom.settings.canonicalRoomKey, "판매신청방");
   assert.equal(stateGeneralRoom.settings.linkedGameRoomKeys.includes("판매게임방"), true);
 
+  const secondGroupAdminRegister = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "/관리자등록 부관리자",
+    sender: "신청관리자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.match(secondGroupAdminRegister.json.reply, /부관리자님이 관리자로 등록되었습니다/);
+
   const buyerConsoleWithGameRoom = await request("/api/buyer/console", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -2070,10 +2091,13 @@ try {
   assert.equal(consoleGameRoom.roomPurpose, "game_room");
   assert.equal(consoleGameRoom.canApplyGameRoom, false);
   assert.equal(consoleGameRoom.linkedApplicationId, buyerConsoleApproved.json.rooms[0].applicationId);
+  assert.deepEqual(consoleGeneralRoom.roomAdmins.map((name) => name).sort(), ["부관리자", "신청관리자"].sort());
+  assert.deepEqual(consoleGameRoom.roomAdmins.map((name) => name).sort(), ["부관리자", "신청관리자"].sort());
   assert.equal(Array.isArray(buyerConsoleWithGameRoom.json.roomGroups), true);
   const consoleRoomGroup = buyerConsoleWithGameRoom.json.roomGroups.find((group) => group.baseRoom.applicationId === buyerConsoleApproved.json.rooms[0].applicationId);
   assert.equal(consoleRoomGroup.baseRoom.roomName, "판매신청방");
   assert.equal(consoleRoomGroup.gameRooms.some((room) => room.applicationId === gameRoomApply.json.application.id), true);
+  assert.deepEqual(consoleRoomGroup.gameRooms[0].roomAdmins.map((name) => name).sort(), ["부관리자", "신청관리자"].sort());
   assert.equal(consoleRoomGroup.roomModeSettings.generalRoomGameBlocked, true);
   assert.equal(consoleRoomGroup.roomModeSettings.gameRoomOpsBlocked, true);
   assert.equal(consoleRoomGroup.roomModeSettings.blockGamesInGeneralRoom, true);
@@ -2093,6 +2117,7 @@ try {
   );
   assert.equal(bridgeConnectBaseWithGame.json.rooms.find((room) => room.roomName === "판매게임방").roomRole, "game");
   assert.equal(bridgeConnectBaseWithGame.json.rooms.find((room) => room.roomName === "판매게임방").canonicalRoomName, "판매신청방");
+  assert.deepEqual(bridgeConnectBaseWithGame.json.rooms.find((room) => room.roomName === "판매게임방").roomAdmins.map((name) => name).sort(), ["부관리자", "신청관리자"].sort());
   assert.equal(bridgeConnectBaseWithGame.json.bridgeDiagnostics.responseRoomCount, 2);
   assert.equal(bridgeConnectBaseWithGame.json.bridgeDiagnostics.linkedGameRoomCount, 1);
   assert.equal(bridgeConnectBaseWithGame.json.bridgeDiagnostics.issues.includes("game_room_not_linked"), false);
@@ -2135,7 +2160,7 @@ try {
   });
   assert.equal(validProfileSync.response.status, 200);
   assert.equal(validProfileSync.json.ok, true);
-  assert.equal(validProfileSync.json.version, "0.5.01");
+  assert.equal(validProfileSync.json.version, "0.5.02");
   assert.equal(validProfileSync.json.summary.requestedRoomCount, 1);
   assert.equal(validProfileSync.json.summary.syncedRoomCount, 2);
   assert.deepEqual(
@@ -4773,7 +4798,7 @@ try {
   });
   assert.equal(roomLogs.response.status, 200);
   assert.equal(roomLogs.json.ok, true);
-  assert.equal(roomLogs.json.version, "0.5.01");
+  assert.equal(roomLogs.json.version, "0.5.02");
   assert.ok(roomLogs.json.summary.totalLogs >= 1);
   assert.ok(Number.isFinite(roomLogs.json.summary.recent24h));
   assert.ok(Number.isFinite(roomLogs.json.summary.commandLogs));

@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.01";
+export const APP_VERSION = "0.5.02";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -228,7 +228,9 @@ export const FEATURES = [
   "admin-room-bulk-archive",
   "unified-buyer-guide",
   "bridge-room-profile-sync",
-  "android-buyer-console-routing"
+  "android-buyer-console-routing",
+  "game-room-admin-sync",
+  "android-notification-sender-fallback"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -268,9 +270,9 @@ const INCIDENT_MESSAGES = Object.freeze({
   }
 });
 const MIN_ANDROID_VERSION = normalizeText(process.env.MIN_ANDROID_VERSION || "1.0.17");
-const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.25");
+const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.27");
 const MIN_ANDROID_VERSION_CODE = Math.max(1, Number(process.env.MIN_ANDROID_VERSION_CODE || 18));
-const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 26));
+const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 28));
 const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
 const SUPABASE_ANON_KEY = normalizeText(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 const SUPABASE_KAKAO_ENABLED = normalizeText(process.env.SUPABASE_KAKAO_ENABLED || "false") === "true";
@@ -2996,6 +2998,55 @@ function gameRoomSummaryPayload(state, account = {}, application = {}) {
   };
 }
 
+function linkedRoomStatesForAdminSync(state, roomState = {}) {
+  const rooms = [];
+  const addRoom = (candidate) => {
+    if (!candidate || rooms.includes(candidate)) return;
+    rooms.push(candidate);
+  };
+  addRoom(roomState);
+  const currentKey = roomKey(roomState.name);
+  const canonicalKey = roomKey(roomState.settings?.canonicalRoomKey || "");
+  if (canonicalKey && state.rooms?.[canonicalKey]) addRoom(state.rooms[canonicalKey]);
+  for (const key of roomState.settings?.linkedGameRoomKeys || []) {
+    if (state.rooms?.[key]) addRoom(state.rooms[key]);
+  }
+  for (const candidate of Object.values(state.rooms || {})) {
+    if (roomKey(candidate.settings?.canonicalRoomKey || "") === currentKey) addRoom(candidate);
+  }
+  return rooms;
+}
+
+function syncRoomGroupAdmins(state, roomState = {}) {
+  const rooms = linkedRoomStatesForAdminSync(state, roomState);
+  const admins = uniqueNames(rooms.flatMap((room) => room.admins || []));
+  if (!admins.length) return [];
+  for (const room of rooms) room.admins = [...admins];
+  return admins;
+}
+
+function effectiveRoomAdminsForApplication(state, account = {}, application = {}, roomState = null, roomView = null) {
+  const admins = [
+    ...(roomView?.admins || []),
+    application.adminName || ""
+  ];
+  if (roomState) {
+    admins.push(...linkedRoomStatesForAdminSync(state, roomState).flatMap((room) => room.admins || []));
+  }
+  const purpose = normalizeApplicationRoomPurpose(application.roomPurpose);
+  if (purpose === "game_room" && application.linkedApplicationId) {
+    const baseApplication = state.applications?.[application.linkedApplicationId];
+    const baseRoomState = baseApplication ? state.rooms?.[roomKey(baseApplication.roomName)] : null;
+    admins.push(baseApplication?.adminName || "", ...(baseRoomState?.admins || []));
+  } else {
+    for (const gameApplication of gameRoomApplicationsForBase(state, account, application)) {
+      const gameRoomState = state.rooms?.[roomKey(gameApplication.roomName)];
+      admins.push(gameApplication.adminName || "", ...(gameRoomState?.admins || []));
+    }
+  }
+  return uniqueNames(admins);
+}
+
 function applicationRoomPayload(state, account = {}, application = {}) {
   const roomState = state.rooms?.[roomKey(application.roomName)];
   const roomView = roomState ? roomAdminView(roomState, state, { application, account }) : null;
@@ -3016,6 +3067,7 @@ function applicationRoomPayload(state, account = {}, application = {}) {
   const bridgeStatus = bridgeConnectCode && licenseKey && (application.roomId || roomView?.roomIds?.[0])
     ? "ready"
     : "needs_setup";
+  const roomAdmins = effectiveRoomAdminsForApplication(state, account, application, roomState, roomView);
   return {
     applicationId: application.id || "",
     roomName: application.roomName || "",
@@ -3036,7 +3088,7 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     subscriptionStatusLabel: subscriptionLabel,
     subscriptionNotice,
     bridgeStatus,
-    roomAdmins: roomView?.admins?.length ? roomView.admins : [application.adminName].filter(Boolean),
+    roomAdmins,
     features: roomView?.features || DEFAULT_ROOM_FEATURES,
     customCommands,
     commandCount: customCommands.length,
@@ -8394,6 +8446,9 @@ function roomAdminView(roomState, state = null, options = {}) {
   const features = roomFeatures(roomState);
   const roomIds = settings.roomIds || [];
   const customCommandsList = customCommands(roomState);
+  const admins = state && typeof state === "object"
+    ? uniqueNames(linkedRoomStatesForAdminSync(state, roomState).flatMap((room) => room.admins || []))
+    : roomState.admins || [];
   return {
     name: roomState.name || "",
     registered: Boolean(settings.registered),
@@ -8405,7 +8460,7 @@ function roomAdminView(roomState, state = null, options = {}) {
     roomIds,
     roomLinks: settings.roomLinks || [],
     joinPhrase: settings.joinPhrase || DEFAULT_JOIN_PHRASE,
-    admins: roomState.admins || [],
+    admins,
     licenseKey: license.key || "",
     licenseStatus: license.key ? license.status || "active" : "missing",
     bridgeStatus: license.key && roomIds.length ? "ready" : "needs_setup",
@@ -9165,6 +9220,7 @@ function applyRoomModeSplit(state, baseRoomState, baseApplication = {}, linkedGa
       sharePointsAndInventory: mode.sharePointsAndInventory
     });
   }
+  syncRoomGroupAdmins(state, baseRoomState);
   return mode;
 }
 
@@ -9218,6 +9274,7 @@ function adminUpsertRoom(state, payload = {}) {
   } else if (admins.length) {
     roomState.admins = admins;
   }
+  syncRoomGroupAdmins(state, roomState);
 
   const license = licenseSettings(roomState);
   license.key = normalizeLicenseKey(payload.licenseKey) || license.key || generateLicenseKey(roomState);

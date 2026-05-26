@@ -18,6 +18,7 @@ final class BridgeEvent {
     String[] roomAdmins;
     int monthlyPriceKrw;
     boolean groupChat;
+    long postedAtMs;
     String senderPersonNameMasked;
     String senderPersonKeyHash;
     String senderPersonUriHash;
