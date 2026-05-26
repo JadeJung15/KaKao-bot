@@ -48,6 +48,9 @@ public class MainActivity extends Activity {
     private EditText licenseKeyInput;
     private EditText scriptSourceInput;
     private TextView roomProfilesSummaryView;
+    private TextView gameRoomProfilesView;
+    private Button gameRoomToggleButton;
+    private boolean gameRoomListExpanded = false;
     private Switch enabledSwitch;
     private Switch scriptEnabledSwitch;
     private Switch attendanceFeatureSwitch;
@@ -119,7 +122,7 @@ public class MainActivity extends Activity {
 
         BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
         infoPanel.addView(statusRow("알림 권한", notificationPermissionEnabled() ? "허용됨" : "필요", notificationPermissionEnabled()));
-        infoPanel.addView(labelValue("대표 방", profile.name));
+        infoPanel.addView(labelValue("대표방(일반방)", profile.name));
         infoPanel.addView(labelValue("등록 방 수", BridgeConfig.roomProfileCount(this) + "개"));
         infoPanel.addView(labelValue("등록 방 목록", BridgeConfig.roomProfilesSummary(this)));
         infoPanel.addView(labelValue("입장확인 문구", profile.joinPhrase));
@@ -211,7 +214,7 @@ public class MainActivity extends Activity {
         statusPanel.addView(statusRow("알림 권한", notificationPermissionEnabled() ? "허용됨" : "필요", notificationPermissionEnabled()));
         statusPanel.addView(labelValue("버전", BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")"));
         statusPanel.addView(labelValue("서버", BridgeConfig.serverUrl(this)));
-        statusPanel.addView(labelValue("대표 방", profile.name));
+        statusPanel.addView(labelValue("대표방(일반방)", profile.name));
         statusPanel.addView(labelValue("roomId", profile.roomId));
         statusPanel.addView(labelValue("입장확인 문구", profile.joinPhrase));
         statusPanel.addView(labelValue("라이선스 키", TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey));
@@ -346,13 +349,23 @@ public class MainActivity extends Activity {
         resetButton.setOnClickListener(v -> confirmResetServerSettings());
         panel.addView(resetButton);
 
-        TextView roomTitle = text("대표 방 설정", 20, Color.rgb(58, 37, 24), true);
+        TextView roomTitle = text("대표방(일반방) 설정", 20, Color.rgb(58, 37, 24), true);
         roomTitle.setPadding(0, dp(16), 0, 0);
         panel.addView(roomTitle);
 
-        roomProfilesSummaryView = text("등록 방 목록\n" + BridgeConfig.roomProfilesSummary(this), 13, Color.rgb(111, 78, 49), false);
+        roomProfilesSummaryView = text("일반방 목록\n" + BridgeConfig.generalRoomProfilesSummary(this), 13, Color.rgb(111, 78, 49), false);
         roomProfilesSummaryView.setPadding(0, dp(8), 0, 0);
         panel.addView(roomProfilesSummaryView);
+
+        gameRoomToggleButton = secondaryButton("게임방 목록 펼치기 (" + BridgeConfig.gameRoomProfileCount(this) + "개)");
+        gameRoomToggleButton.setOnClickListener(v -> toggleGameRoomList());
+        panel.addView(gameRoomToggleButton);
+
+        gameRoomProfilesView = text(BridgeConfig.gameRoomProfilesSummary(this), 13, Color.rgb(111, 78, 49), false);
+        gameRoomProfilesView.setPadding(0, dp(8), 0, dp(4));
+        gameRoomProfilesView.setVisibility(View.GONE);
+        panel.addView(gameRoomProfilesView);
+        refreshRoomProfilesSummary();
 
         BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
         roomNameInput = input("카카오 방 이름", profile.name);
@@ -373,7 +386,7 @@ public class MainActivity extends Activity {
         licenseKeyInput = input("라이선스 키", TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey);
         panel.addView(licenseKeyInput);
 
-        TextView roomHelp = text("대표 방 설정은 목록 첫 번째 방을 직접 수정할 때만 사용하세요. 여러 방은 구매자 콘솔의 설치 안내에서 연결코드를 확인하거나 서버와 다시 동기화하면 됩니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView roomHelp = text("대표방은 일반방을 우선 표시합니다. 게임방은 접기/펼치기 목록에서 확인하고, 여러 방은 구매자 콘솔의 설치 안내에서 연결코드를 확인하거나 서버와 다시 동기화하면 됩니다.", 13, Color.rgb(111, 78, 49), false);
         roomHelp.setPadding(0, dp(10), 0, 0);
         panel.addView(roomHelp);
 
@@ -780,8 +793,25 @@ public class MainActivity extends Activity {
 
     private void refreshRoomProfilesSummary() {
         if (roomProfilesSummaryView != null) {
-            roomProfilesSummaryView.setText("등록 방 목록\n" + BridgeConfig.roomProfilesSummary(this));
+            roomProfilesSummaryView.setText("일반방 목록\n" + BridgeConfig.generalRoomProfilesSummary(this));
         }
+        if (gameRoomProfilesView != null) {
+            gameRoomProfilesView.setText(BridgeConfig.gameRoomProfilesSummary(this));
+            gameRoomProfilesView.setVisibility(gameRoomListExpanded && BridgeConfig.gameRoomProfileCount(this) > 0 ? View.VISIBLE : View.GONE);
+        }
+        if (gameRoomToggleButton != null) {
+            int gameCount = BridgeConfig.gameRoomProfileCount(this);
+            gameRoomToggleButton.setText(gameCount == 0
+                    ? "게임방 없음"
+                    : (gameRoomListExpanded ? "게임방 목록 접기" : "게임방 목록 펼치기") + " (" + gameCount + "개)");
+            gameRoomToggleButton.setEnabled(gameCount > 0);
+        }
+    }
+
+    private void toggleGameRoomList() {
+        if (BridgeConfig.gameRoomProfileCount(this) == 0) return;
+        gameRoomListExpanded = !gameRoomListExpanded;
+        refreshRoomProfilesSummary();
     }
 
     private void refreshProfileSyncStatus() {

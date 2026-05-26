@@ -764,8 +764,8 @@ try {
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
   assert.equal(packageJson.scripts["android:release-report"], "node scripts/android-release-bundle.js --report-only");
   const androidGradle = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "build.gradle"), "utf8");
-  assert.match(androidGradle, /versionCode 28/);
-  assert.match(androidGradle, /versionName "1\.0\.27"/);
+  assert.match(androidGradle, /versionCode 29/);
+  assert.match(androidGradle, /versionName "1\.0\.28"/);
   const androidEventSender = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "EventSender.java"), "utf8");
   assert.match(androidEventSender, /optJSONArray\("rooms"\)/);
   assert.match(androidEventSender, /roomResults/);
@@ -780,6 +780,11 @@ try {
   assert.match(androidMainActivity, /setLastConnectSummary/);
   assert.match(androidMainActivity, /서버와 다시 동기화/);
   assert.match(androidMainActivity, /syncRoomProfiles/);
+  assert.match(androidMainActivity, /대표방\(일반방\)/);
+  assert.match(androidMainActivity, /gameRoomProfilesView/);
+  assert.match(androidMainActivity, /toggleGameRoomList/);
+  assert.match(androidMainActivity, /게임방 목록 펼치기/);
+  assert.match(androidMainActivity, /게임방 목록 접기/);
   assert.match(androidMainActivity, /BUYER_CONNECT_CODE_URL/);
   assert.match(androidMainActivity, /\/console\?from=android&view=setup/);
   assert.match(androidMainActivity, /#app-connect-code/);
@@ -801,6 +806,11 @@ try {
   assert.match(androidBridgeConfig, /lastIgnoreReason/);
   assert.match(androidBridgeConfig, /lastProfileSyncSummary/);
   assert.match(androidBridgeConfig, /roomProfilesJson/);
+  assert.match(androidBridgeConfig, /primaryGeneralRoomProfile/);
+  assert.match(androidBridgeConfig, /generalRoomProfilesSummary/);
+  assert.match(androidBridgeConfig, /gameRoomProfilesSummary/);
+  assert.match(androidBridgeConfig, /gameRoomProfileCount/);
+  assert.match(androidBridgeConfig, /대표방\(일반방\)/);
   assert.match(androidBridgeConfig, /등록된 방 없음/);
   assert.match(androidBridgeConfig, /\[게임방\]/);
   const androidBridgeEvent = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "BridgeEvent.java"), "utf8");

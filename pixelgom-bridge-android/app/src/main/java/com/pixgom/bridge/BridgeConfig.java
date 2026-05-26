@@ -149,11 +149,22 @@ final class BridgeConfig {
 
     static void setPrimaryRoomProfile(Context context, String name, String roomId, String roomLink, String joinPhrase, String admins, String licenseKey) {
         List<RoomProfile> profiles = roomProfiles(context);
-        RoomProfile updated = new RoomProfile(name, roomId, roomLink, joinPhrase, adminList(admins), textOrDefault(licenseKey, deviceLicenseKey(context)));
+        RoomProfile updated = new RoomProfile(name, roomId, roomLink, joinPhrase, adminList(admins), textOrDefault(licenseKey, deviceLicenseKey(context)), "general", "");
         if (profiles.isEmpty()) {
             profiles.add(updated);
         } else {
-            profiles.set(0, updated);
+            int generalIndex = -1;
+            for (int i = 0; i < profiles.size(); i++) {
+                if (!profiles.get(i).isGameRoom()) {
+                    generalIndex = i;
+                    break;
+                }
+            }
+            if (generalIndex >= 0) {
+                profiles.set(generalIndex, updated);
+            } else {
+                profiles.add(0, updated);
+            }
         }
         List<String> lines = new ArrayList<>();
         for (RoomProfile profile : profiles) {
@@ -195,7 +206,14 @@ final class BridgeConfig {
     }
 
     static RoomProfile firstRoomProfile(Context context) {
+        return primaryGeneralRoomProfile(context);
+    }
+
+    static RoomProfile primaryGeneralRoomProfile(Context context) {
         List<RoomProfile> profiles = roomProfiles(context);
+        for (RoomProfile profile : profiles) {
+            if (!profile.isGameRoom()) return profile;
+        }
         return profiles.isEmpty()
                 ? new RoomProfile(DEFAULT_ROOM_NAME, DEFAULT_ROOM_ID, DEFAULT_ROOM_LINK, DEFAULT_JOIN_PHRASE, new String[]{ DEFAULT_ROOM_NAME }, "")
                 : profiles.get(0);
@@ -211,13 +229,8 @@ final class BridgeConfig {
 
     static String roomProfilesSummary(Context context) {
         List<String> rows = new ArrayList<>();
-        int index = 1;
-        for (RoomProfile profile : roomProfiles(context)) {
-            String roleLabel = profile.roleBadge();
-            String canonical = TextUtils.isEmpty(profile.canonicalRoomName) ? "" : " / 기준 " + profile.canonicalRoomName;
-            rows.add(index + ". " + roleLabel + " " + profile.name + " / " + profile.roomId + canonical + " / " + profile.joinPhrase);
-            index++;
-        }
+        rows.add(generalRoomProfilesSummary(context));
+        rows.add(gameRoomProfilesSummary(context));
         String lastConnect = lastConnectSummary(context);
         if (!TextUtils.isEmpty(lastConnect)) rows.add("최근 연결: " + lastConnect);
         String lastSync = lastProfileSyncSummary(context);
@@ -225,6 +238,51 @@ final class BridgeConfig {
         String lastIgnore = lastIgnoreReason(context);
         if (!TextUtils.isEmpty(lastIgnore)) rows.add("최근 무시: " + lastIgnore);
         return rows.isEmpty() ? "등록된 방 없음" : TextUtils.join("\n", rows);
+    }
+
+    static String generalRoomProfilesSummary(Context context) {
+        List<RoomProfile> profiles = roomProfiles(context);
+        List<String> rows = new ArrayList<>();
+        int index = 1;
+        for (RoomProfile profile : profiles) {
+            if (profile.isGameRoom()) continue;
+            String prefix = index == 1 ? "대표방(일반방)" : "일반방 " + index;
+            rows.add(prefix + ": " + roomProfileDisplayLine(profile, false));
+            index++;
+        }
+        if (!rows.isEmpty()) return TextUtils.join("\n", rows);
+        RoomProfile fallback = primaryGeneralRoomProfile(context);
+        return "대표방(일반방): " + roomProfileDisplayLine(fallback, false);
+    }
+
+    static int gameRoomProfileCount(Context context) {
+        int count = 0;
+        for (RoomProfile profile : roomProfiles(context)) {
+            if (profile.isGameRoom()) count++;
+        }
+        return count;
+    }
+
+    static String gameRoomProfilesSummary(Context context) {
+        List<String> rows = new ArrayList<>();
+        int gameCount = gameRoomProfileCount(context);
+        if (gameCount == 0) return "연결된 게임방 없음";
+        rows.add("연결된 게임방 " + gameCount + "개");
+        int index = 1;
+        for (RoomProfile profile : roomProfiles(context)) {
+            if (!profile.isGameRoom()) continue;
+            rows.add(index + ". " + roomProfileDisplayLine(profile, true));
+            index++;
+        }
+        return TextUtils.join("\n", rows);
+    }
+
+    private static String roomProfileDisplayLine(RoomProfile profile, boolean includeCanonical) {
+        String canonical = "";
+        if (includeCanonical && !TextUtils.isEmpty(profile.canonicalRoomName)) {
+            canonical = " / 기준 일반방: " + profile.canonicalRoomName;
+        }
+        return profile.roleBadge() + " " + profile.name + " / " + profile.roomId + canonical + " / " + profile.joinPhrase;
     }
 
     static String roomProfilesJson(Context context) {
@@ -550,6 +608,10 @@ final class BridgeConfig {
             if ("game".equals(roomRole)) return "[게임방]";
             if ("general".equals(roomRole)) return "[일반방]";
             return "[일반방]";
+        }
+
+        boolean isGameRoom() {
+            return "game".equals(roomRole);
         }
     }
 
