@@ -137,7 +137,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.4.95");
+  assert.equal(health.json.version, "0.4.96");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -169,6 +169,7 @@ try {
   assert.match(health.json.features.join(","), /attendance-rewards/);
   assert.match(health.json.features.join(","), /member-rankings/);
   assert.match(health.json.features.join(","), /raw-event-log/);
+  assert.match(health.json.features.join(","), /room-analytics-log-retention/);
   assert.match(health.json.features.join(","), /role-based-help/);
   assert.match(health.json.features.join(","), /stable-user-ids/);
   assert.match(health.json.features.join(","), /admin-identity-reset/);
@@ -516,7 +517,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.4.95");
+  assert.equal(commandTemplates.json.version, "0.4.96");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -545,7 +546,7 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.4.95");
+  assert.equal(commandPacks.json.version, "0.4.96");
   assert.equal(commandPacks.json.total, 13);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.fixedCommands.includes("/상태") && pack.fixedCommands.includes("/운세") && pack.fixedCommands.includes("/신고")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.installCode === "pk.001" && pack.installCodeType === "pack"), true);
@@ -671,7 +672,7 @@ try {
   assert.match(sessionNavText, /href = "\/account"/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.4.95");
+  assert.equal(packageJson.version, "0.4.96");
   assert.equal(packageJson.scripts["build:console"], "vite build --config vite.console.config.mjs");
   assert.equal(packageJson.scripts["dev:console"], "vite --config vite.console.config.mjs");
   assert.equal(packageJson.scripts["check:deploy"], "npm run build:console && node scripts/predeploy-check.js");
@@ -924,7 +925,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.4.95");
+  assert.equal(adminDiagnostics.json.version, "0.4.96");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -935,7 +936,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.4.95");
+  assert.equal(adminBackup.json.version, "0.4.96");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -1277,7 +1278,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.4.95");
+  assert.equal(buyerGuideApproved.json.version, "0.4.96");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -1292,7 +1293,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.4.95");
+  assert.equal(buyerConsoleApproved.json.version, "0.4.96");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.plan.monthlyPriceKrw, 5500);
@@ -4557,6 +4558,30 @@ try {
   const normalChat = await chat("일반 대화", "사용자");
   assert.equal(normalChat.json.reply, null);
   assert.equal(normalChat.json.handled, false);
+
+  const sensitiveChat = await chat("연락은 test@example.com 또는 010-1234-5678 token=abc123", "로그사용자");
+  assert.equal(sensitiveChat.json.reply, null);
+
+  const roomLogsUnauthorized = await request(`/api/admin/room-logs?room=${encodeURIComponent("테스트방")}`);
+  assert.equal(roomLogsUnauthorized.response.status, 401);
+
+  const roomLogs = await request(`/api/admin/room-logs?room=${encodeURIComponent("테스트방")}&limit=50`, {
+    headers: { "x-admin-session": "test-admin-token" }
+  });
+  assert.equal(roomLogs.response.status, 200);
+  assert.equal(roomLogs.json.ok, true);
+  assert.equal(roomLogs.json.version, "0.4.96");
+  assert.ok(roomLogs.json.summary.totalLogs >= 1);
+  assert.ok(roomLogs.json.rooms.some((room) => room.room === "테스트방" && room.count >= 1));
+  const sensitiveLog = roomLogs.json.logs.find((log) => /연락은/.test(log.messagePreview || ""));
+  assert.ok(sensitiveLog);
+  assert.match(sensitiveLog.messagePreview, /\[email\]/);
+  assert.match(sensitiveLog.messagePreview, /\[phone\]/);
+  assert.match(sensitiveLog.messagePreview, /\[secret\]/);
+  assert.doesNotMatch(sensitiveLog.messagePreview, /test@example\.com/);
+  assert.doesNotMatch(sensitiveLog.messagePreview, /010-1234-5678/);
+  assert.ok(sensitiveLog.messageHash);
+  assert.ok(sensitiveLog.senderHash);
 
   const slashHelp = await chat("/", "사용자");
   assert.equal(slashHelp.json.reply, null);

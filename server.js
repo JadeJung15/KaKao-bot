@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.4.95";
+export const APP_VERSION = "0.4.96";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -53,6 +53,7 @@ export const FEATURES = [
   "member-levels",
   "member-rankings",
   "raw-event-log",
+  "room-analytics-log-retention",
   "stable-user-ids",
   "admin-identity-reset",
   "bridge-auto-extract",
@@ -226,6 +227,9 @@ const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
 const MONTHLY_PRICE_KRW = Math.max(0, Number(process.env.MONTHLY_PRICE_KRW || 5500)) || 5500;
 const ADDITIONAL_ROOM_PRICE_KRW = Math.max(0, Number(process.env.ADDITIONAL_ROOM_PRICE_KRW || 2200)) || 2200;
 const DEFAULT_SUBSCRIPTION_DAYS = Math.max(1, Number(process.env.DEFAULT_SUBSCRIPTION_DAYS || 30));
+const ROOM_ANALYTICS_LOG_LIMIT = Math.max(100, Number(process.env.ROOM_ANALYTICS_LOG_LIMIT || 5000));
+const ROOM_ANALYTICS_EXPORT_LIMIT = Math.max(10, Number(process.env.ROOM_ANALYTICS_EXPORT_LIMIT || 500));
+const ROOM_ANALYTICS_MESSAGE_PREVIEW_LIMIT = 240;
 const ADMIN_CONSOLE_TOKEN = normalizeText(process.env.ADMIN_CONSOLE_TOKEN || process.env.PIXGOM_ADMIN_TOKEN || "");
 const OWNER_ADMIN_EMAILS = (process.env.OWNER_ADMIN_EMAILS || process.env.ADMIN_EMAILS || "jadejung15@gmail.com")
   .split(",")
@@ -3292,6 +3296,7 @@ function ensureRoom(state, room) {
     unreadNoticeStates: {},
     events: [],
     rawEvents: [],
+    analyticsLogs: [],
     peopleByIdentity: {},
     ambiguousIdentities: [],
     shop: {},
@@ -3315,6 +3320,10 @@ function ensureRoom(state, room) {
   roomState.unreadNoticeStates ||= {};
   roomState.events ||= [];
   roomState.rawEvents ||= [];
+  roomState.analyticsLogs ||= [];
+  if (roomState.analyticsLogs.length > ROOM_ANALYTICS_LOG_LIMIT) {
+    roomState.analyticsLogs = roomState.analyticsLogs.slice(-ROOM_ANALYTICS_LOG_LIMIT);
+  }
   roomState.peopleByIdentity ||= {};
   roomState.ambiguousIdentities ||= [];
   roomState.shop = normalizeShopState(roomState.shop || {});
@@ -4211,6 +4220,18 @@ function recordRoomEvent(roomState, event) {
   if (roomState.events.length > 500) roomState.events = roomState.events.slice(-500);
 }
 
+function shortHash(value) {
+  const text = normalizeText(value);
+  return text ? createHash("sha256").update(text).digest("hex").slice(0, 16) : "";
+}
+
+function redactSensitiveText(value) {
+  return normalizeText(value)
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, "[email]")
+    .replace(/(?:\+?82[-.\s]?)?0?1[016789][-\s.]?\d{3,4}[-\s.]?\d{4}/g, "[phone]")
+    .replace(/\b(?:token|secret|password|비밀번호|인증번호|api[_-]?key)\s*[:=]\s*\S+/giu, "[secret]");
+}
+
 function payloadValue(payload, paths) {
   for (const pathParts of paths) {
     let value = payload;
@@ -4400,8 +4421,44 @@ function previewText(value, maxLength = 120) {
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
+function recordRoomAnalyticsLog(roomState, payload, meta = {}) {
+  roomState.analyticsLogs ||= [];
+  const message = normalizeText(meta.message || payload?.msg || payload?.message);
+  const parsed = parseBotCommand(message);
+  const identity = payloadIdentity(payload);
+  const sender = normalizeText(meta.sender || payload?.sender || "익명");
+  const room = normalizeText(meta.room || payload?.room || "");
+  const log = {
+    at: nowIso(),
+    room,
+    roomKey: roomKey(room),
+    sender: previewText(redactSensitiveText(sender), 80),
+    senderHash: shortHash(sender),
+    messagePreview: previewText(redactSensitiveText(message), ROOM_ANALYTICS_MESSAGE_PREVIEW_LIMIT),
+    messageHash: shortHash(message),
+    messageLength: message.length,
+    isCommand: parsed.isCommandAttempt,
+    command: parsed.command || "",
+    eventType: meta.event?.type || "",
+    eventName: previewText(redactSensitiveText(meta.event?.name || meta.event?.to || ""), 80),
+    roomId: openChatRoomId(payload?.roomId || payload?.roomLink || payload?.openChatId || payload?.openChatLink),
+    packageName: normalizeText(payload?.packageName || ""),
+    chatType: normalizeText(payload?.chatType || payload?.roomType || ""),
+    isGroupChat: isGroupChatPayload(payload),
+    senderIdentityHash: shortHash(identity.senderId),
+    targetIdentityHash: shortHash(identity.targetUserId),
+    candidateIdentityCount: identity.candidates?.length || 0
+  };
+  roomState.analyticsLogs.push(log);
+  if (roomState.analyticsLogs.length > ROOM_ANALYTICS_LOG_LIMIT) {
+    roomState.analyticsLogs = roomState.analyticsLogs.slice(-ROOM_ANALYTICS_LOG_LIMIT);
+  }
+  return log;
+}
+
 function recordRawEvent(roomState, payload, meta = {}) {
   roomState.rawEvents ||= [];
+  recordRoomAnalyticsLog(roomState, payload, meta);
   const identity = payloadIdentity(payload);
   const event = {
     at: nowIso(),
@@ -8330,6 +8387,7 @@ function roomDiagnostics(roomState) {
   const roomIds = roomState.settings?.roomIds || [];
   const rawEvents = roomState.rawEvents || [];
   const events = roomState.events || [];
+  const analyticsLogs = roomState.analyticsLogs || [];
   const problems = [];
   const bridgeProblems = [];
   if (!roomState.settings?.registered) problems.push("방 미등록");
@@ -8341,7 +8399,7 @@ function roomDiagnostics(roomState) {
   if (!roomIds.length) bridgeProblems.push("roomId 없음");
   if (!license.key) bridgeProblems.push("라이선스 없음");
   if (!roomState.settings?.registered) bridgeProblems.push("등록 방 아님");
-  const lastActivityAt = rawEvents.at(-1)?.at || events.at(-1)?.at || "";
+  const lastActivityAt = analyticsLogs.at(-1)?.at || rawEvents.at(-1)?.at || events.at(-1)?.at || "";
   return {
     ok: problems.length === 0,
     problems,
@@ -8352,8 +8410,10 @@ function roomDiagnostics(roomState) {
     adminsCount: (roomState.admins || []).length,
     rawEventCount: rawEvents.length,
     eventCount: events.length,
+    analyticsLogCount: analyticsLogs.length,
     lastRawEventAt: rawEvents.at(-1)?.at || "",
     lastEventAt: events.at(-1)?.at || "",
+    lastAnalyticsLogAt: analyticsLogs.at(-1)?.at || "",
     subscriptionStatus: subscription.status || "unset",
     subscriptionRemainingDays: remainingDays(subscription.expiresAt),
     licenseStatus: license.key ? license.status || "active" : "missing"
@@ -8374,6 +8434,64 @@ function adminDiagnosticsSummary(diagnosticRooms = []) {
     problemRoomNames: problemRooms.map((room) => room.name).slice(0, 10),
     expiredRoomNames: expiredRooms.map((room) => room.name).slice(0, 10),
     bridgeProblemRoomNames: bridgeProblemRooms.map((room) => room.name).slice(0, 10)
+  };
+}
+
+function adminRoomLogsPayload(state = {}, query = {}) {
+  const requestedRoom = normalizeText(query.room || query.roomName || "");
+  const requestedType = normalizeText(query.type || query.eventType || "");
+  const requestedCommand = normalizeText(query.command || "");
+  const keyword = normalizeText(query.q || query.query || "");
+  const limit = Math.min(
+    Math.max(1, Number(query.limit || ROOM_ANALYTICS_EXPORT_LIMIT) || ROOM_ANALYTICS_EXPORT_LIMIT),
+    ROOM_ANALYTICS_EXPORT_LIMIT
+  );
+  const rooms = Object.values(state.rooms || {}).filter((roomState) => {
+    if (!requestedRoom) return true;
+    return roomKey(roomState.name) === roomKey(requestedRoom);
+  });
+  const allLogs = rooms.flatMap((roomState) => (roomState.analyticsLogs || []).map((log) => ({
+    ...log,
+    room: log.room || roomState.name || ""
+  })));
+  const filtered = allLogs
+    .filter((log) => !requestedType || log.eventType === requestedType)
+    .filter((log) => !requestedCommand || log.command === requestedCommand || log.command === `/${requestedCommand.replace(/^\/+/, "")}`)
+    .filter((log) => {
+      if (!keyword) return true;
+      const haystack = `${log.room || ""} ${log.sender || ""} ${log.messagePreview || ""} ${log.command || ""} ${log.eventType || ""}`;
+      return keyFor(haystack).includes(keyFor(keyword));
+    })
+    .sort((left, right) => String(right.at || "").localeCompare(String(left.at || "")));
+  const roomSummaries = rooms.map((roomState) => {
+    const logs = roomState.analyticsLogs || [];
+    return {
+      room: roomState.name || "",
+      roomKey: roomKey(roomState.name || ""),
+      count: logs.length,
+      firstAt: logs[0]?.at || "",
+      lastAt: logs.at(-1)?.at || ""
+    };
+  });
+  return {
+    ok: true,
+    version: APP_VERSION,
+    generatedAt: nowIso(),
+    retentionLimitPerRoom: ROOM_ANALYTICS_LOG_LIMIT,
+    exportLimit: limit,
+    filters: {
+      room: requestedRoom,
+      type: requestedType,
+      command: requestedCommand,
+      q: keyword
+    },
+    summary: {
+      rooms: roomSummaries.length,
+      totalLogs: roomSummaries.reduce((sum, room) => sum + room.count, 0),
+      matchedLogs: filtered.length
+    },
+    rooms: roomSummaries,
+    logs: filtered.slice(0, limit)
   };
 }
 
@@ -11494,6 +11612,13 @@ async function handleAdminApi(req, url) {
         rooms
       }
     };
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/room-logs") {
+    const auth = await requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return { status: 200, body: adminRoomLogsPayload(state, Object.fromEntries(url.searchParams.entries())) };
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/backup") {
