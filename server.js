@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.07";
+export const APP_VERSION = "0.5.08";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -241,7 +241,11 @@ export const FEATURES = [
   "rpg-short-item-selector",
   "rpg-auto-equip-presets",
   "rpg-expanded-equipment-stats",
-  "lunch-menu-recommendation"
+  "lunch-menu-recommendation",
+  "command-response-emoji-ux",
+  "inventory-sale-cleanup",
+  "inventory-item-locks",
+  "hidden-item-id-chat-results"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -396,6 +400,42 @@ const FEATURE_LABELS = Object.freeze({
   shop: "상점",
   customCommands: "커스텀 명령어"
 });
+const COMMAND_RESPONSE_ICON_BY_CATEGORY = Object.freeze({
+  "기본": "📘",
+  "운영": "📩",
+  "날씨": "🌤️",
+  "운세": "🔮",
+  "출석": "✅",
+  "포인트": "🅟",
+  "게임": "🎲",
+  "랭킹": "🏆",
+  "상점/가방": "🎒",
+  "RPG": "🏰",
+  "생활": "🍱",
+  "픽셀몬스터": "✨",
+  "펫키우기": "🐾",
+  "커스텀": "🧩",
+  "스토어": "📦",
+  "프로필": "👤",
+  "히스토리": "📜",
+  "관리자": "🛠️"
+});
+const COMMAND_RESPONSE_KNOWN_PREFIXES = Object.freeze([
+  "📘", "📩", "🌤️", "🔮", "✅", "🅟", "💰", "🎲", "🏆", "🎒", "🛒",
+  "🏰", "⚔️", "🛡️", "🍱", "✨", "🐾", "🧩", "📦", "👤", "📜", "🛠️",
+  "🚨", "❌", "⚠️", "🎣", "🐟", "🔒", "🔓"
+]);
+const COMMAND_RESPONSE_ICON_EXEMPT_COMMANDS = new Set([
+  "/브릿지",
+  "/bridge",
+  "/js상태",
+  "/jsstatus",
+  "/로컬상태",
+  "/최근이벤트",
+  "/이벤트로그",
+  "/원본로그",
+  "/원본이벤트"
+]);
 const CUSTOM_COMMAND_LIMIT = 30;
 const CUSTOM_COMMAND_RESPONSE_LIMIT = 700;
 const SIGNUP_PASSWORD_MIN_LENGTH = 8;
@@ -429,7 +469,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
   },
   {
     title: "상점/가방",
-    commands: ["/상점", "/구매", "/구매내역", "/가방", "/사용", "/가방선물", "/판매"]
+    commands: ["/상점", "/구매", "/구매내역", "/가방", "/가방정리", "/아이템상세", "/판매목록", "/판매미리보기", "/사용", "/가방선물", "/판매", "/일괄판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록"]
   },
   {
     title: "관리자",
@@ -1226,10 +1266,10 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "attendance-growth": ["/출석", "/미출석", "/출석순위", "/포인트", "/내정보", "/포인트순위"],
   "point-economy": ["/포인트", "/내정보", "/좋아요", "/응원", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위"],
   "game-chance": ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/포인트"],
-  "rpg-adventure": ["/던전", "/던전목록", "/대장간", "/제작가능", "/제작", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/일괄판매", "/가방", "/판매", "/포인트"],
+  "rpg-adventure": ["/던전", "/던전목록", "/대장간", "/제작가능", "/제작", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/판매미리보기", "/일괄판매", "/가방", "/가방정리", "/판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/포인트"],
   "pixel-monster-rpg": ["/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감", "/포인트"],
   "pet-raising": ["/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점", "/포인트"],
-  "shop-inventory": ["/상점", "/구매", "/가방", "/사용", "/가방선물", "/판매", "/구매내역"],
+  "shop-inventory": ["/상점", "/구매", "/가방", "/가방정리", "/아이템상세", "/판매목록", "/판매미리보기", "/사용", "/가방선물", "/판매", "/일괄판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/구매내역"],
   "custom-command": ["/명령어목록", "/커스텀명령어", "/고정명령어", "/명령어등록", "/명령어수정", "/명령어삭제", "/커스텀등록", "/커스텀수정", "/커스텀삭제"],
   "profile-history": ["/프로필", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/닉병합", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
   "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그", "/신고목록", "/신고처리", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록", "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말", ...ADMIN_MANAGEMENT_COMMANDS],
@@ -1559,9 +1599,9 @@ const GAME_PACK_HELP_TOPICS = Object.freeze({
     packIds: ["rpg-adventure"],
     aliases: ["rpg", "RPG", "모험", "던전"],
     intro: "던전에서 재료를 얻고 대장간에서 무기를 제작해 장착하는 모험형 게임팩입니다.",
-    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/던전", "/제작가능", "/자동장착 공격"],
+    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/던전", "/제작가능", "/자동장착 공격", "/가방정리"],
     adminSetup: ["명령어팩 장착: /명령어설치 pk.006", "게임 기능 켜기: /기능켜기 게임", "상점/가방 기능 확인: /기능목록"],
-    examples: ["/던전", "/던전 중급", "/대장간", "/제작가능", "/장착 1", "/자동장착 공격", "/아이템상세 2", "/세트아이템"],
+    examples: ["/던전", "/던전 중급", "/대장간", "/제작가능", "/장착 1", "/자동장착 공격", "/판매미리보기 재료", "/아이템잠금 2"],
     related: ["shop-inventory", "pet-raising"]
   },
   monster: {
@@ -3875,6 +3915,18 @@ function normalizeInventory(value = {}) {
   return inventory;
 }
 
+function normalizeInventoryLocks(value = []) {
+  const source = Array.isArray(value)
+    ? value
+    : Object.entries(value || {})
+      .filter(([, enabled]) => enabled !== false)
+      .map(([id]) => id);
+  return [...new Set(source
+    .map((id) => String(Math.max(0, Math.trunc(Number(id || 0)))))
+    .filter((id) => id && id !== "0"))]
+    .slice(0, 300);
+}
+
 function normalizeGameCooldowns(value = {}) {
   const source = value && typeof value === "object" ? value : {};
   const cooldowns = {};
@@ -4613,6 +4665,7 @@ function normalizePersonState(person) {
   person.chats.byDate ||= {};
   person.chats.byWeek ||= {};
   person.inventory = normalizeInventory(person.inventory || {});
+  person.lockedInventory = normalizeInventoryLocks(person.lockedInventory || person.lockedItems || []);
   person.gameCooldowns = normalizeGameCooldowns(person.gameCooldowns || {});
   person.equipment = normalizeEquipment(person.equipment || {});
   person.monsters = normalizeOwnedMonsters(person.monsters || []);
@@ -7018,6 +7071,25 @@ function parseInventoryActionText(text, pattern) {
   return { selector: compactSpaces(selector), quantity };
 }
 
+function parseInventorySelectorList(selector = "") {
+  const body = compactSpaces(selector);
+  if (!body) return [];
+  const tokens = body.split(/\s*,\s*/).filter(Boolean);
+  const selectors = [];
+  for (const token of tokens) {
+    const range = token.match(/^([0-9]+)\s*-\s*([0-9]+)$/);
+    if (range) {
+      const start = Math.max(1, Math.trunc(Number(range[1])));
+      const end = Math.max(1, Math.trunc(Number(range[2])));
+      const [from, to] = start <= end ? [start, end] : [end, start];
+      for (let value = from; value <= Math.min(to, from + 49); value += 1) selectors.push(String(value));
+    } else {
+      selectors.push(token);
+    }
+  }
+  return [...new Set(selectors)].slice(0, SHOP_MAX_QUANTITY);
+}
+
 function inventoryDisplayRows(roomState, person, filter = null) {
   const rows = inventoryRows(roomState, person).filter((row) => !filter || filter(row));
   return rows.map((row, index) => ({ ...row, selectNo: index + 1 }));
@@ -7027,6 +7099,21 @@ function isEquippedProduct(person, productId) {
   normalizePersonState(person);
   const id = String(productId);
   return ["weapon", "armor", "accessory"].some((slot) => String(person.equipment?.[slot] || "") === id);
+}
+
+function isLockedInventoryProduct(person, productId) {
+  normalizePersonState(person);
+  return (person.lockedInventory || []).includes(String(productId));
+}
+
+function setInventoryLock(person, productId, locked) {
+  normalizePersonState(person);
+  const id = String(productId);
+  const locks = new Set(person.lockedInventory || []);
+  if (locked) locks.add(id);
+  else locks.delete(id);
+  person.lockedInventory = normalizeInventoryLocks([...locks]);
+  return person.lockedInventory;
 }
 
 function resolveInventoryRow(roomState, person, selector, filter = null) {
@@ -7119,43 +7206,37 @@ function baitPurchaseCommand(roomState, sender, text) {
 }
 
 function sellItemCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  const body = compactSpaces(text.replace(/^\/판매\s*/i, ""));
+  if (!body) {
+    return ["❌ 명령어를 확인해 주세요.", "사용 예시:", " /판매 1", " /판매 1,3,5", " /판매 재료"].join("\n");
+  }
+  const mode = inventorySaleModeFromText(body);
+  if (mode) return executeInventorySaleMode(roomState, person, mode, { title: "💰 판매 완료" });
+
+  const selectors = parseInventorySelectorList(body);
+  const isMultiSelector = /,/.test(body) || /^[0-9]+\s*-\s*[0-9]+$/.test(body);
+  if (isMultiSelector) {
+    const rows = selectors.map((selector) => resolveInventoryRow(roomState, person, selector)).filter(Boolean);
+    if (!rows.length) return "❌ 판매할 아이템을 찾지 못했습니다. /판매목록 으로 번호를 확인해 주세요.";
+    const plan = inventorySalePlan(roomState, person, rows, { mode: "선택", quantity: 1 });
+    return applyInventorySalePlan(roomState, person, plan, { title: "💰 판매 완료", emptyText: "선택한 아이템 중 판매 가능한 항목이 없습니다." });
+  }
+
   const parsed = parseInventoryActionText(text, /^\/판매\s*/i);
   if (!parsed?.selector) {
     return ["❌ 명령어를 확인해 주세요.", "사용 예시:", " /판매 1", " /판매 낡은검", " /판매 10000 2"].join("\n");
   }
-  const person = ensurePerson(roomState, sender);
   const row = resolveInventoryRow(roomState, person, parsed.selector);
   if (!row) return "❌ 판매할 아이템을 찾지 못했습니다. /판매목록 으로 번호를 확인해 주세요.";
-  const product = inventoryProductById(roomState, row.productId);
-  const unitPrice = productSellPrice(product);
-  if (!unitPrice) return "⚠️ 판매할 수 없는 아이템입니다.";
-  if (isEquippedProduct(person, row.productId) && inventoryQuantity(person, row.productId) <= parsed.quantity) {
+  const plan = inventorySalePlan(roomState, person, [row], { mode: "선택", quantity: parsed.quantity });
+  if (!plan.items.length && plan.excluded["장착중"]) {
     return ["⚠️ 장착 중인 장비입니다.", "먼저 다른 장비를 장착하거나 중복 수량만 판매해 주세요.", "예시: /자동장착 공격"].join("\n");
   }
-  const nextQuantity = removeInventory(person, row.productId, parsed.quantity);
-  if (nextQuantity < 0) return "⚠️ 판매할 아이템 수량이 부족합니다.";
-  const totalPrice = unitPrice * parsed.quantity;
-  person.points += totalPrice;
-  recordShopTransaction(roomState, {
-    type: "sell",
-    productId: row.productId,
-    productName: product.name || `상품 #${row.productId}`,
-    quantity: parsed.quantity,
-    unitPrice,
-    totalPrice,
-    from: person.currentName,
-    to: person.currentName,
-    by: person.currentName
-  });
-  return [
-    "💰 판매 완료",
-    "",
-    `• 상품 : ${product.name || `상품 #${row.productId}`}`,
-    `• 수량 : ${parsed.quantity}개`,
-    `• 지급 포인트 : ${formatPoint(totalPrice)}`,
-    `• 남은 수량 : ${nextQuantity}개`,
-    `• 보유 포인트 : ${formatPoint(person.points)}`
-  ].join("\n");
+  if (!plan.items.length && plan.excluded["잠금"]) {
+    return ["⚠️ 잠금된 아이템입니다.", "판매하려면 /아이템잠금해제 번호 를 먼저 실행해 주세요.", "확인: /잠금목록"].join("\n");
+  }
+  return applyInventorySalePlan(roomState, person, plan, { title: "💰 판매 완료", emptyText: "선택한 아이템은 판매할 수 없습니다." });
 }
 
 function inventoryRows(roomState, person) {
@@ -7172,11 +7253,153 @@ function inventoryRows(roomState, person) {
         category: product?.category || "shop",
         rarity: product?.rarity || "",
         slot: product?.slot || "",
-        gradeLabel: product?.gradeLabel || ""
+        gradeLabel: product?.gradeLabel || "",
+        locked: isLockedInventoryProduct(person, productId)
       };
     })
     .filter((item) => item.quantity > 0)
     .sort((left, right) => left.productId - right.productId);
+}
+
+function inventorySaleModeFromText(text = "") {
+  const body = compactSpaces(text);
+  const aliases = {
+    "일반": "일반",
+    "중복": "중복",
+    "재료": "재료",
+    "전리품": "재료",
+    "물고기": "물고기",
+    "생선": "물고기"
+  };
+  return aliases[body] || "";
+}
+
+function saleModeMatchesRow(row, mode) {
+  if (mode === "중복") return true;
+  if (mode === "재료") return row.category === "rpg_material" || row.category === "explore";
+  if (mode === "물고기") return row.category === "fish" || isFishProductId(row.productId);
+  if (mode === "일반") {
+    return row.rarity === "common"
+      || row.gradeLabel === "일반"
+      || row.category === "fish"
+      || row.category === "rpg_material"
+      || row.category === "explore";
+  }
+  return true;
+}
+
+function saleProtectedReason(person, row, product) {
+  if (!productSellPrice(product)) return "판매불가";
+  if (isLockedInventoryProduct(person, row.productId)) return "잠금";
+  if (["bait", "pet"].includes(row.category)) return "보호";
+  return "";
+}
+
+function inventorySalePlan(roomState, person, rows, options = {}) {
+  const mode = options.mode || "선택";
+  const requestedQuantity = Math.max(1, Math.trunc(Number(options.quantity || 1)));
+  const items = [];
+  const excluded = {};
+  const sourceRows = rows || inventoryRows(roomState, person).filter((row) => saleModeMatchesRow(row, mode));
+  for (const row of sourceRows) {
+    const product = inventoryProductById(roomState, row.productId);
+    const reason = saleProtectedReason(person, row, product);
+    const equippedReserve = isEquippedProduct(person, row.productId) ? 1 : 0;
+    const baseSellable = Math.max(0, inventoryQuantity(person, row.productId) - equippedReserve);
+    const quantity = mode === "중복"
+      ? Math.max(0, baseSellable - 1)
+      : Math.min(baseSellable, options.quantity === Infinity ? baseSellable : requestedQuantity);
+    if (reason || !quantity) {
+      const excludedReason = reason || (equippedReserve ? "장착중" : "수량부족");
+      excluded[excludedReason] = (excluded[excludedReason] || 0) + 1;
+      continue;
+    }
+    const unitPrice = productSellPrice(product);
+    items.push({
+      productId: row.productId,
+      name: product?.name || row.name,
+      quantity,
+      unitPrice,
+      totalPrice: unitPrice * quantity
+    });
+  }
+  return {
+    mode,
+    items,
+    excluded,
+    totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0),
+    totalPrice: items.reduce((sum, item) => sum + item.totalPrice, 0)
+  };
+}
+
+function excludedSaleText(excluded = {}) {
+  const text = Object.entries(excluded)
+    .filter(([, count]) => count > 0)
+    .map(([reason, count]) => `${reason} ${count}개`)
+    .join(", ");
+  return text || "없음";
+}
+
+function inventorySalePlanText(plan, options = {}) {
+  const title = options.title || "💰 판매 미리보기";
+  const action = options.action || `/판매 ${plan.mode}`;
+  const previewItems = plan.items.slice(0, 4).map((item) => `${item.name} x${item.quantity}`);
+  return [
+    title,
+    "",
+    `• 대상 : ${plan.mode} ${plan.totalQuantity}개`,
+    `• 예상 획득 : ${formatPoint(plan.totalPrice)}`,
+    previewItems.length ? `• 주요 아이템 : ${previewItems.join(", ")}` : "",
+    `• 제외 : ${excludedSaleText(plan.excluded)}`,
+    "",
+    `실행: ${action}`
+  ].filter(Boolean).join("\n");
+}
+
+function applyInventorySalePlan(roomState, person, plan, options = {}) {
+  if (!plan.items.length) {
+    return [
+      options.title || "💰 판매 결과",
+      "",
+      options.emptyText || `${plan.mode} 조건에 맞는 판매 가능 아이템이 없습니다.`,
+      `제외: ${excludedSaleText(plan.excluded)}`
+    ].join("\n");
+  }
+  for (const item of plan.items) {
+    removeInventory(person, item.productId, item.quantity);
+    recordShopTransaction(roomState, {
+      type: "sell",
+      productId: item.productId,
+      productName: item.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+      from: person.currentName,
+      to: person.currentName,
+      by: person.currentName
+    });
+  }
+  person.points += plan.totalPrice;
+  const previewItems = plan.items.slice(0, 4).map((item) => `${item.name} x${item.quantity}`);
+  return [
+    options.title || "💰 판매 완료",
+    "",
+    `• 방식 : ${plan.mode}`,
+    `• 판매 수량 : ${plan.totalQuantity}개`,
+    `• 지급 포인트 : ${formatPoint(plan.totalPrice)}`,
+    previewItems.length ? `• 주요 아이템 : ${previewItems.join(", ")}` : "",
+    `• 제외 : ${excludedSaleText(plan.excluded)}`,
+    `• 보유 포인트 : ${formatPoint(person.points)}`
+  ].filter(Boolean).join("\n");
+}
+
+function executeInventorySaleMode(roomState, person, mode, options = {}) {
+  const rows = inventoryRows(roomState, person).filter((row) => saleModeMatchesRow(row, mode));
+  const plan = inventorySalePlan(roomState, person, rows, { mode, quantity: Infinity });
+  return applyInventorySalePlan(roomState, person, plan, {
+    title: options.title || "💰 일괄판매 완료",
+    emptyText: `${mode} 조건에 맞는 판매 가능 아이템이 없습니다.`
+  });
 }
 
 function inventoryCommand(roomState, sender, text) {
@@ -7210,7 +7433,7 @@ function inventoryCommand(roomState, sender, text) {
   return [
     `🎒 ${person.currentName}님의 ${isItemCommand ? "보유 아이템" : "가방"} ${currentPage}/${totalPages}`,
     "",
-    ...displayRows.map((item) => `${item.selectNo}. ${item.name} x ${item.quantity} ${itemIcon(item)} / 판매가 ${formatPoint(item.sellPrice)}`),
+    ...displayRows.map((item) => `${item.selectNo}. ${item.name} x ${item.quantity} ${itemIcon(item)} / 판매가 ${formatPoint(item.sellPrice)}${item.locked ? " / 잠금" : ""}`),
     "",
     "자세히 보기: /아이템상세 번호",
     currentPage < totalPages ? "다음 페이지: /아이템 다음" : "판매 예시: /판매 1"
@@ -7231,6 +7454,7 @@ function itemDetailCommand(roomState, sender, text) {
     "",
     `${itemIcon(product)} ${product?.name || row.name} x${row.quantity}`,
     `판매가: ${formatPoint(row.sellPrice)}`,
+    `관리번호: ${row.productId}`,
     slot ? `부위: ${RPG_EQUIPMENT_SLOT_LABELS[slot] || "장비"}` : `분류: ${product?.category || row.category}`,
     product?.gradeLabel ? `등급: ${product.gradeLabel}` : "",
     product?.setName ? `세트: ${product.setName}` : "",
@@ -7251,57 +7475,75 @@ function saleListCommand(roomState, sender, text) {
   return [
     `💰 판매 목록 ${currentPage}/${totalPages}`,
     "",
-    ...displayRows.map((item) => `${item.selectNo}. ${item.name} x ${item.quantity} ${itemIcon(item)} / ${formatPoint(item.sellPrice)}${isEquippedProduct(person, item.productId) ? " / 장착중" : ""}`),
+    ...displayRows.map((item) => `${item.selectNo}. ${item.name} x ${item.quantity} ${itemIcon(item)} / ${formatPoint(item.sellPrice)}${isEquippedProduct(person, item.productId) ? " / 장착중" : ""}${item.locked ? " / 잠금" : ""}`),
     "",
     "판매: /판매 1",
-    currentPage < totalPages ? "다음: /판매목록 다음" : "중복 판매: /일괄판매 중복"
+    currentPage < totalPages ? "다음: /판매목록 다음" : "정리: /판매미리보기 중복"
   ].join("\n");
 }
 
 function bulkSellCommand(roomState, sender, text) {
   const mode = compactSpaces(text.replace(/^\/일괄판매\s*/i, "")) || "중복";
-  if (!["일반", "중복"].includes(mode)) return "❌ 사용 예시:\n /일괄판매 일반\n /일괄판매 중복";
+  if (!["일반", "중복", "재료", "물고기"].includes(mode)) return "❌ 사용 예시:\n /일괄판매 일반\n /일괄판매 중복\n /일괄판매 재료\n /일괄판매 물고기";
   const person = ensurePerson(roomState, sender);
-  const rows = inventoryRows(roomState, person);
-  let totalPrice = 0;
-  let soldCount = 0;
-  const soldNames = [];
-  for (const row of rows) {
-    const product = inventoryProductById(roomState, row.productId);
-    const unitPrice = productSellPrice(product);
-    if (!unitPrice || ["bait", "pet"].includes(row.category)) continue;
-    const equippedReserve = isEquippedProduct(person, row.productId) ? 1 : 0;
-    const sellableQuantity = Math.max(0, inventoryQuantity(person, row.productId) - equippedReserve);
-    const isCommon = row.rarity === "common" || row.gradeLabel === "일반" || row.category === "fish" || row.category === "rpg_material" || row.category === "explore";
-    const quantity = mode === "중복" ? Math.max(0, sellableQuantity - 1) : (isCommon ? sellableQuantity : 0);
-    if (!quantity) continue;
-    removeInventory(person, row.productId, quantity);
-    const price = unitPrice * quantity;
-    totalPrice += price;
-    soldCount += quantity;
-    if (soldNames.length < 4) soldNames.push(`${row.name} x${quantity}`);
-    recordShopTransaction(roomState, {
-      type: "bulk_sell",
-      productId: row.productId,
-      productName: product?.name || row.name,
-      quantity,
-      unitPrice,
-      totalPrice: price,
-      from: person.currentName,
-      to: person.currentName,
-      by: person.currentName
-    });
-  }
-  if (!soldCount) return `💰 일괄판매 결과\n\n${mode} 조건에 맞는 판매 가능 아이템이 없습니다.`;
-  person.points += totalPrice;
+  return executeInventorySaleMode(roomState, person, mode, { title: "💰 일괄판매 완료" });
+}
+
+function salePreviewCommand(roomState, sender, text) {
+  const mode = inventorySaleModeFromText(text.replace(/^\/판매미리보기\s*/i, "")) || "중복";
+  const person = ensurePerson(roomState, sender);
+  const rows = inventoryRows(roomState, person).filter((row) => saleModeMatchesRow(row, mode));
+  const plan = inventorySalePlan(roomState, person, rows, { mode, quantity: Infinity });
+  return inventorySalePlanText(plan, { action: `/판매 ${mode}` });
+}
+
+function inventoryCleanupCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const duplicate = inventorySalePlan(roomState, person, inventoryRows(roomState, person).filter((row) => saleModeMatchesRow(row, "중복")), { mode: "중복", quantity: Infinity });
+  const material = inventorySalePlan(roomState, person, inventoryRows(roomState, person).filter((row) => saleModeMatchesRow(row, "재료")), { mode: "재료", quantity: Infinity });
+  const fish = inventorySalePlan(roomState, person, inventoryRows(roomState, person).filter((row) => saleModeMatchesRow(row, "물고기")), { mode: "물고기", quantity: Infinity });
   return [
-    "💰 일괄판매 완료",
+    "🎒 가방 정리",
     "",
-    `• 방식 : ${mode}`,
-    `• 판매 수량 : ${soldCount}개`,
-    `• 지급 포인트 : ${formatPoint(totalPrice)}`,
-    soldNames.length ? `• 주요 아이템 : ${soldNames.join(", ")}` : "",
-    `• 보유 포인트 : ${formatPoint(person.points)}`
+    "추천 정리:",
+    `1. 중복 아이템 판매 - ${duplicate.totalQuantity}개 / ${formatPoint(duplicate.totalPrice)}`,
+    `2. 재료 판매 - ${material.totalQuantity}개 / ${formatPoint(material.totalPrice)}`,
+    `3. 물고기 판매 - ${fish.totalQuantity}개 / ${formatPoint(fish.totalPrice)}`,
+    "",
+    "/판매미리보기 중복",
+    "/판매미리보기 재료",
+    "/판매미리보기 물고기",
+    "/아이템잠금 3"
+  ].join("\n");
+}
+
+function inventoryLockCommand(roomState, sender, text, locked) {
+  const person = ensurePerson(roomState, sender);
+  const commandPattern = locked ? /^\/아이템잠금\s*/i : /^\/아이템잠금해제\s*/i;
+  const selector = compactSpaces(text.replace(commandPattern, ""));
+  const row = resolveInventoryRow(roomState, person, selector);
+  if (!row) return "❌ 아이템을 찾지 못했습니다. /아이템 으로 번호를 확인해 주세요.";
+  setInventoryLock(person, row.productId, locked);
+  return [
+    locked ? "🔒 아이템 잠금" : "🔓 아이템 잠금 해제",
+    "",
+    `${row.name} x${row.quantity}`,
+    locked ? "일괄 판매와 정리 대상에서 제외됩니다." : "다시 판매와 정리 대상으로 사용할 수 있습니다.",
+    "확인: /잠금목록"
+  ].join("\n");
+}
+
+function inventoryLockListCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const rows = inventoryDisplayRows(roomState, person).filter((row) => isLockedInventoryProduct(person, row.productId));
+  if (!rows.length) return "🔒 잠금 목록\n\n잠금된 아이템이 없습니다.";
+  return [
+    `🔒 잠금 목록 ${rows.length}개`,
+    "",
+    ...rows.slice(0, 12).map((row) => `${row.selectNo}. ${row.name} x${row.quantity} ${itemIcon(row)}`),
+    rows.length > 12 ? `...외 ${rows.length - 12}개` : "",
+    "",
+    "해제: /아이템잠금해제 번호"
   ].filter(Boolean).join("\n");
 }
 
@@ -7343,10 +7585,11 @@ function aquariumCommand(roomState, sender, text) {
     `총 판매가: ${formatPoint(totalSellPrice)}`,
     `등급별: ${gradeLine}`,
     "",
-    ...fishRows.slice(0, 20).map((item) => `${item.productId}. ${item.name} x ${item.quantity} / 판매가: ${formatPoint(item.sellPrice)}`),
+    ...fishRows.slice(0, 20).map((item, index) => `${index + 1}. ${item.name} x ${item.quantity} / 판매가: ${formatPoint(item.sellPrice)}`),
     fishRows.length > 20 ? `...외 ${fishRows.length - 20}종` : "",
     "",
-    "/판매 번호 수량 으로 물고기를 포인트로 판매할 수 있습니다."
+    "판매: /판매 물고기",
+    "상세: /아이템상세 번호"
   ].filter((line) => line !== "").join("\n");
 }
 
@@ -7779,9 +8022,9 @@ function fishingGameCommand(roomState, sender) {
     "낚시 결과",
     `시즌: ${settings.seasonName}`,
     "",
-    `${person.currentName}님이 #${item.id} ${item.name}을(를) 낚았습니다.`,
+    `${person.currentName}님이 물고기를 낚았습니다.`,
     `가방에 보관: ${item.name} x ${itemQuantity}`,
-    `판매가 : ${formatPoint(item.sellPrice)}`,
+    `판매가: ${formatPoint(item.sellPrice)}`,
     `남은 미끼 : ${inventoryQuantity(person, BAIT_ITEM_ID)}개`
   ].join("\n");
 }
@@ -7809,9 +8052,9 @@ function exploreGameCommand(roomState, sender) {
     "탐험 결과",
     `시즌: ${settings.seasonName}`,
     "",
-    `${person.currentName}님이 #${item.id} ${item.name}을(를) 발견했습니다.`,
+    `${person.currentName}님이 전리품을 발견했습니다.`,
     `가방에 보관: ${item.name} x ${itemQuantity}`,
-    `판매가 : ${formatPoint(item.sellPrice)}`
+    `판매가: ${formatPoint(item.sellPrice)}`
   ].join("\n");
 }
 
@@ -7830,7 +8073,7 @@ function dungeonListCommand() {
   return [
     "픽셀곰 던전 목록",
     "",
-    ...DUNGEON_CONFIGS.map((config) => `• ${config.title}: 꽝 ${Math.round(config.blankChance * 100)}%, 재료 #${RPG_ITEM_ID_START + config.itemStart}~#${RPG_ITEM_ID_START + config.itemEnd}`),
+    ...DUNGEON_CONFIGS.map((config) => `• ${config.title}: 꽝 ${Math.round(config.blankChance * 100)}%, ${config.key === "beginner" ? "기본 재료 중심" : config.key === "middle" ? "중급 재료와 희귀 재료" : "상급 재료와 고급 전리품"}`),
     "",
     "/던전 또는 /던전 중급 으로 입장합니다.",
     "/대장간 에서 재료 제작식을 확인할 수 있습니다."
@@ -7876,9 +8119,11 @@ function dungeonCommand(roomState, sender, text) {
   return [
     "던전 결과",
     "",
-    `${person.currentName}님이 ${config.title}에서 #${item.id} ${item.name}을(를) 획득했습니다.`,
+    `${person.currentName}님이 ${config.title}에서 재료를 획득했습니다.`,
     `가방에 보관: ${item.name} x ${quantity}`,
-    `판매가 : ${formatPoint(item.sellPrice)}`
+    `판매가: ${formatPoint(item.sellPrice)}`,
+    "판매: /판매 1",
+    "상세: /아이템상세 1"
   ].join("\n");
 }
 
@@ -8243,7 +8488,7 @@ function rpgSetItemsCommand() {
   for (const [setId, set] of Object.entries(RPG_EQUIPMENT_SETS)) {
     const pieces = set.pieces.map((id) => {
       const product = systemProductById(id);
-      return `#${id} ${product?.name || id}`;
+      return product?.name || String(id);
     }).join(", ");
     lines.push(`• ${set.name}: ${set.description}`);
     lines.push(`  구성: ${pieces}`);
@@ -9068,7 +9313,7 @@ function commandFeatureKey(command) {
   if (/^\/(?:프로필|프로칠|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
   if (/^\/(?:게임|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|던전|던전목록|대장간|제작가능|제작|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터훈련|몬스터전투|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
-  if (/^\/(?:상점|구매|구매내역|가방|아이템|보유아이템|아이템상세|판매목록|일괄판매|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
+  if (/^\/(?:상점|구매|구매내역|가방|가방정리|아이템|보유아이템|아이템상세|판매목록|판매미리보기|일괄판매|아이템잠금|아이템잠금해제|잠금목록|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
   return "";
 }
@@ -9117,7 +9362,7 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/미출석", "출석", "오늘 미출석 참여자 확인", { requiresFeature: "attendance" }),
   registryEntry("/출석순위", "출석", "누적 출석 순위", { aliases: ["/출석 순위"], requiresFeature: "rankings", searchableKeywords: ["랭킹"] }),
   registryEntry("/포인트", "포인트", "내 포인트 확인", { aliases: ["/내포인트"], requiresFeature: "points" }),
-  registryEntry("/내정보", "포인트", "레벨, 포인트, 채팅 정보 확인", { aliases: ["/레벨"], requiresFeature: "points" }),
+  registryEntry("/내정보", "포인트", "레벨, 포인트, 채팅 정보 확인", { aliases: ["/레벨", "/정보"], requiresFeature: "points" }),
   registryEntry("/좋아요", "포인트", "포인트로 하트 보내기", { examples: ["/좋아요 닉네임 10"], requiresFeature: "points", searchableKeywords: ["하트"] }),
   registryEntry("/응원", "포인트", "포인트 응원 카드 보내기", { examples: ["/응원 닉네임 메시지"], requiresFeature: "points" }),
   registryEntry("/뽑기", "게임", "공개 확률 포인트 뽑기", { aliases: ["/확률뽑기"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "랜덤"] }),
@@ -9131,14 +9376,17 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/상점", "상점/가방", "구매 가능한 아이템 확인", { requiresFeature: "shop" }),
   registryEntry("/구매", "상점/가방", "포인트로 아이템 구매", { examples: ["/구매 1", "/구매 1 10"], requiresFeature: "shop" }),
   registryEntry("/가방", "상점/가방", "내 아이템 확인", { aliases: ["/아이템", "/보유아이템"], examples: ["/아이템", "/아이템 다음"], requiresFeature: "shop" }),
+  registryEntry("/가방정리", "상점/가방", "가방 정리와 판매 추천", { examples: ["/가방정리"], requiresFeature: "shop" }),
   registryEntry("/아이템상세", "상점/가방", "짧은 번호로 아이템 상세 확인", { examples: ["/아이템상세 2"], requiresFeature: "shop" }),
   registryEntry("/판매목록", "상점/가방", "판매 가능한 보유 아이템 확인", { examples: ["/판매목록"], requiresFeature: "shop" }),
-  registryEntry("/일괄판매", "상점/가방", "일반 또는 중복 아이템 일괄 판매", { examples: ["/일괄판매 일반", "/일괄판매 중복"], requiresFeature: "shop" }),
+  registryEntry("/판매미리보기", "상점/가방", "일괄 판매 전 예상 포인트 확인", { examples: ["/판매미리보기 중복", "/판매미리보기 재료"], requiresFeature: "shop" }),
+  registryEntry("/일괄판매", "상점/가방", "일반, 중복, 재료, 물고기 일괄 판매", { examples: ["/일괄판매 일반", "/일괄판매 중복"], requiresFeature: "shop" }),
+  registryEntry("/아이템잠금", "상점/가방", "중요 아이템 판매 잠금", { aliases: ["/아이템잠금해제", "/잠금목록"], examples: ["/아이템잠금 3", "/아이템잠금해제 3"], requiresFeature: "shop" }),
   registryEntry("/사용", "상점/가방", "아이템 사용", { examples: ["/사용 1"], requiresFeature: "shop" }),
   registryEntry("/가방선물", "상점/가방", "아이템 선물", { examples: ["/가방선물 닉네임 1 1"], requiresFeature: "shop" }),
   registryEntry("/판매", "상점/가방", "가방 아이템을 포인트로 판매", { examples: ["/판매 10000 1"], requiresFeature: "shop" }),
   registryEntry("/구매내역", "상점/가방", "구매와 아이템 내역", { requiresFeature: "shop" }),
-  registryEntry("/게임", "게임", "미니게임 안내", { requiresFeature: "games" }),
+  registryEntry("/게임", "게임", "미니게임 안내", { aliases: ["/게임명령어"], requiresFeature: "games" }),
   registryEntry("/주사위", "게임", "주사위 보상 게임", { requiresFeature: "games" }),
   registryEntry("/낚시", "게임", "낚시 보상 게임", { requiresFeature: "games" }),
   registryEntry("/탐험", "게임", "탐험 보상 게임", { requiresFeature: "games" }),
@@ -9193,6 +9441,35 @@ function resolveCommandRegistryItem(command, compactCommand = "") {
     || (item.aliases || []).includes(token)
     || (raw && (item.command === raw || (item.aliases || []).includes(raw)))
   )) || null;
+}
+
+function responseAlreadyDecorated(line = "") {
+  const text = line.trim();
+  return COMMAND_RESPONSE_KNOWN_PREFIXES.some((prefix) => text.startsWith(prefix));
+}
+
+function commandReplyToneIcon(reply = "") {
+  const text = compactSpaces(reply).slice(0, 160);
+  if (/오류|실패|찾지 못|없습니다|잘못|불가|차단|권한|만료/.test(text)) return "❌";
+  if (/부족|쿨타임|대기|확인|주의|장착 중|잠금/.test(text)) return "⚠️";
+  if (/완료|성공|획득|지급|저장|등록|해제/.test(text)) return "✅";
+  return "";
+}
+
+function decorateCommandReplyFromMessage(message = "", reply = "") {
+  if (!reply || typeof reply !== "string") return reply;
+  const parsed = parseBotCommand(normalizeText(message));
+  const compactCommand = compactSpaces(message);
+  const command = parsed.command || normalizeCustomCommandTrigger(compactCommand);
+  if (!command || COMMAND_RESPONSE_ICON_EXEMPT_COMMANDS.has(command)) return reply;
+  const registryItem = resolveCommandRegistryItem(command, compactCommand);
+  if (!registryItem) return reply;
+  const lines = reply.split("\n");
+  const index = lines.findIndex((line) => line.trim());
+  if (index < 0 || responseAlreadyDecorated(lines[index])) return reply;
+  const icon = commandReplyToneIcon(reply) || COMMAND_RESPONSE_ICON_BY_CATEGORY[registryItem.category] || "📘";
+  lines[index] = `${icon} ${lines[index].trim()}`;
+  return lines.join("\n");
 }
 
 function commandAvailability(item, roomState = null, sender = "", options = {}) {
@@ -13857,9 +14134,14 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/구매") return purchaseItemCommand(roomState, sender, text);
   if (command === "/구매내역") return purchaseHistoryCommand(roomState, sender);
   if (command === "/가방" || command === "/아이템" || command === "/보유아이템") return inventoryCommand(roomState, sender, text);
+  if (command === "/가방정리") return inventoryCleanupCommand(roomState, sender);
   if (command === "/아이템상세") return itemDetailCommand(roomState, sender, text);
   if (command === "/판매목록") return saleListCommand(roomState, sender, text);
+  if (command === "/판매미리보기") return salePreviewCommand(roomState, sender, text);
   if (command === "/일괄판매") return bulkSellCommand(roomState, sender, text);
+  if (command === "/아이템잠금") return inventoryLockCommand(roomState, sender, text, true);
+  if (command === "/아이템잠금해제") return inventoryLockCommand(roomState, sender, text, false);
+  if (command === "/잠금목록") return inventoryLockListCommand(roomState, sender);
   if (command === "/사용") return useItemCommand(roomState, sender, text);
   if (command === "/가방선물") return giftItemCommand(roomState, sender, text);
   if (command === "/판매") return sellItemCommand(roomState, sender, text);
@@ -13926,7 +14208,7 @@ async function handleMessage(state, room, sender, message, identity = {}, detect
   const activityReply = recordActivity(roomState, sender, identity.senderId, { firstChatNotice: !isCommand });
   if (isCommand) {
     const reply = await handleCommand(state, room, sender, message, identity);
-    return appendOperationalNotice(roomState, sender, text, reply);
+    return appendOperationalNotice(roomState, sender, text, decorateCommandReplyFromMessage(message, reply));
   }
 
   recordMentionMessages(roomState, sender, text);
@@ -13941,7 +14223,7 @@ export async function handleSkill(payload) {
   const roomState = ensureRoom(state, room);
   const reply = await handleCommand(state, room, sender, utterance);
   await saveState(state);
-  return kakaoText(reply || "");
+  return kakaoText(decorateCommandReplyFromMessage(utterance, reply) || "");
 }
 
 export async function handleChatEvent(payload) {

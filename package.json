@@ -1,6 +1,6 @@
 {
   "name": "kakao-room-ops-bot",
-  "version": "0.5.07",
+  "version": "0.5.08",
   "private": true,
   "type": "module",
   "scripts": {
