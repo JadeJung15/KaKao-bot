@@ -5320,6 +5320,20 @@ try {
   assert.match(autoHuntNoTicket.json.reply, /(부족|필요)/);
   assert.match(autoHuntNoTicket.json.reply, /(구매|획득)/);
 
+  const customTicketAdd = await chat("/상점추가 자동사냥권 10 RPG 자동사냥 티켓", "관리자");
+  assert.match(customTicketAdd.json.reply, /상점 상품이 추가/);
+  const customTicketMatch = customTicketAdd.json.reply.match(/\n([0-9]+)\. 자동사냥권/);
+  assert.ok(customTicketMatch);
+  const customTicketId = Number(customTicketMatch[1]);
+  await chat("/포인트지급 상점자동러 여 1000", "관리자");
+  const customTicketBuy = await chat(`/구매 ${customTicketId} 2`, "상점자동러 여");
+  assert.match(customTicketBuy.json.reply, /자동사냥권 x 2/);
+  const customTicketAutoHunt = await chat("/자동사냥 초급", "상점자동러 여");
+  assert.match(customTicketAutoHunt.json.reply, /자동사냥 결과/);
+  assert.match(customTicketAutoHunt.json.reply, /10회/);
+  assert.match(customTicketAutoHunt.json.reply, /남은 자동사냥권: 1장/);
+  assert.doesNotMatch(customTicketAutoHunt.json.reply, /자동사냥권이 필요합니다/);
+
   const autoHuntTicketGrant = await chat("/아이템지급 자동러 여 9303 1", "관리자");
   assert.match(autoHuntTicketGrant.json.reply, /자동사냥권/);
   const autoHuntRun = await chat("/자동사냥 중급", "자동러 여");

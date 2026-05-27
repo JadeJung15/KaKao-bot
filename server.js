@@ -7294,6 +7294,40 @@ function removeInventory(person, productId, quantity) {
   return next;
 }
 
+function isAutoHuntTicketProduct(product) {
+  if (!product) return false;
+  if (Number(product.id) === AUTO_HUNT_TICKET_ITEM_ID) return true;
+  if (product.category === "rpg_ticket") return true;
+  return keyFor(product.name || "") === keyFor("자동사냥권");
+}
+
+function autoHuntTicketRows(roomState, person) {
+  normalizePersonState(person);
+  return Object.entries(person.inventory || {})
+    .map(([productId, quantity]) => ({
+      productId,
+      quantity: Math.max(0, Math.trunc(Number(quantity || 0))),
+      product: inventoryProductById(roomState, productId)
+    }))
+    .filter((row) => row.quantity > 0 && isAutoHuntTicketProduct(row.product))
+    .sort((left, right) => {
+      const leftSystem = Number(left.productId) === AUTO_HUNT_TICKET_ITEM_ID ? 0 : 1;
+      const rightSystem = Number(right.productId) === AUTO_HUNT_TICKET_ITEM_ID ? 0 : 1;
+      return leftSystem - rightSystem || Number(left.productId) - Number(right.productId);
+    });
+}
+
+function autoHuntTicketQuantity(roomState, person) {
+  return autoHuntTicketRows(roomState, person).reduce((sum, row) => sum + row.quantity, 0);
+}
+
+function consumeAutoHuntTicket(roomState, person) {
+  const row = autoHuntTicketRows(roomState, person)[0];
+  if (!row) return null;
+  removeInventory(person, row.productId, 1);
+  return row;
+}
+
 function parseProductIdFromCommand(text, pattern) {
   const body = compactSpaces(text.replace(pattern, ""));
   const productId = Math.trunc(Number(body));
@@ -8498,18 +8532,18 @@ function createPendingRpgReward(person, config) {
 
 function autoHuntDungeonCommand(roomState, sender, text) {
   const person = ensurePerson(roomState, sender);
-  const ticketCount = inventoryQuantity(person, AUTO_HUNT_TICKET_ITEM_ID);
+  const ticketCount = autoHuntTicketQuantity(roomState, person);
   if (ticketCount < 1) {
     return [
       "🎫 자동사냥권이 필요합니다.",
       "",
       "자동사냥은 자동사냥권 1장으로 던전 10회를 요약 처리합니다.",
-      "구매/획득: 이벤트 보상, 관리자 지급, 방 상점 등록을 이용해 주세요.",
+      "구매/획득: 방 상점 구매, 이벤트 보상, 관리자 지급을 이용해 주세요.",
       "직접 플레이: /던전"
     ].join("\n");
   }
   const config = dungeonConfigFromText(text.replace(/^\/자동사냥\s*/i, "/던전 "));
-  removeInventory(person, AUTO_HUNT_TICKET_ITEM_ID, 1);
+  const consumedTicket = consumeAutoHuntTicket(roomState, person);
   person.rpgAutoHunt ||= { date: kstDateKey(), count: 0 };
   if (person.rpgAutoHunt.date !== kstDateKey()) person.rpgAutoHunt = { date: kstDateKey(), count: 0 };
   person.rpgAutoHunt.count += 1;
@@ -8540,8 +8574,8 @@ function autoHuntDungeonCommand(roomState, sender, text) {
   });
   recordShopTransaction(roomState, {
     type: "rpg_auto_hunt",
-    productId: AUTO_HUNT_TICKET_ITEM_ID,
-    productName: "자동사냥권",
+    productId: consumedTicket?.productId || AUTO_HUNT_TICKET_ITEM_ID,
+    productName: consumedTicket?.product?.name || "자동사냥권",
     quantity: 1,
     unitPrice: 0,
     totalPrice: totalSell,
@@ -8556,7 +8590,7 @@ function autoHuntDungeonCommand(roomState, sender, text) {
     `희귀 이상: ${rareCount}개`,
     `예상 판매가: ${formatPoint(totalSell)}`,
     `제작 가능: ${rpgCraftableCount(person)}개`,
-    `남은 자동사냥권: ${inventoryQuantity(person, AUTO_HUNT_TICKET_ITEM_ID)}장`
+    `남은 자동사냥권: ${autoHuntTicketQuantity(roomState, person)}장`
   ].join("\n");
 }
 
@@ -8594,7 +8628,7 @@ function rewardChoiceCommand(roomState, sender, text) {
 function rpgAdventureHubCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
   const displayName = displayNameForPerson(roomState, person, sender);
-  const ticketCount = inventoryQuantity(person, AUTO_HUNT_TICKET_ITEM_ID);
+  const ticketCount = autoHuntTicketQuantity(roomState, person);
   const craftableCount = rpgCraftableCount(person);
   const equipped = rpgEquippedProductsBySlot(person);
   const enhanceTarget = equipped.weapon || equipped.armor || equipped.accessory;
