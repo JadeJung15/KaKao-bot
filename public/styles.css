@@ -2566,6 +2566,52 @@ a {
   font-weight: 900;
 }
 
+.beginner-flow {
+  display: grid;
+  gap: 1rem;
+  margin: 18px 0 0;
+  padding: 1.25rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.beginner-flow-head {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.beginner-flow-head h2,
+.beginner-flow-head p {
+  margin: 0;
+}
+
+.beginner-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.beginner-flow-grid article {
+  display: grid;
+  gap: 0.65rem;
+  align-content: start;
+  padding: 1rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.beginner-flow-grid strong {
+  font-size: 1rem;
+}
+
+.beginner-flow-grid span,
+.beginner-flow-grid small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .command-store-modes {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4162,6 +4208,7 @@ a {
   .buyer-guide-grid,
   .command-store-hero,
   .command-store-steps,
+  .beginner-flow-grid,
   .command-store-modes,
   .command-store-toolbar,
   .command-store-summary,

@@ -34,6 +34,11 @@
   const favorites = new Set(readList("pixgomCommandFavorites"));
   const cart = new Set(readList("pixgomCommandCart"));
   const packCart = new Set(readList("pixgomCommandPackCart"));
+  const beginnerFlow = [
+    { id: "game-chance", label: "게임부터 즐기기", recommend: "/추천 게임" },
+    { id: "ops-core", label: "운영부터 정리", recommend: "/추천 운영" },
+    { id: "shop-inventory", label: "가방 정리와 판매", recommend: "/추천 정리" }
+  ];
 
   function readList(key) {
     try {
@@ -871,6 +876,15 @@
 
   summary.addEventListener("click", handleCartActions);
   cartPanel?.addEventListener("click", handleCartActions);
+
+  document.querySelector("[data-beginner-flow]")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-beginner-pack]");
+    if (!button) return;
+    const flow = beginnerFlow.find((item) => item.id === button.dataset.beginnerPack);
+    toggleSet(packCart, button.dataset.beginnerPack, "pixgomCommandPackCart");
+    storeMode = "cart";
+    statusBox.textContent = `${flow?.label || "추천 팩"}을 장바구니에 담았습니다. 카톡에서는 ${flow?.recommend || "/추천"}으로 다음 명령어를 확인하세요.`;
+  });
 
   modeBar?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-store-mode]");

@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.11";
+export const APP_VERSION = "0.5.12";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -250,7 +250,10 @@ export const FEATURES = [
   "command-discovery-hub",
   "starter-tutorial-command",
   "personalized-command-recommendations",
-  "alias-preferred-display-names"
+  "alias-preferred-display-names",
+  "beginner-command-store-flow",
+  "segmented-command-recommendations",
+  "log-based-command-top"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -9965,33 +9968,113 @@ function starterTutorialText(roomState = null, sender = "") {
   ].join("\n");
 }
 
-function commandRecommendationText(roomState = null, sender = "") {
+const COMMAND_RECOMMENDATION_PRESETS = Object.freeze({
+  default: {
+    label: "기본",
+    findHint: "/찾기 게임, /찾기 가방",
+    commands: [
+      { command: "/출석", reason: "오늘 보상 받기", feature: "attendance" },
+      { command: "/포인트", reason: "현재 포인트 확인", feature: "points" },
+      { command: "/게임", reason: "즐길 콘텐츠 보기", feature: "games" },
+      { command: "/가방정리", reason: "아이템 판매/잠금 추천", feature: "shop" },
+      { command: "/점메추", reason: "점심 메뉴 빠르게 추천" }
+    ]
+  },
+  game: {
+    label: "게임",
+    findHint: "/찾기 게임, /게임팩도움말",
+    commands: [
+      { command: "/주사위", reason: "가볍게 포인트 게임 시작", feature: "games" },
+      { command: "/낚시", reason: "미끼로 물고기 수집", feature: "games" },
+      { command: "/던전", reason: "RPG 재료와 장비 보상", feature: "games" },
+      { command: "/몬스터탐험", reason: "픽셀몬스터 수집 시작", feature: "games" },
+      { command: "/펫", reason: "펫 상태 확인", feature: "games" },
+      { command: "/점메추", reason: "채팅 참여형 유틸" }
+    ],
+    topCommands: ["/주사위", "/낚시", "/던전", "/탐험", "/몬스터탐험", "/포획", "/펫", "/점메추"]
+  },
+  ops: {
+    label: "운영",
+    findHint: "/찾기 운영, /명령어팩목록",
+    commands: [
+      { command: "/상태", reason: "서버 연결과 방 상태 확인" },
+      { command: "/명령어팩목록", reason: "장착된 팩 확인" },
+      { command: "/기능목록", reason: "방 기능 ON/OFF 점검" },
+      { command: "/명령어설치목록", reason: "설치 명령어와 삭제 코드 확인" },
+      { command: "/신고목록", reason: "접수된 신고 확인" },
+      { command: "/방정보", reason: "라이선스와 방 설정 확인" }
+    ],
+    adminOnly: true,
+    topCommands: ["/상태", "/명령어팩목록", "/기능목록", "/명령어설치목록", "/신고목록", "/방정보", "/관리자목록"]
+  },
+  cleanup: {
+    label: "정리",
+    findHint: "/찾기 판매, /찾기 가방",
+    commands: [
+      { command: "/가방정리", reason: "판매/잠금 정리 추천", feature: "shop" },
+      { command: "/판매미리보기 중복", reason: "중복 아이템 예상 판매액 확인", feature: "shop" },
+      { command: "/판매미리보기 재료", reason: "재료 일괄 판매 전 확인", feature: "shop" },
+      { command: "/잠금목록", reason: "보호 중인 아이템 확인", feature: "shop" },
+      { command: "/아이템", reason: "짧은 번호로 보유품 확인", feature: "shop" },
+      { command: "/구매내역", reason: "구매/선물 내역 확인", feature: "shop" }
+    ],
+    topCommands: ["/가방정리", "/판매미리보기", "/판매", "/잠금목록", "/아이템", "/보유아이템", "/구매내역"]
+  }
+});
+
+function recommendationPresetFromText(text = "") {
+  const key = keyFor(text);
+  if (!key) return COMMAND_RECOMMENDATION_PRESETS.default;
+  if (["게임", "game", "games", "rpg", "몬스터", "펫"].includes(key)) return COMMAND_RECOMMENDATION_PRESETS.game;
+  if (["운영", "관리", "관리자", "ops", "admin", "operation"].includes(key)) return COMMAND_RECOMMENDATION_PRESETS.ops;
+  if (["정리", "가방", "판매", "cleanup", "clean", "inventory", "shop"].includes(key)) return COMMAND_RECOMMENDATION_PRESETS.cleanup;
+  return COMMAND_RECOMMENDATION_PRESETS.default;
+}
+
+function recentTopCommandRows(roomState = {}, preset = COMMAND_RECOMMENDATION_PRESETS.default, limit = 5) {
+  const allowed = new Set(preset.topCommands || []);
+  const counts = new Map();
+  for (const log of (roomState.analyticsLogs || []).slice(-300)) {
+    const command = normalizeText(log.command || "");
+    if (!command || command === "/추천" || command === "/추천명령어") continue;
+    if (allowed.size && !allowed.has(command)) continue;
+    counts.set(command, (counts.get(command) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, limit)
+    .map(([command, count], index) => `${index + 1}. ${command} ${formatNumber(count)}회`);
+}
+
+function commandRecommendationText(roomState = null, sender = "", topicText = "") {
   const person = roomState && sender ? ensurePerson(roomState, sender) : null;
   const isAdminUser = roomState ? isAdmin(roomState, sender) : false;
-  const suggestions = [
-    { command: "/출석", reason: "오늘 보상 받기", feature: "attendance" },
-    { command: "/포인트", reason: "현재 포인트 확인", feature: "points" },
-    { command: "/게임", reason: "즐길 콘텐츠 보기", feature: "games" },
-    { command: "/가방정리", reason: "아이템 판매/잠금 추천", feature: "shop" },
-    { command: "/점메추", reason: "점심 메뉴 빠르게 추천" }
-  ];
+  const preset = recommendationPresetFromText(topicText);
+  const suggestions = [...preset.commands];
   if (person && Object.keys(person.inventory || {}).length) {
     suggestions.unshift({ command: "/판매미리보기 중복", reason: "중복 아이템 정리", feature: "shop" });
   }
-  if (isAdminUser) {
+  if (isAdminUser && preset === COMMAND_RECOMMENDATION_PRESETS.default) {
     suggestions.push({ command: "/명령어팩목록", reason: "장착된 팩 확인" });
     suggestions.push({ command: "/기능목록", reason: "방 기능 ON/OFF 확인" });
+  }
+  if (preset.adminOnly && !isAdminUser) {
+    suggestions.unshift({ command: "/상태", reason: "참여자가 확인 가능한 기본 상태" });
   }
   const lines = suggestions
     .filter((item) => !item.feature || !roomState || featureEnabled(roomState, item.feature))
     .slice(0, 7)
     .map((item, index) => `${index + 1}. ${item.command} - ${item.reason}`);
+  const topRows = roomState ? recentTopCommandRows(roomState, preset, 5) : [];
   return [
-    "✨ 추천 명령어",
+    `✨ 추천 명령어${preset.label === "기본" ? "" : `: ${preset.label}`}`,
     "",
     ...lines,
     "",
-    "더 찾기: /찾기 게임, /찾기 가방",
+    "많이 쓰는 명령어 TOP",
+    ...(topRows.length ? topRows : ["아직 기록 없음"]),
+    "",
+    `더 찾기: ${preset.findHint}`,
     "처음 안내: /시작"
   ].join("\n");
 }
@@ -14277,7 +14360,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/게임팩도움말") return gamePackHelpText(parsed.args.join(" "));
   if (command === "/메뉴" || command === "/처음") return commandDiscoveryHubText(roomState, sender);
   if (command === "/시작" || command === "/처음시작") return starterTutorialText(roomState, sender);
-  if (command === "/추천" || command === "/추천명령어") return commandRecommendationText(roomState, sender);
+  if (command === "/추천" || command === "/추천명령어") return commandRecommendationText(roomState, sender, parsed.args.join(" "));
   if (command === "/찾기") return commandFindText(roomState, sender, parsed.args.join(" "));
   if (command === "/명령어") return parsed.args.length ? commandFindText(roomState, sender, parsed.args.join(" ")) : commandDiscoveryHubText(roomState, sender);
   const registryItem = resolveCommandRegistryItem(command, compactCommand);

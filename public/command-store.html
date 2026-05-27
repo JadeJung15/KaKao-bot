@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>명령어 스토어 | 픽셀곰</title>
     <link rel="icon" href="/assets/pixgom-closeup.png" type="image/png">
-    <link rel="stylesheet" href="/styles.css?v=20260525-silent-auth">
+    <link rel="stylesheet" href="/styles.css?v=20260527-recommend-flow">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="sub-page command-store-page">
@@ -35,6 +35,34 @@
         <article><strong>2</strong><span>장바구니 담기</span></article>
         <article><strong>3</strong><span>카톡 설치 명령어 복사</span></article>
         <article><strong>4</strong><span>채팅방에서 /설치확인</span></article>
+      </section>
+
+      <section class="beginner-flow" data-beginner-flow aria-label="초보자 추천 흐름">
+        <div class="beginner-flow-head">
+          <p class="section-kicker">Beginner Flow</p>
+          <h2>초보자 추천 흐름</h2>
+          <p>무엇부터 설치할지 모르겠다면 목적을 먼저 고르고, 카톡에서는 /추천 게임, /추천 운영, /추천 정리로 다음 명령어를 확인하세요.</p>
+        </div>
+        <div class="beginner-flow-grid">
+          <article>
+            <strong>게임부터 즐기기</strong>
+            <span>주사위, 낚시, 던전, 펫 같은 참여형 콘텐츠를 먼저 켭니다.</span>
+            <button class="button button-secondary" type="button" data-beginner-pack="game-chance">게임팩 담기</button>
+            <small>채팅 추천: /추천 게임</small>
+          </article>
+          <article>
+            <strong>운영부터 정리</strong>
+            <span>상태, 도움말, 신고, 명령어팩 관리처럼 방 운영 기본 흐름을 준비합니다.</span>
+            <button class="button button-secondary" type="button" data-beginner-pack="ops-core">운영팩 담기</button>
+            <small>채팅 추천: /추천 운영</small>
+          </article>
+          <article>
+            <strong>가방 정리와 판매</strong>
+            <span>가방, 판매, 잠금, 판매 미리보기처럼 아이템 정리 흐름을 설치합니다.</span>
+            <button class="button button-secondary" type="button" data-beginner-pack="shop-inventory">정리팩 담기</button>
+            <small>채팅 추천: /추천 정리</small>
+          </article>
+        </div>
       </section>
 
       <section class="command-store-modes" data-store-mode-tabs aria-label="명령어 스토어 작업 모드">
@@ -129,6 +157,6 @@
       <pre class="form-status" data-template-status>명령어 템플릿을 불러오는 중입니다.</pre>
     </main>
     <script src="/auth.js?v=20260525-silent-auth"></script>
-    <script src="/command-store.js?v=20260525-silent-auth"></script>
+    <script src="/command-store.js?v=20260527-recommend-flow"></script>
   </body>
 </html>
