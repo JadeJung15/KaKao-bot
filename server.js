@@ -533,7 +533,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
   },
   {
     title: "관리자",
-    commands: ["/방등록", "/방정보", "/방목록", "/방삭제", "/입장문구", "/기능목록", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/관리자등록", "/관리자삭제", "/관리자목록", "/최근이벤트", "/원본로그", "/신고목록", "/신고처리", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/별명목록", "/닉병합", "/입퇴장상세", "/고유값초기화", "/포인트지급", "/포인트차감", "/포인트설정", "/상점추가", "/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수", "/명령어등록", "/명령어삭제", "/명령어목록", "/명령어팩목록", "/명령어팩제거"]
+    commands: ["/방등록", "/방정보", "/방목록", "/방삭제", "/입장문구", "/기능목록", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/관리자등록", "/관리자삭제", "/관리자목록", "/최근이벤트", "/원본로그", "/신고목록", "/신고처리", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/별명목록", "/닉병합", "/입퇴장상세", "/고유값초기화", "/포인트지급", "/포인트차감", "/포인트설정", "/상점추가", "/상점수정", "/상점삭제", "/상점정리", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수", "/명령어등록", "/명령어삭제", "/명령어목록", "/명령어팩목록", "/명령어팩제거"]
   },
   {
     title: "게임/연동 예약",
@@ -1522,7 +1522,7 @@ const COMMAND_TEMPLATE_BUNDLES = Object.freeze([
 
 const ADMIN_MANAGEMENT_COMMANDS = Object.freeze([
   "/포인트지급", "/포인트차감", "/포인트설정",
-  "/상점추가", "/상점수정", "/상점삭제", "/상점초기화", "/상점내역",
+  "/상점추가", "/상점수정", "/상점삭제", "/상점정리", "/상점초기화", "/상점내역",
   "/아이템지급", "/아이템회수", "/기능아이템목록",
   "/닉병합"
 ]);
@@ -7437,6 +7437,20 @@ function activeShopProducts(roomState) {
   return shopState(roomState).products.filter((product) => product.active !== false);
 }
 
+function shopProductInventorySummary(roomState, productId) {
+  const id = String(Math.max(0, Math.trunc(Number(productId || 0))));
+  if (!id) return { holders: 0, totalQuantity: 0 };
+  let holders = 0;
+  let totalQuantity = 0;
+  for (const person of Object.values(roomState.people || {})) {
+    const quantity = inventoryQuantity(person, id);
+    if (!quantity) continue;
+    holders += 1;
+    totalQuantity += quantity;
+  }
+  return { holders, totalQuantity };
+}
+
 function productLine(product) {
   return `${product.id}. ${product.name} - ${formatPoint(product.price)}${product.description ? `\n   ${product.description}` : ""}`;
 }
@@ -8436,8 +8450,25 @@ function shopDeleteCommand(roomState, sender, text) {
   if (denied) return denied;
   const productId = parseProductIdFromCommand(text, /^\/상점삭제\s*/i);
   if (!productId) return "형식: /상점삭제 번호";
+  const shop = shopState(roomState);
   const product = shopProductById(roomState, productId);
   if (!product) return "상품 번호를 찾을 수 없습니다.";
+  const inventorySummary = shopProductInventorySummary(roomState, product.id);
+  if (inventorySummary.totalQuantity <= 0) {
+    shop.products = shop.products.filter((item) => item.id !== product.id);
+    recordShopTransaction(roomState, {
+      type: "product_purged",
+      productId: product.id,
+      productName: product.name,
+      by: sender
+    });
+    return [
+      "🛠️ 상점 상품 완전 삭제",
+      "",
+      `${product.name} 상품을 상점에서 완전 삭제했습니다.`,
+      "가방 보유자가 없는 상품이라 목록에서도 제거되었습니다."
+    ].join("\n");
+  }
   product.active = false;
   product.deletedAt = nowIso();
   product.deletedBy = sender;
@@ -8449,7 +8480,50 @@ function shopDeleteCommand(roomState, sender, text) {
     productName: product.name,
     by: sender
   });
-  return `${product.name} 상품을 상점에서 숨겼습니다. 기존 가방 아이템은 유지됩니다.`;
+  return [
+    "🛠️ 상점 상품 숨김 처리",
+    "",
+    `${product.name} 상품은 보유자가 있어 완전 삭제하지 않았습니다.`,
+    `• 보유자 : ${inventorySummary.holders}명`,
+    `• 보유 수량 : ${inventorySummary.totalQuantity}개`,
+    "",
+    "상점 목록에서는 숨김 처리했습니다. 완전 삭제하려면 보유 아이템을 회수한 뒤 /상점정리 를 실행해 주세요."
+  ].join("\n");
+}
+
+function shopCleanupCommand(roomState, sender) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  const shop = shopState(roomState);
+  const removed = [];
+  const kept = [];
+  shop.products = shop.products.filter((product) => {
+    if (product.active !== false) return true;
+    const inventorySummary = shopProductInventorySummary(roomState, product.id);
+    if (inventorySummary.totalQuantity > 0) {
+      kept.push({ product, inventorySummary });
+      return true;
+    }
+    removed.push(product);
+    return false;
+  });
+  if (removed.length) {
+    recordShopTransaction(roomState, {
+      type: "shop_cleanup",
+      productId: 0,
+      productName: removed.map((product) => product.name).slice(0, 5).join(", "),
+      quantity: removed.length,
+      by: sender
+    });
+  }
+  return [
+    "🧹 상점 정리 완료",
+    "",
+    `• 완전 삭제 : ${removed.length}개`,
+    `• 보유자 있어 유지 : ${kept.length}개`,
+    removed.length ? `• 삭제 상품 : ${removed.map((product) => product.name).slice(0, 5).join(", ")}${removed.length > 5 ? ` 외 ${removed.length - 5}개` : ""}` : "",
+    kept.length ? "보유자가 있는 숨김 상품은 아이템 회수 후 다시 정리할 수 있습니다." : ""
+  ].filter(Boolean).join("\n");
 }
 
 function shopResetCommand(roomState, sender) {
@@ -8478,6 +8552,8 @@ function shopTransactionLabel(transaction) {
     product_added: "상품추가",
     product_updated: "상품수정",
     product_deleted: "상품삭제",
+    product_purged: "상품완전삭제",
+    shop_cleanup: "상점정리",
     shop_reset: "상점초기화",
     item_granted: "아이템지급",
     item_revoked: "아이템회수"
@@ -10851,7 +10927,7 @@ function commandFeatureKey(command) {
   if (/^\/(?:프로필|프로칠|내별명|별명목록|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
   if (/^\/(?:게임|오늘할일|주사위|낚시|자동낚시|탐험|자동탐험|자동모험|확률뽑기|뽑기|자동뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|모험|던전|던전목록|자동던전|자동사냥|대장간|제작가능|제작|강화|강화목록|강화상세|보상선택|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
-  if (/^\/(?:상점|구매|구매내역|가방|가방정리|정리추천|판매추천|아이템|보유아이템|아이템상세|판매목록|판매미리보기|일괄판매|아이템잠금|아이템잠금해제|잠금목록|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수|기능아이템목록)(?:\s|$)/.test(command)) return "shop";
+  if (/^\/(?:상점|구매|구매내역|가방|가방정리|정리추천|판매추천|아이템|보유아이템|아이템상세|판매목록|판매미리보기|일괄판매|아이템잠금|아이템잠금해제|잠금목록|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점정리|상점초기화|상점내역|아이템지급|아이템회수|기능아이템목록)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
   return "";
 }
@@ -10976,7 +11052,7 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/구독상태", "관리자", "구독 상태 관리", { aliases: ["/구독연장", "/구독만료"], visibility: "admin", requiresRole: "admin" }),
   registryEntry("/명령어등록", "관리자", "커스텀 명령어 등록과 삭제", { aliases: ["/명령어수정", "/커스텀등록", "/커스텀수정", "/명령어삭제", "/커스텀삭제"], visibility: "admin", requiresRole: "admin", requiresFeature: "customCommands" }),
   registryEntry("/포인트지급", "관리자", "참여자 포인트 관리", { aliases: ["/포인트차감", "/포인트설정"], visibility: "admin", requiresRole: "admin", requiresFeature: "points" }),
-  registryEntry("/상점추가", "관리자", "상점과 아이템 관리", { aliases: ["/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수", "/기능아이템목록"], visibility: "admin", requiresRole: "admin", requiresFeature: "shop" })
+  registryEntry("/상점추가", "관리자", "상점과 아이템 관리", { aliases: ["/상점수정", "/상점삭제", "/상점정리", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수", "/기능아이템목록"], visibility: "admin", requiresRole: "admin", requiresFeature: "shop" })
 ]);
 
 function resolveCommandRegistryItem(command, compactCommand = "") {
@@ -16465,6 +16541,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/상점추가") return shopAddCommand(roomState, sender, text);
   if (command === "/상점수정") return shopUpdateCommand(roomState, sender, text);
   if (command === "/상점삭제") return shopDeleteCommand(roomState, sender, text);
+  if (command === "/상점정리") return shopCleanupCommand(roomState, sender);
   if (command === "/상점초기화") return shopResetCommand(roomState, sender);
   if (command === "/상점내역") return shopHistoryCommand(roomState, sender);
   if (command === "/기능아이템목록") return functionalShopItemListCommand(roomState, sender);

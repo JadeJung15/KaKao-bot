@@ -2277,7 +2277,8 @@ try {
     roomLink: "https://open.kakao.com/o/salesRoom1",
     licenseKey: approvedApplication.json.room.licenseKey
   });
-  assert.match(packShopDelete.json.reply, /상점에서 숨겼습니다/);
+  assert.match(packShopDelete.json.reply, /보유자가 있어/);
+  assert.match(packShopDelete.json.reply, /숨김 처리/);
 
   const packList = await chatPayload({
     registeredRoom: false,
@@ -5241,9 +5242,19 @@ try {
   assert.match(shopAdd.json.reply, /상점 상품이 추가/);
   assert.match(shopAdd.json.reply, /1\. 물약 - 🅟100/);
 
+  const shopAddDeleteOnly = await chat("/상점추가 삭제전용 10 테스트", "관리자");
+  assert.match(shopAddDeleteOnly.json.reply, /2\. 삭제전용 - 🅟10/);
+
+  const shopDeleteUnused = await chat("/상점삭제 2", "관리자");
+  assert.match(shopDeleteUnused.json.reply, /완전 삭제/);
+
+  const shopUpdateDeleted = await chat("/상점수정 2 20 다시등록", "관리자");
+  assert.match(shopUpdateDeleted.json.reply, /상품 번호를 찾을 수 없습니다/);
+
   const shopList = await chat("/상점", "포순이 여");
   assert.match(shopList.json.reply, /픽셀곰 상점/);
   assert.match(shopList.json.reply, /물약/);
+  assert.doesNotMatch(shopList.json.reply, /삭제전용/);
 
   const purchase = await chat("/구매 1", "포순이 여");
   assert.match(purchase.json.reply, /구매 완료/);
@@ -5283,7 +5294,18 @@ try {
   assert.match(shopHistory.json.reply, /물약/);
 
   const shopDelete = await chat("/상점삭제 1", "관리자");
-  assert.match(shopDelete.json.reply, /상점에서 숨겼습니다/);
+  assert.match(shopDelete.json.reply, /보유자가 있어/);
+  assert.match(shopDelete.json.reply, /숨김 처리/);
+
+  const shopAddCleanupTarget = await chat("/상점추가 정리대상 10 테스트", "관리자");
+  assert.match(shopAddCleanupTarget.json.reply, /3\. 정리대상 - 🅟10/);
+
+  const shopResetForCleanup = await chat("/상점초기화", "관리자");
+  assert.match(shopResetForCleanup.json.reply, /상점 상품을 모두 숨겼습니다/);
+
+  const shopCleanup = await chat("/상점정리", "관리자");
+  assert.match(shopCleanup.json.reply, /완전 삭제 : 1개/);
+  assert.match(shopCleanup.json.reply, /보유자 있어 유지 : 1개/);
 
   const emptyShop = await chat("/상점", "포순이 여");
   assert.match(emptyShop.json.reply, /등록된 상품이 없습니다/);
