@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.05";
+export const APP_VERSION = "0.5.06";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -38,6 +38,8 @@ export const FEATURES = [
   "alias-registry",
   "nickname-manual-merge",
   "admin-nickname-merge-tool",
+  "admin-nickname-merge-history",
+  "admin-nickname-merge-candidates",
   "join-exit-history",
   "nickname-history",
   "detailed-member-history",
@@ -4469,6 +4471,46 @@ function mergeProfileForPerson(roomState, targetKey, sourceKey, targetPerson, so
   if (sourceKey !== targetKey) delete roomState.profiles[sourceKey];
 }
 
+function cloneJson(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function nicknameMergeSnapshot(roomState, targetKey, sourceKey, targetName, sourceName, options = {}) {
+  return {
+    id: generateEntityId("nmg"),
+    status: "active",
+    roomName: roomState.name || "",
+    targetKey,
+    sourceKey,
+    targetName,
+    sourceName,
+    reason: options.source || "manual_merge",
+    by: options.by || "",
+    createdAt: nowIso(),
+    undoneAt: "",
+    undoneBy: "",
+    snapshot: {
+      targetPerson: cloneJson(roomState.people?.[targetKey] || null),
+      sourcePerson: cloneJson(roomState.people?.[sourceKey] || null),
+      targetProfile: cloneJson(roomState.profiles?.[targetKey] || null),
+      sourceProfile: cloneJson(roomState.profiles?.[sourceKey] || null),
+      aliases: cloneJson(roomState.aliases || {}),
+      peopleByIdentity: cloneJson(roomState.peopleByIdentity || {}),
+      admins: cloneJson(roomState.admins || []),
+      inboxTarget: cloneJson(roomState.inbox?.[targetKey] || null),
+      inboxSource: cloneJson(roomState.inbox?.[sourceKey] || null)
+    }
+  };
+}
+
+function recordNicknameMergeHistory(roomState, history) {
+  if (!history?.id) return "";
+  roomState.nicknameMergeHistory ||= [];
+  roomState.nicknameMergeHistory.unshift(history);
+  if (roomState.nicknameMergeHistory.length > 100) roomState.nicknameMergeHistory = roomState.nicknameMergeHistory.slice(0, 100);
+  return history.id;
+}
+
 function mergePersonData(roomState, targetKey, sourceKey, options = {}) {
   if (!targetKey || !sourceKey) return { ok: false, error: "not_found" };
   if (targetKey === sourceKey) return { ok: true, merged: false, targetKey, sourceKey };
@@ -4479,6 +4521,7 @@ function mergePersonData(roomState, targetKey, sourceKey, options = {}) {
 
   const targetName = targetPerson.currentName || options.targetName || displayNameForKey(roomState, targetKey, targetKey);
   const sourceName = sourcePerson.currentName || options.sourceName || displayNameForKey(roomState, sourceKey, sourceKey);
+  const history = options.trackHistory === false ? null : nicknameMergeSnapshot(roomState, targetKey, sourceKey, targetName, sourceName, options);
   targetPerson.currentName = targetName;
   targetPerson.names = uniqueNames([
     targetName,
@@ -4539,14 +4582,16 @@ function mergePersonData(roomState, targetKey, sourceKey, options = {}) {
   }
   mergeProfileForPerson(roomState, targetKey, sourceKey, targetPerson, sourcePerson, options.aliases || []);
   delete roomState.people[sourceKey];
+  const mergeId = recordNicknameMergeHistory(roomState, history);
   recordRoomEvent(roomState, {
     type: "nickname_merged",
+    mergeId,
     target: targetName,
     source: sourceName,
     by: options.by || "",
     reason: options.source || "manual_merge"
   });
-  return { ok: true, merged: true, targetKey, sourceKey, targetName, sourceName, points: targetPerson.points };
+  return { ok: true, merged: true, mergeId, targetKey, sourceKey, targetName, sourceName, points: targetPerson.points };
 }
 
 function roomAdminKeys(roomState) {
@@ -12501,6 +12546,13 @@ function adminNicknameMergeRoomState(state, payload = {}) {
   return canonicalDataRoomState(state, physicalRoomState);
 }
 
+function nicknameVariantKey(value = "") {
+  return keyFor(value)
+    .replace(/[0-9０-９]+/g, "")
+    .replace(/\s+/g, "")
+    .replace(/(?:남|여|남자|여자)$/u, "");
+}
+
 function nicknameMergePersonSummary(roomState, key = "", fallbackName = "") {
   const person = key ? roomState.people?.[key] : null;
   const profile = key ? roomState.profiles?.[key] : null;
@@ -12524,6 +12576,69 @@ function nicknameMergePersonSummary(roomState, key = "", fallbackName = "") {
     monsterCount: normalized?.monsters?.length || 0,
     hasPet: Boolean(normalized?.pet),
     aliases: uniqueNames([profile?.alias, ...(profile?.aliases || []), ...aliases])
+  };
+}
+
+function publicNicknameMergeHistoryItem(roomState, item = {}) {
+  return {
+    id: item.id || "",
+    status: item.status || "active",
+    roomName: item.roomName || roomState.name || "",
+    targetKey: item.targetKey || "",
+    sourceKey: item.sourceKey || "",
+    targetName: item.targetName || "",
+    sourceName: item.sourceName || "",
+    reason: item.reason || "",
+    by: item.by || "",
+    createdAt: item.createdAt || "",
+    undoneAt: item.undoneAt || "",
+    undoneBy: item.undoneBy || "",
+    target: nicknameMergePersonSummary(roomState, item.targetKey, item.targetName),
+    source: nicknameMergePersonSummary(roomState, item.sourceKey, item.sourceName)
+  };
+}
+
+function nicknameMergeCandidates(roomState, limit = 20) {
+  const people = Object.entries(roomState.people || {})
+    .map(([key, person]) => [key, normalizePersonState(person)])
+    .filter(([, person]) => person?.currentName && !isReservedPersonName(person.currentName));
+  const candidates = [];
+  for (let leftIndex = 0; leftIndex < people.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < people.length; rightIndex += 1) {
+      const [leftKey, leftPerson] = people[leftIndex];
+      const [rightKey, rightPerson] = people[rightIndex];
+      const leftVariant = nicknameVariantKey(leftPerson.currentName);
+      const rightVariant = nicknameVariantKey(rightPerson.currentName);
+      if (!leftVariant || leftVariant !== rightVariant) continue;
+      if (leftKey === rightKey) continue;
+      const leftHasDigits = /\d/.test(keyFor(leftPerson.currentName));
+      const rightHasDigits = /\d/.test(keyFor(rightPerson.currentName));
+      const targetKey = leftHasDigits || !rightHasDigits ? leftKey : rightKey;
+      const sourceKey = targetKey === leftKey ? rightKey : leftKey;
+      const score = 80 + (leftHasDigits !== rightHasDigits ? 15 : 0);
+      candidates.push({
+        score,
+        reason: "숫자/공백만 다른 닉네임 후보",
+        target: nicknameMergePersonSummary(roomState, targetKey),
+        source: nicknameMergePersonSummary(roomState, sourceKey),
+        command: `/닉병합 ${displayNameForKey(roomState, targetKey)} ${displayNameForKey(roomState, sourceKey)}`
+      });
+    }
+  }
+  return candidates
+    .sort((left, right) => right.score - left.score || right.target.points + right.source.points - (left.target.points + left.source.points))
+    .slice(0, Math.max(1, Number(limit) || 20));
+}
+
+function adminNicknameMergesPayload(state, params = {}) {
+  const roomState = adminNicknameMergeRoomState(state, params);
+  if (!roomState) return { ok: false, status: 404, error: "room_not_found" };
+  return {
+    ok: true,
+    version: APP_VERSION,
+    roomName: roomState.name,
+    history: (roomState.nicknameMergeHistory || []).map((item) => publicNicknameMergeHistoryItem(roomState, item)),
+    candidates: nicknameMergeCandidates(roomState, params.limit || 20)
   };
 }
 
@@ -12607,6 +12722,51 @@ function adminNicknameMergeExecute(state, payload = {}, by = "admin_console") {
   };
 }
 
+function adminNicknameMergeUndo(state, payload = {}, by = "admin_console") {
+  const roomState = adminNicknameMergeRoomState(state, payload);
+  if (!roomState) return { ok: false, status: 404, error: "room_not_found" };
+  const mergeId = normalizeText(payload.mergeId || payload.id);
+  if (!mergeId) return { ok: false, status: 400, error: "nickname_merge_id_required" };
+  const merge = (roomState.nicknameMergeHistory || []).find((item) => item.id === mergeId);
+  if (!merge) return { ok: false, status: 404, error: "nickname_merge_not_found" };
+  if (merge.status === "undone") return { ok: false, status: 409, error: "nickname_merge_already_undone" };
+  const snapshot = merge.snapshot || {};
+  roomState.people ||= {};
+  roomState.profiles ||= {};
+  roomState.aliases = cloneJson(snapshot.aliases || {});
+  roomState.peopleByIdentity = cloneJson(snapshot.peopleByIdentity || {});
+  roomState.admins = cloneJson(snapshot.admins || []);
+  if (snapshot.targetPerson) roomState.people[merge.targetKey] = normalizePersonState(cloneJson(snapshot.targetPerson));
+  else delete roomState.people[merge.targetKey];
+  if (snapshot.sourcePerson) roomState.people[merge.sourceKey] = normalizePersonState(cloneJson(snapshot.sourcePerson));
+  else delete roomState.people[merge.sourceKey];
+  if (snapshot.targetProfile) roomState.profiles[merge.targetKey] = cloneJson(snapshot.targetProfile);
+  else delete roomState.profiles[merge.targetKey];
+  if (snapshot.sourceProfile) roomState.profiles[merge.sourceKey] = cloneJson(snapshot.sourceProfile);
+  else delete roomState.profiles[merge.sourceKey];
+  roomState.inbox ||= {};
+  if (snapshot.inboxTarget) roomState.inbox[merge.targetKey] = cloneJson(snapshot.inboxTarget);
+  else delete roomState.inbox[merge.targetKey];
+  if (snapshot.inboxSource) roomState.inbox[merge.sourceKey] = cloneJson(snapshot.inboxSource);
+  else delete roomState.inbox[merge.sourceKey];
+  merge.status = "undone";
+  merge.undoneAt = nowIso();
+  merge.undoneBy = by;
+  recordRoomEvent(roomState, {
+    type: "nickname_merge_undone",
+    mergeId,
+    target: merge.targetName,
+    source: merge.sourceName,
+    by
+  });
+  return {
+    ok: true,
+    version: APP_VERSION,
+    merge: publicNicknameMergeHistoryItem(roomState, merge),
+    room: roomAdminView(roomState, state)
+  };
+}
+
 async function handleAdminApi(req, url) {
   if (req.method === "GET" && url.pathname === "/api/admin/me") {
     const auth = await requireAdminConsole(req, url);
@@ -12655,12 +12815,31 @@ async function handleAdminApi(req, url) {
     return { status: result.ok ? 200 : result.status || 400, body: result };
   }
 
+  if (req.method === "GET" && url.pathname === "/api/admin/nickname-merges") {
+    const auth = await requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminNicknameMergesPayload(state, Object.fromEntries(url.searchParams.entries()));
+    return { status: result.ok ? 200 : result.status || 400, body: result };
+  }
+
   if (req.method === "POST" && url.pathname === "/api/admin/nickname-merge") {
     const body = await readBody(req);
     const auth = await requireAdminConsole(req, url, body);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
     const state = await loadState();
     const result = adminNicknameMergeExecute(state, body, auth.by || "admin_console");
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/nickname-merge/undo") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminNicknameMergeUndo(state, body, auth.by || "admin_console");
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };

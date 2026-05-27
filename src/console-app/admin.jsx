@@ -638,6 +638,7 @@ function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setTo
   const [commandForm, setCommandForm] = useState({ quick: "", trigger: "", response: "" });
   const [adminName, setAdminName] = useState("");
   const [mergeForm, setMergeForm] = useState({ targetName: "", sourceName: "", preview: null });
+  const [mergeData, setMergeData] = useState({ loading: false, history: [], candidates: [] });
   const [saving, setSaving] = useState(false);
   const commands = baseRoom.customCommands || [];
   const admins = baseRoom.admins || [];
@@ -646,6 +647,7 @@ function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setTo
     setCommandForm({ quick: "", trigger: "", response: "" });
     setAdminName("");
     setMergeForm({ targetName: "", sourceName: "", preview: null });
+    setMergeData({ loading: false, history: [], candidates: [] });
   }, [baseRoom.name]);
 
   async function saveRoomPatch(patch, successMessage) {
@@ -747,6 +749,46 @@ function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setTo
       });
       setMergeForm({ targetName: result.preview?.target?.name || mergeForm.targetName, sourceName: "", preview: result.preview });
       setToast({ tone: "good", message: "닉네임 데이터를 병합했습니다." });
+      await loadNicknameMerges();
+      await onSaved();
+    } catch (error) {
+      setToast({ tone: "bad", message: formatError(error) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function loadNicknameMerges() {
+    if (!baseRoom.name) return;
+    setMergeData((current) => ({ ...current, loading: true }));
+    try {
+      const params = new URLSearchParams({ roomName: baseRoom.name });
+      const result = await adminRequest(`/api/admin/nickname-merges?${params.toString()}`);
+      setMergeData({ loading: false, history: result.history || [], candidates: result.candidates || [] });
+    } catch (error) {
+      setMergeData((current) => ({ ...current, loading: false }));
+      setToast({ tone: "bad", message: formatError(error) });
+    }
+  }
+
+  function useMergeCandidate(candidate) {
+    setMergeForm({
+      targetName: candidate.target?.name || "",
+      sourceName: candidate.source?.name || "",
+      preview: null
+    });
+  }
+
+  async function undoNicknameMerge(item) {
+    if (saving || !baseRoom.name || !item?.id) return;
+    setSaving(true);
+    try {
+      await adminRequest("/api/admin/nickname-merge/undo", {
+        method: "POST",
+        body: { roomName: baseRoom.name, mergeId: item.id }
+      });
+      setToast({ tone: "good", message: "닉네임 병합을 되돌렸습니다." });
+      await loadNicknameMerges();
       await onSaved();
     } catch (error) {
       setToast({ tone: "bad", message: formatError(error) });
@@ -789,8 +831,16 @@ function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setTo
         <div className="console-action-row">
           <button type="submit" disabled={saving}>병합 미리보기</button>
           <button type="button" onClick={executeNicknameMerge} disabled={saving || !mergeForm.preview}>닉네임 병합 실행</button>
+          <button type="button" onClick={loadNicknameMerges} disabled={saving || mergeData.loading}>{mergeData.loading ? "불러오는 중" : "후보 불러오기"}</button>
         </div>
         {mergeForm.preview ? <NicknameMergePreview preview={mergeForm.preview} /> : null}
+        <NicknameMergeHistoryPanel
+          candidates={mergeData.candidates}
+          history={mergeData.history}
+          onUseCandidate={useMergeCandidate}
+          onUndo={undoNicknameMerge}
+          saving={saving}
+        />
       </form>
       <form className="console-mini-form console-command-form" onSubmit={saveCommand}>
         <label>
@@ -866,6 +916,37 @@ function NicknameMergePreview({ preview = {} }) {
       </div>
       <small>실행 명령어: {preview.command}</small>
       <small>병합 후 합칠 닉은 기준 닉의 별명으로 연결되어 같은 사람 데이터로 조회됩니다.</small>
+    </div>
+  );
+}
+
+function NicknameMergeHistoryPanel({ candidates = [], history = [], onUseCandidate, onUndo, saving = false }) {
+  return (
+    <div className="console-compact-list console-nickname-merge-history" data-nickname-merge-history="true">
+      <strong>병합 후보</strong>
+      {candidates.map((candidate) => (
+        <div className="console-compact-row" key={`${candidate.target?.key}:${candidate.source?.key}`}>
+          <div>
+            <strong>{candidate.target?.name} ← {candidate.source?.name}</strong>
+            <span>{candidate.reason} · 점수 {candidate.score}</span>
+            <small>{candidate.command}</small>
+          </div>
+          <button type="button" onClick={() => onUseCandidate(candidate)} disabled={saving}>후보 사용</button>
+        </div>
+      ))}
+      {!candidates.length ? <small>후보 불러오기를 누르면 숫자/공백만 다른 닉네임 후보를 찾습니다.</small> : null}
+      <strong>병합 이력</strong>
+      {history.map((item) => (
+        <div className="console-compact-row" key={item.id}>
+          <div>
+            <strong>{item.targetName} ← {item.sourceName}</strong>
+            <span>{item.status === "undone" ? "되돌림" : "활성"} · {formatDate(item.createdAt)} · {item.by || "admin"}</span>
+            {item.undoneAt ? <small>되돌린 시각: {formatDate(item.undoneAt)}</small> : null}
+          </div>
+          <button type="button" onClick={() => onUndo(item)} disabled={saving || item.status === "undone"}>되돌리기</button>
+        </div>
+      ))}
+      {!history.length ? <small>아직 병합 이력이 없습니다.</small> : null}
     </div>
   );
 }

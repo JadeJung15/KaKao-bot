@@ -112,6 +112,9 @@ export function formatError(error) {
     target_nickname_not_found: "기준 닉 데이터를 찾을 수 없습니다.",
     source_nickname_not_found: "합칠 닉 데이터를 찾을 수 없습니다.",
     nickname_already_merged: "이미 같은 사람 데이터로 연결되어 있습니다.",
+    nickname_merge_id_required: "병합 이력 ID가 필요합니다.",
+    nickname_merge_not_found: "병합 이력을 찾을 수 없습니다.",
+    nickname_merge_already_undone: "이미 되돌린 병합 이력입니다.",
     restore_request_not_found: "복구 요청을 찾을 수 없습니다.",
     invalid_restore_request_status: "복구 요청 상태값이 올바르지 않습니다.",
     purge_confirmation_required: "완전 삭제 확인 문구가 필요합니다."
