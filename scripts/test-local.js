@@ -137,7 +137,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.5.10");
+  assert.equal(health.json.version, "0.5.11");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -331,6 +331,7 @@ try {
   assert.match(health.json.features.join(","), /command-discovery-hub/);
   assert.match(health.json.features.join(","), /starter-tutorial-command/);
   assert.match(health.json.features.join(","), /personalized-command-recommendations/);
+  assert.match(health.json.features.join(","), /alias-preferred-display-names/);
   assert.equal(health.json.incidentMessages.SERVER_ERROR.code, "server_error");
   assert.equal(health.json.incidentMessages.DB_ERROR.code, "db_error");
   assert.equal(health.json.incidentMessages.AUTH_ERROR.code, "auth_error");
@@ -561,7 +562,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.5.10");
+  assert.equal(commandTemplates.json.version, "0.5.11");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -590,7 +591,7 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.5.10");
+  assert.equal(commandPacks.json.version, "0.5.11");
   const profileHistoryPack = commandPacks.json.packs.find((pack) => pack.id === "profile-history");
   assert.ok(profileHistoryPack);
   assert.ok(profileHistoryPack.fixedCommands.includes("/닉병합"));
@@ -801,7 +802,7 @@ try {
   assert.match(sessionNavText, /href = "\/account"/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.5.10");
+  assert.equal(packageJson.version, "0.5.11");
   const serverSourceText = await readFile(path.join(repoRoot, "server.js"), "utf8");
   assert.match(serverSourceText, /const LUNCH_MENU_ITEMS = Object\.freeze/);
   assert.match(serverSourceText, /COMMAND_RESPONSE_ICON_BY_CATEGORY/);
@@ -1153,7 +1154,7 @@ try {
     roomLink: "https://open.kakao.com/o/consoleRoom1",
     licenseKey: adminRoom.json.room.licenseKey
   });
-  assert.match(nicknameMergedPoint.json.reply, /병합오리 95님의 포인트 :/);
+  assert.match(nicknameMergedPoint.json.reply, /병합오리님의 포인트 :/);
   const nicknameMergeUndo = await request("/api/admin/nickname-merge/undo?token=test-admin-token", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -1261,7 +1262,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.5.10");
+  assert.equal(adminDiagnostics.json.version, "0.5.11");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -1272,7 +1273,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.5.10");
+  assert.equal(adminBackup.json.version, "0.5.11");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -1616,7 +1617,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.5.10");
+  assert.equal(buyerGuideApproved.json.version, "0.5.11");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -1637,7 +1638,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.5.10");
+  assert.equal(buyerConsoleApproved.json.version, "0.5.11");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.appConnectCodes.length >= 1, true);
@@ -2331,7 +2332,7 @@ try {
   });
   assert.equal(validProfileSync.response.status, 200);
   assert.equal(validProfileSync.json.ok, true);
-  assert.equal(validProfileSync.json.version, "0.5.10");
+  assert.equal(validProfileSync.json.version, "0.5.11");
   assert.equal(validProfileSync.json.summary.requestedRoomCount, 1);
   assert.equal(validProfileSync.json.summary.syncedRoomCount, 2);
   assert.deepEqual(
@@ -4644,6 +4645,17 @@ try {
   assert.match(profileView.json.reply, /미미 여/);
   assert.match(profileView.json.reply, /엔프피/);
 
+  await chat("/포인트지급 미미 300", "관리자");
+  await chat("/아이템지급 미미 1 1", "관리자");
+  const aliasTargetPoint = await chat("/포인트 미미", "사용자");
+  assert.match(aliasTargetPoint.json.reply, /미미님의 포인트/);
+  const aliasSenderPoint = await chat("/포인트", "미미");
+  assert.match(aliasSenderPoint.json.reply, /미미님의 포인트/);
+  const aliasAttendance = await chat("/출석", "미미");
+  assert.match(aliasAttendance.json.reply, /미미님 출석/);
+  const aliasBag = await chat("/가방", "미미");
+  assert.match(aliasBag.json.reply, /미미님의 가방/);
+
   await chat("일반방 닉 데이터", "오리 95");
   await chat("게임방 닉 데이터", "오리");
   const aliasTargetGrant = await chat("/포인트지급 오리 95 100", "관리자");
@@ -4656,7 +4668,7 @@ try {
   const aliasMergedPoint = await chat("/포인트", "오리 95");
   assert.match(aliasMergedPoint.json.reply, /🅟306/);
   const aliasSourcePointAfterMerge = await chat("/포인트", "오리");
-  assert.match(aliasSourcePointAfterMerge.json.reply, /오리 95님의 포인트 : 🅟308/);
+  assert.match(aliasSourcePointAfterMerge.json.reply, /오리님의 포인트 : 🅟308/);
 
   await chat("일반방 수동 병합 데이터", "거북 77");
   await chat("게임방 수동 병합 데이터", "거북");
@@ -4673,7 +4685,7 @@ try {
   const manualMergedPoint = await chat("/포인트", "거북 77");
   assert.match(manualMergedPoint.json.reply, /🅟126/);
   const manualSourcePointAfterMerge = await chat("/포인트", "거북");
-  assert.match(manualSourcePointAfterMerge.json.reply, /거북 77님의 포인트 : 🅟128/);
+  assert.match(manualSourcePointAfterMerge.json.reply, /거북님의 포인트 : 🅟128/);
 
   await chat("포인트 기능 테스트 시작", "포순이 여");
 
@@ -5068,7 +5080,7 @@ try {
 
   const cheerReply = await chat("/응원 미미 여 오늘도 고마워", "포순이 여");
   assert.match(cheerReply.json.reply, /포인트 응원 카드/);
-  assert.match(cheerReply.json.reply, /포순이 여 -> 미미 여/);
+  assert.match(cheerReply.json.reply, /포순이 여 -> 미미/);
   assert.match(cheerReply.json.reply, /오늘도 고마워/);
   assert.match(cheerReply.json.reply, /사용 포인트 : 🅟50/);
 
@@ -5114,11 +5126,11 @@ try {
 
   const missingAttendance = await chat("/미출석", "포순이 여");
   assert.match(missingAttendance.json.reply, /오늘 미출석/);
-  assert.match(missingAttendance.json.reply, /미미 여/);
+  assert.match(missingAttendance.json.reply, /오리/);
 
   const likeRank = await chat("/좋아요순위", "포순이 여");
   assert.match(likeRank.json.reply, /채팅방 좋아요순위/);
-  assert.match(likeRank.json.reply, /미미 여 ♥11/);
+  assert.match(likeRank.json.reply, /미미 ♥11/);
 
   const levelRank = await chat("/레벨순위", "포순이 여");
   assert.match(levelRank.json.reply, /채팅방 레벨 순위/);
@@ -5143,7 +5155,7 @@ try {
   assert.equal(unreadNoticeRepeat.json.reply, null);
 
   const inbox = await chat("/메시지", "미미 여");
-  assert.match(inbox.json.reply, /💌 미미 여님, 1건의 메시지/);
+  assert.match(inbox.json.reply, /💌 미미님, 1건의 메시지/);
   assert.match(inbox.json.reply, /보낸사람 : 관리자/);
   assert.match(inbox.json.reply, /미미야 확인해줘/);
 
@@ -5226,7 +5238,7 @@ try {
   });
   assert.equal(roomLogs.response.status, 200);
   assert.equal(roomLogs.json.ok, true);
-  assert.equal(roomLogs.json.version, "0.5.10");
+  assert.equal(roomLogs.json.version, "0.5.11");
   assert.ok(roomLogs.json.summary.totalLogs >= 1);
   assert.ok(Number.isFinite(roomLogs.json.summary.recent24h));
   assert.ok(Number.isFinite(roomLogs.json.summary.commandLogs));

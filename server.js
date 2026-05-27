@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.10";
+export const APP_VERSION = "0.5.11";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -249,7 +249,8 @@ export const FEATURES = [
   "hidden-system-shop-ids",
   "command-discovery-hub",
   "starter-tutorial-command",
-  "personalized-command-recommendations"
+  "personalized-command-recommendations",
+  "alias-preferred-display-names"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -4708,7 +4709,13 @@ function addUnique(list, value) {
 }
 
 function displayNameForKey(roomState, key, fallback = "") {
-  return roomState.profiles[key]?.name || roomState.people[key]?.currentName || stripKakaoSuffix(fallback) || key;
+  const profile = roomState.profiles?.[key] || {};
+  return profile.alias || profile.aliases?.[0] || profile.name || roomState.people[key]?.currentName || stripKakaoSuffix(fallback) || key;
+}
+
+function displayNameForPerson(roomState, person, fallback = "") {
+  const key = person?.currentName ? personKey(person.currentName) : "";
+  return key ? displayNameForKey(roomState, key, fallback || person.currentName) : stripKakaoSuffix(fallback) || "";
 }
 
 function existingPersonKey(roomState, query) {
@@ -6487,17 +6494,18 @@ function parseTargetAndAmount(text, commandPattern) {
   };
 }
 
-function grantExpAndLevel(person, expAmount) {
+function grantExpAndLevel(roomState, person, expAmount, fallback = "") {
   normalizePersonState(person);
   person.exp += Math.max(0, Number(expAmount) || 0);
   const notices = [];
+  const displayName = displayNameForPerson(roomState, person, fallback);
   while (person.exp >= requiredExpForLevel(person.level)) {
     const fromLevel = person.level;
     person.exp -= requiredExpForLevel(person.level);
     person.level += 1;
     person.points += LEVEL_UP_POINT_REWARD;
     notices.push([
-      `${person.currentName}님 레벨업!`,
+      `${displayName}님 레벨업!`,
       "",
       `LV.${fromLevel} ➜ LV.${person.level}`,
       "",
@@ -6623,7 +6631,7 @@ function recordActivity(roomState, sender, identityId = "", options = {}) {
   person.chats.total += 1;
   person.chats.byDate[dateKey] = (person.chats.byDate[dateKey] || 0) + 1;
   person.chats.byWeek[weekKey] = (person.chats.byWeek[weekKey] || 0) + 1;
-  const notices = grantExpAndLevel(person, CHAT_EXP_REWARD);
+  const notices = grantExpAndLevel(roomState, person, CHAT_EXP_REWARD, sender);
   return entryNotice || reentryNotice || notices[0] || null;
 }
 
@@ -6656,17 +6664,18 @@ function pointGuideText() {
 
 function attendanceCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const displayName = displayNameForPerson(roomState, person, sender);
   const today = kstDateKey();
-  if (person.attendance.dates.includes(today)) return `${person.currentName}님 이미 출첵 하셨습니다.`;
+  if (person.attendance.dates.includes(today)) return `${displayName}님 이미 출첵 하셨습니다.`;
 
   const lastDate = person.attendance.dates.at(-1);
   person.attendance.currentStreak = lastDate === previousDateKey(today) ? person.attendance.currentStreak + 1 : 1;
   person.attendance.dates.push(today);
   person.points += ATTENDANCE_POINT_REWARD;
-  const notices = grantExpAndLevel(person, ATTENDANCE_EXP_REWARD);
+  const notices = grantExpAndLevel(roomState, person, ATTENDANCE_EXP_REWARD, sender);
   const firstLine = person.attendance.currentStreak > 1
-    ? `${person.currentName}님 ${person.attendance.currentStreak}일 연속 출석!`
-    : `${person.currentName}님 출석!`;
+    ? `${displayName}님 ${person.attendance.currentStreak}일 연속 출석!`
+    : `${displayName}님 출석!`;
   return [
     firstLine,
     "",
@@ -6696,7 +6705,7 @@ function missingAttendanceCommand(roomState) {
   return [
     `오늘 미출석 ${people.length}명`,
     "",
-    ...people.slice(0, 30).map((person, index) => `${index + 1}. ${person.currentName}`),
+    ...people.slice(0, 30).map((person, index) => `${index + 1}. ${displayNameForPerson(roomState, person)}`),
     people.length > 30 ? `...외 ${people.length - 30}명` : "",
     "",
     "기준: 봇이 기록한 참여자"
@@ -6715,7 +6724,7 @@ function attendanceRankingCommand(roomState, sender) {
   ];
   rows.slice(0, 15).forEach((item, index) => {
     const rank = index + 1;
-    lines.push(`${medal(rank)} ${item.person.currentName} ${formatNumber(item.person.attendance.dates.length)}일`);
+    lines.push(`${medal(rank)} ${displayNameForPerson(roomState, item.person)} ${formatNumber(item.person.attendance.dates.length)}일`);
   });
   if (!rows.length) lines.push("기록 없음");
   return lines.join("\n");
@@ -6728,8 +6737,9 @@ function likeCommand(roomState, sender, text) {
 
   const giver = ensurePerson(roomState, sender);
   const targetKey = existingPersonKey(roomState, parsed.target);
+  const senderKey = existingPersonKey(roomState, sender) || personKey(sender);
   if (!targetKey) return `"${parsed.target}" 사용자를 찾을 수 없습니다.`;
-  if (targetKey === personKey(sender)) return "님 말고 다른 사람";
+  if (targetKey === senderKey) return "님 말고 다른 사람";
 
   const receiver = roomState.people[targetKey];
   const cost = parsed.amount * LIKE_POINT_COST;
@@ -6773,7 +6783,8 @@ function cheerCommand(roomState, sender, text) {
   if (parsed.message.length > MAX_CHEER_MESSAGE_LENGTH) return `응원 메시지는 ${MAX_CHEER_MESSAGE_LENGTH}자 이내로 입력해주세요.`;
 
   const senderPerson = ensurePerson(roomState, sender);
-  if (parsed.key === personKey(sender)) return "본인에게는 응원 카드를 보낼 수 없습니다.";
+  const senderKey = existingPersonKey(roomState, sender) || personKey(sender);
+  if (parsed.key === senderKey) return "본인에게는 응원 카드를 보낼 수 없습니다.";
   if (senderPerson.points < CHEER_POINT_COST) {
     return [
       "포인트가 부족합니다.",
@@ -6798,7 +6809,7 @@ function cheerCommand(roomState, sender, text) {
   return [
     "포인트 응원 카드",
     "",
-    `${senderPerson.currentName} -> ${receiver.currentName}`,
+    `${displayNameForPerson(roomState, senderPerson, sender)} -> ${displayNameForKey(roomState, parsed.key, parsed.name)}`,
     `"${parsed.message}"`,
     "",
     `사용 포인트 : ${formatPoint(CHEER_POINT_COST)}`
@@ -6836,7 +6847,7 @@ function luckyDrawCommand(roomState, sender) {
   return [
     "뽑기 결과",
     "",
-    `${person.currentName}님 ${outcome.label}`,
+    `${displayNameForPerson(roomState, person, sender)}님 ${outcome.label}`,
     `사용 : ${formatPoint(LUCKY_DRAW_POINT_COST)}`,
     `획득 : ${formatPoint(outcome.reward)}`,
     `보유 : ${formatPoint(person.points)}`
@@ -7420,9 +7431,10 @@ function inventoryCommand(roomState, sender, text) {
   const person = key ? roomState.people[key] || ensurePerson(roomState, target) : null;
   if (!person) return `"${target}" 사용자를 찾을 수 없습니다.`;
   const rows = inventoryRows(roomState, person);
+  const displayName = displayNameForPerson(roomState, person, target);
   if (!rows.length) {
     return [
-      `${person.currentName}님의 가방`,
+      `${displayName}님의 가방`,
       "",
       "보유한 아이템이 없습니다.",
       "/상점 으로 구매 가능한 상품을 확인하세요."
@@ -7435,7 +7447,7 @@ function inventoryCommand(roomState, sender, text) {
   const displayRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
     .map((item, index) => ({ ...item, selectNo: (currentPage - 1) * pageSize + index + 1 }));
   return [
-    `🎒 ${person.currentName}님의 ${isItemCommand ? "보유 아이템" : "가방"} ${currentPage}/${totalPages}`,
+    `🎒 ${displayName}님의 ${isItemCommand ? "보유 아이템" : "가방"} ${currentPage}/${totalPages}`,
     "",
     ...displayRows.map((item) => `${item.selectNo}. ${item.name} x ${item.quantity} ${itemIcon(item)} / 판매가 ${formatPoint(item.sellPrice)}${item.locked ? " / 잠금" : ""}`),
     "",
@@ -7562,10 +7574,11 @@ function aquariumCommand(roomState, sender, text) {
   const key = existingPersonKey(roomState, target) || (query ? "" : personKey(sender));
   const person = key ? roomState.people[key] || ensurePerson(roomState, target) : null;
   if (!person) return `"${target}" 사용자를 찾을 수 없습니다.`;
+  const displayName = displayNameForPerson(roomState, person, target);
   const fishRows = inventoryRows(roomState, person).filter((item) => isFishProductId(item.productId));
   if (!fishRows.length) {
     return [
-      `${person.currentName}님의 어항`,
+      `${displayName}님의 어항`,
       "",
       "보유한 물고기가 없습니다.",
       "/미끼구매 후 /낚시 로 물고기를 모아보세요."
@@ -7582,7 +7595,7 @@ function aquariumCommand(roomState, sender, text) {
     .map((grade) => `${grade.label} ${gradeCounts[grade.id] || 0}`)
     .join(" / ");
   return [
-    `${person.currentName}님의 어항`,
+    `${displayName}님의 어항`,
     "",
     `수집: ${fishRows.length}/${FISH_CATALOG_SIZE}종`,
     `보유 물고기: ${totalQuantity}마리`,
@@ -7639,7 +7652,8 @@ function giftItemCommand(roomState, sender, text) {
   const giver = ensurePerson(roomState, sender);
   const targetKey = existingPersonKey(roomState, parsed.target);
   if (!targetKey) return `"${parsed.target}" 사용자를 찾을 수 없습니다.`;
-  if (targetKey === personKey(sender)) return "본인에게는 선물할 수 없습니다.";
+  const giverKey = existingPersonKey(roomState, sender) || personKey(sender);
+  if (targetKey === giverKey) return "본인에게는 선물할 수 없습니다.";
   const receiver = roomState.people[targetKey];
   const nextGiverQuantity = removeInventory(giver, parsed.productId, parsed.quantity);
   if (nextGiverQuantity < 0) return "선물할 아이템 수량이 부족합니다.";
@@ -7658,8 +7672,8 @@ function giftItemCommand(roomState, sender, text) {
     "가방 선물 완료",
     "",
     `• 상품 : ${product?.name || `상품 #${parsed.productId}`}`,
-    `• 보낸 사람 : ${giver.currentName}`,
-    `• 받은 사람 : ${receiver.currentName}`,
+    `• 보낸 사람 : ${displayNameForPerson(roomState, giver, sender)}`,
+    `• 받은 사람 : ${displayNameForPerson(roomState, receiver, parsed.target)}`,
     `• 수량 : ${parsed.quantity}개`,
     `• 받은 사람 보유 : ${receiverQuantity}개`
   ].join("\n");
@@ -7668,13 +7682,14 @@ function giftItemCommand(roomState, sender, text) {
 function purchaseHistoryCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
   const nameKey = personKey(person.currentName);
+  const displayName = displayNameForPerson(roomState, person, sender);
   const transactions = shopState(roomState).transactions
     .filter((item) => [item.from, item.to, item.by].some((name) => personKey(name) === nameKey))
     .slice(-10)
     .reverse();
-  if (!transactions.length) return `${person.currentName}님의 구매/아이템 내역이 없습니다.`;
+  if (!transactions.length) return `${displayName}님의 구매/아이템 내역이 없습니다.`;
   return [
-    `${person.currentName}님 구매/아이템 내역`,
+    `${displayName}님 구매/아이템 내역`,
     "",
     ...transactions.map((item, index) => `${index + 1}. ${shortKstDate(new Date(item.at))} ${shopTransactionLabel(item)} ${item.productName || `상품 #${item.productId}`} x ${item.quantity}`)
   ].join("\n");
@@ -7871,7 +7886,7 @@ function adminItemTransferCommand(roomState, sender, text, mode) {
   return [
     `${label} 완료`,
     "",
-    `• 대상 : ${person.currentName}`,
+    `• 대상 : ${displayNameForPerson(roomState, person, parsed.target)}`,
     `• 상품 : ${product.name}`,
     `• 수량 : ${parsed.quantity}개`,
     `• 현재 보유 : ${nextQuantity}개`
@@ -7927,7 +7942,7 @@ function oddEvenCommand(roomState, sender, text) {
   return [
     "홀짝 결과",
     "",
-    `참여자 : ${person.currentName}`,
+    `참여자 : ${displayNameForPerson(roomState, person, sender)}`,
     `선택 : ${bet.choice}`,
     `베팅 : ${formatPoint(bet.amount)}`,
     `결과 : ${result}`,
@@ -7944,8 +7959,9 @@ function transferCommand(roomState, sender, text) {
 
   const senderPerson = ensurePerson(roomState, sender);
   const targetKey = existingPersonKey(roomState, parsed.target);
+  const senderKey = existingPersonKey(roomState, sender) || personKey(sender);
   if (!targetKey) return `"${parsed.target}" 사용자를 찾을 수 없습니다.`;
-  if (targetKey === personKey(sender)) return "본인에게는 이체할 수 없습니다.";
+  if (targetKey === senderKey) return "본인에게는 이체할 수 없습니다.";
 
   const receiver = roomState.people[targetKey];
   const fee = Math.max(1, Math.ceil(parsed.amount * TRANSFER_FEE_RATE));
@@ -7963,12 +7979,11 @@ function transferCommand(roomState, sender, text) {
   senderPerson.spentPoints += fee;
   receiver.points += parsed.amount;
   recordRoomEvent(roomState, { type: "point_transferred", from: senderPerson.currentName, to: receiver.currentName, amount: parsed.amount, fee });
-  const alias = roomState.profiles[targetKey]?.alias ? ` (별명 : ${roomState.profiles[targetKey].alias})` : "";
   return [
     "✅ 이체 완료",
     "",
-    `• 송금인 : ${senderPerson.currentName}`,
-    `• 수취인 : ${receiver.currentName}${alias}`,
+    `• 송금인 : ${displayNameForPerson(roomState, senderPerson, sender)}`,
+    `• 수취인 : ${displayNameForKey(roomState, targetKey, parsed.target)}`,
     `• 포인트 : ${formatPoint(parsed.amount)}`,
     `• 수수료 : ${formatPoint(fee)}`
   ].join("\n");
@@ -7976,6 +7991,7 @@ function transferCommand(roomState, sender, text) {
 
 function diceGameCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const displayName = displayNameForPerson(roomState, person, sender);
   const cooldown = gameCooldownText(person, "dice");
   if (cooldown) return cooldown;
   const settings = gameSettings(roomState);
@@ -7988,7 +8004,7 @@ function diceGameCommand(roomState, sender) {
     "주사위 게임",
     `시즌: ${settings.seasonName}`,
     "",
-    `${person.currentName}님 결과: ${roll}`,
+    `${displayName}님 결과: ${roll}`,
     `획득: ${formatPoint(reward)}`,
     `보유: ${formatPoint(person.points)}`
   ].join("\n");
@@ -7996,6 +8012,7 @@ function diceGameCommand(roomState, sender) {
 
 function fishingGameCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const displayName = displayNameForPerson(roomState, person, sender);
   const settings = gameSettings(roomState);
   const baitQuantity = inventoryQuantity(person, BAIT_ITEM_ID);
   if (baitQuantity <= 0) {
@@ -8026,7 +8043,7 @@ function fishingGameCommand(roomState, sender) {
     "낚시 결과",
     `시즌: ${settings.seasonName}`,
     "",
-    `${person.currentName}님이 물고기를 낚았습니다.`,
+    `${displayName}님이 물고기를 낚았습니다.`,
     `가방에 보관: ${item.name} x ${itemQuantity}`,
     `판매가: ${formatPoint(item.sellPrice)}`,
     `남은 미끼 : ${inventoryQuantity(person, BAIT_ITEM_ID)}개`
@@ -8035,6 +8052,7 @@ function fishingGameCommand(roomState, sender) {
 
 function exploreGameCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const displayName = displayNameForPerson(roomState, person, sender);
   const cooldown = gameCooldownText(person, "explore");
   if (cooldown) return cooldown;
   const settings = gameSettings(roomState);
@@ -8056,7 +8074,7 @@ function exploreGameCommand(roomState, sender) {
     "탐험 결과",
     `시즌: ${settings.seasonName}`,
     "",
-    `${person.currentName}님이 전리품을 발견했습니다.`,
+    `${displayName}님이 전리품을 발견했습니다.`,
     `가방에 보관: ${item.name} x ${itemQuantity}`,
     `판매가: ${formatPoint(item.sellPrice)}`
   ].join("\n");
@@ -8093,6 +8111,7 @@ function randomDungeonItem(config) {
 
 function dungeonCommand(roomState, sender, text) {
   const person = ensurePerson(roomState, sender);
+  const displayName = displayNameForPerson(roomState, person, sender);
   const cooldown = gameCooldownText(person, "dungeon");
   if (cooldown) return cooldown;
   const config = dungeonConfigFromText(text);
@@ -8103,7 +8122,7 @@ function dungeonCommand(roomState, sender, text) {
     return [
       "던전 결과",
       "",
-      `${person.currentName}님이 ${config.title}을(를) 탐험했습니다.`,
+      `${displayName}님이 ${config.title}을(를) 탐험했습니다.`,
       "결과: 꽝",
       "아무것도 얻지 못했습니다."
     ].join("\n");
@@ -8123,7 +8142,7 @@ function dungeonCommand(roomState, sender, text) {
   return [
     "던전 결과",
     "",
-    `${person.currentName}님이 ${config.title}에서 재료를 획득했습니다.`,
+    `${displayName}님이 ${config.title}에서 재료를 획득했습니다.`,
     `가방에 보관: ${item.name} x ${quantity}`,
     `판매가: ${formatPoint(item.sellPrice)}`,
     "판매: /판매 1",
@@ -8415,13 +8434,14 @@ function rpgSetBonusSummary(person) {
 
 function equipmentCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const displayName = displayNameForPerson(roomState, person, sender);
   const weapon = systemProductById(person.equipment?.weapon);
   const armor = systemProductById(person.equipment?.armor);
   const accessory = systemProductById(person.equipment?.accessory);
   const setBonus = rpgSetBonusSummary(person);
   const stats = rpgCurrentStats(person);
   return [
-    `⚔️ ${person.currentName}님의 장비`,
+    `⚔️ ${displayName}님의 장비`,
     "",
     `무기: ${weapon ? weapon.name : "미장착"}`,
     `방어구: ${armor ? armor.name : "미장착"}`,
@@ -8472,10 +8492,11 @@ function autoEquipCommand(roomState, sender, text) {
 
 function equipmentDetailCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const displayName = displayNameForPerson(roomState, person, sender);
   const equipped = rpgEquippedProductsBySlot(person);
   const setBonus = rpgSetBonusSummary(person);
   return [
-    `🛡️ ${person.currentName}님의 장비 상세`,
+    `🛡️ ${displayName}님의 장비 상세`,
     "",
     ...["weapon", "armor", "accessory"].map((slot) => {
       const product = equipped[slot];
@@ -8489,9 +8510,10 @@ function equipmentDetailCommand(roomState, sender) {
 
 function rpgStatsCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const displayName = displayNameForPerson(roomState, person, sender);
   const stats = rpgCurrentStats(person);
   return [
-    `📈 ${person.currentName}님의 스탯`,
+    `📈 ${displayName}님의 스탯`,
     "",
     `공격력 ${stats.attack} / 방어력 ${stats.defense} / 민첩 ${stats.agility}`,
     `HP ${stats.hp} / MP ${stats.mp}`,
@@ -8536,6 +8558,7 @@ function randomPixelMonsterSpecies() {
 
 function monsterExploreCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const displayName = displayNameForPerson(roomState, person, sender);
   const cooldown = gameCooldownText(person, "monsterExplore");
   if (cooldown) return cooldown;
   const species = randomPixelMonsterSpecies();
@@ -8544,7 +8567,7 @@ function monsterExploreCommand(roomState, sender) {
   return [
     "몬스터 탐험",
     "",
-    `${person.currentName}님이 ${species.name}을(를) 발견했습니다.`,
+    `${displayName}님이 ${species.name}을(를) 발견했습니다.`,
     `속성: ${species.element} / 등급: ${species.rarityLabel}`,
     "/포획 으로 포획을 시도하세요."
   ].join("\n");
@@ -8552,6 +8575,7 @@ function monsterExploreCommand(roomState, sender) {
 
 function monsterCaptureCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
+  const displayName = displayNameForPerson(roomState, person, sender);
   const pending = normalizePendingMonster(person.pendingMonster);
   if (!pending) return "발견한 몬스터가 없습니다. /몬스터탐험 으로 먼저 찾아주세요.";
   const species = pixelMonsterSpeciesById(pending.speciesId);
@@ -8580,16 +8604,17 @@ function monsterCaptureCommand(roomState, sender) {
   return [
     "포획 성공",
     "",
-    `${person.currentName}님이 ${species.name}을(를) 동료로 맞이했습니다.`,
+    `${displayName}님이 ${species.name}을(를) 동료로 맞이했습니다.`,
     `보유 몬스터: ${person.monsters.length}마리`
   ].join("\n");
 }
 
 function monsterListCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
-  if (!person.monsters.length) return `${person.currentName}님의 몬스터가 없습니다. /몬스터탐험 으로 시작해 주세요.`;
+  const displayName = displayNameForPerson(roomState, person, sender);
+  if (!person.monsters.length) return `${displayName}님의 몬스터가 없습니다. /몬스터탐험 으로 시작해 주세요.`;
   return [
-    `${person.currentName}님의 몬스터`,
+    `${displayName}님의 몬스터`,
     "",
     ...person.monsters.slice(0, 20).map((monster, index) => {
       const species = pixelMonsterSpeciesById(monster.speciesId);
@@ -8648,14 +8673,15 @@ function monsterBattleCommand(roomState, sender) {
 
 function petAdoptCommand(roomState, sender, text) {
   const person = ensurePerson(roomState, sender);
-  if (person.pet) return `${person.currentName}님은 이미 ${person.pet.name}을(를) 키우고 있습니다. /펫 으로 상태를 확인해 주세요.`;
+  const displayName = displayNameForPerson(roomState, person, sender);
+  if (person.pet) return `${displayName}님은 이미 ${person.pet.name}을(를) 키우고 있습니다. /펫 으로 상태를 확인해 주세요.`;
   const name = compactSpaces(text.replace(/^\/펫입양\s*/i, "")).slice(0, 24) || "픽셀펫";
   const species = PET_SPECIES[Math.floor(Math.random() * PET_SPECIES.length)] || PET_SPECIES[0];
   person.pet = normalizePetState({ name, species, hunger: 20, happiness: 70, energy: 70, cleanliness: 70, health: 90, level: 1, exp: 0, bornAt: nowIso(), updatedAt: nowIso() });
   return [
     "펫 입양 완료",
     "",
-    `${person.currentName}님이 ${person.pet.name} (${person.pet.species})을(를) 입양했습니다.`,
+    `${displayName}님이 ${person.pet.name} (${person.pet.species})을(를) 입양했습니다.`,
     "/펫 으로 상태를 확인해 주세요."
   ].join("\n");
 }
@@ -8663,9 +8689,10 @@ function petAdoptCommand(roomState, sender, text) {
 function petStatusCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
   if (!person.pet) return "키우는 펫이 없습니다. /펫입양 이름 으로 입양해 주세요.";
+  const displayName = displayNameForPerson(roomState, person, sender);
   const pet = person.pet;
   return [
-    `${person.currentName}님의 펫`,
+    `${displayName}님의 펫`,
     "",
     `${pet.name} (${pet.species}) Lv.${pet.level}`,
     `배고픔: ${pet.hunger}/100`,
@@ -8834,7 +8861,7 @@ function adminPointAdjustCommand(roomState, sender, text, mode) {
   return [
     `포인트 ${label} 완료`,
     "",
-    `• 대상 : ${person.currentName}`,
+    `• 대상 : ${displayNameForPerson(roomState, person, parsed.target)}`,
     `• 금액 : ${formatPoint(parsed.amount)}`,
     `• 보유 포인트 : ${formatPoint(person.points)}`
   ].join("\n");
@@ -8849,7 +8876,8 @@ function memberInfoCommand(roomState, text, sender) {
   const month = kstMonthKey();
   const nextExp = requiredExpForLevel(person.level);
   const expPercent = nextExp ? ((person.exp / nextExp) * 100).toFixed(2) : "0.00";
-  const nameLine = `${profile?.alias ? "🌿" : "🥚"}${person.currentName}${profile?.alias ? ` (${profile.alias})` : ""}`;
+  const displayName = displayNameForPerson(roomState, person, query);
+  const nameLine = `${profile?.alias ? "🌿" : "🥚"}${displayName}`;
   const monthAttendance = person.attendance.dates.filter((date) => date.startsWith(month)).length;
   return [
     nameLine,
@@ -8927,7 +8955,7 @@ function rankingText(roomState, sender, type) {
   lines.push(`• ${displayNameForKey(roomState, senderKey, sender)}님 : ${ownRank ? `${ownRank}위` : "순위 없음"}`, "");
   rows.slice(0, 15).forEach((item, index) => {
     const rank = index + 1;
-    lines.push(`${medal(rank)} ${item.person.currentName} ${config.value(item, total)}`);
+    lines.push(`${medal(rank)} ${displayNameForPerson(roomState, item.person, item.person.currentName)} ${config.value(item, total)}`);
   });
   if (!rows.length) lines.push("기록 없음");
   return lines.join("\n");
@@ -8938,7 +8966,7 @@ function personHistoryText(roomState, query, sender) {
   const key = resolveName(roomState, target);
   const person = roomState.people[key];
   if (!person) return `"${target}" 닉네임 기록이 없습니다.`;
-  const lines = [`${person.currentName || target}님 히스토리`, ""];
+  const lines = [`${displayNameForPerson(roomState, person, target)}님 히스토리`, ""];
   lines.push("❰ 닉네임 히스토리 ❱");
   if (person.names?.length) {
     for (const name of person.names) lines.push(`• ${name}`);
@@ -8999,7 +9027,7 @@ function recentExitCandidateText(roomState, currentName) {
       .slice(0, 4);
     lines.push(
       "",
-      `• ${person.currentName || "이름없음"} - 마지막 퇴장 ${shortKstDate(new Date(lastExitAt))}`,
+      `• ${displayNameForPerson(roomState, person, person.currentName) || "이름없음"} - 마지막 퇴장 ${shortKstDate(new Date(lastExitAt))}`,
       `  입장 ${person.entries?.length || 0}회 / 퇴장 ${person.exits?.length || 0}회 / 강퇴 ${person.kicks?.length || 0}회`,
       `  이전닉: ${names.length ? names.join(", ") : "기록 없음"}`
     );
@@ -9025,7 +9053,7 @@ function personDetailedHistoryText(roomState, query, sender) {
   ].sort((a, b) => new Date(a.at) - new Date(b.at));
 
   const lines = [
-    `${person.currentName || target}님 입퇴장 상세`,
+    `${displayNameForPerson(roomState, person, target)}님 입퇴장 상세`,
     "",
     `입장 ${entries.length}회 / 퇴장 ${exits.length}회 / 강퇴 ${kicks.length}회 / 닉변 ${nickChanges.length}회`,
     "",
@@ -9053,9 +9081,9 @@ function nicknameHistoryText(person) {
   return lines.join("\n");
 }
 
-function welcomeText(person, reentryCandidateText = "") {
+function welcomeText(roomState, person, reentryCandidateText = "") {
   const lines = [
-    `${person.currentName}님 어서오세요👀`
+    `${displayNameForPerson(roomState, person, person.currentName)}님 어서오세요👀`
   ];
   if (reentryCandidateText) lines.push("", reentryCandidateText);
   return lines.join("\n");
@@ -9064,7 +9092,7 @@ function welcomeText(person, reentryCandidateText = "") {
 function reentryText(roomState, person) {
   const kickCount = person.kicks?.length || 0;
   const lines = [
-    `⚠ ${person.currentName}님 ${person.entries.length}회 재입장 ⚠`,
+    `⚠ ${displayNameForPerson(roomState, person, person.currentName)}님 ${person.entries.length}회 재입장 ⚠`,
     "",
     `- 강퇴이력 : ${kickCount}회`
   ];
@@ -9080,7 +9108,7 @@ function recordEntry(roomState, name, identityId = "") {
   person.entries.push({ at });
   recordRoomEvent(roomState, { type: "entered", name: person.currentName });
   const count = person.entries.length;
-  if (count <= 1) return welcomeText(person, identityId ? "" : recentExitCandidateText(roomState, person.currentName));
+  if (count <= 1) return welcomeText(roomState, person, identityId ? "" : recentExitCandidateText(roomState, person.currentName));
   return reentryText(roomState, person);
 }
 
@@ -9093,7 +9121,7 @@ function recordExit(roomState, name, type = "left", identityId = "") {
   recordRoomEvent(roomState, { type, name: person.currentName });
   if (type === "kicked") return null;
   return [
-    `${person.currentName}님 안녕히 가세요👀`,
+    `${displayNameForPerson(roomState, person, person.currentName)}님 안녕히 가세요👀`,
     "",
     personHistoryText(roomState, person.currentName, person.currentName)
   ].join("\n");
