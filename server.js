@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.03";
+export const APP_VERSION = "0.5.04";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -36,6 +36,7 @@ export const FEATURES = [
   "identity-conflict-guard",
   "profile-registry",
   "alias-registry",
+  "nickname-manual-merge",
   "join-exit-history",
   "nickname-history",
   "detailed-member-history",
@@ -425,7 +426,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
   },
   {
     title: "관리자",
-    commands: ["/방등록", "/방정보", "/방목록", "/방삭제", "/입장문구", "/기능목록", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/관리자등록", "/관리자삭제", "/관리자목록", "/최근이벤트", "/원본로그", "/신고목록", "/신고처리", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장상세", "/고유값초기화", "/포인트지급", "/포인트차감", "/포인트설정", "/상점추가", "/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수", "/명령어등록", "/명령어삭제", "/명령어목록", "/명령어팩목록", "/명령어팩제거"]
+    commands: ["/방등록", "/방정보", "/방목록", "/방삭제", "/입장문구", "/기능목록", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/관리자등록", "/관리자삭제", "/관리자목록", "/최근이벤트", "/원본로그", "/신고목록", "/신고처리", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/닉병합", "/입퇴장상세", "/고유값초기화", "/포인트지급", "/포인트차감", "/포인트설정", "/상점추가", "/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수", "/명령어등록", "/명령어삭제", "/명령어목록", "/명령어팩목록", "/명령어팩제거"]
   },
   {
     title: "게임/연동 예약",
@@ -951,7 +952,8 @@ const COMMAND_TEMPLATE_BUNDLES = Object.freeze([
 const ADMIN_MANAGEMENT_COMMANDS = Object.freeze([
   "/포인트지급", "/포인트차감", "/포인트설정",
   "/상점추가", "/상점수정", "/상점삭제", "/상점초기화", "/상점내역",
-  "/아이템지급", "/아이템회수"
+  "/아이템지급", "/아이템회수",
+  "/닉병합"
 ]);
 const COMMAND_PACK_ALWAYS_INSTALLED_COMMANDS = Object.freeze([
   "/상태", "/도움말", "/방등록", "/신고", "/신고목록", "/신고처리",
@@ -970,7 +972,7 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "pet-raising": ["/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점", "/포인트"],
   "shop-inventory": ["/상점", "/구매", "/가방", "/사용", "/가방선물", "/판매", "/구매내역"],
   "custom-command": ["/명령어목록", "/커스텀명령어", "/고정명령어", "/명령어등록", "/명령어수정", "/명령어삭제", "/커스텀등록", "/커스텀수정", "/커스텀삭제"],
-  "profile-history": ["/프로필", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
+  "profile-history": ["/프로필", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/닉병합", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
   "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그", "/신고목록", "/신고처리", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록", "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말", ...ADMIN_MANAGEMENT_COMMANDS],
   "event-engagement": ["/출석", "/좋아요", "/응원", "/운세", "/날씨", "/채팅오늘", "/채팅금주", "/포인트순위"]
 });
@@ -4289,7 +4291,8 @@ function ensurePerson(roomState, name, identityId = "") {
     markAmbiguousIdentity(roomState, identityId);
   }
   const trustedIdentityKey = isAmbiguousIdentity(roomState, identityId) ? "" : identityPersonKey(roomState, identityId);
-  const key = trustedIdentityKey || displayKey;
+  const aliasTargetKey = roomState.aliases?.[keyFor(displayName)] || "";
+  const key = trustedIdentityKey || aliasTargetKey || displayKey;
   if (!key) return null;
   roomState.people[key] ||= {
     currentName: displayName,
@@ -4325,8 +4328,9 @@ function ensurePerson(roomState, name, identityId = "") {
   person.currentName ||= displayName;
   if (displayName) person.currentName = displayName;
   addUnique(person.names, displayName);
-  if (trustedIdentityKey && displayKey && trustedIdentityKey !== displayKey) remapPersonKey(roomState, trustedIdentityKey, displayKey, person);
-  if (!isAmbiguousIdentity(roomState, identityId)) attachPersonIdentity(roomState, displayKey || key, person, identityId);
+  const storageKey = aliasTargetKey || displayKey || key;
+  if (trustedIdentityKey && storageKey && trustedIdentityKey !== storageKey) remapPersonKey(roomState, trustedIdentityKey, storageKey, person);
+  if (!isAmbiguousIdentity(roomState, identityId)) attachPersonIdentity(roomState, storageKey || key, person, identityId);
   return person;
 }
 
@@ -4399,6 +4403,149 @@ function existingPersonKey(roomState, query) {
     return key;
   }
   return "";
+}
+
+function mergeNumericMaps(target = {}, source = {}) {
+  const result = { ...(target || {}) };
+  for (const [key, value] of Object.entries(source || {})) {
+    result[key] = Math.max(0, Number(result[key] || 0)) + Math.max(0, Number(value || 0));
+  }
+  return result;
+}
+
+function mergeCooldownMaps(target = {}, source = {}) {
+  const result = { ...(target || {}) };
+  for (const [key, value] of Object.entries(source || {})) {
+    const currentTime = Date.parse(result[key] || "");
+    const sourceTime = Date.parse(value || "");
+    if (Number.isFinite(sourceTime) && (!Number.isFinite(currentTime) || sourceTime > currentTime)) {
+      result[key] = value;
+    }
+  }
+  return normalizeGameCooldowns(result);
+}
+
+function mergeEquipmentState(target = {}, source = {}) {
+  const targetEquipment = normalizeEquipment(target || {});
+  const sourceEquipment = normalizeEquipment(source || {});
+  return {
+    weapon: targetEquipment.weapon || sourceEquipment.weapon || "",
+    armor: targetEquipment.armor || sourceEquipment.armor || "",
+    accessory: targetEquipment.accessory || sourceEquipment.accessory || ""
+  };
+}
+
+function mergeProfileForPerson(roomState, targetKey, sourceKey, targetPerson, sourcePerson, extraAliases = []) {
+  roomState.profiles ||= {};
+  roomState.aliases ||= {};
+  const sourceProfile = roomState.profiles[sourceKey] || {};
+  const targetProfile = roomState.profiles[targetKey] || {};
+  const aliases = uniqueNames([
+    targetProfile.alias,
+    ...(targetProfile.aliases || []),
+    sourceProfile.name,
+    sourceProfile.alias,
+    ...(sourceProfile.aliases || []),
+    sourcePerson?.currentName,
+    ...(sourcePerson?.names || []),
+    ...extraAliases
+  ]).filter((name) => keyFor(name) !== keyFor(targetPerson.currentName));
+
+  roomState.profiles[targetKey] = {
+    name: targetProfile.name || targetPerson.currentName,
+    alias: targetProfile.alias || aliases[0] || "",
+    aliases,
+    fields: { ...(sourceProfile.fields || {}), ...(targetProfile.fields || {}) },
+    raw: targetProfile.raw || sourceProfile.raw || "",
+    updatedAt: nowIso(),
+    updatedBy: targetProfile.updatedBy || sourceProfile.updatedBy || ""
+  };
+
+  for (const alias of aliases) roomState.aliases[keyFor(alias)] = targetKey;
+  for (const [alias, key] of Object.entries(roomState.aliases || {})) {
+    if (key === sourceKey) roomState.aliases[alias] = targetKey;
+  }
+  if (sourceKey !== targetKey) delete roomState.profiles[sourceKey];
+}
+
+function mergePersonData(roomState, targetKey, sourceKey, options = {}) {
+  if (!targetKey || !sourceKey) return { ok: false, error: "not_found" };
+  if (targetKey === sourceKey) return { ok: true, merged: false, targetKey, sourceKey };
+  roomState.people ||= {};
+  const targetPerson = normalizePersonState(roomState.people[targetKey] || ensurePerson(roomState, options.targetName || targetKey));
+  const sourcePerson = normalizePersonState(roomState.people[sourceKey] || ensurePerson(roomState, options.sourceName || sourceKey));
+  if (!targetPerson || !sourcePerson) return { ok: false, error: "not_found" };
+
+  const targetName = targetPerson.currentName || options.targetName || displayNameForKey(roomState, targetKey, targetKey);
+  const sourceName = sourcePerson.currentName || options.sourceName || displayNameForKey(roomState, sourceKey, sourceKey);
+  targetPerson.currentName = targetName;
+  targetPerson.names = uniqueNames([
+    targetName,
+    ...(targetPerson.names || []),
+    sourceName,
+    ...(sourcePerson.names || [])
+  ]);
+  targetPerson.entries = [...(targetPerson.entries || []), ...(sourcePerson.entries || [])];
+  targetPerson.exits = [...(targetPerson.exits || []), ...(sourcePerson.exits || [])];
+  targetPerson.kicks = [...(targetPerson.kicks || []), ...(sourcePerson.kicks || [])];
+  targetPerson.nickChanges = [
+    ...(targetPerson.nickChanges || []),
+    ...(sourcePerson.nickChanges || []),
+    { from: sourceName, to: targetName, at: nowIso(), source: options.source || "manual_merge" }
+  ].filter((event) => event.from && event.to);
+  targetPerson.joinedAt = [targetPerson.joinedAt, sourcePerson.joinedAt]
+    .filter(Boolean)
+    .sort()[0] || nowIso();
+  targetPerson.points = Math.max(0, Number(targetPerson.points || 0)) + Math.max(0, Number(sourcePerson.points || 0));
+  targetPerson.spentPoints = Math.max(0, Number(targetPerson.spentPoints || 0)) + Math.max(0, Number(sourcePerson.spentPoints || 0));
+  targetPerson.exp = Math.max(0, Number(targetPerson.exp || 0)) + Math.max(0, Number(sourcePerson.exp || 0));
+  targetPerson.level = Math.max(1, Number(targetPerson.level || 1), Number(sourcePerson.level || 1));
+  targetPerson.hearts = Math.max(0, Number(targetPerson.hearts || 0)) + Math.max(0, Number(sourcePerson.hearts || 0));
+  targetPerson.attendance = {
+    dates: [...new Set([...(targetPerson.attendance?.dates || []), ...(sourcePerson.attendance?.dates || [])])].sort(),
+    currentStreak: Math.max(Number(targetPerson.attendance?.currentStreak || 0), Number(sourcePerson.attendance?.currentStreak || 0))
+  };
+  targetPerson.chats = {
+    total: Math.max(0, Number(targetPerson.chats?.total || 0)) + Math.max(0, Number(sourcePerson.chats?.total || 0)),
+    byDate: mergeNumericMaps(targetPerson.chats?.byDate, sourcePerson.chats?.byDate),
+    byWeek: mergeNumericMaps(targetPerson.chats?.byWeek, sourcePerson.chats?.byWeek)
+  };
+  targetPerson.inventory = normalizeInventory(mergeNumericMaps(targetPerson.inventory, sourcePerson.inventory));
+  targetPerson.gameCooldowns = mergeCooldownMaps(targetPerson.gameCooldowns, sourcePerson.gameCooldowns);
+  targetPerson.equipment = mergeEquipmentState(targetPerson.equipment, sourcePerson.equipment);
+  targetPerson.monsters = normalizeOwnedMonsters([...(targetPerson.monsters || []), ...(sourcePerson.monsters || [])]);
+  targetPerson.pendingMonster = targetPerson.pendingMonster || sourcePerson.pendingMonster || null;
+  targetPerson.pet = targetPerson.pet || sourcePerson.pet || null;
+  targetPerson.identities = [...new Set([...(targetPerson.identities || []), ...(sourcePerson.identities || [])].map(normalizeIdentityId).filter(Boolean))];
+  targetPerson.firstChatReentryNotices = [...new Set([...(targetPerson.firstChatReentryNotices || []), ...(sourcePerson.firstChatReentryNotices || [])])];
+  normalizePersonState(targetPerson);
+
+  roomState.people[targetKey] = targetPerson;
+  if (roomState.inbox?.[sourceKey]) {
+    roomState.inbox[targetKey] = [...(roomState.inbox[targetKey] || []), ...roomState.inbox[sourceKey]];
+    delete roomState.inbox[sourceKey];
+  }
+  roomState.admins = (roomState.admins || []).map((name) => (personKey(name) === sourceKey ? targetName : name));
+  roomState.admins = uniqueNames(roomState.admins);
+  for (const [id, key] of Object.entries(roomState.peopleByIdentity || {})) {
+    if (key === sourceKey) roomState.peopleByIdentity[id] = targetKey;
+  }
+  for (const id of targetPerson.identities || []) {
+    if (!isAmbiguousIdentity(roomState, id)) {
+      roomState.peopleByIdentity ||= {};
+      roomState.peopleByIdentity[id] = targetKey;
+    }
+  }
+  mergeProfileForPerson(roomState, targetKey, sourceKey, targetPerson, sourcePerson, options.aliases || []);
+  delete roomState.people[sourceKey];
+  recordRoomEvent(roomState, {
+    type: "nickname_merged",
+    target: targetName,
+    source: sourceName,
+    by: options.by || "",
+    reason: options.source || "manual_merge"
+  });
+  return { ok: true, merged: true, targetKey, sourceKey, targetName, sourceName, points: targetPerson.points };
 }
 
 function roomAdminKeys(roomState) {
@@ -4833,6 +4980,16 @@ function aliasRegisterCommand(roomState, sender, text) {
   const key = resolveName(roomState, target);
   const displayName = stripKakaoSuffix(target);
   ensurePerson(roomState, displayName);
+  const sourceKey = existingPersonKey(roomState, alias);
+  const mergeResult = sourceKey && sourceKey !== key
+    ? mergePersonData(roomState, key, sourceKey, {
+      targetName: displayName,
+      sourceName: alias,
+      aliases: [alias],
+      by: sender,
+      source: "alias_register"
+    })
+    : { merged: false };
   roomState.profiles[key] ||= {
     name: displayName,
     alias: "",
@@ -4847,7 +5004,72 @@ function aliasRegisterCommand(roomState, sender, text) {
   addUnique(profile.aliases, alias);
   roomState.aliases[keyFor(alias)] = key;
   recordRoomEvent(roomState, { type: "alias_registered", name: profile.name, alias, by: sender });
-  return `${profile.name}님의 별명이 ${alias} (으)로 등록되었습니다.`;
+  return [
+    `${profile.name}님의 별명이 ${alias} (으)로 등록되었습니다.`,
+    mergeResult.merged ? `데이터 병합: ${mergeResult.sourceName} → ${mergeResult.targetName}` : ""
+  ].filter(Boolean).join("\n");
+}
+
+function parseNicknameMergeTarget(roomState, text) {
+  const body = text.replace(/^\/(?:닉병합|닉네임병합|별명병합)\s*/i, "").trim();
+  const tokens = body.split(/\s+/).filter(Boolean);
+  if (tokens.length < 2) return null;
+  const fallbackCandidates = [];
+  for (let index = 1; index < tokens.length; index += 1) {
+    const targetName = stripKakaoSuffix(tokens.slice(0, index).join(" "));
+    const sourceName = stripKakaoSuffix(tokens.slice(index).join(" "));
+    if (!targetName || !sourceName) continue;
+    const targetKey = existingPersonKey(roomState, targetName);
+    const sourceKey = existingPersonKey(roomState, sourceName);
+    if (targetKey && sourceKey && targetKey !== sourceKey) {
+      return { targetName, sourceName, targetKey, sourceKey };
+    }
+    if (!targetKey && sourceKey) fallbackCandidates.push({ targetName, sourceName, sourceKey });
+    if (targetKey && sourceKey && targetKey === sourceKey) {
+      fallbackCandidates.push({ targetName, sourceName, targetKey, sourceKey, same: true });
+    }
+  }
+  const sameCandidate = fallbackCandidates.find((candidate) => candidate.same);
+  if (sameCandidate) return sameCandidate;
+  if (fallbackCandidates.length === 1) {
+    const candidate = fallbackCandidates[0];
+    const person = ensurePerson(roomState, candidate.targetName);
+    return {
+      ...candidate,
+      targetKey: personKey(person?.currentName || candidate.targetName)
+    };
+  }
+  return null;
+}
+
+function nicknameMergeCommand(roomState, sender, text) {
+  const parsed = parseNicknameMergeTarget(roomState, text);
+  if (!parsed) {
+    return [
+      "형식: /닉병합 기준닉 합칠닉",
+      "예: /닉병합 오리 95 오리",
+      "띄어쓰기 닉네임은 기존 데이터 기준으로 자동 판정합니다."
+    ].join("\n");
+  }
+  if (parsed.same || parsed.targetKey === parsed.sourceKey) {
+    return "이미 같은 닉네임 데이터로 연결되어 있습니다.";
+  }
+  const result = mergePersonData(roomState, parsed.targetKey, parsed.sourceKey, {
+    targetName: parsed.targetName,
+    sourceName: parsed.sourceName,
+    aliases: [parsed.sourceName],
+    by: sender,
+    source: "manual_nickname_merge"
+  });
+  if (!result.ok) return "병합할 닉네임 데이터를 찾지 못했습니다. /닉이력 으로 대상 닉네임을 먼저 확인해 주세요.";
+  return [
+    "닉네임 병합 완료",
+    `기준 : ${result.targetName}`,
+    `합친 닉 : ${result.sourceName}`,
+    `보유 포인트 : ${formatPoint(result.points)}`,
+    "",
+    "일반방/게임방에서 닉네임이 달라도 합친 닉은 같은 사람 데이터로 조회됩니다."
+  ].join("\n");
 }
 
 function aliasDeleteCommand(roomState, text) {
@@ -8201,7 +8423,7 @@ function commandFeatureKey(command) {
   if (/^\/포인트\s*순위$|^\/포인트순위$|^\/좋아요\s*순위$|^\/좋아요순위$|^\/레벨\s*순위$|^\/레벨순위$|^\/출석\s*순위$|^\/출석순위$/.test(command)) return "rankings";
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
-  if (/^\/(?:프로필|프로칠|프로필등록|프로필삭제|별명등록|별명삭제)(?:\s|$)/.test(command)) return "profiles";
+  if (/^\/(?:프로필|프로칠|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
   if (/^\/(?:게임|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|던전|던전목록|대장간|제작가능|제작|장비|장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터훈련|몬스터전투|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
   if (/^\/(?:상점|구매|구매내역|가방|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
@@ -8300,6 +8522,7 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/프로필삭제", "관리자", "프로필 삭제", { visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
   registryEntry("/별명등록", "관리자", "별명 등록", { visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
   registryEntry("/별명삭제", "관리자", "별명 삭제", { visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
+  registryEntry("/닉병합", "관리자", "일반방/게임방 닉네임 데이터 병합", { aliases: ["/닉네임병합", "/별명병합"], examples: ["/닉병합 오리 95 오리"], visibility: "admin", requiresRole: "admin", requiresFeature: "profiles", searchableKeywords: ["닉네임", "별명", "병합", "게임방"] }),
   registryEntry("/입퇴장상세", "관리자", "입퇴장 상세 이력", { visibility: "admin", requiresRole: "admin", requiresFeature: "history" }),
   registryEntry("/관리자등록", "관리자", "방 관리자 등록", { visibility: "admin", requiresRole: "admin" }),
   registryEntry("/관리자삭제", "관리자", "방 관리자 삭제", { visibility: "admin", requiresRole: "admin" }),
@@ -12739,6 +12962,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/프로필" || command === "/프로칠") return profileViewCommand(roomState, text, sender);
   if (command === "/별명등록") return requireAdmin(roomState, sender) || aliasRegisterCommand(roomState, sender, text);
   if (command === "/별명삭제") return requireAdmin(roomState, sender) || aliasDeleteCommand(roomState, text);
+  if (command === "/닉병합" || command === "/닉네임병합" || command === "/별명병합") return requireAdmin(roomState, sender) || nicknameMergeCommand(roomState, sender, text);
   if (command === "/입퇴장상세") {
     const denied = requireAdmin(roomState, sender);
     if (denied) return denied;
