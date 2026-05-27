@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.08";
+export const APP_VERSION = "0.5.09";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -245,7 +245,9 @@ export const FEATURES = [
   "command-response-emoji-ux",
   "inventory-sale-cleanup",
   "inventory-item-locks",
-  "hidden-item-id-chat-results"
+  "hidden-item-id-chat-results",
+  "hidden-system-shop-ids",
+  "command-discovery-hub"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -1255,7 +1257,7 @@ const ADMIN_MANAGEMENT_COMMANDS = Object.freeze([
   "/닉병합"
 ]);
 const COMMAND_PACK_ALWAYS_INSTALLED_COMMANDS = Object.freeze([
-  "/상태", "/도움말", "/방등록", "/신고", "/신고목록", "/신고처리",
+  "/상태", "/도움말", "/메뉴", "/처음", "/찾기", "/명령어", "/방등록", "/신고", "/신고목록", "/신고처리",
   "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록",
   "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말", "/점메추",
   ...ADMIN_MANAGEMENT_COMMANDS
@@ -5545,7 +5547,7 @@ function isSubscriptionExpired(roomState) {
 }
 
 function subscriptionBypassCommand(text) {
-  return /^\/(?:구독상태|구독연장|구독만료|방정보|방등록|방설정|입장문구|방목록|기능|기능목록|기능켜기|기능끄기|도움말|help|\?)(?:\s|$)/i.test(normalizeText(text));
+  return /^\/(?:구독상태|구독연장|구독만료|방정보|방등록|방설정|입장문구|방목록|기능|기능목록|기능켜기|기능끄기|도움말|help|\?|메뉴|처음|찾기|명령어)(?:\s|$)/i.test(normalizeText(text));
 }
 
 function subscriptionStatusLabel(status, days) {
@@ -7154,15 +7156,15 @@ function baitShopCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
   const bait = systemProductById(BAIT_ITEM_ID);
   return [
-    "미끼 상점",
+    "🎣 미끼 상점",
     "",
-    `${bait.id}. ${bait.name} - ${formatPoint(bait.price)} / 판매가 ${formatPoint(bait.sellPrice)}`,
+    `1. ${bait.name} - ${formatPoint(bait.price)} / 판매가 ${formatPoint(bait.sellPrice)}`,
     `   ${bait.description}`,
     "",
     `보유 포인트: ${formatPoint(person.points)}`,
     `보유 미끼: ${inventoryQuantity(person, BAIT_ITEM_ID)}개`,
     "",
-    "/미끼구매 수량 으로 구매합니다."
+    "구매: /미끼구매 수량"
   ].join("\n");
 }
 
@@ -8151,12 +8153,27 @@ function rpgRecipeCanCraft(person, recipe) {
   return hasMaterials && Number(person.points || 0) >= Number(recipe.pointCost || 0);
 }
 
+function rpgRecipeDisplayNo(recipe) {
+  const index = RPG_WEAPON_RECIPES.findIndex((item) => item.itemId === recipe?.itemId);
+  return index >= 0 ? index + 1 : 0;
+}
+
 function rpgRecipeLine(recipe, person = null) {
   const slot = RPG_EQUIPMENT_SLOT_LABELS[recipe.slot || "weapon"] || "장비";
   const setName = recipe.setId ? ` / ${RPG_EQUIPMENT_SETS[recipe.setId]?.name || "세트"}` : "";
   const craftable = person ? (rpgRecipeCanCraft(person, recipe) ? "제작 가능" : "재료 부족") : "";
   const craftableText = craftable ? ` / ${craftable}` : "";
-  return `${recipe.itemId}. [${slot}${setName}] ${recipe.name} - ${rpgMaterialText(recipe, person)} + ${formatPoint(recipe.pointCost)} / 전투력 +${recipe.power}${craftableText}`;
+  const displayNo = rpgRecipeDisplayNo(recipe) || "?";
+  return `${displayNo}. [${slot}${setName}] ${recipe.name} - ${rpgMaterialText(recipe, person)} + ${formatPoint(recipe.pointCost)} / 전투력 +${recipe.power}${craftableText}`;
+}
+
+function rpgRecipeFromCraftText(text = "") {
+  const body = compactSpaces(text.replace(/^\/제작\s*/i, ""));
+  const raw = body.replace(/,/g, "");
+  const numeric = Math.trunc(Number(raw));
+  if (!body || !numeric || String(numeric) !== raw) return null;
+  if (numeric >= 1000) return RPG_WEAPON_RECIPES.find((item) => item.itemId === numeric) || null;
+  return RPG_WEAPON_RECIPES[numeric - 1] || null;
 }
 
 function blacksmithCommand(roomState = null, sender = "") {
@@ -8169,15 +8186,14 @@ function blacksmithCommand(roomState = null, sender = "") {
     ...RPG_WEAPON_RECIPES.map((recipe) => rpgRecipeLine(recipe, person)),
     "",
     "/제작가능 으로 지금 만들 수 있는 장비를 확인합니다.",
-    "/제작 번호 로 장비를 만들면 현재 장비보다 강할 때 자동 장착됩니다.",
+    "/제작 1 처럼 짧은 번호로 만들면 현재 장비보다 강할 때 자동 장착됩니다.",
     "/세트아이템 으로 세트 보너스를 확인합니다."
   ].join("\n");
 }
 
 function craftWeaponCommand(roomState, sender, text) {
-  const recipeId = parseProductIdFromCommand(text, /^\/제작\s*/i);
-  const recipe = RPG_WEAPON_RECIPES.find((item) => item.itemId === recipeId);
-  if (!recipe) return "형식: /제작 12001";
+  const recipe = rpgRecipeFromCraftText(text);
+  if (!recipe) return "형식: /제작 1";
   const person = ensurePerson(roomState, sender);
   const missingMaterials = rpgRecipeMaterials(recipe).filter((item) => inventoryQuantity(person, item.id) < item.qty);
   if (missingMaterials.length) {
@@ -8500,10 +8516,10 @@ function rpgSetItemsCommand() {
 
 function monsterDexCommand() {
   const preview = PIXEL_MONSTER_SPECIES.slice(0, 10)
-    .map((species) => `${species.speciesId}. ${species.name} [${species.element}/${species.rarityLabel}]`)
+    .map((species, index) => `${index + 1}. ${species.name} [${species.element}/${species.rarityLabel}]`)
     .join("\n");
   return [
-    "픽셀몬스터 도감",
+    "🔮 픽셀몬스터 도감",
     "",
     `총 ${PIXEL_MONSTER_SPECIES_COUNT}종`,
     preview,
@@ -8727,11 +8743,13 @@ function petShopCommand(roomState, sender) {
     ].join("\n");
   }
   return [
-    "펫 상점",
+    "🐾 펫 상점",
     "",
-    `${snack.id}. ${snack.name} - ${formatPoint(snack.price)} / 판매가 ${formatPoint(snack.sellPrice)}`,
-    "v1에서는 /펫먹이, /펫놀기, /펫씻기, /펫재우기 를 바로 사용할 수 있습니다.",
-    `보유 포인트: ${formatPoint(person.points)}`
+    `1. ${snack.name} - ${formatPoint(snack.price)} / 판매가 ${formatPoint(snack.sellPrice)}`,
+    "돌봄: /펫먹이, /펫놀기, /펫씻기, /펫재우기",
+    `보유 포인트: ${formatPoint(person.points)}`,
+    "",
+    "구매형 간식 확장은 준비 중입니다."
   ].join("\n");
 }
 
@@ -9266,7 +9284,7 @@ const GAME_ROOM_ECONOMY_COMMANDS = new Set([
   "/포인트", "/내포인트", "/내정보", "/레벨", "/정보", "/가방", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/일괄판매", "/판매", "/구매내역", "/상점", "/구매", "/점메추"
 ]);
 const GAME_ROOM_DIAGNOSTIC_COMMANDS = new Set([
-  "/상태", "/status", "/브릿지", "/bridge", "/js상태", "/jsstatus", "/로컬상태", "/도움말", "/help", "/?", "/게임팩도움말"
+  "/상태", "/status", "/브릿지", "/bridge", "/js상태", "/jsstatus", "/로컬상태", "/도움말", "/help", "/?", "/메뉴", "/처음", "/찾기", "/명령어", "/게임팩도움말"
 ]);
 
 function commandForRoomRole(command) {
@@ -9351,7 +9369,7 @@ function registryEntry(command, category, description, options = {}) {
 
 const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/상태", "기본", "서버 연결 상태 확인", { aliases: ["/status"], searchableKeywords: ["서버", "연결"] }),
-  registryEntry("/도움말", "기본", "현재 사용 가능한 명령어 확인", { aliases: ["/help", "/?"], searchableKeywords: ["help", "명령어"] }),
+  registryEntry("/도움말", "기본", "현재 사용 가능한 명령어 확인", { aliases: ["/help", "/?", "/메뉴", "/처음", "/찾기", "/명령어"], examples: ["/메뉴", "/찾기 게임"], searchableKeywords: ["help", "명령어", "처음", "찾기"] }),
   registryEntry("/브릿지", "기본", "브릿지 연결 진단", { aliases: ["/bridge"], searchableKeywords: ["연결", "진단"] }),
   registryEntry("/js상태", "기본", "브릿지 JS 호환 진단", { aliases: ["/jsstatus", "/로컬상태"], searchableKeywords: ["js", "로컬"] }),
   registryEntry("/메시지", "운영", "내 읽지 않은 메시지함 확인", { aliases: ["/메세지", "/메시지함"], searchableKeywords: ["읽지 않은", "쪽지"] }),
@@ -9384,14 +9402,14 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/아이템잠금", "상점/가방", "중요 아이템 판매 잠금", { aliases: ["/아이템잠금해제", "/잠금목록"], examples: ["/아이템잠금 3", "/아이템잠금해제 3"], requiresFeature: "shop" }),
   registryEntry("/사용", "상점/가방", "아이템 사용", { examples: ["/사용 1"], requiresFeature: "shop" }),
   registryEntry("/가방선물", "상점/가방", "아이템 선물", { examples: ["/가방선물 닉네임 1 1"], requiresFeature: "shop" }),
-  registryEntry("/판매", "상점/가방", "가방 아이템을 포인트로 판매", { examples: ["/판매 10000 1"], requiresFeature: "shop" }),
+  registryEntry("/판매", "상점/가방", "가방 아이템을 포인트로 판매", { examples: ["/판매 1", "/판매 재료"], requiresFeature: "shop" }),
   registryEntry("/구매내역", "상점/가방", "구매와 아이템 내역", { requiresFeature: "shop" }),
   registryEntry("/게임", "게임", "미니게임 안내", { aliases: ["/게임명령어"], requiresFeature: "games" }),
   registryEntry("/주사위", "게임", "주사위 보상 게임", { requiresFeature: "games" }),
   registryEntry("/낚시", "게임", "낚시 보상 게임", { requiresFeature: "games" }),
   registryEntry("/탐험", "게임", "탐험 보상 게임", { requiresFeature: "games" }),
   registryEntry("/던전", "RPG", "던전 탐험과 재료 획득", { aliases: ["/던전목록"], examples: ["/던전", "/던전 중급"], requiresFeature: "games", searchableKeywords: ["RPG", "모험", "재료"] }),
-  registryEntry("/대장간", "RPG", "장비 제작 레시피 확인", { aliases: ["/제작", "/제작가능", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템"], examples: ["/대장간", "/제작가능", "/제작 12001", "/자동장착 공격"], requiresFeature: "games", searchableKeywords: ["무기", "방어구", "장신구", "제작", "장비", "세트"] }),
+  registryEntry("/대장간", "RPG", "장비 제작 레시피 확인", { aliases: ["/제작", "/제작가능", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템"], examples: ["/대장간", "/제작가능", "/제작 1", "/자동장착 공격"], requiresFeature: "games", searchableKeywords: ["무기", "방어구", "장신구", "제작", "장비", "세트"] }),
   registryEntry("/점메추", "생활", "점심 메뉴 추천", { examples: ["/점메추", "/점메추 한식", "/점메추 매운거"], searchableKeywords: ["점심", "메뉴", "추천", "음식"] }),
   registryEntry("/몬스터탐험", "픽셀몬스터", "오리지널 몬스터 발견", { aliases: ["/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감"], requiresFeature: "games", searchableKeywords: ["몬스터", "수집", "도감"] }),
   registryEntry("/펫입양", "펫키우기", "개인 펫 입양과 성장", { aliases: ["/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점"], requiresFeature: "games", searchableKeywords: ["펫", "키우기", "훈련"] }),
@@ -9721,7 +9739,12 @@ function helpText(roomStateOrAdmin = false, sender = "") {
     if (!groups.has(item.category)) groups.set(item.category, []);
     groups.get(item.category).push(item);
   }
-  const lines = [`${DEFAULT_BOT_NAME} ${isAdminUser ? "관리자 명령어" : "참여자 명령어"}`, ""];
+  const lines = [
+    `${DEFAULT_BOT_NAME} ${isAdminUser ? "관리자 명령어" : "참여자 명령어"}`,
+    "",
+    "빠른 찾기: /메뉴, /찾기 게임, /찾기 가방",
+    ""
+  ];
   for (const [category, items] of groups.entries()) {
     lines.push(category);
     for (const item of items) {
@@ -9781,6 +9804,99 @@ function applicationForRoomState(state = {}, roomState = {}) {
   return Object.values(state.applications || {})
     .filter((application) => !application.archivedAt)
     .find((application) => roomKey(application.roomName) === targetKey) || null;
+}
+
+const COMMAND_DISCOVERY_TOPICS = Object.freeze([
+  {
+    key: "게임",
+    aliases: ["게임", "미니게임", "낚시", "던전", "rpg"],
+    title: "게임/RPG",
+    commands: ["/게임", "/낚시", "/어항", "/던전", "/대장간", "/자동장착", "/가방정리"]
+  },
+  {
+    key: "가방",
+    aliases: ["가방", "아이템", "판매", "상점", "정리"],
+    title: "가방/상점",
+    commands: ["/가방", "/아이템상세 1", "/판매목록", "/판매미리보기 중복", "/판매 재료", "/아이템잠금 1"]
+  },
+  {
+    key: "포인트",
+    aliases: ["포인트", "랭킹", "순위", "출석"],
+    title: "포인트/출석",
+    commands: ["/포인트", "/출석", "/출석순위", "/포인트순위", "/좋아요 닉네임 10", "/이체 닉네임 100"]
+  },
+  {
+    key: "운영",
+    aliases: ["운영", "관리", "관리자", "방설정"],
+    title: "운영/관리",
+    commands: ["/상태", "/명령어팩", "/명령어설치목록", "/관리자목록", "/기능목록", "/신고목록"]
+  },
+  {
+    key: "도움",
+    aliases: ["도움", "도움말", "처음", "시작"],
+    title: "처음 시작",
+    commands: ["/메뉴", "/도움말", "/찾기 게임", "/찾기 가방", "/게임팩도움말", "/명령어팩"]
+  }
+]);
+
+function commandDiscoveryHubText(roomState = null, sender = "") {
+  const isAdminUser = roomState ? isAdmin(roomState, sender) : false;
+  return [
+    "📘 픽셀곰 메뉴",
+    "",
+    "처음 시작: /도움말, /명령어팩",
+    "게임 찾기: /찾기 게임",
+    "가방 정리: /찾기 가방",
+    "포인트/출석: /찾기 포인트",
+    isAdminUser ? "관리자 기능: /찾기 운영" : "문의/신고: /신고 사유",
+    "",
+    "자주 쓰는 흐름",
+    "1. /게임 -> 즐길 콘텐츠 확인",
+    "2. /가방 -> 보유 아이템 확인",
+    "3. /가방정리 -> 판매/잠금 추천",
+    "",
+    "찾기 예시: /찾기 낚시, /찾기 RPG, /찾기 판매"
+  ].join("\n");
+}
+
+function commandDiscoveryTopic(query = "") {
+  const normalized = normalizeText(query).toLowerCase();
+  if (!normalized) return null;
+  return COMMAND_DISCOVERY_TOPICS.find((topic) => (
+    topic.aliases.some((alias) => normalized.includes(alias.toLowerCase()))
+  )) || null;
+}
+
+function commandFindText(roomState = null, sender = "", query = "") {
+  const normalized = normalizeText(query);
+  const topic = commandDiscoveryTopic(normalized);
+  if (!topic) {
+    return [
+      "🔎 명령어 찾기",
+      "",
+      "찾고 싶은 콘텐츠를 붙여서 입력해 주세요.",
+      "",
+      "/찾기 게임",
+      "/찾기 가방",
+      "/찾기 포인트",
+      "/찾기 운영",
+      "",
+      "처음이면 /메뉴 를 입력하세요."
+    ].join("\n");
+  }
+  const isAdminUser = roomState ? isAdmin(roomState, sender) : false;
+  const commandLines = topic.commands
+    .filter((line) => isAdminUser || !["/관리자목록", "/기능목록", "/신고목록", "/명령어설치목록"].some((adminCommand) => line.startsWith(adminCommand)))
+    .slice(0, 8)
+    .map((line, index) => `${index + 1}. ${line}`);
+  return [
+    `🔎 명령어 찾기: ${topic.title}`,
+    "",
+    ...commandLines,
+    "",
+    "상세 도움말: /도움말",
+    "팩 상세: /명령어팩 코드"
+  ].join("\n");
 }
 
 function roomLastSettingsSavedAt(roomState = {}) {
@@ -14062,6 +14178,9 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/명령어팩목록" || command === "/장착팩") return commandPackListText(roomState, sender, parsed);
   if (command === "/명령어팩제거" || command === "/팩제거") return commandPackRemoveCommand(roomState, sender, parsed);
   if (command === "/게임팩도움말") return gamePackHelpText(parsed.args.join(" "));
+  if (command === "/메뉴" || command === "/처음") return commandDiscoveryHubText(roomState, sender);
+  if (command === "/찾기") return commandFindText(roomState, sender, parsed.args.join(" "));
+  if (command === "/명령어") return parsed.args.length ? commandFindText(roomState, sender, parsed.args.join(" ")) : commandDiscoveryHubText(roomState, sender);
   const registryItem = resolveCommandRegistryItem(command, compactCommand);
   if (registryItem && !commandInstalledInRoom(registryItem, roomState)) return commandInstallRequiredText(registryItem);
   const requiredFeature = commandFeatureKey(compactCommand);
