@@ -7706,9 +7706,10 @@ function parseProductQuantityCommand(text, pattern) {
   if (!body) return null;
   const match = body.match(/^([0-9]+)(?:\s+([0-9]+))?$/);
   if (!match) return null;
+  const quantity = Number(match[2] || 1);
   return {
     productId: Math.trunc(Number(match[1])),
-    quantity: Math.min(SHOP_MAX_QUANTITY, Math.max(1, Math.trunc(Number(match[2] || 1))))
+    quantity: Number.isSafeInteger(quantity) ? Math.max(1, quantity) : 1
   };
 }
 
@@ -7839,7 +7840,8 @@ function baitShopCommand(roomState, sender) {
 
 function baitPurchaseCommand(roomState, sender, text) {
   const body = compactSpaces(text.replace(/^\/미끼구매\s*/i, ""));
-  const quantity = Math.min(SHOP_MAX_QUANTITY, Math.max(1, Math.trunc(Number(body || 1))));
+  const requested = Number(body || 1);
+  const quantity = Number.isSafeInteger(requested) ? Math.max(1, requested) : 0;
   if (!quantity || (body && String(quantity) !== body.replace(/,/g, ""))) return "형식: /미끼구매 수량";
   const bait = systemProductById(BAIT_ITEM_ID);
   const person = ensurePerson(roomState, sender);

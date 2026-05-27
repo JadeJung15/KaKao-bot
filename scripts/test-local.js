@@ -5265,9 +5265,15 @@ try {
   assert.match(bulkPurchase.json.reply, /물약 x 10/);
   assert.match(bulkPurchase.json.reply, /사용 포인트 : 🅟1,000/);
 
+  await chat("/포인트지급 포순이 여 20000", "관리자");
+  const unlimitedPurchase = await chat("/구매 1 120", "포순이 여");
+  assert.match(unlimitedPurchase.json.reply, /구매 완료/);
+  assert.match(unlimitedPurchase.json.reply, /물약 x 120/);
+  assert.match(unlimitedPurchase.json.reply, /사용 포인트 : 🅟12,000/);
+
   const bag = await chat("/가방", "포순이 여");
   assert.match(bag.json.reply, /포순이 여님의 가방/);
-  assert.match(bag.json.reply, /1\. 물약 x 11/);
+  assert.match(bag.json.reply, /1\. 물약 x 131/);
 
   const itemGrant = await chat("/아이템지급 미미 여 1 2", "관리자");
   assert.match(itemGrant.json.reply, /아이템지급 완료/);
@@ -5818,6 +5824,11 @@ try {
   const baitPurchase = await chat("/미끼구매 3", "낚시러 여");
   assert.match(baitPurchase.json.reply, /미끼 구매 완료/);
   assert.match(baitPurchase.json.reply, /기본 미끼 x 3/);
+
+  await chat("/포인트지급 낚시러 여 3000", "관리자");
+  const baitUnlimitedPurchase = await chat("/미끼구매 120", "낚시러 여");
+  assert.match(baitUnlimitedPurchase.json.reply, /미끼 구매 완료/);
+  assert.match(baitUnlimitedPurchase.json.reply, /기본 미끼 x 120/);
 
   const fishingItem = await chat("/낚시", "낚시러 여");
   assert.match(fishingItem.json.reply, /낚시 결과/);
