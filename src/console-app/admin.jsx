@@ -281,13 +281,14 @@ function AdminApp() {
     if (nextFilters.q) params.set("q", nextFilters.q);
     if (nextFilters.command) params.set("command", nextFilters.command);
     if (nextFilters.type) params.set("type", nextFilters.type);
+    if (nextFilters.status) params.set("status", nextFilters.status);
     setLogState((current) => ({ ...current, loading: true, error: "" }));
     try {
-      const result = await adminRequest(`/api/admin/room-logs?${params.toString()}`);
+      const result = await adminRequest(`/api/admin/live-events?${params.toString()}`);
       setLogFilters({ ...nextFilters, room: roomName });
       setLogState({
         loading: false,
-        logs: result.logs || [],
+        logs: result.events || [],
         rooms: result.rooms || [],
         summary: result.summary || {},
         error: ""
@@ -1388,7 +1389,7 @@ function RoomLogsPanel({ roomOptions = [], filters = {}, setFilters, logState = 
       <div className="console-section-head">
         <div>
           <p className="console-eyebrow">Room Analytics</p>
-          <h3>방별 로그</h3>
+          <h3>실시간 로그/속도 진단</h3>
         </div>
         <StatusBadge label={`${logState.summary?.matchedLogs || 0}건 표시`} status="ok" />
       </div>
@@ -1410,6 +1411,17 @@ function RoomLogsPanel({ roomOptions = [], filters = {}, setFilters, logState = 
         <label>
           <span>이벤트 타입</span>
           <input value={filters.type || ""} onChange={(event) => update({ type: event.target.value })} placeholder="entered, left 등" />
+        </label>
+        <label>
+          <span>상태 필터</span>
+          <select value={filters.status || ""} onChange={(event) => update({ status: event.target.value })}>
+            <option value="">전체</option>
+            <option value="handled">정상 처리</option>
+            <option value="no_reply">응답 없음</option>
+            <option value="duplicate">중복 이벤트</option>
+            <option value="ignored">무시됨</option>
+            <option value="error">오류</option>
+          </select>
         </label>
         <label>
           <span>조회 수</span>
@@ -1435,6 +1447,10 @@ function RoomLogsPanel({ roomOptions = [], filters = {}, setFilters, logState = 
         <FieldRow label="최근 24시간">{logState.summary?.recent24h || 0}건</FieldRow>
         <FieldRow label="명령어 로그">{logState.summary?.commandLogs || 0}건</FieldRow>
         <FieldRow label="오류 로그">{logState.summary?.errorLogs || 0}건</FieldRow>
+        <FieldRow label="중복 차단">{logState.summary?.duplicateLogs || 0}건</FieldRow>
+        <FieldRow label="p50 총 시간">{logState.summary?.p50TotalMs || 0}ms</FieldRow>
+        <FieldRow label="p95 총 시간">{logState.summary?.p95TotalMs || 0}ms</FieldRow>
+        <FieldRow label="평균 DB 저장">{logState.summary?.avgSaveStateMs || 0}ms</FieldRow>
         <FieldRow label="현재 방">{filters.room || roomOptions[0] || "-"}</FieldRow>
       </div>
       <div className="console-preview-box">
@@ -1447,14 +1463,17 @@ function RoomLogsPanel({ roomOptions = [], filters = {}, setFilters, logState = 
         {(logState.logs || []).map((log) => (
           <article className="console-card console-log-card" key={`${log.at}-${log.messageHash}-${log.senderHash}`}>
             <div>
-              <strong>{log.command || log.eventType || "채팅"} · {formatDate(log.at)}</strong>
-              <span>{log.room || "-"} · {log.sender || "익명"} · 길이 {log.messageLength || 0}</span>
+              <strong>{log.command || log.eventType || "채팅"} · {formatDate(log.serverReceivedAt || log.at)}</strong>
+              <span>{log.room || "-"} · {log.sender || "익명"} · 상태 {log.status || "-"} · 응답 {log.replyLength || 0}자</span>
               <small>{log.messagePreview || "메시지 없음"}</small>
             </div>
             <div className="console-log-meta">
-              <StatusBadge label={log.isCommand ? "명령어" : "일반"} status={log.isCommand ? "ok" : "neutral"} />
+              <StatusBadge label={log.command ? "명령어" : "일반"} status={log.command ? "ok" : "neutral"} />
+              <StatusBadge label={`총 ${log.totalMs || 0}ms`} status={(log.totalMs || 0) > 1000 ? "expired" : "ok"} />
+              <small>앱 수신 {formatDate(log.bridgeReceivedAt)} · 서버 수신 {formatDate(log.serverReceivedAt)}</small>
+              <small>명령어 {log.commandMs || 0}ms · DB 저장 {log.saveStateMs || 0}ms</small>
               {log.eventType ? <StatusBadge label={log.eventType} status="open" /> : null}
-              <small>msg {log.messageHash || "-"} · sender {log.senderHash || "-"}</small>
+              <small>event {log.eventId || "-"} · {log.ignoreReason || log.errorReason || "정상"}</small>
             </div>
           </article>
         ))}

@@ -34,6 +34,10 @@ final class BridgeEvent {
     String identityPrimaryField;
     String identityHashAlgorithm;
     String identityExtractionVersion;
+    String eventId;
+    String bridgeReceivedAt;
+    String bridgeSentAt;
+    int retryCount;
     boolean senderPersonKeyPresent;
     boolean senderPersonUriPresent;
     boolean messagingUserKeyPresent;

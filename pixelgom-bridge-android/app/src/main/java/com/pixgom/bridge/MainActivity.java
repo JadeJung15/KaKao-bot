@@ -36,6 +36,7 @@ public class MainActivity extends Activity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private TextView homeDiagnosticsStatus;
     private TextView profileSyncStatus;
+    private TextView pendingQueueStatus;
     private TextView permissionStatus;
     private TextView logView;
     private EditText serverUrlInput;
@@ -73,6 +74,7 @@ public class MainActivity extends Activity {
         if (homeDiagnosticsStatus != null) refreshHomeDiagnostics();
         if (permissionStatus != null) refreshStatus();
         if (logView != null) refreshLogs();
+        if (pendingQueueStatus != null) refreshPendingQueueStatus();
     }
 
     private void showHome() {
@@ -84,6 +86,7 @@ public class MainActivity extends Activity {
     private void showMain() {
         setContentView(buildMainContent());
         refreshStatus();
+        refreshPendingQueueStatus();
         refreshLogs();
     }
 
@@ -341,6 +344,18 @@ public class MainActivity extends Activity {
         profileSyncButton.setOnClickListener(v -> syncRoomProfiles());
         panel.addView(profileSyncButton);
 
+        pendingQueueStatus = text("전송 대기 상태 확인 중", 13, Color.rgb(111, 78, 49), false);
+        pendingQueueStatus.setPadding(0, dp(8), 0, 0);
+        panel.addView(pendingQueueStatus);
+
+        Button retryPendingButton = secondaryButton("전송 대기 재시도");
+        retryPendingButton.setOnClickListener(v -> retryPendingEvents());
+        panel.addView(retryPendingButton);
+
+        Button clearPendingButton = secondaryButton("대기 큐 비우기");
+        clearPendingButton.setOnClickListener(v -> confirmClearPendingEvents());
+        panel.addView(clearPendingButton);
+
         TextView resetHelp = text("기기를 바꾸거나 다른 곳에 다시 등록할 때는 이 앱의 저장된 방/라이선스/동기화 기록만 초기화합니다. 구매자 계정과 서버 결제/신청 데이터는 삭제되지 않습니다.", 13, Color.rgb(111, 78, 49), false);
         resetHelp.setPadding(0, dp(10), 0, 0);
         panel.addView(resetHelp);
@@ -511,6 +526,7 @@ public class MainActivity extends Activity {
     private void clearMainRefs() {
         homeDiagnosticsStatus = null;
         profileSyncStatus = null;
+        pendingQueueStatus = null;
         permissionStatus = null;
         logView = null;
         serverUrlInput = null;
@@ -523,6 +539,8 @@ public class MainActivity extends Activity {
         connectionCodeInput = null;
         scriptSourceInput = null;
         roomProfilesSummaryView = null;
+        gameRoomProfilesView = null;
+        gameRoomToggleButton = null;
         enabledSwitch = null;
         scriptEnabledSwitch = null;
         attendanceFeatureSwitch = null;
@@ -707,6 +725,49 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void retryPendingEvents() {
+        if (BridgeConfig.pendingEventCount(this) == 0) {
+            Toast.makeText(this, "전송 대기 이벤트가 없습니다.", Toast.LENGTH_SHORT).show();
+            refreshPendingQueueStatus();
+            return;
+        }
+        BridgeConfig.appendLog(this, "전송 대기 재시도 시작");
+        refreshLogs();
+        executor.execute(() -> {
+            EventSender.RetryResult result = EventSender.retryPending(this);
+            runOnUiThread(() -> {
+                BridgeConfig.appendLog(this, "전송 대기 재시도 완료: 성공 " + result.success + " / 실패 " + result.failed + " / 남음 " + result.remaining);
+                refreshPendingQueueStatus();
+                refreshLogs();
+                Toast.makeText(this, "전송 대기 재시도 완료", Toast.LENGTH_SHORT).show();
+            });
+        });
+    }
+
+    private void confirmClearPendingEvents() {
+        new AlertDialog.Builder(this)
+                .setTitle("대기 큐 비우기")
+                .setMessage("서버로 아직 전송되지 않은 대기 이벤트를 비웁니다. 이미 처리된 서버 데이터는 삭제되지 않습니다.")
+                .setPositiveButton("비우기", (dialog, which) -> {
+                    BridgeConfig.clearPendingEvents(this);
+                    refreshPendingQueueStatus();
+                    refreshLogs();
+                })
+                .setNegativeButton("취소", null)
+                .show();
+    }
+
+    private void refreshPendingQueueStatus() {
+        if (pendingQueueStatus == null) return;
+        pendingQueueStatus.setText(
+                "대기 중 이벤트: " + BridgeConfig.pendingEventCount(this)
+                        + "\n최근 전송 성공: " + safeText(BridgeConfig.lastSendSuccess(this))
+                        + "\n최근 전송 실패: " + safeText(BridgeConfig.lastSendFailure(this))
+                        + "\n최근 서버 timing: " + safeText(BridgeConfig.lastServerTimingSummary(this))
+                        + "\n등록 일반방/게임방: " + BridgeConfig.roomProfileCount(this) + "개 / 게임방 " + BridgeConfig.gameRoomProfileCount(this) + "개"
+        );
+    }
+
     private void testScript() {
         BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
         BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
@@ -843,6 +904,7 @@ public class MainActivity extends Activity {
         refreshStatus();
         refreshRoomProfilesSummary();
         refreshProfileSyncStatus();
+        refreshPendingQueueStatus();
         refreshLogs();
         Toast.makeText(this, "서버 설정을 초기화했습니다. 새 연결코드를 입력해 다시 등록하세요.", Toast.LENGTH_LONG).show();
     }

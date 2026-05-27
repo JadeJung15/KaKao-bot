@@ -24,6 +24,7 @@ public class PixelgomNotificationListener extends NotificationListenerService {
     public void onListenerConnected() {
         BridgeConfig.applyMigrations(this);
         BridgeConfig.appendLog(this, "알림 브릿지 연결됨");
+        executor.execute(this::flushPendingQueue);
     }
 
     @Override
@@ -51,6 +52,8 @@ public class PixelgomNotificationListener extends NotificationListenerService {
             return;
         }
         BridgeConfig.applyRoomProfile(event, profile);
+        event.bridgeReceivedAt = BridgeConfig.nowIso();
+        event.eventId = BridgeConfig.newEventId();
         if (!event.hasRequiredFields()) {
             BridgeConfig.setLastIgnoreReason(this, "필수값 부족 sender=" + event.sender + " msg=" + event.message);
             BridgeConfig.appendLog(this, "무시: 필수값 부족 sender=" + event.sender + " msg=" + event.message);
@@ -81,12 +84,17 @@ public class PixelgomNotificationListener extends NotificationListenerService {
             String reply = "";
             if (!result.ok()) {
                 BridgeConfig.appendLog(this, "전송 실패: " + result.error);
+                BridgeConfig.setLastSendFailure(this, event.eventId + " / " + result.error);
+                BridgeConfig.enqueuePendingEvent(this, EventSender.buildPayload(this, event, event.retryCount), result.error);
             } else if (result.ignored) {
                 BridgeConfig.appendLog(this, "서버 무시: " + event.sender + " / " + preview(event.message));
+                BridgeConfig.setLastSendSuccess(this, event.eventId + " / ignored / " + result.timingSummary);
                 return;
             } else {
                 BridgeConfig.appendLog(this, "서버 전송 성공: " + event.sender + " / " + preview(event.message));
+                BridgeConfig.setLastSendSuccess(this, event.eventId + " / " + result.timingSummary);
                 reply = result.reply;
+                flushPendingQueue();
             }
 
             if (TextUtils.isEmpty(reply) || isServerUnknownCommand(reply)) {
@@ -103,6 +111,12 @@ public class PixelgomNotificationListener extends NotificationListenerService {
                 sendReply(notification, reply);
             }
         });
+    }
+
+    private void flushPendingQueue() {
+        if (BridgeConfig.pendingEventCount(this) <= 0) return;
+        EventSender.RetryResult retry = EventSender.retryPending(this);
+        BridgeConfig.appendLog(this, "전송 대기 재시도: 성공 " + retry.success + " / 실패 " + retry.failed + " / 남음 " + retry.remaining);
     }
 
     private void sendReply(Notification notification, String reply) {

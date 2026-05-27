@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.18";
+export const APP_VERSION = "0.5.19";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -267,7 +267,12 @@ export const FEATURES = [
   "console-search-deep-links",
   "inventory-page-navigation",
   "chat-state-warm-cache",
-  "chat-event-timing-diagnostics"
+  "chat-event-timing-diagnostics",
+  "bridge-retry-queue",
+  "chat-event-deduplication",
+  "chat-event-detailed-timing",
+  "admin-live-event-diagnostics",
+  "read-only-command-save-skip"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -1782,6 +1787,19 @@ function parseBotCommand(message) {
   };
 }
 
+const READ_ONLY_SAVE_SKIP_COMMANDS = new Set([
+  "/상태", "/status", "/브릿지", "/bridge", "/js상태", "/jsstatus", "/로컬상태",
+  "/도움말", "/help", "/?", "/메뉴", "/처음", "/찾기", "/명령어",
+  "/게임", "/게임명령어", "/점메추", "/명령어팩", "/게임팩도움말",
+  "/포인트", "/내포인트", "/고정명령어", "/추천", "/추천명령어", "/오늘할일", "/할일"
+]);
+
+function isReadOnlySaveSkipCommand(message) {
+  const parsed = parseBotCommand(message);
+  if (!parsed.isCommandAttempt) return false;
+  return READ_ONLY_SAVE_SKIP_COMMANDS.has(parsed.command);
+}
+
 const WEATHER_REGIONS = Object.freeze({
   "시흥": { name: "시흥", latitude: 37.3799, longitude: 126.8031, aliases: ["시흥시"] },
   "서울": { name: "서울", latitude: 37.5665, longitude: 126.9780, aliases: ["서울시"] },
@@ -2617,12 +2635,19 @@ function elapsedMs(startedAt) {
   return Math.max(0, Math.round((performance.now() - startedAt) * 10) / 10);
 }
 
-function chatTimingPayload(startedAt, loadStateMs = 0, saveStateMs = 0, cacheHit = false) {
+function chatTimingPayload(startedAt, detail = {}) {
   return {
+    receivedAt: detail.receivedAt || "",
+    eventId: detail.eventId || "",
     totalMs: elapsedMs(startedAt),
-    loadStateMs: Math.max(0, Math.round(Number(loadStateMs || 0) * 10) / 10),
-    saveStateMs: Math.max(0, Math.round(Number(saveStateMs || 0) * 10) / 10),
-    cacheHit: Boolean(cacheHit)
+    loadStateMs: Math.max(0, Math.round(Number(detail.loadStateMs || 0) * 10) / 10),
+    guardMs: Math.max(0, Math.round(Number(detail.guardMs || 0) * 10) / 10),
+    commandMs: Math.max(0, Math.round(Number(detail.commandMs || 0) * 10) / 10),
+    logMs: Math.max(0, Math.round(Number(detail.logMs || 0) * 10) / 10),
+    saveStateMs: Math.max(0, Math.round(Number(detail.saveStateMs || 0) * 10) / 10),
+    cacheHit: Boolean(detail.cacheHit),
+    duplicate: Boolean(detail.duplicate),
+    saveRequired: detail.saveRequired !== false
   };
 }
 
@@ -3890,6 +3915,7 @@ function ensureRoom(state, room) {
     events: [],
     rawEvents: [],
     analyticsLogs: [],
+    recentEventIds: [],
     peopleByIdentity: {},
     ambiguousIdentities: [],
     shop: {},
@@ -3914,6 +3940,7 @@ function ensureRoom(state, room) {
   roomState.events ||= [];
   roomState.rawEvents ||= [];
   roomState.analyticsLogs ||= [];
+  roomState.recentEventIds = Array.isArray(roomState.recentEventIds) ? roomState.recentEventIds.slice(-300) : [];
   if (roomState.analyticsLogs.length > ROOM_ANALYTICS_LOG_LIMIT) {
     roomState.analyticsLogs = roomState.analyticsLogs.slice(-ROOM_ANALYTICS_LOG_LIMIT);
   }
@@ -5074,6 +5101,35 @@ function shortHash(value) {
   return text ? createHash("sha256").update(text).digest("hex").slice(0, 16) : "";
 }
 
+function parseTimestampMs(value) {
+  if (Number.isFinite(Number(value)) && Number(value) > 0) return Number(value);
+  const parsed = Date.parse(normalizeText(value));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function resolveChatEventId(payload = {}, { room = "", sender = "", message = "" } = {}) {
+  const explicit = normalizeText(payload.eventId || payload.bridgeEventId || payload.event_id || payload.id);
+  if (explicit) return explicit.slice(0, 96);
+  const roomId = normalizeText(payload.roomId || payload.openChatId || payload.roomLink || payload.openChatLink || room);
+  const timestampSource = payload.bridgeReceivedAt || payload.postedAtMs || payload.createdAt || payload.at;
+  const timestamp = parseTimestampMs(timestampSource);
+  const timeKey = timestamp ? Math.floor(timestamp / 5000) : `${Date.now()}:${randomBytes(4).toString("hex")}`;
+  return `srv_${shortHash([roomId, room, sender, message, timeKey].join("|"))}`;
+}
+
+function eventIdSeen(roomState, eventId) {
+  if (!eventId) return false;
+  roomState.recentEventIds ||= [];
+  return roomState.recentEventIds.includes(eventId);
+}
+
+function rememberEventId(roomState, eventId) {
+  if (!eventId) return;
+  roomState.recentEventIds ||= [];
+  if (!roomState.recentEventIds.includes(eventId)) roomState.recentEventIds.push(eventId);
+  if (roomState.recentEventIds.length > 300) roomState.recentEventIds = roomState.recentEventIds.slice(-300);
+}
+
 function redactSensitiveText(value) {
   return normalizeText(value)
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, "[email]")
@@ -5189,6 +5245,7 @@ function collectPayloadIds(value, basePath = "", depth = 0, results = []) {
     const pathName = basePath ? `${basePath}.${key}` : key;
     const keyName = key.toLowerCase();
     if (/^(roomid|room_id|openchatid|openchat_id|openchatroomid|open_chat_room_id|kakaoopenchatid)$/.test(keyName)) continue;
+    if (/^(eventid|event_id|bridgeeventid|bridge_event_id|messageid|message_id|notificationid|notification_id)$/.test(keyName)) continue;
     if (nested && typeof nested === "object") {
       collectPayloadIds(nested, pathName, depth + 1, results);
       continue;
@@ -5277,8 +5334,10 @@ function recordRoomAnalyticsLog(roomState, payload, meta = {}) {
   const identity = payloadIdentity(payload);
   const sender = normalizeText(meta.sender || payload?.sender || "익명");
   const room = normalizeText(meta.room || payload?.room || "");
+  const timing = meta.timing || {};
   const log = {
     at: nowIso(),
+    eventId: normalizeText(meta.eventId || payload?.eventId || payload?.bridgeEventId || ""),
     room,
     roomKey: roomKey(room),
     sender: previewText(redactSensitiveText(sender), 80),
@@ -5296,7 +5355,23 @@ function recordRoomAnalyticsLog(roomState, payload, meta = {}) {
     isGroupChat: isGroupChatPayload(payload),
     senderIdentityHash: shortHash(identity.senderId),
     targetIdentityHash: shortHash(identity.targetUserId),
-    candidateIdentityCount: identity.candidates?.length || 0
+    candidateIdentityCount: identity.candidates?.length || 0,
+    bridgeReceivedAt: normalizeText(payload?.bridgeReceivedAt || ""),
+    bridgeSentAt: normalizeText(payload?.bridgeSentAt || ""),
+    serverReceivedAt: normalizeText(meta.serverReceivedAt || ""),
+    replyGeneratedAt: normalizeText(meta.replyGeneratedAt || ""),
+    status: normalizeText(meta.status || "received"),
+    ignoreReason: normalizeText(meta.ignoreReason || ""),
+    errorReason: normalizeText(meta.errorReason || ""),
+    replyLength: Math.max(0, Number(meta.replyLength || 0) || 0),
+    saveRequired: meta.saveRequired !== false,
+    duplicate: Boolean(meta.duplicate),
+    totalMs: Math.max(0, Number(timing.totalMs || 0) || 0),
+    loadStateMs: Math.max(0, Number(timing.loadStateMs || 0) || 0),
+    guardMs: Math.max(0, Number(timing.guardMs || 0) || 0),
+    commandMs: Math.max(0, Number(timing.commandMs || 0) || 0),
+    logMs: Math.max(0, Number(timing.logMs || 0) || 0),
+    saveStateMs: Math.max(0, Number(timing.saveStateMs || 0) || 0)
   };
   roomState.analyticsLogs.push(log);
   if (roomState.analyticsLogs.length > ROOM_ANALYTICS_LOG_LIMIT) {
@@ -5307,22 +5382,27 @@ function recordRoomAnalyticsLog(roomState, payload, meta = {}) {
 
 function recordRawEvent(roomState, payload, meta = {}) {
   roomState.rawEvents ||= [];
-  recordRoomAnalyticsLog(roomState, payload, meta);
+  const analyticsLog = recordRoomAnalyticsLog(roomState, payload, meta);
   const identity = payloadIdentity(payload);
   const event = {
     at: nowIso(),
+    eventId: analyticsLog.eventId,
     route: "chat-event",
     room: meta.room || "",
     sender: meta.sender || "",
     message: meta.message || "",
     eventType: meta.event?.type || "",
     eventName: meta.event?.name || meta.event?.to || "",
+    status: analyticsLog.status,
+    ignoreReason: analyticsLog.ignoreReason,
+    errorReason: analyticsLog.errorReason,
+    timing: meta.timing || {},
     identity,
     payload: sanitizePayload(payload)
   };
   roomState.rawEvents.push(event);
   if (roomState.rawEvents.length > 50) roomState.rawEvents = roomState.rawEvents.slice(-50);
-  return event;
+  return { event, analyticsLog };
 }
 
 function resolveName(roomState, query) {
@@ -5750,6 +5830,14 @@ function licenseGuardResult(roomState, payload = {}, message = "", registrationC
     ignored: true,
     reason: incoming ? "invalid_license" : "missing_license"
   };
+}
+
+function shouldRunLicenseGuard(roomState, message = "", registrationCommand = false) {
+  if (registrationCommand) return true;
+  const parsed = parseBotCommand(message);
+  if (!parsed.isCommandAttempt) return true;
+  if (registryItemForCommandName(parsed.command)) return true;
+  return Boolean(customCommandMatch(roomState, compactSpaces(message)));
 }
 
 function subscriptionExtendCommand(roomState, sender, text) {
@@ -10615,6 +10703,17 @@ function adminRoomLogsPayload(state = {}, query = {}) {
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, 5)
     .map(([command, count]) => ({ command, count }));
+  const finite = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+  const timedLogs = filtered.filter((log) => finite(log.totalMs) > 0);
+  const sortedTotalMs = timedLogs.map((log) => finite(log.totalMs)).sort((left, right) => left - right);
+  const percentile = (values, ratio) => {
+    if (!values.length) return 0;
+    return Math.round(values[Math.min(values.length - 1, Math.floor(values.length * ratio))] * 10) / 10;
+  };
+  const avg = (values) => values.length
+    ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10
+    : 0;
+  const saveMsValues = timedLogs.map((log) => finite(log.saveStateMs)).filter((value) => value >= 0);
   return {
     ok: true,
     version: APP_VERSION,
@@ -10634,10 +10733,73 @@ function adminRoomLogsPayload(state = {}, query = {}) {
       recent24h,
       commandLogs: commandLogs.length,
       errorLogs: errorLogs.length,
+      duplicateLogs: filtered.filter((log) => log.duplicate || log.status === "duplicate").length,
+      p50TotalMs: percentile(sortedTotalMs, 0.5),
+      p95TotalMs: percentile(sortedTotalMs, 0.95),
+      avgSaveStateMs: avg(saveMsValues),
+      lastOkAt: filtered.find((log) => log.status === "handled")?.at || "",
       topCommands
     },
     rooms: roomSummaries,
     logs: filtered.slice(0, limit)
+  };
+}
+
+function adminLiveEventsPayload(state = {}, query = {}) {
+  const status = normalizeText(query.status || "");
+  const payload = adminRoomLogsPayload(state, query);
+  const events = payload.logs
+    .filter((log) => !status || log.status === status || (status === "error" && log.errorReason) || (status === "duplicate" && (log.duplicate || log.status === "duplicate")))
+    .map((log) => ({
+      eventId: log.eventId || "",
+      room: log.room || "",
+      sender: log.sender || "",
+      command: log.command || "",
+      status: log.status || "",
+      ignoreReason: log.ignoreReason || "",
+      errorReason: log.errorReason || "",
+      bridgeReceivedAt: log.bridgeReceivedAt || "",
+      bridgeSentAt: log.bridgeSentAt || "",
+      serverReceivedAt: log.serverReceivedAt || log.at || "",
+      replyGeneratedAt: log.replyGeneratedAt || "",
+      totalMs: Number(log.totalMs || 0),
+      commandMs: Number(log.commandMs || 0),
+      saveStateMs: Number(log.saveStateMs || 0),
+      duplicate: Boolean(log.duplicate),
+      replyLength: Number(log.replyLength || 0),
+      messagePreview: log.messagePreview || ""
+    }));
+  return {
+    ok: true,
+    version: APP_VERSION,
+    generatedAt: nowIso(),
+    filters: { ...payload.filters, status },
+    summary: payload.summary,
+    events
+  };
+}
+
+function adminPerformanceSummaryPayload(state = {}, query = {}) {
+  const payload = adminRoomLogsPayload(state, { ...query, limit: ROOM_ANALYTICS_EXPORT_LIMIT });
+  return {
+    ok: true,
+    version: APP_VERSION,
+    generatedAt: nowIso(),
+    window: normalizeText(query.window || "24h"),
+    filters: payload.filters,
+    summary: {
+      totalEvents: payload.summary.matchedLogs,
+      commandEvents: payload.summary.commandLogs,
+      errorEvents: payload.summary.errorLogs,
+      duplicateEvents: payload.summary.duplicateLogs,
+      p50TotalMs: payload.summary.p50TotalMs,
+      p95TotalMs: payload.summary.p95TotalMs,
+      avgSaveStateMs: payload.summary.avgSaveStateMs,
+      recent24h: payload.summary.recent24h,
+      lastOkAt: payload.summary.lastOkAt,
+      topCommands: payload.summary.topCommands
+    },
+    rooms: payload.rooms
   };
 }
 
@@ -10647,7 +10809,7 @@ function csvCell(value) {
 }
 
 function roomLogsCsv(logs = []) {
-  const headers = ["at", "room", "sender", "eventType", "command", "isCommand", "messagePreview", "messageHash", "senderHash"];
+  const headers = ["at", "eventId", "room", "sender", "status", "eventType", "command", "isCommand", "messagePreview", "totalMs", "commandMs", "saveStateMs", "messageHash", "senderHash"];
   return [
     headers.join(","),
     ...logs.map((log) => headers.map((key) => csvCell(log[key])).join(","))
@@ -14621,6 +14783,20 @@ async function handleAdminApi(req, url) {
     return { status: 200, body: adminRoomLogsPayload(state, Object.fromEntries(url.searchParams.entries())) };
   }
 
+  if (req.method === "GET" && url.pathname === "/api/admin/live-events") {
+    const auth = await requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return { status: 200, body: adminLiveEventsPayload(state, Object.fromEntries(url.searchParams.entries())) };
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/performance-summary") {
+    const auth = await requireAdminConsole(req, url);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    return { status: 200, body: adminPerformanceSummaryPayload(state, Object.fromEntries(url.searchParams.entries())) };
+  }
+
   if (req.method === "GET" && url.pathname === "/api/admin/room-logs/export") {
     const auth = await requireAdminConsole(req, url);
     if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
@@ -15109,55 +15285,176 @@ export async function handleSkill(payload) {
 
 export async function handleChatEvent(payload) {
   const timingStartedAt = performance.now();
+  const serverReceivedAt = nowIso();
   let loadStateMs = 0;
   let saveStateMs = 0;
+  let guardMs = 0;
+  let commandMs = 0;
+  let logMs = 0;
   let cacheHit = false;
+  let duplicate = false;
+  let saveRequired = true;
+  let eventId = "";
   const withTiming = (body) => ({
     ...body,
-    timing: chatTimingPayload(timingStartedAt, loadStateMs, saveStateMs, cacheHit)
+    timing: chatTimingPayload(timingStartedAt, {
+      receivedAt: serverReceivedAt,
+      eventId,
+      loadStateMs,
+      guardMs,
+      commandMs,
+      logMs,
+      saveStateMs,
+      cacheHit,
+      duplicate,
+      saveRequired
+    })
   });
   const room = normalizeText(payload?.room);
   const message = normalizeText(payload?.msg || payload?.message);
   const sender = normalizeText(payload?.sender) || "익명";
   const event = payloadSystemEvent(payload, message);
   const identity = payloadIdentity(payload);
+  eventId = resolveChatEventId(payload, { room, sender, message });
   const loadStartedAt = performance.now();
   const state = await loadState();
   loadStateMs = elapsedMs(loadStartedAt);
   cacheHit = state?.__cacheHit === true;
   const roomState = ensureRoom(state, room);
+  if (eventIdSeen(roomState, eventId)) {
+    duplicate = true;
+    saveRequired = true;
+    const logStartedAt = performance.now();
+    const record = recordRawEvent(roomState, { ...payload, eventId }, {
+      room,
+      sender,
+      message,
+      event,
+      eventId,
+      serverReceivedAt,
+      status: "duplicate",
+      ignoreReason: "duplicate_event",
+      duplicate: true,
+      saveRequired,
+      timing: chatTimingPayload(timingStartedAt, {
+        receivedAt: serverReceivedAt,
+        eventId,
+        loadStateMs,
+        cacheHit,
+        duplicate,
+        saveRequired
+      })
+    });
+    logMs = elapsedMs(logStartedAt);
+    record.analyticsLog.logMs = logMs;
+    record.event.timing = { ...record.event.timing, logMs };
+    const saveStartedAt = performance.now();
+    await saveState(state);
+    saveStateMs = elapsedMs(saveStartedAt);
+    record.analyticsLog.saveStateMs = saveStateMs;
+    record.analyticsLog.totalMs = elapsedMs(timingStartedAt);
+    return withTiming({ ok: true, reply: null, ignored: true, duplicate: true, reason: "duplicate_event" });
+  }
   const registeredRoom = isRegisteredRoomPayload(payload, state, room);
   const registrationCommand = roomRegistrationCommand(message);
+  const guardStartedAt = performance.now();
   if (!registeredRoom && registrationCommand && !isGroupChatPayload(payload)) {
+    guardMs = elapsedMs(guardStartedAt);
     return withTiming({ ok: true, reply: null, ignored: true, reason: "non_group_chat" });
   }
   if (!registeredRoom && !registrationCommand && !isGroupChatPayload(payload)) {
+    guardMs = elapsedMs(guardStartedAt);
     return withTiming({ ok: true, reply: null, ignored: true, reason: "non_group_chat" });
   }
   if (!registeredRoom && !registrationCommand) {
+    guardMs = elapsedMs(guardStartedAt);
     return withTiming({ ok: true, reply: null, ignored: true, reason: "unregistered_room" });
   }
-  const licenseGuard = licenseGuardResult(roomState, payload, message, registrationCommand);
+  const licenseGuard = shouldRunLicenseGuard(roomState, message, registrationCommand)
+    ? licenseGuardResult(roomState, payload, message, registrationCommand)
+    : null;
+  guardMs = elapsedMs(guardStartedAt);
   if (licenseGuard) {
+    rememberEventId(roomState, eventId);
     const saveStartedAt = performance.now();
     await saveState(state);
     saveStateMs = elapsedMs(saveStartedAt);
     return withTiming(licenseGuard);
   }
   // Runtime chat payloads must not overwrite admin-owned room settings.
-  recordRawEvent(roomState, payload, { room, sender, message, event });
+  const logStartedAt = performance.now();
+  const record = recordRawEvent(roomState, { ...payload, eventId }, {
+    room,
+    sender,
+    message,
+    event,
+    eventId,
+    serverReceivedAt,
+    status: "received",
+    saveRequired,
+    timing: chatTimingPayload(timingStartedAt, {
+      receivedAt: serverReceivedAt,
+      eventId,
+      loadStateMs,
+      guardMs,
+      cacheHit,
+      duplicate,
+      saveRequired
+    })
+  });
+  logMs = elapsedMs(logStartedAt);
+  record.analyticsLog.logMs = logMs;
+  record.event.timing = { ...record.event.timing, logMs };
 
   if (!message || isBotSender(sender)) {
+    rememberEventId(roomState, eventId);
+    record.analyticsLog.status = "ignored";
+    record.analyticsLog.ignoreReason = !message ? "empty_message" : "bot_sender";
+    record.event.status = "ignored";
+    record.event.ignoreReason = record.analyticsLog.ignoreReason;
     const saveStartedAt = performance.now();
     await saveState(state);
     saveStateMs = elapsedMs(saveStartedAt);
+    record.analyticsLog.saveStateMs = saveStateMs;
+    record.analyticsLog.totalMs = elapsedMs(timingStartedAt);
     return withTiming({ ok: true, reply: null, ignored: true });
   }
 
-  const reply = await handleMessage(state, room, sender, message, { ...identity, payload, physicalRoomState: roomState }, event);
-  const saveStartedAt = performance.now();
-  await saveState(state);
-  saveStateMs = elapsedMs(saveStartedAt);
+  const commandStartedAt = performance.now();
+  const reply = isReadOnlySaveSkipCommand(message)
+    ? await handleCommand(state, room, sender, message, { ...identity, payload, physicalRoomState: roomState })
+    : await handleMessage(state, room, sender, message, { ...identity, payload, physicalRoomState: roomState }, event);
+  commandMs = elapsedMs(commandStartedAt);
+  saveRequired = !isReadOnlySaveSkipCommand(message);
+  rememberEventId(roomState, eventId);
+  const replyGeneratedAt = nowIso();
+  record.analyticsLog.status = reply ? "handled" : "no_reply";
+  record.analyticsLog.replyGeneratedAt = replyGeneratedAt;
+  record.analyticsLog.replyLength = normalizeText(reply).length;
+  record.analyticsLog.saveRequired = saveRequired;
+  record.analyticsLog.commandMs = commandMs;
+  record.event.status = record.analyticsLog.status;
+  record.event.timing = { ...record.event.timing, commandMs };
+  if (saveRequired) {
+    const saveStartedAt = performance.now();
+    await saveState(state);
+    saveStateMs = elapsedMs(saveStartedAt);
+  }
+  record.analyticsLog.saveStateMs = saveStateMs;
+  record.analyticsLog.totalMs = elapsedMs(timingStartedAt);
+  record.event.timing = {
+    receivedAt: serverReceivedAt,
+    eventId,
+    loadStateMs,
+    guardMs,
+    commandMs,
+    logMs,
+    saveStateMs,
+    totalMs: record.analyticsLog.totalMs,
+    cacheHit,
+    duplicate,
+    saveRequired
+  };
   return withTiming({
     ok: true,
     reply,

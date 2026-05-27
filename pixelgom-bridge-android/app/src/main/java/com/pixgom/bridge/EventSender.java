@@ -19,9 +19,80 @@ final class EventSender {
     private EventSender() {}
 
     static SendResult send(Context context, BridgeEvent event) {
+        JSONObject payload = buildPayload(context, event, event == null ? 0 : event.retryCount);
+        return sendPayload(context, payload);
+    }
+
+    static SendResult sendPayload(Context context, JSONObject payload) {
         HttpURLConnection connection = null;
         try {
-            JSONObject payload = new JSONObject();
+            URL url = new URL(BridgeConfig.serverUrl(context));
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            writeJson(connection, payload);
+
+            int status = connection.getResponseCode();
+            JSONObject response = new JSONObject(readBody(connection, status));
+            JSONObject timing = response.optJSONObject("timing");
+            String timingSummary = timingSummary(timing);
+            if (!timingSummary.isEmpty()) BridgeConfig.setLastServerTimingSummary(context, timingSummary);
+            return new SendResult(status, cleanReply(response), response.optBoolean("ignored", false), null, response.optString("eventId", timing == null ? payload.optString("eventId", "") : timing.optString("eventId", payload.optString("eventId", ""))), timingSummary);
+        } catch (Exception error) {
+            return new SendResult(0, "", false, error.getClass().getSimpleName() + ": " + error.getMessage(), payload == null ? "" : payload.optString("eventId", ""), "");
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    static RetryResult retryPending(Context context) {
+        JSONArray pending = BridgeConfig.pendingEvents(context);
+        JSONArray remaining = new JSONArray();
+        int success = 0;
+        int failed = 0;
+        for (int index = 0; index < pending.length(); index++) {
+            JSONObject payload = pending.optJSONObject(index);
+            if (payload == null) continue;
+            int retryCount = payload.optInt("retryCount", 0) + 1;
+            try {
+                payload.put("retryCount", retryCount);
+                payload.put("bridgeSentAt", BridgeConfig.nowIso());
+            } catch (Exception ignored) {
+                // Keep retry best-effort.
+            }
+            SendResult result = sendPayload(context, payload);
+            if (result.ok()) {
+                success++;
+            } else {
+                failed++;
+                try {
+                    payload.put("lastError", result.error);
+                } catch (Exception ignored) {
+                    // Keep failed payload.
+                }
+                remaining.put(payload);
+            }
+        }
+        BridgeConfig.setPendingEvents(context, remaining);
+        return new RetryResult(success, failed, remaining.length());
+    }
+
+    static JSONObject buildPayload(Context context, BridgeEvent event, int retryCount) {
+        JSONObject payload = new JSONObject();
+        try {
+            if (event.eventId == null || event.eventId.trim().isEmpty()) event.eventId = BridgeConfig.newEventId();
+            event.bridgeSentAt = BridgeConfig.nowIso();
+            BridgeConfig.RoomProfile matchedProfile = BridgeConfig.matchingProfile(context, event.rawRoom == null ? event.room : event.rawRoom);
+            payload.put("eventId", event.eventId);
+            payload.put("bridgeReceivedAt", event.bridgeReceivedAt == null ? "" : event.bridgeReceivedAt);
+            payload.put("bridgeSentAt", event.bridgeSentAt);
+            payload.put("retryCount", retryCount);
+            payload.put("roomProfileCount", BridgeConfig.roomProfileCount(context));
+            payload.put("matchedRoomRole", matchedProfile == null ? "" : matchedProfile.roomRole);
+            payload.put("canonicalRoomName", matchedProfile == null ? "" : matchedProfile.canonicalRoomName);
             payload.put("room", event.room);
             payload.put("rawRoom", event.rawRoom);
             payload.put("roomId", event.roomId);
@@ -38,24 +109,10 @@ final class EventSender {
             payload.put("rawIsGroupChat", event.groupChat);
             payload.put("packageName", event.packageName);
             payload.put("source", "pixelgom-android-bridge");
-
-            URL url = new URL(BridgeConfig.serverUrl(context));
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(10000);
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            writeJson(connection, payload);
-
-            int status = connection.getResponseCode();
-            JSONObject response = new JSONObject(readBody(connection, status));
-            return new SendResult(status, cleanReply(response), response.optBoolean("ignored", false), null);
-        } catch (Exception error) {
-            return new SendResult(0, "", false, error.getClass().getSimpleName() + ": " + error.getMessage());
-        } finally {
-            if (connection != null) connection.disconnect();
+        } catch (Exception ignored) {
+            // A malformed diagnostic field must not block the base send path.
         }
+        return payload;
     }
 
     static ConnectResult connect(Context context, String code) {
@@ -257,21 +314,46 @@ final class EventSender {
         return value;
     }
 
+    private static String timingSummary(JSONObject timing) {
+        if (timing == null) return "";
+        return "eventId=" + timing.optString("eventId", "")
+                + " total=" + timing.optDouble("totalMs", 0) + "ms"
+                + " command=" + timing.optDouble("commandMs", 0) + "ms"
+                + " save=" + timing.optDouble("saveStateMs", 0) + "ms"
+                + " duplicate=" + timing.optBoolean("duplicate", false);
+    }
+
     static final class SendResult {
         final int status;
         final String reply;
         final boolean ignored;
         final String error;
+        final String eventId;
+        final String timingSummary;
 
-        SendResult(int status, String reply, boolean ignored, String error) {
+        SendResult(int status, String reply, boolean ignored, String error, String eventId, String timingSummary) {
             this.status = status;
             this.reply = reply == null ? "" : reply;
             this.ignored = ignored;
             this.error = error;
+            this.eventId = eventId == null ? "" : eventId;
+            this.timingSummary = timingSummary == null ? "" : timingSummary;
         }
 
         boolean ok() {
             return error == null && status >= 200 && status < 300;
+        }
+    }
+
+    static final class RetryResult {
+        final int success;
+        final int failed;
+        final int remaining;
+
+        RetryResult(int success, int failed, int remaining) {
+            this.success = success;
+            this.failed = failed;
+            this.remaining = remaining;
         }
     }
 

@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.text.TextUtils;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
@@ -45,8 +46,13 @@ final class BridgeConfig {
     private static final String KEY_LAST_CONNECT_SUMMARY = "last_connect_summary";
     private static final String KEY_LAST_PROFILE_SYNC_SUMMARY = "last_profile_sync_summary";
     private static final String KEY_LAST_IGNORE_REASON = "last_ignore_reason";
+    private static final String KEY_PENDING_EVENTS = "pending_events";
+    private static final String KEY_LAST_SEND_SUCCESS = "last_send_success";
+    private static final String KEY_LAST_SEND_FAILURE = "last_send_failure";
+    private static final String KEY_LAST_SERVER_TIMING = "last_server_timing";
     private static final String EMPTY_ROOM_PROFILES = "__PIXGOM_EMPTY_ROOM_PROFILES__";
     private static final int MAX_LOG_LINES = 80;
+    private static final int MAX_PENDING_EVENTS = 80;
 
     private BridgeConfig() {}
 
@@ -134,6 +140,10 @@ final class BridgeConfig {
                 .remove(KEY_LAST_CONNECT_SUMMARY)
                 .remove(KEY_LAST_PROFILE_SYNC_SUMMARY)
                 .remove(KEY_LAST_IGNORE_REASON)
+                .remove(KEY_PENDING_EVENTS)
+                .remove(KEY_LAST_SEND_SUCCESS)
+                .remove(KEY_LAST_SEND_FAILURE)
+                .remove(KEY_LAST_SERVER_TIMING)
                 .apply();
         appendLog(context, "서버 설정 초기화 / 등록 취소 완료");
     }
@@ -530,6 +540,79 @@ final class BridgeConfig {
 
     static String logs(Context context) {
         return prefs(context).getString(KEY_LOGS, "");
+    }
+
+    static String newEventId() {
+        return "and_" + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    static String nowIso() {
+        return new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.KOREA).format(new Date());
+    }
+
+    static JSONArray pendingEvents(Context context) {
+        String stored = prefs(context).getString(KEY_PENDING_EVENTS, "[]");
+        try {
+            return new JSONArray(TextUtils.isEmpty(stored) ? "[]" : stored);
+        } catch (JSONException error) {
+            return new JSONArray();
+        }
+    }
+
+    static int pendingEventCount(Context context) {
+        return pendingEvents(context).length();
+    }
+
+    static void setPendingEvents(Context context, JSONArray events) {
+        prefs(context).edit().putString(KEY_PENDING_EVENTS, events == null ? "[]" : events.toString()).apply();
+    }
+
+    static void enqueuePendingEvent(Context context, JSONObject payload, String reason) {
+        JSONArray events = pendingEvents(context);
+        JSONObject next = payload == null ? new JSONObject() : payload;
+        try {
+            next.put("queuedAt", nowIso());
+            next.put("lastError", textOrDefault(reason, "send_failed"));
+            if (!next.has("eventId") || TextUtils.isEmpty(next.optString("eventId", ""))) next.put("eventId", newEventId());
+        } catch (JSONException ignored) {
+            // Pending diagnostics must not crash notification handling.
+        }
+        events.put(next);
+        while (events.length() > MAX_PENDING_EVENTS) {
+            JSONArray trimmed = new JSONArray();
+            for (int index = 1; index < events.length(); index++) trimmed.put(events.opt(index));
+            events = trimmed;
+        }
+        setPendingEvents(context, events);
+    }
+
+    static void clearPendingEvents(Context context) {
+        prefs(context).edit().putString(KEY_PENDING_EVENTS, "[]").apply();
+        appendLog(context, "전송 대기 큐 비움");
+    }
+
+    static void setLastSendSuccess(Context context, String value) {
+        prefs(context).edit().putString(KEY_LAST_SEND_SUCCESS, textOrDefault(value, "")).apply();
+    }
+
+    static String lastSendSuccess(Context context) {
+        return prefs(context).getString(KEY_LAST_SEND_SUCCESS, "");
+    }
+
+    static void setLastSendFailure(Context context, String value) {
+        prefs(context).edit().putString(KEY_LAST_SEND_FAILURE, textOrDefault(value, "")).apply();
+    }
+
+    static String lastSendFailure(Context context) {
+        return prefs(context).getString(KEY_LAST_SEND_FAILURE, "");
+    }
+
+    static void setLastServerTimingSummary(Context context, String value) {
+        prefs(context).edit().putString(KEY_LAST_SERVER_TIMING, textOrDefault(value, "")).apply();
+    }
+
+    static String lastServerTimingSummary(Context context) {
+        return prefs(context).getString(KEY_LAST_SERVER_TIMING, "");
     }
 
     static void setLastConnectSummary(Context context, String value) {
