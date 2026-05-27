@@ -614,7 +614,7 @@ try {
   assert.match(updatesPageText, /픽셀곰 0\.4\.79/);
   assert.match(updatesPageText, /픽셀곰 0\.4\.70/);
   const rpgHelpPageText = await (await fetch(`${baseUrl}/help/rpg`)).text();
-  assert.match(rpgHelpPageText, /자동사냥/);
+  assert.match(rpgHelpPageText, /자동던전/);
   assert.match(rpgHelpPageText, /강화/);
   assert.match(rpgHelpPageText, /보상선택/);
   assert.match(rpgHelpPageText, /다이아/);
@@ -787,7 +787,7 @@ try {
     && pack.fixedCommands.includes("/장비상세")
     && pack.fixedCommands.includes("/스탯")
     && pack.fixedCommands.includes("/모험")
-    && pack.fixedCommands.includes("/자동사냥")
+    && pack.fixedCommands.includes("/자동던전")
     && pack.fixedCommands.includes("/자동모험")
     && pack.fixedCommands.includes("/자동탐험")
     && pack.fixedCommands.includes("/자동낚시")
@@ -4293,7 +4293,7 @@ try {
   assert.match(gameHub.json.reply, /픽셀몬스터/);
   assert.match(gameHub.json.reply, /점메추/);
   assert.match(gameHub.json.reply, /몬스터퀘스트|몬스터보스|몬스터팀/);
-  assert.match(gameHub.json.reply, /\/모험|\/자동사냥/);
+  assert.match(gameHub.json.reply, /\/모험|\/자동던전/);
 
   const dailyChecklist = await chatPayload({
     registeredRoom: false,
@@ -4308,7 +4308,7 @@ try {
   assert.match(dailyChecklist.json.reply, /\/출석/);
   assert.match(dailyChecklist.json.reply, /\/낚시/);
   assert.match(dailyChecklist.json.reply, /\/던전/);
-  assert.match(dailyChecklist.json.reply, /\/모험|\/자동사냥/);
+  assert.match(dailyChecklist.json.reply, /\/모험|\/자동던전/);
   assert.match(dailyChecklist.json.reply, /\/펫/);
   assert.match(dailyChecklist.json.reply, /\/몬스터퀘스트|\/몬스터보스/);
   assert.match(dailyChecklist.json.reply, /\/가방정리|\/정리추천/);
@@ -4343,7 +4343,7 @@ try {
 
   for (const [topic, title, expected] of [
     ["돈벌기", "돈 벌기", /\/출석|\/낚시|\/던전/],
-    ["RPG", "RPG", /\/모험|\/자동사냥|\/강화|\/제작가능/],
+    ["RPG", "RPG", /\/모험|\/자동던전|\/강화|\/제작가능/],
     ["펫", "펫", /\/펫|\/펫먹이|\/펫훈련/],
     ["수집", "수집", /\/몬스터퀘스트|\/몬스터보스|\/몬스터팀/]
   ]) {
@@ -5345,7 +5345,7 @@ try {
   assert.match(adventureHub.json.reply, /강화/);
   assert.match(adventureHub.json.reply, /제작 가능/);
 
-  const autoHuntNoTicket = await chat("/자동사냥", "자동러 여");
+  const autoHuntNoTicket = await chat("/자동던전", "자동러 여");
   assert.match(autoHuntNoTicket.json.reply, /자동사냥권/);
   assert.match(autoHuntNoTicket.json.reply, /(부족|필요)/);
   assert.match(autoHuntNoTicket.json.reply, /(구매|획득)/);
@@ -5360,16 +5360,16 @@ try {
   await chat("/포인트지급 상점자동러 여 1000", "관리자");
   const customTicketBuy = await chat(`/구매 ${customTicketId} 2`, "상점자동러 여");
   assert.match(customTicketBuy.json.reply, /자동사냥권 x 2/);
-  const customTicketAutoHunt = await chat("/자동사냥 초급", "상점자동러 여");
-  assert.match(customTicketAutoHunt.json.reply, /자동사냥 결과/);
+  const customTicketAutoHunt = await chat("/자동던전 초급", "상점자동러 여");
+  assert.match(customTicketAutoHunt.json.reply, /자동던전 결과/);
   assert.match(customTicketAutoHunt.json.reply, /10회/);
   assert.match(customTicketAutoHunt.json.reply, /남은 자동사냥권: 1장/);
   assert.doesNotMatch(customTicketAutoHunt.json.reply, /자동사냥권이 필요합니다/);
 
   const autoHuntTicketGrant = await chat("/아이템지급 자동러 여 9303 1", "관리자");
   assert.match(autoHuntTicketGrant.json.reply, /자동사냥권/);
-  const autoHuntRun = await chat("/자동사냥 중급", "자동러 여");
-  assert.match(autoHuntRun.json.reply, /자동사냥 결과/);
+  const autoHuntRun = await chat("/자동던전 중급", "자동러 여");
+  assert.match(autoHuntRun.json.reply, /자동던전 결과/);
   assert.match(autoHuntRun.json.reply, /10회/);
   assert.match(autoHuntRun.json.reply, /획득/);
   assert.match(autoHuntRun.json.reply, /꽝/);
@@ -5378,11 +5378,16 @@ try {
 
   const autoHuntBulkTicketGrant = await chat("/아이템지급 자동대량러 여 9303 10", "관리자");
   assert.match(autoHuntBulkTicketGrant.json.reply, /자동사냥권/);
-  const autoHuntBulkRun = await chat("/자동사냥 상급 10", "자동대량러 여");
-  assert.match(autoHuntBulkRun.json.reply, /자동사냥 결과/);
+  const autoHuntBulkRun = await chat("/자동던전 상급 10", "자동대량러 여");
+  assert.match(autoHuntBulkRun.json.reply, /자동던전 결과/);
   assert.match(autoHuntBulkRun.json.reply, /상급 심연 100회 요약/);
   assert.match(autoHuntBulkRun.json.reply, /남은 자동사냥권: 0장/);
   assert.doesNotMatch(autoHuntBulkRun.json.reply, /#11\d{3}|110\d{2}|9303/);
+
+  await chat("/아이템지급 자동호환러 여 9303 1", "관리자");
+  const legacyAutoHuntRun = await chat("/자동사냥 중급", "자동호환러 여");
+  assert.match(legacyAutoHuntRun.json.reply, /자동던전 결과/);
+  assert.match(legacyAutoHuntRun.json.reply, /10회/);
 
   const functionalItems = await chat("/기능아이템목록", "관리자");
   assert.match(functionalItems.json.reply, /기능성 아이템 목록/);

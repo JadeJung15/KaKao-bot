@@ -539,7 +539,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
     title: "게임/연동 예약",
     commands: [
       "/게임", "/주사위", "/낚시", "/탐험", "/자동탐험", "/자동모험", "/자동낚시", "/뽑기", "/자동뽑기", "/뽑기목록", "/홀", "/짝", "/미끼상점", "/미끼구매", "/어항", "/수족관",
-      "/모험", "/던전", "/던전목록", "/자동사냥", "/대장간", "/제작", "/제작가능", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장착",
+      "/모험", "/던전", "/던전목록", "/자동던전", "/대장간", "/제작", "/제작가능", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장착",
       "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감",
       "/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점",
       "/픽셀곰게임", "/게임연동"
@@ -1337,7 +1337,7 @@ const SYSTEM_PRODUCTS = Object.freeze([
 ]);
 const SYSTEM_PRODUCT_MAP = new Map(SYSTEM_PRODUCTS.map((product) => [String(product.id), product]));
 const FUNCTIONAL_SHOP_ITEM_GUIDES = Object.freeze([
-  { name: "자동사냥권", systemId: AUTO_HUNT_TICKET_ITEM_ID, use: "/자동사냥", example: "/상점추가 자동사냥권 250 던전 10회 자동사냥 티켓" },
+  { name: "자동사냥권", systemId: AUTO_HUNT_TICKET_ITEM_ID, use: "/자동던전", example: "/상점추가 자동사냥권 250 던전 10회 자동던전 티켓" },
   { name: "자동탐험권", systemId: AUTO_EXPLORE_TICKET_ITEM_ID, use: "/자동탐험", example: "/상점추가 자동탐험권 160 탐험 10회 자동탐험 티켓" },
   { name: "자동낚시권", systemId: AUTO_FISHING_TICKET_ITEM_ID, use: "/자동낚시", example: "/상점추가 자동낚시권 180 낚시 10회 자동낚시 티켓" },
   { name: "자동뽑기권", systemId: AUTO_DRAW_TICKET_ITEM_ID, use: "/자동뽑기", example: "/상점추가 자동뽑기권 140 뽑기 10회 자동뽑기 티켓" },
@@ -1538,7 +1538,7 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "attendance-growth": ["/출석", "/미출석", "/출석순위", "/포인트", "/내정보", "/포인트순위"],
   "point-economy": ["/포인트", "/내정보", "/좋아요", "/응원", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위"],
   "game-chance": ["/게임", "/오늘할일", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/포인트"],
-  "rpg-adventure": ["/모험", "/던전", "/던전목록", "/자동사냥", "/자동탐험", "/자동모험", "/자동낚시", "/자동뽑기", "/대장간", "/제작가능", "/제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/판매미리보기", "/판매추천", "/정리추천", "/일괄판매", "/가방", "/가방정리", "/판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/포인트"],
+  "rpg-adventure": ["/모험", "/던전", "/던전목록", "/자동던전", "/자동탐험", "/자동모험", "/자동낚시", "/자동뽑기", "/대장간", "/제작가능", "/제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/판매미리보기", "/판매추천", "/정리추천", "/일괄판매", "/가방", "/가방정리", "/판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/포인트"],
   "pixel-monster-rpg": ["/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감", "/포인트"],
   "pet-raising": ["/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점", "/포인트"],
   "shop-inventory": ["/상점", "/구매", "/가방", "/가방정리", "/판매추천", "/정리추천", "/아이템상세", "/판매목록", "/판매미리보기", "/사용", "/가방선물", "/판매", "/일괄판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/구매내역", "/기능아이템목록"],
@@ -1870,10 +1870,10 @@ const GAME_PACK_HELP_TOPICS = Object.freeze({
     path: "/help/rpg",
     packIds: ["rpg-adventure"],
     aliases: ["rpg", "RPG", "모험", "던전"],
-    intro: "던전, 자동사냥권 10회 요약, 자동탐험/자동낚시/자동뽑기, 장비 강화, 확장 제작식을 묶은 모험형 게임팩입니다.",
-    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/모험", "/자동사냥 상급 10", "/제작가능", "/강화목록", "/자동장착 공격"],
+    intro: "던전, 자동던전 10회 요약, 자동탐험/자동낚시/자동뽑기, 장비 강화, 확장 제작식을 묶은 모험형 게임팩입니다.",
+    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/모험", "/자동던전 상급 10", "/제작가능", "/강화목록", "/자동장착 공격"],
     adminSetup: ["명령어팩 장착: /명령어설치 pk.006", "게임 기능 켜기: /기능켜기 게임", "상점/가방 기능 확인: /기능목록"],
-    examples: ["/모험", "/던전 중급", "/자동사냥 상급 10", "/자동탐험 2", "/자동낚시 2", "/자동뽑기 2", "/대장간", "/제작가능", "/강화 무기", "/강화상세", "/자동장착 공격", "/보상선택 포인트"],
+    examples: ["/모험", "/던전 중급", "/자동던전 상급 10", "/자동탐험 2", "/자동낚시 2", "/자동뽑기 2", "/대장간", "/제작가능", "/강화 무기", "/강화상세", "/자동장착 공격", "/보상선택 포인트"],
     related: ["shop-inventory", "pet-raising"]
   },
   monster: {
@@ -7513,9 +7513,9 @@ const AUTO_GAME_TICKET_CONFIGS = Object.freeze({
     name: "자동사냥권",
     systemId: AUTO_HUNT_TICKET_ITEM_ID,
     category: "rpg_ticket",
-    command: "/자동사냥",
+    command: "/자동던전",
     directCommand: "/던전",
-    title: "자동사냥"
+    title: "자동던전"
   },
   explore: {
     name: "자동탐험권",
@@ -7582,7 +7582,7 @@ function consumeAutoGameTickets(roomState, person, config = AUTO_GAME_TICKET_CON
   return consumed;
 }
 
-function parseAutoGameCommand(text = "", commandPattern = /^\/자동사냥\s*/i) {
+function parseAutoGameCommand(text = "", commandPattern = /^\/자동던전\s*/i) {
   const body = compactSpaces(text.replace(commandPattern, ""));
   if (!body) return { subject: "", ticketUse: 1 };
   const parts = body.split(/\s+/).filter(Boolean);
@@ -8757,7 +8757,7 @@ function dungeonListCommand() {
     "  판매가: 동 3,000 / 은 10,000 / 금 50,000 / 다이아 100,000",
     "",
     "/던전 또는 /던전 중급 으로 입장합니다.",
-    "10회 요약: /자동사냥 중급",
+    "10회 요약: /자동던전 중급",
     "장비 성장: /제작가능, /강화목록"
   ].join("\n");
 }
@@ -8844,7 +8844,7 @@ function createPendingRpgReward(person, config) {
 
 function autoHuntDungeonCommand(roomState, sender, text) {
   const person = ensurePerson(roomState, sender);
-  const parsed = parseAutoGameCommand(text, /^\/자동사냥\s*/i);
+  const parsed = parseAutoGameCommand(text, /^\/자동(?:던전|사냥)\s*/i);
   const ticketUse = parsed.ticketUse;
   const ticketCount = autoHuntTicketQuantity(roomState, person);
   if (ticketCount < ticketUse) return autoGameTicketRequiredText(AUTO_GAME_TICKET_CONFIGS.hunt, ticketUse);
@@ -8891,7 +8891,7 @@ function autoHuntDungeonCommand(roomState, sender, text) {
     by: person.currentName
   });
   return [
-    "🏰 자동사냥 결과",
+    "🏰 자동던전 결과",
     `${config.title} ${runs}회 요약`,
     "",
     `획득: ${rewards.length}개 / 꽝 ${blanks}회`,
@@ -9095,7 +9095,7 @@ function rpgAdventureHubCommand(roomState, sender) {
     `🏰 ${displayName}님의 RPG 모험`,
     `오늘 할 일: /던전 → /제작가능 → /강화목록`,
     `자동사냥권: ${ticketCount}장 · 자동탐험권 ${exploreTicketCount}장 · 자동낚시권 ${fishingTicketCount}장 · 자동뽑기권 ${drawTicketCount}장`,
-    "대량 실행: /자동사냥 상급 10",
+    "대량 실행: /자동던전 상급 10",
     `제작 가능: ${craftableCount}개`,
     `강화 추천: ${enhanceText}`,
     `던전 상태: ${cooldown}`,
@@ -9608,7 +9608,7 @@ function rpgEnhanceCommand(roomState, sender, text) {
     return [
       "⚠️ 강화 재료가 부족합니다.",
       `${material?.name || "재료"}: ${inventoryQuantity(person, cost.materialId)}/${cost.materialQty}`,
-      "재료 획득: /던전 또는 /자동사냥"
+      "재료 획득: /던전 또는 /자동던전"
     ].join("\n");
   }
   if (person.points < cost.pointCost) {
@@ -10228,7 +10228,7 @@ function gameHelpText(roomState) {
     gameSeasonPeriodText(settings),
     `주사위 기본 보상: ${formatPoint(settings.diceReward)} x 결과`,
     "",
-    "1. RPG 성장: /모험, /자동사냥 상급 10, /강화목록",
+    "1. RPG 성장: /모험, /자동던전 상급 10, /강화목록",
     "2. 낚시 수집: /미끼상점, /낚시, /자동낚시",
     "3. 펫 돌보기: /펫입양, /펫, /펫먹이",
     `4. 픽셀몬스터: /몬스터, /몬스터퀘스트, /몬스터보스 (${PIXEL_MONSTER_SPECIES_COUNT}종)`,
@@ -10252,7 +10252,7 @@ function dailyActionChecklistCommand(roomState, sender) {
     "1. /출석 - 오늘 보상 받기",
     `2. /낚시 - 미끼 ${formatNumber(bait)}개 확인`,
     "3. /모험 또는 /던전 - RPG 목표와 재료 성장",
-    "4. /자동사냥 상급 10 - 자동사냥권 10장으로 100회 요약",
+    "4. /자동던전 상급 10 - 자동사냥권 10장으로 100회 요약",
     "5. /몬스터퀘스트 - 수집 루틴 확인",
     "6. /몬스터보스 - 방 전체 보스 참여",
     pet ? `7. /펫 - ${pet} 상태 확인` : "7. /펫입양 이름 - 첫 펫 시작",
@@ -10796,7 +10796,7 @@ function bridgeJsServerText() {
 const ACTIVE_GAME_ROOM_COMMANDS = new Set([
   "/게임", "/게임명령어", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/확률뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝",
   "/미끼상점", "/미끼구매", "/어항", "/수족관",
-  "/모험", "/던전", "/던전목록", "/자동사냥", "/대장간", "/제작가능", "/제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템",
+  "/모험", "/던전", "/던전목록", "/자동던전", "/자동사냥", "/대장간", "/제작가능", "/제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템",
   "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감",
   "/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점"
 ]);
@@ -10849,7 +10849,7 @@ function commandFeatureKey(command) {
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
   if (/^\/(?:프로필|프로칠|내별명|별명목록|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
-  if (/^\/(?:게임|오늘할일|주사위|낚시|자동낚시|탐험|자동탐험|자동모험|확률뽑기|뽑기|자동뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|모험|던전|던전목록|자동사냥|대장간|제작가능|제작|강화|강화목록|강화상세|보상선택|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:게임|오늘할일|주사위|낚시|자동낚시|탐험|자동탐험|자동모험|확률뽑기|뽑기|자동뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|모험|던전|던전목록|자동던전|자동사냥|대장간|제작가능|제작|강화|강화목록|강화상세|보상선택|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
   if (/^\/(?:상점|구매|구매내역|가방|가방정리|정리추천|판매추천|아이템|보유아이템|아이템상세|판매목록|판매미리보기|일괄판매|아이템잠금|아이템잠금해제|잠금목록|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수|기능아이템목록)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
@@ -10933,8 +10933,8 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/주사위", "게임", "주사위 보상 게임", { requiresFeature: "games" }),
   registryEntry("/낚시", "게임", "낚시 보상 게임", { aliases: ["/자동낚시"], requiresFeature: "games", searchableKeywords: ["낚시", "자동낚시"] }),
   registryEntry("/탐험", "게임", "탐험 보상 게임", { aliases: ["/자동탐험", "/자동모험"], requiresFeature: "games", searchableKeywords: ["탐험", "자동탐험", "자동모험"] }),
-  registryEntry("/모험", "RPG", "RPG 오늘 할 일과 추천 행동 확인", { aliases: ["/RPG", "/알피지"], examples: ["/모험"], requiresFeature: "games", searchableKeywords: ["RPG", "허브", "모험", "자동사냥", "강화"] }),
-  registryEntry("/던전", "RPG", "던전 탐험과 재료 획득", { aliases: ["/던전목록", "/자동사냥", "/보상선택"], examples: ["/던전", "/던전 중급", "/자동사냥 중급", "/자동사냥 상급 10"], requiresFeature: "games", searchableKeywords: ["RPG", "모험", "재료", "자동사냥", "보상"] }),
+  registryEntry("/모험", "RPG", "RPG 오늘 할 일과 추천 행동 확인", { aliases: ["/RPG", "/알피지"], examples: ["/모험"], requiresFeature: "games", searchableKeywords: ["RPG", "허브", "모험", "자동던전", "강화"] }),
+  registryEntry("/던전", "RPG", "던전 탐험과 재료 획득", { aliases: ["/던전목록", "/자동던전", "/자동사냥", "/보상선택"], examples: ["/던전", "/던전 중급", "/자동던전 중급", "/자동던전 상급 10"], requiresFeature: "games", searchableKeywords: ["RPG", "모험", "재료", "자동던전", "자동사냥", "보상"] }),
   registryEntry("/대장간", "RPG", "장비 제작과 강화 흐름 확인", { aliases: ["/제작", "/제작가능", "/강화", "/강화목록", "/강화상세", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템"], examples: ["/대장간", "/제작가능", "/제작 1", "/강화 무기", "/자동장착 공격"], requiresFeature: "games", searchableKeywords: ["무기", "방어구", "장신구", "제작", "장비", "세트", "강화"] }),
   registryEntry("/점메추", "생활", "점심 메뉴 추천", { examples: ["/점메추", "/점메추 한식", "/점메추 매운거"], searchableKeywords: ["점심", "메뉴", "추천", "음식"] }),
   registryEntry("/몬스터탐험", "픽셀몬스터", "오리지널 몬스터 발견과 수집 성장", { aliases: ["/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감"], requiresFeature: "games", searchableKeywords: ["몬스터", "수집", "도감", "퀘스트", "보스", "진화"] }),
@@ -11339,7 +11339,7 @@ const COMMAND_DISCOVERY_TOPICS = Object.freeze([
     key: "게임",
     aliases: ["게임", "미니게임", "낚시", "던전", "rpg"],
     title: "게임/RPG",
-    commands: ["/게임", "/오늘할일", "/모험", "/자동사냥 상급 10", "/낚시", "/던전", "/가방정리", "/강화목록", "/자동탐험", "/자동낚시", "/자동뽑기", "/대장간"]
+    commands: ["/게임", "/오늘할일", "/모험", "/자동던전 상급 10", "/낚시", "/던전", "/가방정리", "/강화목록", "/자동탐험", "/자동낚시", "/자동뽑기", "/대장간"]
   },
   {
     key: "가방",
@@ -11530,7 +11530,7 @@ const COMMAND_RECOMMENDATION_PRESETS = Object.freeze({
     findHint: "/게임, /도움말 RPG",
     commands: [
       { command: "/모험", reason: "RPG 오늘 할 일과 성장 추천", feature: "games" },
-      { command: "/자동사냥 상급 10", reason: "자동사냥권 10장으로 던전 100회 요약", feature: "games" },
+      { command: "/자동던전 상급 10", reason: "자동사냥권 10장으로 던전 100회 요약", feature: "games" },
       { command: "/던전", reason: "재료와 장비 성장", feature: "games" },
       { command: "/강화목록", reason: "강화할 장비와 비용 확인", feature: "games" },
       { command: "/제작가능", reason: "지금 만들 수 있는 장비 확인", feature: "games" },
@@ -11538,7 +11538,7 @@ const COMMAND_RECOMMENDATION_PRESETS = Object.freeze({
       { command: "/장비", reason: "현재 장비 요약", feature: "games" },
       { command: "/스탯", reason: "전투 능력치 확인", feature: "games" }
     ],
-    topCommands: ["/모험", "/자동사냥", "/자동탐험", "/자동낚시", "/자동뽑기", "/던전", "/강화목록", "/강화", "/제작가능", "/제작", "/자동장착", "/장비", "/스탯", "/세트아이템"]
+    topCommands: ["/모험", "/자동던전", "/자동탐험", "/자동낚시", "/자동뽑기", "/던전", "/강화목록", "/강화", "/제작가능", "/제작", "/자동장착", "/장비", "/스탯", "/세트아이템"]
   },
   pet: {
     label: "펫",
@@ -11719,7 +11719,7 @@ function roomStatusSnapshot(state = {}, roomState = {}, options = {}) {
 
 function gameCommandTopObjects(roomState = {}, limit = 5) {
   const gameCommands = new Set([
-    "/게임", "/오늘할일", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/모험", "/자동사냥", "/던전", "/강화", "/강화목록", "/몬스터탐험", "/포획", "/펫", "/펫먹이", "/점메추",
+    "/게임", "/오늘할일", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/모험", "/자동던전", "/자동사냥", "/던전", "/강화", "/강화목록", "/몬스터탐험", "/포획", "/펫", "/펫먹이", "/점메추",
     "/판매추천", "/정리추천", "/가방정리", "/판매미리보기", "/자동장착"
   ]);
   const counts = new Map();
@@ -16385,7 +16385,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/모험") return rpgAdventureHubCommand(roomState, sender);
   if (command === "/던전목록") return dungeonListCommand();
   if (command === "/던전") return dungeonCommand(roomState, sender, text);
-  if (command === "/자동사냥") return autoHuntDungeonCommand(roomState, sender, text);
+  if (command === "/자동던전" || command === "/자동사냥") return autoHuntDungeonCommand(roomState, sender, text);
   if (command === "/대장간") return blacksmithCommand(roomState, sender);
   if (command === "/제작가능") return craftableEquipmentCommand(roomState, sender);
   if (command === "/제작") return craftWeaponCommand(roomState, sender, text);
