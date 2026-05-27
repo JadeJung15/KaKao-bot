@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.23";
+export const APP_VERSION = "0.5.24";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -3570,6 +3570,7 @@ function applicationRoomPayload(state, account = {}, application = {}) {
   const roomPurpose = application.roomPurpose || "general_room";
   const isGameRoom = normalizeApplicationRoomPurpose(roomPurpose) === "game_room";
   const linkedGameRooms = isGameRoom ? [] : gameRoomApplicationsForBase(state, account, application);
+  const payloadRoomRole = effectiveRoomRoleForApplication(state, roomState, application, account, linkedGameRooms);
   const licenseKey = application.licenseKey || roomView?.licenseKey || "";
   const subscription = roomView?.subscription || application.plan || {};
   const customCommands = roomView?.customCommands || [];
@@ -3596,7 +3597,7 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     linkedGameRooms: linkedGameRooms.map((item) => gameRoomSummaryPayload(state, account, item)),
     canApplyGameRoom: !isGameRoom && application.status === "approved" && state.payments?.[application.paymentId]?.status === "paid" && linkedGameRooms.length === 0,
     gameRoomApplyUrl: !isGameRoom ? `/apply?roomPurpose=game_room&linkedApplicationId=${encodeURIComponent(application.id || "")}` : "",
-    roomRole: roomView?.roomRole || "standard",
+    roomRole: payloadRoomRole,
     canonicalRoomName: roomView?.canonicalRoomName || "",
     joinPhrase: roomView?.joinPhrase || DEFAULT_JOIN_PHRASE,
     licenseKey,
@@ -3619,6 +3620,17 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     serverUrl: "https://pixgom.com/chat-event",
     bridgeConnectCode
   };
+}
+
+function effectiveRoomRoleForApplication(state = {}, roomState = null, application = {}, account = {}, linkedGameRooms = null) {
+  const purpose = normalizeApplicationRoomPurpose(application.roomPurpose);
+  if (purpose === "game_room") return "game";
+  const savedRole = normalizeRoomRole(roomState?.settings?.roomRole || "");
+  const gameRooms = Array.isArray(linkedGameRooms)
+    ? linkedGameRooms
+    : gameRoomApplicationsForBase(state, account || state.accounts?.[application.accountId] || {}, application);
+  if (purpose !== "game_room" && gameRooms.length > 0) return "general";
+  return savedRole;
 }
 
 function bridgeConnectApplicationsForApplication(state, account = {}, application = {}) {
@@ -10419,11 +10431,12 @@ function roomLifecycleSnapshot(state = {}, roomState = {}, application = null, a
 
 function roomStatusSnapshot(state = {}, roomState = {}, options = {}) {
   const application = options.application || applicationForRoomState(state, roomState);
+  const account = options.account || state.accounts?.[application?.accountId] || {};
   const subscription = updateSubscriptionStatus(roomState);
   const diagnostics = roomDiagnostics(roomState);
   const license = licenseSettings(roomState);
   const settings = roomState.settings || {};
-  const role = normalizeRoomRole(settings.roomRole);
+  const role = effectiveRoomRoleForApplication(state, roomState, application || {}, account);
   const bridgeReady = Boolean(license.key && (settings.roomIds || []).length && settings.registered !== false);
   const modeSplit = normalizedModeSplit(settings.modeSplit, {
     blockGamesInGeneralRoom: role === "general",
