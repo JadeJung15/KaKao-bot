@@ -33,6 +33,85 @@ async function copyTextToClipboard(value = "") {
   return copied;
 }
 
+function BuyerSearchPanel({ onToast }) {
+  const [query, setQuery] = useState("");
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!query.trim()) return;
+    const token = buyerToken();
+    const params = new URLSearchParams({ q: query.trim() });
+    if (token) params.set("token", token);
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/buyer/search?${params.toString()}`, { cache: "no-store" });
+      const json = await response.json();
+      if (!response.ok || json.ok === false) throw new Error(json.error || "buyer_search_failed");
+      setResult(json);
+    } catch (error) {
+      onToast?.({ tone: "bad", message: formatError(error) });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const sections = result?.sections || {};
+  return (
+    <section className="console-search-panel">
+      <form className="console-search-form" onSubmit={submit}>
+        <div>
+          <p className="console-eyebrow">내 콘솔 검색</p>
+          <h2>방, 결제, 앱 연결, 명령어, 게임/가방, 별명 검색</h2>
+          <p>동명이인 가능성 있음, 관리자 확인 필요 상태는 자동 병합하지 않습니다.</p>
+        </div>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="방명, 명령어, 별명, 앱 연결 상태 검색" />
+        <button type="submit" disabled={loading}>{loading ? "검색 중" : "검색"}</button>
+      </form>
+      {result ? (
+        <div className="console-search-results">
+          <BuyerSearchSection title="방" items={sections.rooms || []} render={(item) => `${item.roomName} · ${item.subscriptionStatusLabel || ""} · ${item.bridgeStatus}`} />
+          <BuyerSearchSection title="결제" items={sections.payments || []} render={(item) => `${item.roomName} · ${item.statusLabel} · ${item.paymentStatusLabel}`} />
+          <BuyerSearchSection title="앱 연결" items={sections.appConnection || []} render={(item) => `${item.roomName} · ${item.appConnectCodeStatus}`} />
+          <BuyerSearchSection title="명령어" items={sections.commands || []} render={(item) => `${item.command} · ${item.description}`} />
+          <BuyerSearchSection title="게임/가방" items={sections.games || []} render={(item) => `${item.title} · ${item.installCode}`} />
+          <BuyerSearchSection title="별명" items={sections.aliases || []} render={(item) => `${item.displayName} · ${item.conflictNotice || item.identitySummary}`} />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function BuyerSearchSection({ title, items = [], render }) {
+  return (
+    <div className="console-search-section">
+      <strong>{title}</strong>
+      {items.length ? items.slice(0, 5).map((item, index) => (
+        <div className="console-compact-row" key={`${title}-${index}`}>{render(item)}</div>
+      )) : <p>결과 없음</p>}
+    </div>
+  );
+}
+
+function BuyerGameUsageSummary({ summary = {} }) {
+  return (
+    <section className="console-game-overview">
+      <div>
+        <p className="console-eyebrow">Game Summary</p>
+        <h3>내 게임 이용 요약</h3>
+        <p>{summary.enabled === false ? "게임 기능 꺼짐" : "사용 가능 콘텐츠를 확인하세요."}</p>
+      </div>
+      <div className="console-compact-list">
+        <span>사용 가능 콘텐츠: {(summary.availableContent || []).join(", ") || "기본 명령어"}</span>
+        <span>다음 할 일: {(summary.nextActions || []).join(" · ")}</span>
+        <span>가방 정리 추천: {summary.cleanupRecommendation || "정리할 아이템이 없습니다."}</span>
+        <span>앱 연결 상태: {summary.appConnectionHint || "설치 안내 탭에서 확인"}</span>
+      </div>
+    </section>
+  );
+}
+
 function BuyerApp() {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -158,6 +237,7 @@ function BuyerApp() {
       <BuyerConsoleTabs activeView={activeView} onChange={setActiveView} />
       {payload ? <SummaryGrid items={buyerSummaries(payload)} /> : null}
       {payload ? <BuyerStepOverview payload={payload} onRefresh={() => load()} /> : null}
+      {payload ? <BuyerSearchPanel onToast={setToast} /> : null}
       {payload ? <AppConnectCodePanel rooms={appConnectCodeRooms} applications={payload.applications || []} onCopy={copyAppConnectCode} /> : null}
       {payload ? <BuyerGuidePanel payload={payload} activeView={activeView} /> : null}
       <section className="buyer-room-grid">
@@ -461,6 +541,7 @@ function RoomGroupCard({ group = {}, onReload, setToast }) {
         <FieldRow label="월 이용료">{formatKrw(room.monthlyPriceKrw)}</FieldRow>
         <FieldRow label="연결코드">{room.bridgeConnectCode ? "발급됨" : "승인 후 표시"}</FieldRow>
       </div>
+      <BuyerGameUsageSummary summary={room.gameUsageSummary || {}} />
       <div className="console-alias-summary" data-alias-summary="buyer">
         <div className="console-section-head compact">
           <div>

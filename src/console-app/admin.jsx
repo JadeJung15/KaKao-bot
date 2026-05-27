@@ -84,6 +84,95 @@ function adminSummaryItems(rooms = [], archivedRooms = [], applications = [], in
   ));
 }
 
+function IntegratedAdminSearch({ selectedRoomName = "", onToast }) {
+  const [query, setQuery] = useState("");
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event) {
+    event?.preventDefault();
+    if (!query.trim()) return;
+    const params = new URLSearchParams({ q: query.trim() });
+    if (selectedRoomName) params.set("roomName", selectedRoomName);
+    setLoading(true);
+    try {
+      setResult(await adminRequest(`/api/admin/search?${params.toString()}`));
+    } catch (error) {
+      onToast?.({ tone: "bad", message: formatError(error) });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const sections = result?.sections || {};
+  const people = sections.people || [];
+  return (
+    <section className="console-search-panel">
+      <form onSubmit={submit} className="console-search-form">
+        <div>
+          <p className="console-eyebrow">운영자 통합 검색</p>
+          <h2>방, 신청자, 닉네임, 별명, 로그, 문의 검색</h2>
+          <p>동명이인 후보는 자동 병합하지 않고 닉병합 도구로 연결합니다.</p>
+        </div>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="방명, 닉네임, 별명, 명령어, 로그 검색" />
+        <button type="submit" disabled={loading}>{loading ? "검색 중" : "검색"}</button>
+      </form>
+      {result ? (
+        <div className="console-search-results">
+          <SearchSection title="방" items={sections.rooms || []} render={(item) => `${item.roomName} · ${item.roleLabel || item.role} · ${item.bridgeStatus}`} />
+          <SearchSection title="명령어" items={sections.commands || []} render={(item) => `${item.command} · ${item.description}`} />
+          <SearchSection title="로그" items={sections.logs || []} render={(item) => `${item.roomName} · ${item.command || item.eventType} · ${item.messagePreview}`} />
+          <SearchSection title="문의" items={sections.inquiries || []} render={(item) => `${item.roomName} · ${item.statusLabel} · ${item.message}`} />
+          <div className="console-search-section">
+            <strong>동명이인 후보</strong>
+            {people.length ? people.map((item) => (
+              <div className="console-compact-row" key={`${item.roomName}-${item.personKey}`}>
+                <span>{item.displayName} · {item.roomName}</span>
+                <small>{item.identityStatus === "conflict_possible" ? "동명이인 후보" : item.identitySummary} · 별명 {item.aliases?.join(", ") || "없음"} · 가방 {item.inventoryQuantity}</small>
+                <code>{item.mergeCommand || "닉병합 기준닉 합칠닉"}</code>
+              </div>
+            )) : <p>검색된 참여자가 없습니다.</p>}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function SearchSection({ title, items = [], render }) {
+  return (
+    <div className="console-search-section">
+      <strong>{title}</strong>
+      {items.length ? items.slice(0, 5).map((item, index) => (
+        <div className="console-compact-row" key={`${title}-${index}`}>
+          <span>{render(item)}</span>
+        </div>
+      )) : <p>결과 없음</p>}
+    </div>
+  );
+}
+
+function GameOpsOverviewPanel({ overview = {} }) {
+  const packs = overview.installedGamePacks || [];
+  const cooldowns = overview.cooldowns || [];
+  return (
+    <section className="console-game-overview">
+      <div>
+        <p className="console-eyebrow">Game Ops</p>
+        <h3>게임 운영 요약</h3>
+        <p>{overview.statusLabel || "게임 상태 확인 필요"}</p>
+      </div>
+      <div className="console-compact-list">
+        <span>장착 팩: {packs.length ? packs.map((pack) => pack.title).join(", ") : "없음"}</span>
+        <span>쿨타임: {cooldowns.map((item) => `${item.command} ${item.seconds}s`).join(" · ") || "기본값"}</span>
+        <span>보상 설정: 주사위 {overview.rewards?.diceReward ?? "-"} · 낚시 {overview.rewards?.fishingReward || "-"}</span>
+        <span>상점 상품: {overview.shopItemCount ?? 0}개</span>
+        <span>게임 명령어 TOP: {(overview.recentTopCommands || []).map((item) => `${item.command} ${item.count}`).join(" · ") || "기록 없음"}</span>
+      </div>
+    </section>
+  );
+}
+
 function AdminApp() {
   const [state, setState] = useState({ loading: true, rooms: [], roomGroups: [], applications: [], reports: [], transfers: [], inquiries: [], archivedRooms: [], restoreRequests: [] });
   const [search, setSearch] = useState("");
@@ -406,6 +495,7 @@ function AdminApp() {
         </div>
       </header>
       <SummaryGrid items={summaryItems} />
+      <IntegratedAdminSearch selectedRoomName={baseRoom.name || selected?.name || ""} onToast={setToast} />
       <PaymentApprovalQueue
         applications={paymentApprovalRequests}
         approvingApplicationId={approvingApplicationId}
@@ -459,6 +549,7 @@ function AdminApp() {
                 <StatusBadge label={roomRoleLabel(baseRoom)} status={snapshot(baseRoom).role} />
               </div>
               <DetailTabs tabs={DETAIL_TABS} current={tab} onChange={setTab} />
+              <GameOpsOverviewPanel overview={baseRoom.gameOpsOverview || {}} />
               {tab === "settings" && (
                 <AdminSettingsPanel
                   baseRoom={baseRoom}

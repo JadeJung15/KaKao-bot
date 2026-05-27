@@ -5492,6 +5492,53 @@ a {
   background: #fffdf8;
 }
 
+.console-search-panel,
+.console-game-overview {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dfe5ee;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.console-search-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 320px) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.console-search-form input {
+  min-height: 42px;
+  border: 1px solid #ccd5e2;
+  border-radius: 6px;
+  padding: 0 11px;
+}
+
+.console-search-results {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.console-search-section {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #eef2f6;
+  padding-top: 10px;
+}
+
+.console-search-section code {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.console-game-overview .console-compact-list span {
+  color: #465364;
+  font-size: 0.9rem;
+}
+
 .console-toast {
   position: fixed;
   right: 18px;
@@ -5559,6 +5606,8 @@ a {
   .buyer-step-overview,
   .buyer-connect-code-card,
   .console-log-filters,
+  .console-search-form,
+  .console-search-results,
   .console-two-column-form,
   .console-sidebar {
     grid-template-columns: 1fr;

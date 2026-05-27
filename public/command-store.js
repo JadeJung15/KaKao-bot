@@ -35,9 +35,11 @@
   const cart = new Set(readList("pixgomCommandCart"));
   const packCart = new Set(readList("pixgomCommandPackCart"));
   const beginnerFlow = [
-    { id: "game-chance", label: "게임부터 즐기기", recommend: "/추천 게임" },
-    { id: "ops-core", label: "운영부터 정리", recommend: "/추천 운영" },
-    { id: "shop-inventory", label: "가방 정리와 판매", recommend: "/추천 정리" }
+    { id: "ops-core", label: "처음 시작", recommend: "/추천 운영", packIds: ["ops-core"] },
+    { id: "earning-flow", label: "돈 벌기", recommend: "/추천 돈벌기", packIds: ["attendance-growth", "point-economy", "game-chance"] },
+    { id: "shop-inventory", label: "아이템 정리", recommend: "/추천 정리", packIds: ["shop-inventory"] },
+    { id: "rpg-growth", label: "RPG 성장", recommend: "/추천 RPG", packIds: ["rpg-adventure"] },
+    { id: "pet-collection", label: "펫/수집", recommend: "/추천 펫 · /추천 수집", packIds: ["pet-raising", "pixel-monster-rpg"] }
   ];
 
   function readList(key) {
@@ -881,9 +883,12 @@
     const button = event.target.closest("[data-beginner-pack]");
     if (!button) return;
     const flow = beginnerFlow.find((item) => item.id === button.dataset.beginnerPack);
-    toggleSet(packCart, button.dataset.beginnerPack, "pixgomCommandPackCart");
+    const packIds = flow?.packIds?.length ? flow.packIds : [button.dataset.beginnerPack];
+    for (const packId of packIds) packCart.add(packId);
+    writeSet("pixgomCommandPackCart", packCart);
     storeMode = "cart";
     statusBox.textContent = `${flow?.label || "추천 팩"}을 장바구니에 담았습니다. 카톡에서는 ${flow?.recommend || "/추천"}으로 다음 명령어를 확인하세요.`;
+    renderTemplates();
   });
 
   modeBar?.addEventListener("click", (event) => {
