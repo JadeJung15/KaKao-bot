@@ -196,7 +196,7 @@ function AdminApp() {
   const [purgeForms, setPurgeForms] = useState({});
   const [actionForms, setActionForms] = useState({});
   const [logState, setLogState] = useState({ loading: false, logs: [], rooms: [], summary: null, error: "" });
-  const [logFilters, setLogFilters] = useState({ room: "", q: "", command: "", type: "", limit: "100" });
+  const [logFilters, setLogFilters] = useState({ room: "", q: "", command: "", type: "", status: "", window: "24h", limit: "100" });
   const [approvingApplicationId, setApprovingApplicationId] = useState("");
 
   async function load() {
@@ -282,6 +282,7 @@ function AdminApp() {
     if (nextFilters.command) params.set("command", nextFilters.command);
     if (nextFilters.type) params.set("type", nextFilters.type);
     if (nextFilters.status) params.set("status", nextFilters.status);
+    if (nextFilters.window) params.set("window", nextFilters.window);
     setLogState((current) => ({ ...current, loading: true, error: "" }));
     try {
       const result = await adminRequest(`/api/admin/live-events?${params.toString()}`);
@@ -1438,6 +1439,15 @@ function RoomLogsPanel({ roomOptions = [], filters = {}, setFilters, logState = 
             <option value="slow">느린 응답</option>
             <option value="ignored">무시됨</option>
             <option value="error">오류</option>
+          </select>
+        </label>
+        <label>
+          <span>기간</span>
+          <select value={filters.window || "24h"} onChange={(event) => update({ window: event.target.value })}>
+            <option value="1h">최근 1시간</option>
+            <option value="24h">최근 24시간</option>
+            <option value="7d">최근 7일</option>
+            <option value="all">전체 기간</option>
           </select>
         </label>
         <label>

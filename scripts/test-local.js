@@ -1034,6 +1034,8 @@ try {
   assert.match(adminReactSource, /실패\/재시도 필요/);
   assert.match(adminReactSource, /저장 지연/);
   assert.match(adminReactSource, /느린 응답/);
+  assert.match(adminReactSource, /최근 1시간/);
+  assert.match(adminReactSource, /최근 7일/);
   assert.match(adminReactSource, /p95 총 시간/);
   assert.match(adminReactSource, /평균 DB 저장/);
   assert.match(adminReactSource, /느린 명령 TOP/);
@@ -6207,6 +6209,11 @@ try {
   });
   assert.equal(slowEvents.response.status, 200);
   assert.ok(slowEvents.json.events.some((event) => event.eventId === slowEventId && event.command === "/자동던전"));
+  const recentSlowEvents = await request(`/api/admin/live-events?roomName=${encodeURIComponent("테스트방")}&status=slow&window=24h&limit=20`, {
+    headers: { "x-admin-session": "test-admin-token" }
+  });
+  assert.equal(recentSlowEvents.response.status, 200);
+  assert.ok(!recentSlowEvents.json.events.some((event) => event.command === "/오래된느린명령"));
   const performanceUnauthorized = await request(`/api/admin/performance-summary?roomName=${encodeURIComponent("테스트방")}`);
   assert.equal(performanceUnauthorized.response.status, 401);
   const performanceSummary = await request(`/api/admin/performance-summary?roomName=${encodeURIComponent("테스트방")}&window=24h`, {
