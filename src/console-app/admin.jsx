@@ -1362,11 +1362,13 @@ function liveLogStatusLabel(log = {}) {
   const status = String(log.status || "").toLowerCase();
   const ignoreReason = String(log.ignoreReason || "").trim();
   const errorReason = String(log.errorReason || "").trim();
+  const totalMs = Number(log.totalMs || 0);
   const saveMs = Number(log.saveStateMs || 0);
   if (status === "duplicate") return { label: "중복 차단", tone: "warn" };
   if (status === "ignored" || ignoreReason) return { label: "무시된 알림", tone: "neutral" };
   if (status === "error" || errorReason) return { label: "실패/재시도 필요", tone: "bad" };
   if (status === "no_reply") return { label: "응답 없음", tone: "warn" };
+  if (totalMs >= 1000) return { label: "느린 응답", tone: "warn" };
   if (saveMs >= 500) return { label: "저장 지연", tone: "warn" };
   if (status === "handled" || log.replyLength > 0 || log.command) return { label: "정상 처리", tone: "good" };
   return { label: "상태 확인", tone: "neutral" };
@@ -1433,6 +1435,7 @@ function RoomLogsPanel({ roomOptions = [], filters = {}, setFilters, logState = 
             <option value="handled">정상 처리</option>
             <option value="no_reply">응답 없음</option>
             <option value="duplicate">중복 이벤트</option>
+            <option value="slow">느린 응답</option>
             <option value="ignored">무시됨</option>
             <option value="error">오류</option>
           </select>

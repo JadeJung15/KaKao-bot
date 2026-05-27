@@ -12232,7 +12232,14 @@ function adminLiveEventsPayload(state = {}, query = {}) {
   const status = normalizeText(query.status || "");
   const payload = adminRoomLogsPayload(state, query);
   const events = payload.logs
-    .filter((log) => !status || log.status === status || (status === "error" && log.errorReason) || (status === "duplicate" && (log.duplicate || log.status === "duplicate")))
+    .filter((log) => {
+      const totalMs = Number(log.totalMs || 0);
+      return !status
+        || log.status === status
+        || (status === "error" && log.errorReason)
+        || (status === "duplicate" && (log.duplicate || log.status === "duplicate"))
+        || (status === "slow" && totalMs >= 1000);
+    })
     .map((log) => ({
       eventId: log.eventId || "",
       room: log.room || "",

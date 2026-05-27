@@ -1033,6 +1033,7 @@ try {
   assert.match(adminReactSource, /무시된 알림/);
   assert.match(adminReactSource, /실패\/재시도 필요/);
   assert.match(adminReactSource, /저장 지연/);
+  assert.match(adminReactSource, /느린 응답/);
   assert.match(adminReactSource, /p95 총 시간/);
   assert.match(adminReactSource, /평균 DB 저장/);
   assert.match(adminReactSource, /느린 명령 TOP/);
@@ -6110,6 +6111,24 @@ try {
   const sensitiveChat = await chat("연락은 test@example.com 또는 010-1234-5678 token=abc123", "로그사용자");
   assert.equal(sensitiveChat.json.reply, null);
 
+  const slowEventId = `slow-event-${process.pid}`;
+  const slowState = await readTestState();
+  slowState.rooms["테스트방"].analyticsLogs.push({
+    at: new Date().toISOString(),
+    eventId: slowEventId,
+    room: "테스트방",
+    sender: "느린사용자",
+    status: "handled",
+    isCommand: true,
+    command: "/자동던전",
+    messagePreview: "/자동던전 상급 100",
+    totalMs: 1500,
+    commandMs: 900,
+    saveStateMs: 400,
+    replyLength: 50
+  });
+  await writeFile(testDbPath, `${JSON.stringify(slowState, null, 2)}\n`, "utf8");
+
   const roomLogsUnauthorized = await request(`/api/admin/room-logs?room=${encodeURIComponent("테스트방")}`);
   assert.equal(roomLogsUnauthorized.response.status, 401);
 
@@ -6170,6 +6189,11 @@ try {
   assert.equal(liveEvents.json.ok, true);
   assert.equal(liveEvents.json.version, "0.5.28");
   assert.ok(Array.isArray(liveEvents.json.events));
+  const slowEvents = await request(`/api/admin/live-events?roomName=${encodeURIComponent("테스트방")}&status=slow&limit=20`, {
+    headers: { "x-admin-session": "test-admin-token" }
+  });
+  assert.equal(slowEvents.response.status, 200);
+  assert.ok(slowEvents.json.events.some((event) => event.eventId === slowEventId && event.command === "/자동던전"));
   const performanceUnauthorized = await request(`/api/admin/performance-summary?roomName=${encodeURIComponent("테스트방")}`);
   assert.equal(performanceUnauthorized.response.status, 401);
   const performanceSummary = await request(`/api/admin/performance-summary?roomName=${encodeURIComponent("테스트방")}&window=24h`, {
