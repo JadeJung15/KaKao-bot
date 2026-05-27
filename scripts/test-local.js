@@ -1035,6 +1035,8 @@ try {
   assert.match(adminReactSource, /저장 지연/);
   assert.match(adminReactSource, /p95 총 시간/);
   assert.match(adminReactSource, /평균 DB 저장/);
+  assert.match(adminReactSource, /느린 명령 TOP/);
+  assert.match(adminReactSource, /slowCommands/);
   assert.match(adminReactSource, /커스텀 명령어 \/ 관리자/);
   assert.match(adminReactSource, /사과=맛있어/);
   assert.match(adminReactSource, /명령어 저장/);
@@ -6126,6 +6128,11 @@ try {
   assert.ok(Number.isFinite(roomLogs.json.summary.p95TotalMs));
   assert.ok(Number.isFinite(roomLogs.json.summary.avgSaveStateMs));
   assert.ok(Array.isArray(roomLogs.json.summary.topCommands));
+  assert.ok(Array.isArray(roomLogs.json.summary.slowCommands));
+  if (roomLogs.json.summary.slowCommands.length) {
+    assert.ok(Number.isFinite(roomLogs.json.summary.slowCommands[0].p95TotalMs));
+    assert.ok(Number.isFinite(roomLogs.json.summary.slowCommands[0].avgSaveStateMs));
+  }
   assert.ok(roomLogs.json.rooms.some((room) => room.room === "테스트방" && room.count >= 1));
   assert.ok(roomLogs.json.logs.some((log) => log.eventId));
   const sensitiveLog = roomLogs.json.logs.find((log) => /연락은/.test(log.messagePreview || ""));
@@ -6175,6 +6182,7 @@ try {
   assert.ok(Number.isFinite(performanceSummary.json.summary.p95TotalMs));
   assert.ok(Number.isFinite(performanceSummary.json.summary.avgSaveStateMs));
   assert.ok(Number.isFinite(performanceSummary.json.summary.duplicateEvents));
+  assert.ok(Array.isArray(performanceSummary.json.summary.slowCommands));
 
   const slashHelp = await chat("/", "사용자");
   assert.equal(slashHelp.json.reply, null);

@@ -1472,6 +1472,15 @@ function RoomLogsPanel({ roomOptions = [], filters = {}, setFilters, logState = 
         {(logState.summary?.topCommands || []).map((item) => <span key={item.command}>{item.command} · {item.count}건</span>)}
         {!logState.summary?.topCommands?.length ? <span>아직 집계된 명령어가 없습니다.</span> : null}
       </div>
+      <div className="console-preview-box">
+        <strong>느린 명령 TOP</strong>
+        {(logState.summary?.slowCommands || []).map((item) => (
+          <span key={item.command}>
+            {item.command} · p95 {item.p95TotalMs || 0}ms · 평균 저장 {item.avgSaveStateMs || 0}ms · {item.count}건
+          </span>
+        ))}
+        {!logState.summary?.slowCommands?.length ? <span>아직 속도 집계가 없습니다.</span> : null}
+      </div>
       {logState.error ? <EmptyState title="로그 조회 실패">{logState.error}</EmptyState> : null}
       <div className="console-card-list compact">
         {(logState.logs || []).map((log) => (

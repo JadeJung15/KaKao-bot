@@ -12162,15 +12162,39 @@ function adminRoomLogsPayload(state = {}, query = {}) {
     .slice(0, 5)
     .map(([command, count]) => ({ command, count }));
   const finite = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
-  const timedLogs = filtered.filter((log) => finite(log.totalMs) > 0);
-  const sortedTotalMs = timedLogs.map((log) => finite(log.totalMs)).sort((left, right) => left - right);
+  const avg = (values) => values.length
+    ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10
+    : 0;
   const percentile = (values, ratio) => {
     if (!values.length) return 0;
     return Math.round(values[Math.min(values.length - 1, Math.floor(values.length * ratio))] * 10) / 10;
   };
-  const avg = (values) => values.length
-    ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10
-    : 0;
+  const commandPerformance = new Map();
+  for (const log of commandLogs) {
+    const command = log.command || "명령어";
+    const row = commandPerformance.get(command) || { command, totalMs: [], commandMs: [], saveStateMs: [] };
+    row.totalMs.push(finite(log.totalMs));
+    row.commandMs.push(finite(log.commandMs));
+    row.saveStateMs.push(finite(log.saveStateMs));
+    commandPerformance.set(command, row);
+  }
+  const slowCommands = [...commandPerformance.values()]
+    .map((row) => {
+      const sortedTotals = row.totalMs.slice().sort((left, right) => left - right);
+      return {
+        command: row.command,
+        count: row.totalMs.length,
+        avgTotalMs: avg(row.totalMs),
+        p95TotalMs: percentile(sortedTotals, 0.95),
+        maxTotalMs: Math.max(0, ...row.totalMs),
+        avgCommandMs: avg(row.commandMs),
+        avgSaveStateMs: avg(row.saveStateMs)
+      };
+    })
+    .sort((left, right) => right.p95TotalMs - left.p95TotalMs || right.avgTotalMs - left.avgTotalMs || right.count - left.count)
+    .slice(0, 5);
+  const timedLogs = filtered.filter((log) => finite(log.totalMs) > 0);
+  const sortedTotalMs = timedLogs.map((log) => finite(log.totalMs)).sort((left, right) => left - right);
   const saveMsValues = timedLogs.map((log) => finite(log.saveStateMs)).filter((value) => value >= 0);
   return {
     ok: true,
@@ -12196,7 +12220,8 @@ function adminRoomLogsPayload(state = {}, query = {}) {
       p95TotalMs: percentile(sortedTotalMs, 0.95),
       avgSaveStateMs: avg(saveMsValues),
       lastOkAt: filtered.find((log) => log.status === "handled")?.at || "",
-      topCommands
+      topCommands,
+      slowCommands
     },
     rooms: roomSummaries,
     logs: filtered.slice(0, limit)
@@ -12255,7 +12280,8 @@ function adminPerformanceSummaryPayload(state = {}, query = {}) {
       avgSaveStateMs: payload.summary.avgSaveStateMs,
       recent24h: payload.summary.recent24h,
       lastOkAt: payload.summary.lastOkAt,
-      topCommands: payload.summary.topCommands
+      topCommands: payload.summary.topCommands,
+      slowCommands: payload.summary.slowCommands
     },
     rooms: payload.rooms
   };
