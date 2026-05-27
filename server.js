@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.27";
+export const APP_VERSION = "0.5.28";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -286,7 +286,11 @@ export const FEATURES = [
   "rpg-equipment-enhancement",
   "rpg-adventure-hub",
   "functional-shop-item-mapping",
-  "dungeon-precious-metal-drops"
+  "dungeon-precious-metal-drops",
+  "multi-auto-game-tickets",
+  "auto-command-bulk-runs",
+  "expanded-rpg-equipment-catalog",
+  "expanded-dungeon-catalog"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -398,6 +402,9 @@ const CAPTURE_STONE_ITEM_ID = 9301;
 const PET_SNACK_ITEM_ID = 9302;
 const AUTO_HUNT_TICKET_ITEM_ID = 9303;
 const ENHANCEMENT_STONE_ITEM_ID = 9304;
+const AUTO_EXPLORE_TICKET_ITEM_ID = 9305;
+const AUTO_FISHING_TICKET_ITEM_ID = 9306;
+const AUTO_DRAW_TICKET_ITEM_ID = 9307;
 const COPPER_TREASURE_ITEM_ID = 9401;
 const SILVER_TREASURE_ITEM_ID = 9402;
 const GOLD_TREASURE_ITEM_ID = 9403;
@@ -410,6 +417,7 @@ const RPG_ITEM_ID_START = 11000;
 const RPG_ITEM_CATALOG_SIZE = 500;
 const RPG_WEAPON_ITEM_ID_START = 12000;
 const RPG_AUTO_HUNT_RUNS = 10;
+const AUTO_GAME_MAX_TICKET_USE = 10;
 const RPG_MAX_ENHANCEMENT_LEVEL = 10;
 const RPG_REWARD_CHOICE_TTL_MS = 10 * 60 * 1000;
 const PIXEL_MONSTER_SPECIES_COUNT = 150;
@@ -530,7 +538,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
   {
     title: "게임/연동 예약",
     commands: [
-      "/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/미끼상점", "/미끼구매", "/어항", "/수족관",
+      "/게임", "/주사위", "/낚시", "/탐험", "/자동탐험", "/자동모험", "/자동낚시", "/뽑기", "/자동뽑기", "/뽑기목록", "/홀", "/짝", "/미끼상점", "/미끼구매", "/어항", "/수족관",
       "/모험", "/던전", "/던전목록", "/자동사냥", "/대장간", "/제작", "/제작가능", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장착",
       "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감",
       "/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점",
@@ -686,6 +694,36 @@ const RPG_EQUIPMENT_SETS = Object.freeze({
     pieces: [RPG_WEAPON_ITEM_ID_START + 4, RPG_WEAPON_ITEM_ID_START + 8, RPG_WEAPON_ITEM_ID_START + 11],
     bonuses: { 2: 4, 3: 10 },
     description: "중급 유적 이후 장비 전환용 세트"
+  },
+  volcanic: {
+    name: "용암 세트",
+    pieces: [RPG_WEAPON_ITEM_ID_START + 100, RPG_WEAPON_ITEM_ID_START + 101, RPG_WEAPON_ITEM_ID_START + 102],
+    bonuses: { 2: 9, 3: 18 },
+    description: "화염석 기반 상급 공격 세트"
+  },
+  sky: {
+    name: "천공 세트",
+    pieces: [RPG_WEAPON_ITEM_ID_START + 103, RPG_WEAPON_ITEM_ID_START + 104, RPG_WEAPON_ITEM_ID_START + 105],
+    bonuses: { 2: 8, 3: 17 },
+    description: "바람 깃털 기반 민첩/명중 세트"
+  },
+  royal: {
+    name: "왕릉 세트",
+    pieces: [RPG_WEAPON_ITEM_ID_START + 106, RPG_WEAPON_ITEM_ID_START + 107, RPG_WEAPON_ITEM_ID_START + 108],
+    bonuses: { 2: 10, 3: 20 },
+    description: "고대 왕릉 재료로 제작하는 생존 세트"
+  },
+  abyssal: {
+    name: "심연 세트",
+    pieces: [RPG_WEAPON_ITEM_ID_START + 109, RPG_WEAPON_ITEM_ID_START + 110, RPG_WEAPON_ITEM_ID_START + 111],
+    bonuses: { 2: 11, 3: 22 },
+    description: "심연 재료 기반 마법 세트"
+  },
+  diamond: {
+    name: "다이아 세트",
+    pieces: [RPG_WEAPON_ITEM_ID_START + 112, RPG_WEAPON_ITEM_ID_START + 113, RPG_WEAPON_ITEM_ID_START + 114],
+    bonuses: { 2: 14, 3: 28 },
+    description: "보석 보상을 활용하는 최상급 균형 세트"
   }
 });
 const RPG_EQUIPMENT_RECIPES = Object.freeze([
@@ -827,7 +865,87 @@ const RPG_EQUIPMENT_RECIPES = Object.freeze([
     description: "유적 탐험에 도움을 주는 범용 장신구"
   }
 ]);
-const RPG_WEAPON_RECIPES = RPG_EQUIPMENT_RECIPES;
+const RPG_EXPANDED_SET_THEMES = Object.freeze([
+  { setId: "volcanic", prefix: "용암", materialId: RPG_ITEM_ID_START + 16, pointBase: 850, powerBase: 24, rarity: "epic", skill: "화염 베기" },
+  { setId: "sky", prefix: "천공", materialId: RPG_ITEM_ID_START + 18, pointBase: 780, powerBase: 22, rarity: "rare", skill: "질풍 사격" },
+  { setId: "royal", prefix: "왕릉", materialId: RPG_ITEM_ID_START + 22, pointBase: 900, powerBase: 25, rarity: "epic", skill: "왕가의 보호" },
+  { setId: "abyssal", prefix: "심연", materialId: RPG_ITEM_ID_START + 19, pointBase: 980, powerBase: 27, rarity: "legendary", skill: "그림자 파동" },
+  { setId: "diamond", prefix: "다이아", materialId: DIAMOND_TREASURE_ITEM_ID, pointBase: 2500, powerBase: 38, rarity: "legendary", skill: "보석 공명" }
+]);
+
+const RPG_EXPANDED_SLOT_TEMPLATES = Object.freeze([
+  { slot: "weapon", suffix: "대검", materialQty: 4, powerBonus: 6, stats: { attack: 22, crit: 4, accuracy: 4 } },
+  { slot: "armor", suffix: "갑옷", materialQty: 4, powerBonus: 4, stats: { defense: 20, hp: 60, magicDefense: 6 } },
+  { slot: "accessory", suffix: "반지", materialQty: 3, powerBonus: 2, stats: { agility: 8, mp: 25, skillEffect: 5 } }
+]);
+
+const RPG_EXTRA_EQUIPMENT_THEMES = Object.freeze([
+  { prefix: "서리", materialId: RPG_ITEM_ID_START + 17, base: 18, skill: "빙결 보호" },
+  { prefix: "폭풍", materialId: RPG_ITEM_ID_START + 18, base: 19, skill: "폭풍 가속" },
+  { prefix: "태양", materialId: RPG_ITEM_ID_START + 20, base: 21, skill: "태양 일격" },
+  { prefix: "달빛", materialId: RPG_ITEM_ID_START + 6, base: 20, skill: "달빛 회복" },
+  { prefix: "흑철", materialId: RPG_ITEM_ID_START + 4, base: 17, skill: "흑철 방벽" },
+  { prefix: "미스릴", materialId: RPG_ITEM_ID_START + 5, base: 22, skill: "미스릴 집중" },
+  { prefix: "룬", materialId: RPG_ITEM_ID_START + 22, base: 20, skill: "룬 증폭" },
+  { prefix: "고대", materialId: RPG_ITEM_ID_START + 8, base: 18, skill: "고대 지식" }
+]);
+
+function rpgGeneratedStats(slot, base, bonus = 0) {
+  if (slot === "weapon") return { attack: base + bonus, crit: Math.max(2, Math.floor(base / 5)), accuracy: Math.max(2, Math.floor(base / 6)) };
+  if (slot === "armor") return { defense: base + bonus, hp: (base + bonus) * 4, magicDefense: Math.max(2, Math.floor(base / 4)) };
+  return { agility: Math.max(2, Math.floor(base / 3)), mp: (base + bonus) * 2, skillEffect: Math.max(2, Math.floor(base / 5)) };
+}
+
+function generatedExpandedRpgEquipmentRecipes() {
+  const setRecipes = RPG_EXPANDED_SET_THEMES.flatMap((theme, themeIndex) => (
+    RPG_EXPANDED_SLOT_TEMPLATES.map((slotTemplate, slotIndex) => {
+      const itemId = RPG_WEAPON_ITEM_ID_START + 100 + (themeIndex * RPG_EXPANDED_SLOT_TEMPLATES.length) + slotIndex;
+      const power = theme.powerBase + slotTemplate.powerBonus + themeIndex;
+      return {
+        itemId,
+        name: `${theme.prefix} ${slotTemplate.suffix}`,
+        slot: slotTemplate.slot,
+        setId: theme.setId,
+        materialId: theme.materialId,
+        materialQty: slotTemplate.materialQty,
+        pointCost: theme.pointBase + (slotIndex * 120),
+        power,
+        sellPrice: Math.max(650, Math.floor((theme.pointBase + power * 80) * 0.45)),
+        description: `${RPG_EQUIPMENT_SETS[theme.setId]?.name || theme.prefix} 제작 장비`,
+        rarity: theme.rarity,
+        stats: { ...rpgGeneratedStats(slotTemplate.slot, power), ...slotTemplate.stats },
+        magicSkill: theme.skill,
+        specialOptions: [`${theme.prefix} 보너스`, "세트 효과"]
+      };
+    })
+  ));
+  const extraRecipes = RPG_EXTRA_EQUIPMENT_THEMES.flatMap((theme, themeIndex) => (
+    RPG_EXPANDED_SLOT_TEMPLATES.map((slotTemplate, slotIndex) => {
+      const itemId = RPG_WEAPON_ITEM_ID_START + 150 + (themeIndex * RPG_EXPANDED_SLOT_TEMPLATES.length) + slotIndex;
+      const suffix = slotTemplate.slot === "weapon" ? "검" : slotTemplate.slot === "armor" ? "코트" : "목걸이";
+      const power = theme.base + slotTemplate.powerBonus + Math.floor(themeIndex / 2);
+      return {
+        itemId,
+        name: `${theme.prefix} ${suffix}`,
+        slot: slotTemplate.slot,
+        materialId: theme.materialId,
+        materialQty: slotTemplate.materialQty,
+        pointCost: 420 + themeIndex * 80 + slotIndex * 70,
+        power,
+        sellPrice: 340 + themeIndex * 90 + slotIndex * 60,
+        description: `${theme.prefix} 재료로 제작하는 확장 장비`,
+        rarity: power >= 25 ? "rare" : "uncommon",
+        stats: rpgGeneratedStats(slotTemplate.slot, power, slotIndex),
+        magicSkill: theme.skill,
+        specialOptions: ["확장 제작식"]
+      };
+    })
+  ));
+  return [...setRecipes, ...extraRecipes];
+}
+
+const RPG_EXPANDED_EQUIPMENT_RECIPES = Object.freeze(generatedExpandedRpgEquipmentRecipes());
+const RPG_WEAPON_RECIPES = Object.freeze([...RPG_EQUIPMENT_RECIPES, ...RPG_EXPANDED_EQUIPMENT_RECIPES]);
 function emptyRpgStats() {
   return Object.fromEntries(RPG_STAT_KEYS.map((key) => [key, 0]));
 }
@@ -1110,6 +1228,42 @@ const SYSTEM_PRODUCTS = Object.freeze([
     gradeLabel: "고급"
   },
   {
+    id: AUTO_EXPLORE_TICKET_ITEM_ID,
+    name: "자동탐험권",
+    price: 160,
+    sellPrice: 60,
+    description: "탐험 10회를 한 번에 요약 처리하는 티켓",
+    active: true,
+    system: true,
+    category: "explore_ticket",
+    rarity: "uncommon",
+    gradeLabel: "고급"
+  },
+  {
+    id: AUTO_FISHING_TICKET_ITEM_ID,
+    name: "자동낚시권",
+    price: 180,
+    sellPrice: 70,
+    description: "미끼를 소비해 낚시 10회를 한 번에 요약 처리하는 티켓",
+    active: true,
+    system: true,
+    category: "fishing_ticket",
+    rarity: "uncommon",
+    gradeLabel: "고급"
+  },
+  {
+    id: AUTO_DRAW_TICKET_ITEM_ID,
+    name: "자동뽑기권",
+    price: 140,
+    sellPrice: 50,
+    description: "포인트 뽑기 10회를 한 번에 요약 처리하는 티켓",
+    active: true,
+    system: true,
+    category: "draw_ticket",
+    rarity: "uncommon",
+    gradeLabel: "고급"
+  },
+  {
     id: ENHANCEMENT_STONE_ITEM_ID,
     name: "강화석",
     price: 120,
@@ -1184,6 +1338,9 @@ const SYSTEM_PRODUCTS = Object.freeze([
 const SYSTEM_PRODUCT_MAP = new Map(SYSTEM_PRODUCTS.map((product) => [String(product.id), product]));
 const FUNCTIONAL_SHOP_ITEM_GUIDES = Object.freeze([
   { name: "자동사냥권", systemId: AUTO_HUNT_TICKET_ITEM_ID, use: "/자동사냥", example: "/상점추가 자동사냥권 250 던전 10회 자동사냥 티켓" },
+  { name: "자동탐험권", systemId: AUTO_EXPLORE_TICKET_ITEM_ID, use: "/자동탐험", example: "/상점추가 자동탐험권 160 탐험 10회 자동탐험 티켓" },
+  { name: "자동낚시권", systemId: AUTO_FISHING_TICKET_ITEM_ID, use: "/자동낚시", example: "/상점추가 자동낚시권 180 낚시 10회 자동낚시 티켓" },
+  { name: "자동뽑기권", systemId: AUTO_DRAW_TICKET_ITEM_ID, use: "/자동뽑기", example: "/상점추가 자동뽑기권 140 뽑기 10회 자동뽑기 티켓" },
   { name: "강화석", systemId: ENHANCEMENT_STONE_ITEM_ID, use: "/강화", example: "/상점추가 강화석 120 장비 강화 재료" },
   { name: "기본 미끼", systemId: BAIT_ITEM_ID, use: "/낚시", example: "/상점추가 기본 미끼 20 낚시용 미끼" },
   { name: "기본 포획석", systemId: CAPTURE_STONE_ITEM_ID, use: "/포획", example: "/상점추가 기본 포획석 30 몬스터 포획 도구" },
@@ -1380,8 +1537,8 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "ops-core": ["/상태", "/도움말", "/브릿지", "/js상태", "/메시지", "/날씨", "/운세", "/신고"],
   "attendance-growth": ["/출석", "/미출석", "/출석순위", "/포인트", "/내정보", "/포인트순위"],
   "point-economy": ["/포인트", "/내정보", "/좋아요", "/응원", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위"],
-  "game-chance": ["/게임", "/오늘할일", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/포인트"],
-  "rpg-adventure": ["/모험", "/던전", "/던전목록", "/자동사냥", "/대장간", "/제작가능", "/제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/판매미리보기", "/판매추천", "/정리추천", "/일괄판매", "/가방", "/가방정리", "/판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/포인트"],
+  "game-chance": ["/게임", "/오늘할일", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/포인트"],
+  "rpg-adventure": ["/모험", "/던전", "/던전목록", "/자동사냥", "/자동탐험", "/자동모험", "/자동낚시", "/자동뽑기", "/대장간", "/제작가능", "/제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/판매미리보기", "/판매추천", "/정리추천", "/일괄판매", "/가방", "/가방정리", "/판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/포인트"],
   "pixel-monster-rpg": ["/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감", "/포인트"],
   "pet-raising": ["/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점", "/포인트"],
   "shop-inventory": ["/상점", "/구매", "/가방", "/가방정리", "/판매추천", "/정리추천", "/아이템상세", "/판매목록", "/판매미리보기", "/사용", "/가방선물", "/판매", "/일괄판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/구매내역", "/기능아이템목록"],
@@ -1396,7 +1553,7 @@ const LEGACY_PACK_COMMANDS = Object.freeze({
   "basic-ops": ["/도움말", "/메시지", "/프로필"],
   "basic-ops-plus": ["/도움말", "/메시지", "/출석", "/ㅊㅊ", "/미출석", "/포인트", "/내정보", "/출석순위", "/포인트순위", "/레벨순위", "/프로필"],
   "basic-ops-pro": ["/도움말", "/메시지", "/출석", "/ㅊㅊ", "/미출석", "/포인트", "/내정보", "/출석순위", "/포인트순위", "/레벨순위", "/상점", "/구매", "/구매내역", "/가방", "/사용", "/가방선물", "/판매", "/프로필"],
-  "addon-mini-games-3": ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/미끼상점", "/미끼구매", "/어항", "/수족관"]
+  "addon-mini-games-3": ["/게임", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/뽑기목록", "/홀", "/짝", "/미끼상점", "/미끼구매", "/어항", "/수족관"]
 });
 
 const LEGACY_OPERATING_CUSTOM_COMMANDS = Object.freeze([
@@ -1713,10 +1870,10 @@ const GAME_PACK_HELP_TOPICS = Object.freeze({
     path: "/help/rpg",
     packIds: ["rpg-adventure"],
     aliases: ["rpg", "RPG", "모험", "던전"],
-    intro: "던전, 자동사냥권 10회 요약, 장비 강화, 제작, 자동장착을 묶은 모험형 게임팩입니다.",
-    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/모험", "/자동사냥", "/제작가능", "/강화목록", "/자동장착 공격"],
+    intro: "던전, 자동사냥권 10회 요약, 자동탐험/자동낚시/자동뽑기, 장비 강화, 확장 제작식을 묶은 모험형 게임팩입니다.",
+    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/모험", "/자동사냥 상급 10", "/제작가능", "/강화목록", "/자동장착 공격"],
     adminSetup: ["명령어팩 장착: /명령어설치 pk.006", "게임 기능 켜기: /기능켜기 게임", "상점/가방 기능 확인: /기능목록"],
-    examples: ["/모험", "/던전 중급", "/자동사냥 중급", "/대장간", "/제작가능", "/강화 무기", "/강화상세", "/자동장착 공격", "/보상선택 포인트"],
+    examples: ["/모험", "/던전 중급", "/자동사냥 상급 10", "/자동탐험 2", "/자동낚시 2", "/자동뽑기 2", "/대장간", "/제작가능", "/강화 무기", "/강화상세", "/자동장착 공격", "/보상선택 포인트"],
     related: ["shop-inventory", "pet-raising"]
   },
   monster: {
@@ -7351,13 +7508,48 @@ function functionalShopItemListCommand(roomState, sender) {
   ].join("\n");
 }
 
-function isAutoHuntTicketProduct(product) {
+const AUTO_GAME_TICKET_CONFIGS = Object.freeze({
+  hunt: {
+    name: "자동사냥권",
+    systemId: AUTO_HUNT_TICKET_ITEM_ID,
+    category: "rpg_ticket",
+    command: "/자동사냥",
+    directCommand: "/던전",
+    title: "자동사냥"
+  },
+  explore: {
+    name: "자동탐험권",
+    systemId: AUTO_EXPLORE_TICKET_ITEM_ID,
+    category: "explore_ticket",
+    command: "/자동탐험",
+    directCommand: "/탐험",
+    title: "자동탐험"
+  },
+  fishing: {
+    name: "자동낚시권",
+    systemId: AUTO_FISHING_TICKET_ITEM_ID,
+    category: "fishing_ticket",
+    command: "/자동낚시",
+    directCommand: "/낚시",
+    title: "자동낚시"
+  },
+  draw: {
+    name: "자동뽑기권",
+    systemId: AUTO_DRAW_TICKET_ITEM_ID,
+    category: "draw_ticket",
+    command: "/자동뽑기",
+    directCommand: "/뽑기",
+    title: "자동뽑기"
+  }
+});
+
+function isAutoGameTicketProduct(product, config = AUTO_GAME_TICKET_CONFIGS.hunt) {
   if (!product) return false;
   const guide = functionalShopGuideForProduct(product);
-  return guide?.systemId === AUTO_HUNT_TICKET_ITEM_ID || product.category === "rpg_ticket";
+  return guide?.systemId === config.systemId || product.category === config.category;
 }
 
-function autoHuntTicketRows(roomState, person) {
+function autoGameTicketRows(roomState, person, config = AUTO_GAME_TICKET_CONFIGS.hunt) {
   normalizePersonState(person);
   return Object.entries(person.inventory || {})
     .map(([productId, quantity]) => ({
@@ -7365,23 +7557,64 @@ function autoHuntTicketRows(roomState, person) {
       quantity: Math.max(0, Math.trunc(Number(quantity || 0))),
       product: inventoryProductById(roomState, productId)
     }))
-    .filter((row) => row.quantity > 0 && isAutoHuntTicketProduct(row.product))
+    .filter((row) => row.quantity > 0 && isAutoGameTicketProduct(row.product, config))
     .sort((left, right) => {
-      const leftSystem = Number(left.productId) === AUTO_HUNT_TICKET_ITEM_ID ? 0 : 1;
-      const rightSystem = Number(right.productId) === AUTO_HUNT_TICKET_ITEM_ID ? 0 : 1;
+      const leftSystem = Number(left.productId) === config.systemId ? 0 : 1;
+      const rightSystem = Number(right.productId) === config.systemId ? 0 : 1;
       return leftSystem - rightSystem || Number(left.productId) - Number(right.productId);
     });
 }
 
+function autoGameTicketQuantity(roomState, person, config = AUTO_GAME_TICKET_CONFIGS.hunt) {
+  return autoGameTicketRows(roomState, person, config).reduce((sum, row) => sum + row.quantity, 0);
+}
+
+function consumeAutoGameTickets(roomState, person, config = AUTO_GAME_TICKET_CONFIGS.hunt, quantity = 1) {
+  const consumed = [];
+  let left = Math.max(1, Math.trunc(Number(quantity || 1)));
+  for (const row of autoGameTicketRows(roomState, person, config)) {
+    if (left <= 0) break;
+    const amount = Math.min(left, row.quantity);
+    removeInventory(person, row.productId, amount);
+    consumed.push({ ...row, quantity: amount });
+    left -= amount;
+  }
+  return consumed;
+}
+
+function parseAutoGameCommand(text = "", commandPattern = /^\/자동사냥\s*/i) {
+  const body = compactSpaces(text.replace(commandPattern, ""));
+  if (!body) return { subject: "", ticketUse: 1 };
+  const parts = body.split(/\s+/).filter(Boolean);
+  let ticketUse = 1;
+  if (/^[0-9]+$/.test(parts.at(-1) || "")) {
+    ticketUse = Math.min(AUTO_GAME_MAX_TICKET_USE, Math.max(1, Math.trunc(Number(parts.pop()))));
+  }
+  return { subject: parts.join(" "), ticketUse };
+}
+
+function autoGameTicketRequiredText(config = AUTO_GAME_TICKET_CONFIGS.hunt, ticketUse = 1) {
+  const runs = ticketUse * RPG_AUTO_HUNT_RUNS;
+  return [
+    `🎫 ${config.name}이 필요합니다.`,
+    "",
+    `${config.title}은 ${config.name} 1장으로 ${RPG_AUTO_HUNT_RUNS}회를 요약 처리합니다.`,
+    ticketUse > 1 ? `요청 수량: ${ticketUse}장 = ${runs}회` : "",
+    "구매/획득: 방 상점 구매, 이벤트 보상, 관리자 지급을 이용해 주세요.",
+    `직접 플레이: ${config.directCommand}`
+  ].filter(Boolean).join("\n");
+}
+
+function autoHuntTicketRows(roomState, person) {
+  return autoGameTicketRows(roomState, person, AUTO_GAME_TICKET_CONFIGS.hunt);
+}
+
 function autoHuntTicketQuantity(roomState, person) {
-  return autoHuntTicketRows(roomState, person).reduce((sum, row) => sum + row.quantity, 0);
+  return autoGameTicketQuantity(roomState, person, AUTO_GAME_TICKET_CONFIGS.hunt);
 }
 
 function consumeAutoHuntTicket(roomState, person) {
-  const row = autoHuntTicketRows(roomState, person)[0];
-  if (!row) return null;
-  removeInventory(person, row.productId, 1);
-  return row;
+  return consumeAutoGameTickets(roomState, person, AUTO_GAME_TICKET_CONFIGS.hunt, 1)[0] || null;
 }
 
 function parseProductIdFromCommand(text, pattern) {
@@ -8504,7 +8737,10 @@ function exploreGameCommand(roomState, sender) {
 const DUNGEON_CONFIGS = Object.freeze([
   { key: "beginner", names: ["", "초급", "초급 광산", "광산"], title: "초급 광산", purpose: "초급 재료", blankChance: 0.25, itemStart: 0, itemEnd: 119, treasureChance: 0.08, preciousChance: 0.015 },
   { key: "middle", names: ["중급", "중급 유적", "유적"], title: "중급 유적", purpose: "중급 제작", blankChance: 0.30, itemStart: 80, itemEnd: 299, treasureChance: 0.10, preciousChance: 0.025 },
-  { key: "advanced", names: ["상급", "상급 심연", "심연"], title: "상급 심연", purpose: "상급 강화/희귀", blankChance: 0.35, itemStart: 240, itemEnd: 499, treasureChance: 0.12, preciousChance: 0.04 }
+  { key: "advanced", names: ["상급", "상급 심연", "심연"], title: "상급 심연", purpose: "상급 강화/희귀", blankChance: 0.35, itemStart: 240, itemEnd: 499, treasureChance: 0.12, preciousChance: 0.04 },
+  { key: "royal", names: ["왕릉", "고대 왕릉"], title: "고대 왕릉", purpose: "왕릉 세트/룬 재료", blankChance: 0.32, itemStart: 200, itemEnd: 380, treasureChance: 0.14, preciousChance: 0.035 },
+  { key: "volcanic", names: ["용암", "용암 성채", "성채"], title: "용암 성채", purpose: "용암 세트/화염석", blankChance: 0.38, itemStart: 160, itemEnd: 340, treasureChance: 0.16, preciousChance: 0.05 },
+  { key: "sky", names: ["천공", "천공 유적", "하늘"], title: "천공 유적", purpose: "천공 세트/바람 재료", blankChance: 0.34, itemStart: 180, itemEnd: 420, treasureChance: 0.15, preciousChance: 0.045 }
 ]);
 
 function dungeonConfigFromText(text = "") {
@@ -8608,27 +8844,22 @@ function createPendingRpgReward(person, config) {
 
 function autoHuntDungeonCommand(roomState, sender, text) {
   const person = ensurePerson(roomState, sender);
+  const parsed = parseAutoGameCommand(text, /^\/자동사냥\s*/i);
+  const ticketUse = parsed.ticketUse;
   const ticketCount = autoHuntTicketQuantity(roomState, person);
-  if (ticketCount < 1) {
-    return [
-      "🎫 자동사냥권이 필요합니다.",
-      "",
-      "자동사냥은 자동사냥권 1장으로 던전 10회를 요약 처리합니다.",
-      "구매/획득: 방 상점 구매, 이벤트 보상, 관리자 지급을 이용해 주세요.",
-      "직접 플레이: /던전"
-    ].join("\n");
-  }
-  const config = dungeonConfigFromText(text.replace(/^\/자동사냥\s*/i, "/던전 "));
-  const consumedTicket = consumeAutoHuntTicket(roomState, person);
+  if (ticketCount < ticketUse) return autoGameTicketRequiredText(AUTO_GAME_TICKET_CONFIGS.hunt, ticketUse);
+  const config = dungeonConfigFromText(`/던전 ${parsed.subject}`);
+  const consumedTickets = consumeAutoGameTickets(roomState, person, AUTO_GAME_TICKET_CONFIGS.hunt, ticketUse);
+  const runs = ticketUse * RPG_AUTO_HUNT_RUNS;
   person.rpgAutoHunt ||= { date: kstDateKey(), count: 0 };
   if (person.rpgAutoHunt.date !== kstDateKey()) person.rpgAutoHunt = { date: kstDateKey(), count: 0 };
-  person.rpgAutoHunt.count += 1;
+  person.rpgAutoHunt.count += ticketUse;
 
   const rewards = [];
   let blanks = 0;
   let totalSell = 0;
   let rareCount = 0;
-  for (let index = 0; index < RPG_AUTO_HUNT_RUNS; index += 1) {
+  for (let index = 0; index < runs; index += 1) {
     const item = randomDungeonItem(config);
     if (!item) {
       blanks += 1;
@@ -8643,16 +8874,17 @@ function autoHuntDungeonCommand(roomState, sender, text) {
     type: "rpg_auto_hunt",
     name: person.currentName,
     dungeon: config.title,
-    runs: RPG_AUTO_HUNT_RUNS,
+    runs,
+    tickets: ticketUse,
     rewards: rewards.length,
     blanks,
     totalSell
   });
   recordShopTransaction(roomState, {
     type: "rpg_auto_hunt",
-    productId: consumedTicket?.productId || AUTO_HUNT_TICKET_ITEM_ID,
-    productName: consumedTicket?.product?.name || "자동사냥권",
-    quantity: 1,
+    productId: consumedTickets[0]?.productId || AUTO_HUNT_TICKET_ITEM_ID,
+    productName: consumedTickets[0]?.product?.name || "자동사냥권",
+    quantity: ticketUse,
     unitPrice: 0,
     totalPrice: totalSell,
     to: person.currentName,
@@ -8660,13 +8892,157 @@ function autoHuntDungeonCommand(roomState, sender, text) {
   });
   return [
     "🏰 자동사냥 결과",
-    `${config.title} ${RPG_AUTO_HUNT_RUNS}회 요약`,
+    `${config.title} ${runs}회 요약`,
     "",
     `획득: ${rewards.length}개 / 꽝 ${blanks}회`,
     `희귀 이상: ${rareCount}개`,
     `예상 판매가: ${formatPoint(totalSell)}`,
     `제작 가능: ${rpgCraftableCount(person)}개`,
     `남은 자동사냥권: ${autoHuntTicketQuantity(roomState, person)}장`
+  ].join("\n");
+}
+
+function autoExploreCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  const config = AUTO_GAME_TICKET_CONFIGS.explore;
+  const parsed = parseAutoGameCommand(text, /^\/자동(?:탐험|모험)\s*/i);
+  const ticketUse = parsed.ticketUse;
+  const ticketCount = autoGameTicketQuantity(roomState, person, config);
+  if (ticketCount < ticketUse) return autoGameTicketRequiredText(config, ticketUse);
+  consumeAutoGameTickets(roomState, person, config, ticketUse);
+  const runs = ticketUse * RPG_AUTO_HUNT_RUNS;
+  const rewards = [];
+  let totalSell = 0;
+  let rareCount = 0;
+  for (let index = 0; index < runs; index += 1) {
+    const item = randomExploreProduct();
+    addInventory(person, item.id, 1);
+    totalSell += productSellPrice(item);
+    if (rpgRareReward(item)) rareCount += 1;
+    rewards.push(item);
+  }
+  recordRoomEvent(roomState, { type: "auto_explore", name: person.currentName, runs, tickets: ticketUse, rewards: rewards.length, totalSell });
+  recordShopTransaction(roomState, {
+    type: "auto_explore",
+    productId: AUTO_EXPLORE_TICKET_ITEM_ID,
+    productName: config.name,
+    quantity: ticketUse,
+    totalPrice: totalSell,
+    to: person.currentName,
+    by: person.currentName
+  });
+  return [
+    "🧭 자동탐험 결과",
+    `${runs}회 요약`,
+    "",
+    `획득: ${rewards.length}개`,
+    `희귀 이상: ${rareCount}개`,
+    `예상 판매가: ${formatPoint(totalSell)}`,
+    `남은 자동탐험권: ${autoGameTicketQuantity(roomState, person, config)}장`
+  ].join("\n");
+}
+
+function autoFishingCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  const config = AUTO_GAME_TICKET_CONFIGS.fishing;
+  const parsed = parseAutoGameCommand(text, /^\/자동낚시\s*/i);
+  const ticketUse = parsed.ticketUse;
+  const ticketCount = autoGameTicketQuantity(roomState, person, config);
+  if (ticketCount < ticketUse) return autoGameTicketRequiredText(config, ticketUse);
+  const runs = ticketUse * RPG_AUTO_HUNT_RUNS;
+  const baitCount = inventoryQuantity(person, BAIT_ITEM_ID);
+  if (baitCount < runs) {
+    return [
+      "🎣 자동낚시 준비 필요",
+      "",
+      `필요 미끼: ${runs}개`,
+      `보유 미끼: ${baitCount}개`,
+      "미끼 구매: /미끼구매 수량"
+    ].join("\n");
+  }
+  consumeAutoGameTickets(roomState, person, config, ticketUse);
+  removeInventory(person, BAIT_ITEM_ID, runs);
+  const rewards = [];
+  let totalSell = 0;
+  let rareCount = 0;
+  for (let index = 0; index < runs; index += 1) {
+    const item = randomFishProduct();
+    addInventory(person, item.id, 1);
+    totalSell += productSellPrice(item);
+    if (rpgRareReward(item)) rareCount += 1;
+    rewards.push(item);
+  }
+  recordRoomEvent(roomState, { type: "auto_fishing", name: person.currentName, runs, tickets: ticketUse, rewards: rewards.length, totalSell });
+  recordShopTransaction(roomState, {
+    type: "auto_fishing",
+    productId: AUTO_FISHING_TICKET_ITEM_ID,
+    productName: config.name,
+    quantity: ticketUse,
+    totalPrice: totalSell,
+    to: person.currentName,
+    by: person.currentName
+  });
+  return [
+    "🎣 자동낚시 결과",
+    `${runs}회 요약`,
+    "",
+    `획득: ${rewards.length}마리`,
+    `희귀 이상: ${rareCount}마리`,
+    `예상 판매가: ${formatPoint(totalSell)}`,
+    `남은 자동낚시권: ${autoGameTicketQuantity(roomState, person, config)}장`,
+    `남은 미끼: ${inventoryQuantity(person, BAIT_ITEM_ID)}개`
+  ].join("\n");
+}
+
+function autoLuckyDrawCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  const config = AUTO_GAME_TICKET_CONFIGS.draw;
+  const parsed = parseAutoGameCommand(text, /^\/자동뽑기\s*/i);
+  const ticketUse = parsed.ticketUse;
+  const ticketCount = autoGameTicketQuantity(roomState, person, config);
+  if (ticketCount < ticketUse) return autoGameTicketRequiredText(config, ticketUse);
+  const runs = ticketUse * RPG_AUTO_HUNT_RUNS;
+  const totalCost = LUCKY_DRAW_POINT_COST * runs;
+  if (person.points < totalCost) {
+    return [
+      "💰 자동뽑기 포인트 부족",
+      "",
+      `필요 포인트: ${formatPoint(totalCost)}`,
+      `보유 포인트: ${formatPoint(person.points)}`
+    ].join("\n");
+  }
+  consumeAutoGameTickets(roomState, person, config, ticketUse);
+  person.points -= totalCost;
+  person.spentPoints += totalCost;
+  let totalReward = 0;
+  const outcomeCounts = {};
+  for (let index = 0; index < runs; index += 1) {
+    const roll = Math.random();
+    const outcome = LUCKY_DRAW_OUTCOMES.find((item) => roll < item.threshold) || LUCKY_DRAW_OUTCOMES.at(-1);
+    totalReward += outcome.reward;
+    outcomeCounts[outcome.label] = (outcomeCounts[outcome.label] || 0) + 1;
+  }
+  person.points += totalReward;
+  recordRoomEvent(roomState, { type: "auto_lucky_draw", name: person.currentName, runs, tickets: ticketUse, cost: totalCost, reward: totalReward });
+  recordShopTransaction(roomState, {
+    type: "auto_lucky_draw",
+    productId: AUTO_DRAW_TICKET_ITEM_ID,
+    productName: config.name,
+    quantity: ticketUse,
+    unitPrice: LUCKY_DRAW_POINT_COST,
+    totalPrice: totalCost,
+    to: person.currentName,
+    by: person.currentName
+  });
+  const outcomeSummary = Object.entries(outcomeCounts).map(([label, count]) => `${label} ${count}회`).join(" / ");
+  return [
+    "🎲 자동뽑기 결과",
+    `${runs}회 요약`,
+    "",
+    `결과: ${outcomeSummary}`,
+    `사용: ${formatPoint(totalCost)} / 획득: ${formatPoint(totalReward)}`,
+    `남은 자동뽑기권: ${autoGameTicketQuantity(roomState, person, config)}장`,
+    `남은 포인트: ${formatPoint(person.points)}`
   ].join("\n");
 }
 
@@ -8705,6 +9081,9 @@ function rpgAdventureHubCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
   const displayName = displayNameForPerson(roomState, person, sender);
   const ticketCount = autoHuntTicketQuantity(roomState, person);
+  const exploreTicketCount = autoGameTicketQuantity(roomState, person, AUTO_GAME_TICKET_CONFIGS.explore);
+  const fishingTicketCount = autoGameTicketQuantity(roomState, person, AUTO_GAME_TICKET_CONFIGS.fishing);
+  const drawTicketCount = autoGameTicketQuantity(roomState, person, AUTO_GAME_TICKET_CONFIGS.draw);
   const craftableCount = rpgCraftableCount(person);
   const equipped = rpgEquippedProductsBySlot(person);
   const enhanceTarget = equipped.weapon || equipped.armor || equipped.accessory;
@@ -8715,7 +9094,8 @@ function rpgAdventureHubCommand(roomState, sender) {
   return [
     `🏰 ${displayName}님의 RPG 모험`,
     `오늘 할 일: /던전 → /제작가능 → /강화목록`,
-    `자동사냥권: ${ticketCount}장 / /자동사냥 중급`,
+    `자동사냥권: ${ticketCount}장 · 자동탐험권 ${exploreTicketCount}장 · 자동낚시권 ${fishingTicketCount}장 · 자동뽑기권 ${drawTicketCount}장`,
+    "대량 실행: /자동사냥 상급 10",
     `제작 가능: ${craftableCount}개`,
     `강화 추천: ${enhanceText}`,
     `던전 상태: ${cooldown}`,
@@ -8781,6 +9161,7 @@ function blacksmithCommand(roomState = null, sender = "") {
     "픽셀곰 대장간",
     "",
     "제작 종류: 무기 / 방어구 / 장신구 / 세트",
+    `확장 제작식: ${RPG_WEAPON_RECIPES.length}종`,
     person ? `지금 제작 가능: ${craftableCount}개` : "지금 제작 가능: /제작가능",
     "",
     "제작 확인: /제작가능",
@@ -9847,11 +10228,11 @@ function gameHelpText(roomState) {
     gameSeasonPeriodText(settings),
     `주사위 기본 보상: ${formatPoint(settings.diceReward)} x 결과`,
     "",
-    "1. RPG 성장: /모험, /자동사냥, /강화목록",
-    "2. 낚시 수집: /미끼상점, /낚시, /어항",
+    "1. RPG 성장: /모험, /자동사냥 상급 10, /강화목록",
+    "2. 낚시 수집: /미끼상점, /낚시, /자동낚시",
     "3. 펫 돌보기: /펫입양, /펫, /펫먹이",
     `4. 픽셀몬스터: /몬스터, /몬스터퀘스트, /몬스터보스 (${PIXEL_MONSTER_SPECIES_COUNT}종)`,
-    "5. 가벼운 게임: /주사위, /뽑기, /홀 100",
+    "5. 가벼운 게임: /주사위, /뽑기, /자동뽑기",
     "6. 점메추: /점메추 한식, /점메추 매운거",
     "",
     "오늘 루틴: /오늘할일",
@@ -9871,7 +10252,7 @@ function dailyActionChecklistCommand(roomState, sender) {
     "1. /출석 - 오늘 보상 받기",
     `2. /낚시 - 미끼 ${formatNumber(bait)}개 확인`,
     "3. /모험 또는 /던전 - RPG 목표와 재료 성장",
-    "4. /자동사냥 중급 - 10회 요약 사냥",
+    "4. /자동사냥 상급 10 - 자동사냥권 10장으로 100회 요약",
     "5. /몬스터퀘스트 - 수집 루틴 확인",
     "6. /몬스터보스 - 방 전체 보스 참여",
     pet ? `7. /펫 - ${pet} 상태 확인` : "7. /펫입양 이름 - 첫 펫 시작",
@@ -10413,7 +10794,7 @@ function bridgeJsServerText() {
 }
 
 const ACTIVE_GAME_ROOM_COMMANDS = new Set([
-  "/게임", "/게임명령어", "/주사위", "/낚시", "/탐험", "/뽑기", "/확률뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝",
+  "/게임", "/게임명령어", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/확률뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝",
   "/미끼상점", "/미끼구매", "/어항", "/수족관",
   "/모험", "/던전", "/던전목록", "/자동사냥", "/대장간", "/제작가능", "/제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템",
   "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감",
@@ -10468,7 +10849,7 @@ function commandFeatureKey(command) {
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
   if (/^\/(?:프로필|프로칠|내별명|별명목록|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
-  if (/^\/(?:게임|오늘할일|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|모험|던전|던전목록|자동사냥|대장간|제작가능|제작|강화|강화목록|강화상세|보상선택|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:게임|오늘할일|주사위|낚시|자동낚시|탐험|자동탐험|자동모험|확률뽑기|뽑기|자동뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|모험|던전|던전목록|자동사냥|대장간|제작가능|제작|강화|강화목록|강화상세|보상선택|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
   if (/^\/(?:상점|구매|구매내역|가방|가방정리|정리추천|판매추천|아이템|보유아이템|아이템상세|판매목록|판매미리보기|일괄판매|아이템잠금|아이템잠금해제|잠금목록|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수|기능아이템목록)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
@@ -10525,7 +10906,7 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/내정보", "포인트", "레벨, 포인트, 채팅 정보 확인", { aliases: ["/레벨", "/정보"], requiresFeature: "points" }),
   registryEntry("/좋아요", "포인트", "포인트로 하트 보내기", { examples: ["/좋아요 닉네임 10"], requiresFeature: "points", searchableKeywords: ["하트"] }),
   registryEntry("/응원", "포인트", "포인트 응원 카드 보내기", { examples: ["/응원 닉네임 메시지"], requiresFeature: "points" }),
-  registryEntry("/뽑기", "게임", "공개 확률 포인트 뽑기", { aliases: ["/확률뽑기"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "랜덤"] }),
+  registryEntry("/뽑기", "게임", "공개 확률 포인트 뽑기", { aliases: ["/확률뽑기", "/자동뽑기"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "랜덤", "자동뽑기"] }),
   registryEntry("/뽑기목록", "게임", "뽑기 확률과 보상 확인", { requiresFeature: "games", searchableKeywords: ["포인트", "확률", "보상"] }),
   registryEntry("/홀", "게임", "홀짝 포인트 베팅", { aliases: ["/짝", "/홀짝"], examples: ["/홀 100", "/짝 100"], requiresFeature: "games", searchableKeywords: ["포인트", "베팅"] }),
   registryEntry("/이체", "포인트", "포인트 이체", { examples: ["/이체 닉네임 100"], requiresFeature: "points" }),
@@ -10550,10 +10931,10 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/구매내역", "상점/가방", "구매와 아이템 내역", { requiresFeature: "shop" }),
   registryEntry("/게임", "게임", "RPG, 낚시, 펫, 수집, 점메추 게임 허브", { aliases: ["/게임명령어"], requiresFeature: "games", searchableKeywords: ["허브", "RPG", "낚시", "펫", "픽셀몬스터"] }),
   registryEntry("/주사위", "게임", "주사위 보상 게임", { requiresFeature: "games" }),
-  registryEntry("/낚시", "게임", "낚시 보상 게임", { requiresFeature: "games" }),
-  registryEntry("/탐험", "게임", "탐험 보상 게임", { requiresFeature: "games" }),
+  registryEntry("/낚시", "게임", "낚시 보상 게임", { aliases: ["/자동낚시"], requiresFeature: "games", searchableKeywords: ["낚시", "자동낚시"] }),
+  registryEntry("/탐험", "게임", "탐험 보상 게임", { aliases: ["/자동탐험", "/자동모험"], requiresFeature: "games", searchableKeywords: ["탐험", "자동탐험", "자동모험"] }),
   registryEntry("/모험", "RPG", "RPG 오늘 할 일과 추천 행동 확인", { aliases: ["/RPG", "/알피지"], examples: ["/모험"], requiresFeature: "games", searchableKeywords: ["RPG", "허브", "모험", "자동사냥", "강화"] }),
-  registryEntry("/던전", "RPG", "던전 탐험과 재료 획득", { aliases: ["/던전목록", "/자동사냥", "/보상선택"], examples: ["/던전", "/던전 중급", "/자동사냥 중급"], requiresFeature: "games", searchableKeywords: ["RPG", "모험", "재료", "자동사냥", "보상"] }),
+  registryEntry("/던전", "RPG", "던전 탐험과 재료 획득", { aliases: ["/던전목록", "/자동사냥", "/보상선택"], examples: ["/던전", "/던전 중급", "/자동사냥 중급", "/자동사냥 상급 10"], requiresFeature: "games", searchableKeywords: ["RPG", "모험", "재료", "자동사냥", "보상"] }),
   registryEntry("/대장간", "RPG", "장비 제작과 강화 흐름 확인", { aliases: ["/제작", "/제작가능", "/강화", "/강화목록", "/강화상세", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템"], examples: ["/대장간", "/제작가능", "/제작 1", "/강화 무기", "/자동장착 공격"], requiresFeature: "games", searchableKeywords: ["무기", "방어구", "장신구", "제작", "장비", "세트", "강화"] }),
   registryEntry("/점메추", "생활", "점심 메뉴 추천", { examples: ["/점메추", "/점메추 한식", "/점메추 매운거"], searchableKeywords: ["점심", "메뉴", "추천", "음식"] }),
   registryEntry("/몬스터탐험", "픽셀몬스터", "오리지널 몬스터 발견과 수집 성장", { aliases: ["/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감"], requiresFeature: "games", searchableKeywords: ["몬스터", "수집", "도감", "퀘스트", "보스", "진화"] }),
@@ -10958,7 +11339,7 @@ const COMMAND_DISCOVERY_TOPICS = Object.freeze([
     key: "게임",
     aliases: ["게임", "미니게임", "낚시", "던전", "rpg"],
     title: "게임/RPG",
-    commands: ["/게임", "/오늘할일", "/모험", "/자동사냥", "/낚시", "/던전", "/가방정리", "/강화목록", "/어항", "/대장간", "/자동장착"]
+    commands: ["/게임", "/오늘할일", "/모험", "/자동사냥 상급 10", "/낚시", "/던전", "/가방정리", "/강화목록", "/자동탐험", "/자동낚시", "/자동뽑기", "/대장간"]
   },
   {
     key: "가방",
@@ -11149,7 +11530,7 @@ const COMMAND_RECOMMENDATION_PRESETS = Object.freeze({
     findHint: "/게임, /도움말 RPG",
     commands: [
       { command: "/모험", reason: "RPG 오늘 할 일과 성장 추천", feature: "games" },
-      { command: "/자동사냥", reason: "자동사냥권으로 던전 10회 요약", feature: "games" },
+      { command: "/자동사냥 상급 10", reason: "자동사냥권 10장으로 던전 100회 요약", feature: "games" },
       { command: "/던전", reason: "재료와 장비 성장", feature: "games" },
       { command: "/강화목록", reason: "강화할 장비와 비용 확인", feature: "games" },
       { command: "/제작가능", reason: "지금 만들 수 있는 장비 확인", feature: "games" },
@@ -11157,7 +11538,7 @@ const COMMAND_RECOMMENDATION_PRESETS = Object.freeze({
       { command: "/장비", reason: "현재 장비 요약", feature: "games" },
       { command: "/스탯", reason: "전투 능력치 확인", feature: "games" }
     ],
-    topCommands: ["/모험", "/자동사냥", "/던전", "/강화목록", "/강화", "/제작가능", "/제작", "/자동장착", "/장비", "/스탯", "/세트아이템"]
+    topCommands: ["/모험", "/자동사냥", "/자동탐험", "/자동낚시", "/자동뽑기", "/던전", "/강화목록", "/강화", "/제작가능", "/제작", "/자동장착", "/장비", "/스탯", "/세트아이템"]
   },
   pet: {
     label: "펫",
@@ -11338,7 +11719,7 @@ function roomStatusSnapshot(state = {}, roomState = {}, options = {}) {
 
 function gameCommandTopObjects(roomState = {}, limit = 5) {
   const gameCommands = new Set([
-    "/게임", "/오늘할일", "/주사위", "/낚시", "/탐험", "/모험", "/자동사냥", "/던전", "/강화", "/강화목록", "/몬스터탐험", "/포획", "/펫", "/펫먹이", "/점메추",
+    "/게임", "/오늘할일", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/모험", "/자동사냥", "/던전", "/강화", "/강화목록", "/몬스터탐험", "/포획", "/펫", "/펫먹이", "/점메추",
     "/판매추천", "/정리추천", "/가방정리", "/판매미리보기", "/자동장착"
   ]);
   const counts = new Map();
@@ -15997,8 +16378,10 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/미끼상점") return baitShopCommand(roomState, sender);
   if (command === "/미끼구매") return baitPurchaseCommand(roomState, sender, text);
   if (command === "/낚시") return fishingGameCommand(roomState, sender);
+  if (command === "/자동낚시") return autoFishingCommand(roomState, sender, text);
   if (command === "/어항" || command === "/수족관") return aquariumCommand(roomState, sender, text);
   if (command === "/탐험") return exploreGameCommand(roomState, sender);
+  if (command === "/자동탐험" || command === "/자동모험") return autoExploreCommand(roomState, sender, text);
   if (command === "/모험") return rpgAdventureHubCommand(roomState, sender);
   if (command === "/던전목록") return dungeonListCommand();
   if (command === "/던전") return dungeonCommand(roomState, sender, text);
@@ -16060,6 +16443,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/좋아요") return likeCommand(roomState, sender, text);
   if (command === "/응원") return cheerCommand(roomState, sender, text);
   if (command === "/뽑기목록") return luckyDrawCatalogText();
+  if (command === "/자동뽑기") return autoLuckyDrawCommand(roomState, sender, text);
   if (command === "/확률뽑기" || command === "/뽑기") return luckyDrawCommand(roomState, sender);
   if (command === "/홀짝" || /^\/(?:홀|짝)(?:\s|$)/.test(command)) return oddEvenCommand(roomState, sender, text);
   if (command === "/이체") return transferCommand(roomState, sender, text);
