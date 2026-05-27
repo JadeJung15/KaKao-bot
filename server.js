@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.06";
+export const APP_VERSION = "0.5.07";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -237,7 +237,11 @@ export const FEATURES = [
   "android-notification-sender-fallback",
   "rpg-crafting-auto-equip",
   "rpg-craftable-list",
-  "rpg-equipment-set-bonus"
+  "rpg-equipment-set-bonus",
+  "rpg-short-item-selector",
+  "rpg-auto-equip-presets",
+  "rpg-expanded-equipment-stats",
+  "lunch-menu-recommendation"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -515,6 +519,57 @@ const RPG_EQUIPMENT_SLOT_LABELS = Object.freeze({
   armor: "방어구",
   accessory: "장신구"
 });
+const RPG_STAT_LABELS = Object.freeze({
+  attack: "공격력",
+  defense: "방어력",
+  agility: "민첩",
+  hp: "HP",
+  mp: "MP",
+  magicAttack: "마법 공격력",
+  magicDefense: "마법 방어력",
+  crit: "치명타",
+  evasion: "회피",
+  accuracy: "명중",
+  skillEffect: "스킬 효과"
+});
+const RPG_STAT_KEYS = Object.freeze(Object.keys(RPG_STAT_LABELS));
+const RPG_AUTO_EQUIP_PRESETS = Object.freeze({
+  balance: {
+    label: "균형",
+    weights: { attack: 1.1, defense: 1.1, agility: 0.9, hp: 0.12, mp: 0.1, magicAttack: 1, magicDefense: 0.9, crit: 1, evasion: 0.8, accuracy: 0.8, skillEffect: 0.8 },
+    focus: ["attack", "defense", "hp"]
+  },
+  attack: {
+    label: "공격",
+    aliases: ["공격", "딜", "딜러"],
+    weights: { attack: 2, crit: 1.4, accuracy: 1.2, agility: 0.8, hp: 0.04 },
+    focus: ["attack", "crit", "accuracy"]
+  },
+  defense: {
+    label: "방어",
+    aliases: ["방어", "탱", "탱커"],
+    weights: { defense: 2, hp: 0.18, magicDefense: 1.4, evasion: 0.6 },
+    focus: ["defense", "hp", "magicDefense"]
+  },
+  agility: {
+    label: "민첩",
+    aliases: ["민첩", "속도", "회피"],
+    weights: { agility: 2, evasion: 1.5, accuracy: 1.1, crit: 0.8 },
+    focus: ["agility", "evasion", "accuracy"]
+  },
+  magic: {
+    label: "마법",
+    aliases: ["마법", "마공", "마나"],
+    weights: { magicAttack: 2, mp: 0.18, skillEffect: 1.5, magicDefense: 0.8 },
+    focus: ["magicAttack", "mp", "skillEffect"]
+  },
+  survival: {
+    label: "생존",
+    aliases: ["생존", "체력", "버티기"],
+    weights: { hp: 0.24, defense: 1.6, magicDefense: 1.4, evasion: 1 },
+    focus: ["hp", "defense", "magicDefense"]
+  }
+});
 const RPG_EQUIPMENT_SETS = Object.freeze({
   mining: {
     name: "광산 세트",
@@ -675,6 +730,63 @@ const RPG_EQUIPMENT_RECIPES = Object.freeze([
   }
 ]);
 const RPG_WEAPON_RECIPES = RPG_EQUIPMENT_RECIPES;
+function emptyRpgStats() {
+  return Object.fromEntries(RPG_STAT_KEYS.map((key) => [key, 0]));
+}
+
+function normalizeRpgStats(value = {}) {
+  const stats = emptyRpgStats();
+  for (const key of RPG_STAT_KEYS) {
+    stats[key] = Math.trunc(Number(value?.[key] || 0));
+  }
+  return stats;
+}
+
+function derivedRpgStats(item = {}) {
+  const power = Math.max(0, Math.trunc(Number(item.power || 0)));
+  const slot = item.slot || item.category || "weapon";
+  const stats = emptyRpgStats();
+  if (slot === "weapon") {
+    stats.attack = power;
+    stats.crit = Math.max(0, Math.floor(power / 4));
+    stats.accuracy = Math.max(1, Math.floor(power / 3));
+    if (/룬|별빛|마법|수정/.test(item.name || "")) {
+      stats.magicAttack = Math.max(1, Math.floor(power * 0.8));
+      stats.mp = power * 4;
+      stats.skillEffect = Math.max(1, Math.floor(power / 5));
+    }
+    if (/단검|그림자/.test(item.name || "")) {
+      stats.agility = Math.max(1, Math.floor(power * 0.7));
+      stats.evasion = Math.max(1, Math.floor(power / 3));
+    }
+  } else if (slot === "armor") {
+    stats.defense = power;
+    stats.hp = power * 8;
+    stats.magicDefense = Math.max(0, Math.floor(power / 3));
+    if (/망토|그림자/.test(item.name || "")) {
+      stats.agility = Math.max(1, Math.floor(power / 3));
+      stats.evasion = Math.max(1, Math.floor(power / 2));
+    }
+    if (/로브|별빛/.test(item.name || "")) {
+      stats.mp = power * 5;
+      stats.magicDefense += Math.max(1, Math.floor(power / 2));
+    }
+  } else {
+    stats.agility = Math.max(0, Math.floor(power / 2));
+    stats.mp = power * 3;
+    stats.magicAttack = Math.max(0, Math.floor(power / 2));
+    stats.magicDefense = Math.max(0, Math.floor(power / 3));
+    stats.skillEffect = Math.max(0, Math.floor(power / 4));
+    if (/부적|나침반/.test(item.name || "")) stats.accuracy = Math.max(1, Math.floor(power / 2));
+    if (/반지|그림자/.test(item.name || "")) stats.evasion = Math.max(1, Math.floor(power / 2));
+  }
+  return stats;
+}
+
+function rpgEquipmentStats(item = {}) {
+  return normalizeRpgStats(item.stats && typeof item.stats === "object" ? item.stats : derivedRpgStats(item));
+}
+
 const PIXEL_MONSTER_ELEMENTS = Object.freeze(["숲", "바위", "물결", "불꽃", "바람", "빛", "그림자"]);
 const PIXEL_MONSTER_RARITIES = Object.freeze([
   { id: "common", label: "일반", catchRate: 0.65 },
@@ -697,6 +809,143 @@ const PIXEL_MONSTER_SPECIES = Object.freeze(Array.from({ length: PIXEL_MONSTER_S
     basePower: 8 + index
   };
 }));
+const LUNCH_MENU_ITEMS = Object.freeze([
+  { name: "김치찌개", categories: ["한식", "든든한 음식", "배달 추천"], note: "뜨끈하고 실패 확률 낮은 메뉴입니다." },
+  { name: "된장찌개", categories: ["한식", "가벼운 음식", "혼밥 추천"], note: "속 편하게 먹기 좋습니다." },
+  { name: "제육볶음", categories: ["한식", "매운 음식", "든든한 음식"], note: "밥이 바로 생각나는 선택입니다." },
+  { name: "불고기백반", categories: ["한식", "든든한 음식"], note: "무난하지만 만족도가 높습니다." },
+  { name: "비빔밥", categories: ["한식", "가벼운 음식", "혼밥 추천"], note: "채소와 밥을 균형 있게 먹기 좋습니다." },
+  { name: "순두부찌개", categories: ["한식", "매운 음식", "배달 추천"], note: "칼칼하게 기분 전환하기 좋습니다." },
+  { name: "닭갈비", categories: ["한식", "매운 음식", "든든한 음식"], note: "여럿이 먹기 좋은 점심입니다." },
+  { name: "갈비탕", categories: ["한식", "국밥", "든든한 음식"], note: "든든하게 체력 보충하기 좋습니다." },
+  { name: "짜장면", categories: ["중식", "면류", "배달 추천"], note: "빠르고 익숙한 선택입니다." },
+  { name: "짬뽕", categories: ["중식", "면류", "매운 음식"], note: "얼큰한 국물이 필요할 때 좋습니다." },
+  { name: "볶음밥", categories: ["중식", "든든한 음식", "혼밥 추천"], note: "간단하지만 포만감이 좋습니다." },
+  { name: "마파두부덮밥", categories: ["중식", "매운 음식", "도시락"], note: "매콤하고 부드러운 밥 메뉴입니다." },
+  { name: "탕수육덮밥", categories: ["중식", "든든한 음식", "배달 추천"], note: "바삭한 맛이 필요할 때 좋습니다." },
+  { name: "유산슬밥", categories: ["중식", "가벼운 음식"], note: "자극을 줄이고 싶을 때 어울립니다." },
+  { name: "고추잡채밥", categories: ["중식", "매운 음식", "든든한 음식"], note: "매콤한 볶음 메뉴가 당길 때 좋습니다." },
+  { name: "중화비빔밥", categories: ["중식", "매운 음식", "혼밥 추천"], note: "짬뽕보다 밥이 당길 때 추천합니다." },
+  { name: "초밥", categories: ["일식", "가벼운 음식", "혼밥 추천"], note: "깔끔하게 먹기 좋습니다." },
+  { name: "돈카츠", categories: ["일식", "든든한 음식"], note: "바삭한 한 끼가 필요할 때 좋습니다." },
+  { name: "규동", categories: ["일식", "덮밥", "혼밥 추천"], note: "빠르게 먹기 좋은 덮밥입니다." },
+  { name: "라멘", categories: ["일식", "면류", "든든한 음식"], note: "국물과 면이 같이 당길 때 좋습니다." },
+  { name: "우동", categories: ["일식", "면류", "가벼운 음식"], note: "따뜻하고 부담이 적습니다." },
+  { name: "가츠동", categories: ["일식", "든든한 음식", "도시락"], note: "돈카츠와 밥을 한 번에 해결합니다." },
+  { name: "냉소바", categories: ["일식", "면류", "가벼운 음식"], note: "더운 날 가볍게 먹기 좋습니다." },
+  { name: "연어덮밥", categories: ["일식", "덮밥", "혼밥 추천"], note: "깔끔한 점심으로 좋습니다." },
+  { name: "파스타", categories: ["양식", "면류", "배달 추천"], note: "느긋한 점심 분위기에 어울립니다." },
+  { name: "리조또", categories: ["양식", "든든한 음식"], note: "부드럽고 든든합니다." },
+  { name: "함박스테이크", categories: ["양식", "든든한 음식", "도시락"], note: "밥과 소스 조합이 좋습니다." },
+  { name: "샐러드파스타", categories: ["양식", "다이어트식", "가벼운 음식"], note: "가볍게 먹고 싶을 때 좋습니다." },
+  { name: "그릴치킨", categories: ["양식", "다이어트식", "든든한 음식"], note: "단백질 챙기기 좋은 선택입니다." },
+  { name: "피자", categories: ["양식", "패스트푸드", "배달 추천"], note: "나눠 먹기 좋은 메뉴입니다." },
+  { name: "오므라이스", categories: ["양식", "도시락", "혼밥 추천"], note: "부드럽고 무난합니다." },
+  { name: "스테이크덮밥", categories: ["양식", "든든한 음식"], note: "조금 특별한 점심으로 좋습니다." },
+  { name: "떡볶이", categories: ["분식", "매운 음식", "배달 추천"], note: "매콤한 기분 전환 메뉴입니다." },
+  { name: "김밥", categories: ["분식", "가벼운 음식", "혼밥 추천"], note: "간단하고 빠릅니다." },
+  { name: "라볶이", categories: ["분식", "면류", "매운 음식"], note: "분식과 면을 같이 즐깁니다." },
+  { name: "순대", categories: ["분식", "든든한 음식"], note: "떡볶이와 같이 먹어도 좋습니다." },
+  { name: "튀김", categories: ["분식", "배달 추천"], note: "바삭한 사이드가 필요할 때 좋습니다." },
+  { name: "쫄면", categories: ["분식", "면류", "매운 음식"], note: "새콤매콤하게 입맛을 살립니다." },
+  { name: "잔치국수", categories: ["분식", "면류", "가벼운 음식"], note: "편하게 먹기 좋은 국수입니다." },
+  { name: "참치김밥", categories: ["분식", "도시락", "혼밥 추천"], note: "간단하지만 든든합니다." },
+  { name: "햄버거", categories: ["패스트푸드", "배달 추천", "혼밥 추천"], note: "빠르게 한 끼 해결하기 좋습니다." },
+  { name: "치킨버거", categories: ["패스트푸드", "든든한 음식"], note: "바삭한 식감이 좋습니다." },
+  { name: "샌드위치", categories: ["패스트푸드", "가벼운 음식", "다이어트식"], note: "회의 사이에 먹기 편합니다." },
+  { name: "타코", categories: ["패스트푸드", "양식"], note: "색다른 점심으로 좋습니다." },
+  { name: "브리또", categories: ["패스트푸드", "든든한 음식"], note: "손쉽게 먹는 든든한 메뉴입니다." },
+  { name: "핫도그", categories: ["패스트푸드", "가벼운 음식"], note: "간단히 먹기 좋습니다." },
+  { name: "치킨랩", categories: ["패스트푸드", "다이어트식", "가벼운 음식"], note: "가볍지만 단백질도 챙깁니다." },
+  { name: "감자튀김세트", categories: ["패스트푸드", "배달 추천"], note: "가볍게 즐기는 패스트푸드입니다." },
+  { name: "돼지국밥", categories: ["국밥", "한식", "든든한 음식"], note: "든든함이 필요한 날 추천합니다." },
+  { name: "순대국밥", categories: ["국밥", "한식", "든든한 음식"], note: "오래 가는 포만감이 있습니다." },
+  { name: "콩나물국밥", categories: ["국밥", "가벼운 음식", "해장"], note: "시원하고 부담이 적습니다." },
+  { name: "설렁탕", categories: ["국밥", "한식", "든든한 음식"], note: "부드럽게 속을 채우기 좋습니다." },
+  { name: "육개장", categories: ["국밥", "매운 음식", "든든한 음식"], note: "얼큰하게 힘내기 좋습니다." },
+  { name: "뼈해장국", categories: ["국밥", "매운 음식", "든든한 음식"], note: "오후 체력이 필요할 때 좋습니다." },
+  { name: "소고기국밥", categories: ["국밥", "한식", "든든한 음식"], note: "고기와 국물이 안정적입니다." },
+  { name: "굴국밥", categories: ["국밥", "가벼운 음식"], note: "깔끔한 국물 메뉴입니다." },
+  { name: "칼국수", categories: ["면류", "한식", "든든한 음식"], note: "따뜻한 면이 당길 때 좋습니다." },
+  { name: "냉면", categories: ["면류", "한식", "가벼운 음식"], note: "시원하게 먹기 좋습니다." },
+  { name: "비빔국수", categories: ["면류", "매운 음식", "가벼운 음식"], note: "새콤매콤하게 가볍습니다." },
+  { name: "잔치국수", categories: ["면류", "가벼운 음식", "혼밥 추천"], note: "부담 없는 국수 메뉴입니다." },
+  { name: "쌀국수", categories: ["면류", "가벼운 음식", "배달 추천"], note: "국물이 깔끔합니다." },
+  { name: "탄탄면", categories: ["면류", "중식", "매운 음식"], note: "고소하고 매콤합니다." },
+  { name: "팟타이", categories: ["면류", "양식", "배달 추천"], note: "색다른 면 요리입니다." },
+  { name: "김치우동", categories: ["면류", "일식", "매운 음식"], note: "뜨끈하고 실패 확률 낮은 메뉴입니다." },
+  { name: "제육도시락", categories: ["도시락", "한식", "든든한 음식"], note: "회사 점심으로 안정적입니다." },
+  { name: "치킨마요덮밥", categories: ["도시락", "든든한 음식", "혼밥 추천"], note: "달달하고 든든합니다." },
+  { name: "불고기도시락", categories: ["도시락", "한식"], note: "무난하게 먹기 좋습니다." },
+  { name: "연어도시락", categories: ["도시락", "일식", "가벼운 음식"], note: "깔끔한 도시락입니다." },
+  { name: "닭가슴살도시락", categories: ["도시락", "다이어트식", "가벼운 음식"], note: "식단 관리에 좋습니다." },
+  { name: "소시지야채볶음도시락", categories: ["도시락", "든든한 음식"], note: "익숙한 반찬 조합입니다." },
+  { name: "돈까스도시락", categories: ["도시락", "일식", "든든한 음식"], note: "바삭한 도시락입니다." },
+  { name: "참치마요덮밥", categories: ["도시락", "혼밥 추천"], note: "간단하고 빠르게 먹습니다." },
+  { name: "닭가슴살샐러드", categories: ["다이어트식", "가벼운 음식"], note: "가볍게 단백질을 챙깁니다." },
+  { name: "연어샐러드", categories: ["다이어트식", "가벼운 음식"], note: "깔끔하고 산뜻합니다." },
+  { name: "포케", categories: ["다이어트식", "가벼운 음식", "혼밥 추천"], note: "밥과 채소를 균형 있게 먹습니다." },
+  { name: "두부덮밥", categories: ["다이어트식", "한식", "가벼운 음식"], note: "부담이 적은 밥 메뉴입니다." },
+  { name: "곤약비빔면", categories: ["다이어트식", "면류", "매운 음식"], note: "가볍게 매콤함을 챙깁니다." },
+  { name: "샐러드랩", categories: ["다이어트식", "패스트푸드", "가벼운 음식"], note: "손쉽게 먹는 가벼운 점심입니다." },
+  { name: "현미도시락", categories: ["다이어트식", "도시락"], note: "식단 관리에 안정적입니다." },
+  { name: "오트밀닭죽", categories: ["다이어트식", "가벼운 음식"], note: "속이 편한 메뉴입니다." },
+  { name: "불닭덮밥", categories: ["매운 음식", "도시락", "든든한 음식"], note: "강한 매운맛이 필요할 때 좋습니다." },
+  { name: "마라탕", categories: ["매운 음식", "중식", "배달 추천"], note: "입맛을 확 깨웁니다." },
+  { name: "마라샹궈", categories: ["매운 음식", "중식", "든든한 음식"], note: "매운 볶음이 당길 때 좋습니다." },
+  { name: "낙지덮밥", categories: ["매운 음식", "한식", "든든한 음식"], note: "매콤하게 힘내기 좋습니다." },
+  { name: "매운갈비찜", categories: ["매운 음식", "한식", "배달 추천"], note: "든든한 매운 메뉴입니다." },
+  { name: "쭈꾸미볶음", categories: ["매운 음식", "한식"], note: "밥과 잘 맞는 매콤함입니다." },
+  { name: "김치볶음밥", categories: ["매운 음식", "한식", "혼밥 추천"], note: "간단하고 익숙합니다." },
+  { name: "얼큰칼국수", categories: ["매운 음식", "면류"], note: "칼칼한 국물이 좋습니다." },
+  { name: "계란찜정식", categories: ["가벼운 음식", "한식"], note: "부드럽고 편안합니다." },
+  { name: "죽", categories: ["가벼운 음식", "한식", "혼밥 추천"], note: "속이 예민한 날 좋습니다." },
+  { name: "토스트", categories: ["가벼운 음식", "패스트푸드"], note: "짧은 점심에 어울립니다." },
+  { name: "메밀소바", categories: ["가벼운 음식", "면류", "일식"], note: "깔끔하게 먹기 좋습니다." },
+  { name: "카프레제샐러드", categories: ["가벼운 음식", "양식", "다이어트식"], note: "산뜻한 점심입니다." },
+  { name: "닭죽", categories: ["가벼운 음식", "한식"], note: "부담 없이 든든합니다." },
+  { name: "오니기리", categories: ["가벼운 음식", "일식", "혼밥 추천"], note: "간단히 먹기 좋습니다." },
+  { name: "유부초밥", categories: ["가벼운 음식", "일식", "도시락"], note: "달달하고 가볍습니다." },
+  { name: "보쌈정식", categories: ["든든한 음식", "한식"], note: "포만감이 오래 갑니다." },
+  { name: "찜닭", categories: ["든든한 음식", "한식", "배달 추천"], note: "여럿이 먹기 좋습니다." },
+  { name: "삼겹살정식", categories: ["든든한 음식", "한식"], note: "제대로 먹고 싶은 날 추천합니다." },
+  { name: "부대찌개", categories: ["든든한 음식", "한식", "매운 음식"], note: "밥과 국물이 모두 좋습니다." },
+  { name: "닭곰탕", categories: ["든든한 음식", "국밥"], note: "담백하게 체력을 채웁니다." },
+  { name: "카레라이스", categories: ["든든한 음식", "일식", "혼밥 추천"], note: "빠르고 안정적인 메뉴입니다." },
+  { name: "고기국수", categories: ["든든한 음식", "면류"], note: "면이지만 포만감이 큽니다." },
+  { name: "치즈돈카츠", categories: ["든든한 음식", "일식"], note: "고소하고 든든합니다." },
+  { name: "치킨", categories: ["배달 추천", "패스트푸드", "든든한 음식"], note: "나눠 먹기 좋은 배달 메뉴입니다." },
+  { name: "족발", categories: ["배달 추천", "한식", "든든한 음식"], note: "회의 후 점심에도 잘 맞습니다." },
+  { name: "보쌈", categories: ["배달 추천", "한식", "든든한 음식"], note: "깔끔하게 고기 먹기 좋습니다." },
+  { name: "분짜", categories: ["배달 추천", "면류", "가벼운 음식"], note: "상큼한 면 요리입니다." },
+  { name: "닭강정", categories: ["배달 추천", "패스트푸드"], note: "달콤바삭한 점심입니다." },
+  { name: "김치찜", categories: ["배달 추천", "한식", "매운 음식"], note: "밥이 잘 들어갑니다." },
+  { name: "샤브샤브", categories: ["배달 추천", "가벼운 음식"], note: "채소와 고기를 같이 먹습니다." },
+  { name: "로제떡볶이", categories: ["배달 추천", "분식"], note: "부드러운 매콤함입니다." },
+  { name: "혼밥김치찌개", categories: ["혼밥 추천", "한식", "든든한 음식"], note: "혼자 먹기 좋은 찌개입니다." },
+  { name: "컵밥", categories: ["혼밥 추천", "도시락"], note: "빠르게 먹기 좋습니다." },
+  { name: "덮밥", categories: ["혼밥 추천", "도시락", "든든한 음식"], note: "선택지가 넓은 한 그릇입니다." },
+  { name: "미니우동세트", categories: ["혼밥 추천", "일식", "면류"], note: "가볍게 세트로 먹기 좋습니다." },
+  { name: "삼각김밥세트", categories: ["혼밥 추천", "가벼운 음식"], note: "시간이 없을 때 좋습니다." },
+  { name: "편의점도시락", categories: ["혼밥 추천", "도시락"], note: "가장 빠른 현실적 선택입니다." },
+  { name: "버섯덮밥", categories: ["혼밥 추천", "가벼운 음식"], note: "담백한 한 그릇입니다." },
+  { name: "소고기덮밥", categories: ["혼밥 추천", "든든한 음식"], note: "혼밥이어도 든든합니다." }
+]);
+const LUNCH_CATEGORY_ALIASES = Object.freeze({
+  매운거: "매운 음식",
+  매운것: "매운 음식",
+  매운: "매운 음식",
+  가벼운거: "가벼운 음식",
+  가벼운것: "가벼운 음식",
+  가볍게: "가벼운 음식",
+  든든한거: "든든한 음식",
+  든든한것: "든든한 음식",
+  든든: "든든한 음식",
+  배달: "배달 추천",
+  혼밥: "혼밥 추천",
+  랜덤: "",
+  아무거나: ""
+});
 const PET_SPECIES = Object.freeze(["몽실펫", "콩알펫", "루미펫", "토리펫"]);
 const EXPLORE_REWARD_ITEMS = Object.freeze([
   { id: 9101, name: "낡은 보물상자", sellPrice: 45, description: "탐험에서 발견한 작은 보물상자", category: "explore", rarity: "common" },
@@ -757,7 +1006,14 @@ const SYSTEM_PRODUCTS = Object.freeze([
     setId: recipe.setId || "",
     setName: recipe.setId ? RPG_EQUIPMENT_SETS[recipe.setId]?.name || "" : "",
     rarity: recipe.power >= 15 ? "rare" : recipe.power >= 9 ? "uncommon" : "common",
-    power: recipe.power
+    gradeLabel: recipe.power >= 15 ? "희귀" : recipe.power >= 9 ? "고급" : "일반",
+    power: recipe.power,
+    stats: rpgEquipmentStats(recipe),
+    levelLimit: recipe.levelLimit || 1,
+    jobLimit: recipe.jobLimit || "",
+    enhancement: recipe.enhancement || 0,
+    specialOptions: recipe.specialOptions || [],
+    magicSkill: recipe.magicSkill || ""
   })),
   ...FISH_SPECIES.flatMap((species, speciesIndex) => FISH_GRADES.map((grade, gradeIndex) => {
     const id = FISH_ITEM_ID_START + (speciesIndex * FISH_GRADE_COUNT) + gradeIndex;
@@ -961,7 +1217,7 @@ const ADMIN_MANAGEMENT_COMMANDS = Object.freeze([
 const COMMAND_PACK_ALWAYS_INSTALLED_COMMANDS = Object.freeze([
   "/상태", "/도움말", "/방등록", "/신고", "/신고목록", "/신고처리",
   "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록",
-  "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말",
+  "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말", "/점메추",
   ...ADMIN_MANAGEMENT_COMMANDS
 ]);
 
@@ -970,14 +1226,14 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "attendance-growth": ["/출석", "/미출석", "/출석순위", "/포인트", "/내정보", "/포인트순위"],
   "point-economy": ["/포인트", "/내정보", "/좋아요", "/응원", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위"],
   "game-chance": ["/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/포인트"],
-  "rpg-adventure": ["/던전", "/던전목록", "/대장간", "/제작가능", "/제작", "/장비", "/장착", "/세트아이템", "/가방", "/판매", "/포인트"],
+  "rpg-adventure": ["/던전", "/던전목록", "/대장간", "/제작가능", "/제작", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/일괄판매", "/가방", "/판매", "/포인트"],
   "pixel-monster-rpg": ["/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감", "/포인트"],
   "pet-raising": ["/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점", "/포인트"],
   "shop-inventory": ["/상점", "/구매", "/가방", "/사용", "/가방선물", "/판매", "/구매내역"],
   "custom-command": ["/명령어목록", "/커스텀명령어", "/고정명령어", "/명령어등록", "/명령어수정", "/명령어삭제", "/커스텀등록", "/커스텀수정", "/커스텀삭제"],
   "profile-history": ["/프로필", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/닉병합", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
   "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그", "/신고목록", "/신고처리", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록", "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말", ...ADMIN_MANAGEMENT_COMMANDS],
-  "event-engagement": ["/출석", "/좋아요", "/응원", "/운세", "/날씨", "/채팅오늘", "/채팅금주", "/포인트순위"]
+  "event-engagement": ["/출석", "/좋아요", "/응원", "/운세", "/날씨", "/채팅오늘", "/채팅금주", "/포인트순위", "/점메추"]
 });
 const ALL_IN_ONE_PACK_COMMANDS = Object.freeze([...new Set(Object.values(COMMAND_PACK_COMMANDS).flat())]);
 
@@ -1303,9 +1559,9 @@ const GAME_PACK_HELP_TOPICS = Object.freeze({
     packIds: ["rpg-adventure"],
     aliases: ["rpg", "RPG", "모험", "던전"],
     intro: "던전에서 재료를 얻고 대장간에서 무기를 제작해 장착하는 모험형 게임팩입니다.",
-    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/던전", "/제작가능", "/제작 12001"],
+    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/던전", "/제작가능", "/자동장착 공격"],
     adminSetup: ["명령어팩 장착: /명령어설치 pk.006", "게임 기능 켜기: /기능켜기 게임", "상점/가방 기능 확인: /기능목록"],
-    examples: ["/던전", "/던전 중급", "/대장간", "/제작가능", "/제작 12001", "/세트아이템"],
+    examples: ["/던전", "/던전 중급", "/대장간", "/제작가능", "/장착 1", "/자동장착 공격", "/아이템상세 2", "/세트아이템"],
     related: ["shop-inventory", "pet-raising"]
   },
   monster: {
@@ -6749,6 +7005,64 @@ function parseProductQuantityCommand(text, pattern) {
   };
 }
 
+function parseInventoryActionText(text, pattern) {
+  const body = compactSpaces(text.replace(pattern, ""));
+  if (!body) return null;
+  const parts = body.split(/\s+/);
+  let quantity = 1;
+  let selector = body;
+  if (parts.length > 1 && /^[0-9]+$/.test(parts.at(-1))) {
+    quantity = Math.min(SHOP_MAX_QUANTITY, Math.max(1, Math.trunc(Number(parts.at(-1)))));
+    selector = parts.slice(0, -1).join(" ");
+  }
+  return { selector: compactSpaces(selector), quantity };
+}
+
+function inventoryDisplayRows(roomState, person, filter = null) {
+  const rows = inventoryRows(roomState, person).filter((row) => !filter || filter(row));
+  return rows.map((row, index) => ({ ...row, selectNo: index + 1 }));
+}
+
+function isEquippedProduct(person, productId) {
+  normalizePersonState(person);
+  const id = String(productId);
+  return ["weapon", "armor", "accessory"].some((slot) => String(person.equipment?.[slot] || "") === id);
+}
+
+function resolveInventoryRow(roomState, person, selector, filter = null) {
+  const body = compactSpaces(selector || "");
+  if (!body) return null;
+  const rows = inventoryDisplayRows(roomState, person, filter);
+  const numeric = body.match(/^[0-9]+$/) ? Math.trunc(Number(body)) : 0;
+  if (numeric > 0 && numeric < 1000) return rows[numeric - 1] || null;
+  if (numeric >= 1000) return rows.find((row) => row.productId === numeric) || null;
+  const key = keyFor(body);
+  return rows.find((row) => keyFor(row.name) === key)
+    || rows.find((row) => keyFor(row.name).includes(key))
+    || null;
+}
+
+function itemIcon(rowOrProduct = {}) {
+  const category = rowOrProduct.category || "";
+  const slot = rowOrProduct.slot || "";
+  if (slot === "weapon" || category === "weapon") return "⚔️";
+  if (slot === "armor" || category === "armor") return "🛡️";
+  if (slot === "accessory" || category === "accessory") return "✨";
+  if (category === "fish") return "🐟";
+  if (category === "rpg_material") return "⛏️";
+  if (category === "bait") return "🎣";
+  if (category === "pet") return "🐾";
+  return "🎒";
+}
+
+function inventoryPageFromText(text, pattern) {
+  const body = compactSpaces(text.replace(pattern, ""));
+  if (!body || body === "1") return 1;
+  if (body === "다음") return 2;
+  const page = Math.trunc(Number(body));
+  return Number.isFinite(page) && page > 0 ? page : 1;
+}
+
 function baitShopCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
   const bait = systemProductById(BAIT_ITEM_ID);
@@ -6805,21 +7119,27 @@ function baitPurchaseCommand(roomState, sender, text) {
 }
 
 function sellItemCommand(roomState, sender, text) {
-  const parsed = parseProductQuantityCommand(text, /^\/판매\s*/i);
-  if (!parsed?.productId || !parsed.quantity) return "형식: /판매 번호 수량";
-  const product = inventoryProductById(roomState, parsed.productId);
-  if (!product) return "판매 가능한 아이템 번호가 아닙니다. /가방 으로 보유 아이템을 확인해주세요.";
-  const unitPrice = productSellPrice(product);
-  if (!unitPrice) return "판매할 수 없는 아이템입니다.";
+  const parsed = parseInventoryActionText(text, /^\/판매\s*/i);
+  if (!parsed?.selector) {
+    return ["❌ 명령어를 확인해 주세요.", "사용 예시:", " /판매 1", " /판매 낡은검", " /판매 10000 2"].join("\n");
+  }
   const person = ensurePerson(roomState, sender);
-  const nextQuantity = removeInventory(person, parsed.productId, parsed.quantity);
-  if (nextQuantity < 0) return "판매할 아이템 수량이 부족합니다.";
+  const row = resolveInventoryRow(roomState, person, parsed.selector);
+  if (!row) return "❌ 판매할 아이템을 찾지 못했습니다. /판매목록 으로 번호를 확인해 주세요.";
+  const product = inventoryProductById(roomState, row.productId);
+  const unitPrice = productSellPrice(product);
+  if (!unitPrice) return "⚠️ 판매할 수 없는 아이템입니다.";
+  if (isEquippedProduct(person, row.productId) && inventoryQuantity(person, row.productId) <= parsed.quantity) {
+    return ["⚠️ 장착 중인 장비입니다.", "먼저 다른 장비를 장착하거나 중복 수량만 판매해 주세요.", "예시: /자동장착 공격"].join("\n");
+  }
+  const nextQuantity = removeInventory(person, row.productId, parsed.quantity);
+  if (nextQuantity < 0) return "⚠️ 판매할 아이템 수량이 부족합니다.";
   const totalPrice = unitPrice * parsed.quantity;
   person.points += totalPrice;
   recordShopTransaction(roomState, {
     type: "sell",
-    productId: parsed.productId,
-    productName: product.name || `상품 #${parsed.productId}`,
+    productId: row.productId,
+    productName: product.name || `상품 #${row.productId}`,
     quantity: parsed.quantity,
     unitPrice,
     totalPrice,
@@ -6828,9 +7148,9 @@ function sellItemCommand(roomState, sender, text) {
     by: person.currentName
   });
   return [
-    "판매 완료",
+    "💰 판매 완료",
     "",
-    `• 상품 : ${product.name || `상품 #${parsed.productId}`}`,
+    `• 상품 : ${product.name || `상품 #${row.productId}`}`,
     `• 수량 : ${parsed.quantity}개`,
     `• 지급 포인트 : ${formatPoint(totalPrice)}`,
     `• 남은 수량 : ${nextQuantity}개`,
@@ -6850,7 +7170,9 @@ function inventoryRows(roomState, person) {
         active: product?.active !== false,
         sellPrice: productSellPrice(product),
         category: product?.category || "shop",
-        rarity: product?.rarity || ""
+        rarity: product?.rarity || "",
+        slot: product?.slot || "",
+        gradeLabel: product?.gradeLabel || ""
       };
     })
     .filter((item) => item.quantity > 0)
@@ -6858,9 +7180,11 @@ function inventoryRows(roomState, person) {
 }
 
 function inventoryCommand(roomState, sender, text) {
-  const query = stripKakaoSuffix(text.replace(/^\/가방\s*/i, ""));
+  const isItemCommand = /^\/(?:아이템|보유아이템)(?:\s|$)/.test(text);
+  const query = stripKakaoSuffix(text.replace(isItemCommand ? /^\/(?:아이템|보유아이템)\s*/i : /^\/가방\s*/i, ""));
   let target = sender;
-  if (query) {
+  const isPageQuery = !query || query === "다음" || /^[0-9]+$/.test(query);
+  if (query && !isItemCommand && !isPageQuery) {
     const denied = requireAdmin(roomState, sender);
     if (denied) return denied;
     target = query;
@@ -6877,13 +7201,108 @@ function inventoryCommand(roomState, sender, text) {
       "/상점 으로 구매 가능한 상품을 확인하세요."
     ].join("\n");
   }
+  const page = inventoryPageFromText(text, isItemCommand ? /^\/(?:아이템|보유아이템)\s*/i : /^\/가방\s*/i);
+  const pageSize = 8;
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const displayRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+    .map((item, index) => ({ ...item, selectNo: (currentPage - 1) * pageSize + index + 1 }));
   return [
-    `${person.currentName}님의 가방`,
+    `🎒 ${person.currentName}님의 ${isItemCommand ? "보유 아이템" : "가방"} ${currentPage}/${totalPages}`,
     "",
-    ...rows.map((item) => `${item.productId}. ${item.name} x ${item.quantity} / 판매가: ${formatPoint(item.sellPrice)}`),
+    ...displayRows.map((item) => `${item.selectNo}. ${item.name} x ${item.quantity} ${itemIcon(item)} / 판매가 ${formatPoint(item.sellPrice)}`),
     "",
-    "/사용 번호 로 아이템을 사용하거나 /판매 번호 수량 으로 판매합니다."
+    "자세히 보기: /아이템상세 번호",
+    currentPage < totalPages ? "다음 페이지: /아이템 다음" : "판매 예시: /판매 1"
   ].join("\n");
+}
+
+function itemDetailCommand(roomState, sender, text) {
+  const body = compactSpaces(text.replace(/^\/아이템상세\s*/i, ""));
+  const person = ensurePerson(roomState, sender);
+  const row = resolveInventoryRow(roomState, person, body);
+  if (!row) return "❌ 아이템을 찾지 못했습니다. /아이템 으로 번호를 확인해 주세요.";
+  const product = inventoryProductById(roomState, row.productId);
+  const slot = rpgEquipmentSlot(product);
+  const stats = slot ? rpgEquipmentStats(product) : null;
+  const statLine = stats ? rpgStatSummary(stats, ["attack", "defense", "agility", "hp", "mp", "magicAttack"]) : "";
+  return [
+    `🎒 아이템 상세 ${row.selectNo || ""}`.trim(),
+    "",
+    `${itemIcon(product)} ${product?.name || row.name} x${row.quantity}`,
+    `판매가: ${formatPoint(row.sellPrice)}`,
+    slot ? `부위: ${RPG_EQUIPMENT_SLOT_LABELS[slot] || "장비"}` : `분류: ${product?.category || row.category}`,
+    product?.gradeLabel ? `등급: ${product.gradeLabel}` : "",
+    product?.setName ? `세트: ${product.setName}` : "",
+    statLine ? `능력치: ${statLine}` : "",
+    product?.description || ""
+  ].filter(Boolean).join("\n");
+}
+
+function saleListCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  const rows = inventoryDisplayRows(roomState, person, (row) => productSellPrice(inventoryProductById(roomState, row.productId)) > 0);
+  if (!rows.length) return "💰 판매 목록\n\n판매 가능한 아이템이 없습니다.";
+  const page = inventoryPageFromText(text, /^\/판매목록\s*/i);
+  const pageSize = 8;
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const displayRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  return [
+    `💰 판매 목록 ${currentPage}/${totalPages}`,
+    "",
+    ...displayRows.map((item) => `${item.selectNo}. ${item.name} x ${item.quantity} ${itemIcon(item)} / ${formatPoint(item.sellPrice)}${isEquippedProduct(person, item.productId) ? " / 장착중" : ""}`),
+    "",
+    "판매: /판매 1",
+    currentPage < totalPages ? "다음: /판매목록 다음" : "중복 판매: /일괄판매 중복"
+  ].join("\n");
+}
+
+function bulkSellCommand(roomState, sender, text) {
+  const mode = compactSpaces(text.replace(/^\/일괄판매\s*/i, "")) || "중복";
+  if (!["일반", "중복"].includes(mode)) return "❌ 사용 예시:\n /일괄판매 일반\n /일괄판매 중복";
+  const person = ensurePerson(roomState, sender);
+  const rows = inventoryRows(roomState, person);
+  let totalPrice = 0;
+  let soldCount = 0;
+  const soldNames = [];
+  for (const row of rows) {
+    const product = inventoryProductById(roomState, row.productId);
+    const unitPrice = productSellPrice(product);
+    if (!unitPrice || ["bait", "pet"].includes(row.category)) continue;
+    const equippedReserve = isEquippedProduct(person, row.productId) ? 1 : 0;
+    const sellableQuantity = Math.max(0, inventoryQuantity(person, row.productId) - equippedReserve);
+    const isCommon = row.rarity === "common" || row.gradeLabel === "일반" || row.category === "fish" || row.category === "rpg_material" || row.category === "explore";
+    const quantity = mode === "중복" ? Math.max(0, sellableQuantity - 1) : (isCommon ? sellableQuantity : 0);
+    if (!quantity) continue;
+    removeInventory(person, row.productId, quantity);
+    const price = unitPrice * quantity;
+    totalPrice += price;
+    soldCount += quantity;
+    if (soldNames.length < 4) soldNames.push(`${row.name} x${quantity}`);
+    recordShopTransaction(roomState, {
+      type: "bulk_sell",
+      productId: row.productId,
+      productName: product?.name || row.name,
+      quantity,
+      unitPrice,
+      totalPrice: price,
+      from: person.currentName,
+      to: person.currentName,
+      by: person.currentName
+    });
+  }
+  if (!soldCount) return `💰 일괄판매 결과\n\n${mode} 조건에 맞는 판매 가능 아이템이 없습니다.`;
+  person.points += totalPrice;
+  return [
+    "💰 일괄판매 완료",
+    "",
+    `• 방식 : ${mode}`,
+    `• 판매 수량 : ${soldCount}개`,
+    `• 지급 포인트 : ${formatPoint(totalPrice)}`,
+    soldNames.length ? `• 주요 아이템 : ${soldNames.join(", ")}` : "",
+    `• 보유 포인트 : ${formatPoint(person.points)}`
+  ].filter(Boolean).join("\n");
 }
 
 function aquariumCommand(roomState, sender, text) {
@@ -7588,16 +8007,119 @@ function rpgEquipmentSlot(product) {
   return "";
 }
 
+function rpgStatSummary(stats = {}, keys = RPG_STAT_KEYS, limit = 6) {
+  const normalized = normalizeRpgStats(stats);
+  const rows = keys
+    .map((key) => ({ key, value: normalized[key] || 0 }))
+    .filter((item) => item.value !== 0)
+    .slice(0, limit)
+    .map((item) => `${RPG_STAT_LABELS[item.key]} +${item.value}`);
+  return rows.join(" / ") || "능력치 없음";
+}
+
+function rpgCombinedStats(products = []) {
+  const total = emptyRpgStats();
+  for (const product of products.filter(Boolean)) {
+    const stats = rpgEquipmentStats(product);
+    for (const key of RPG_STAT_KEYS) total[key] += stats[key] || 0;
+  }
+  return total;
+}
+
+function rpgEquippedProductsBySlot(person) {
+  person.equipment = normalizeEquipment(person.equipment || {});
+  return {
+    weapon: systemProductById(person.equipment.weapon),
+    armor: systemProductById(person.equipment.armor),
+    accessory: systemProductById(person.equipment.accessory)
+  };
+}
+
+function rpgPresetFromText(value = "") {
+  const key = keyFor(value || "balance");
+  if (!key || key === "기본" || key === "자동") return "balance";
+  for (const [presetKey, preset] of Object.entries(RPG_AUTO_EQUIP_PRESETS)) {
+    if (presetKey === key || keyFor(preset.label) === key || (preset.aliases || []).some((alias) => keyFor(alias) === key)) return presetKey;
+  }
+  return "balance";
+}
+
+function rpgScoreProduct(product, presetKey = "balance") {
+  const preset = RPG_AUTO_EQUIP_PRESETS[presetKey] || RPG_AUTO_EQUIP_PRESETS.balance;
+  const weights = preset.weights || {};
+  const stats = rpgEquipmentStats(product);
+  return RPG_STAT_KEYS.reduce((sum, key) => sum + ((stats[key] || 0) * (weights[key] ?? 0.4)), Number(product?.power || 0) * 0.5);
+}
+
+function rpgStatDiffSummary(before = {}, after = {}, keys = RPG_STAT_KEYS, limit = 4) {
+  const rows = [];
+  for (const key of keys) {
+    const diff = Math.trunc(Number(after[key] || 0)) - Math.trunc(Number(before[key] || 0));
+    if (!diff) continue;
+    rows.push(`${RPG_STAT_LABELS[key]} ${diff > 0 ? "+" : ""}${diff}`);
+  }
+  return rows.slice(0, limit).join(" / ") || "변화 없음";
+}
+
+function rpgCurrentStats(person) {
+  const equipped = rpgEquippedProductsBySlot(person);
+  const stats = rpgCombinedStats(Object.values(equipped));
+  const setBonus = rpgSetBonusSummary(person);
+  if (setBonus.totalBonus) {
+    stats.attack += setBonus.totalBonus;
+    stats.defense += Math.floor(setBonus.totalBonus / 2);
+  }
+  return stats;
+}
+
+function rpgEquipmentComparison(currentProduct, nextProduct) {
+  const before = currentProduct ? rpgEquipmentStats(currentProduct) : emptyRpgStats();
+  const after = nextProduct ? rpgEquipmentStats(nextProduct) : emptyRpgStats();
+  return rpgStatDiffSummary(before, after, ["attack", "defense", "agility", "hp", "mp", "magicAttack", "magicDefense", "crit", "evasion", "accuracy", "skillEffect"], 4);
+}
+
 function autoEquipIfBetter(person, product) {
   const slot = rpgEquipmentSlot(product);
   if (!slot) return false;
   person.equipment = normalizeEquipment(person.equipment || {});
   const current = systemProductById(person.equipment[slot]);
-  if (!current || Number(product.power || 0) > Number(current.power || 0)) {
+  if (!current || rpgScoreProduct(product, "balance") > rpgScoreProduct(current, "balance")) {
     person.equipment[slot] = String(product.id);
     return true;
   }
   return false;
+}
+
+function autoEquipBestEquipment(person, presetKey = "balance") {
+  normalizePersonState(person);
+  person.equipment = normalizeEquipment(person.equipment || {});
+  const beforeStats = rpgCurrentStats(person);
+  const beforeEquipment = rpgEquippedProductsBySlot(person);
+  const changes = [];
+  for (const slot of ["weapon", "armor", "accessory"]) {
+    const candidates = Object.entries(person.inventory || {})
+      .filter(([, quantity]) => Math.trunc(Number(quantity || 0)) > 0)
+      .map(([productId]) => systemProductById(productId))
+      .filter((product) => rpgEquipmentSlot(product) === slot)
+      .sort((left, right) => rpgScoreProduct(right, presetKey) - rpgScoreProduct(left, presetKey));
+    const best = candidates[0];
+    if (best && String(person.equipment[slot] || "") !== String(best.id)) {
+      changes.push({
+        slot,
+        from: beforeEquipment[slot]?.name || "미장착",
+        to: best.name
+      });
+      person.equipment[slot] = String(best.id);
+    }
+  }
+  const afterStats = rpgCurrentStats(person);
+  return {
+    presetKey,
+    preset: RPG_AUTO_EQUIP_PRESETS[presetKey] || RPG_AUTO_EQUIP_PRESETS.balance,
+    changes,
+    beforeStats,
+    afterStats
+  };
 }
 
 function equippedRpgProducts(person) {
@@ -7634,35 +8156,85 @@ function equipmentCommand(roomState, sender) {
   const armor = systemProductById(person.equipment?.armor);
   const accessory = systemProductById(person.equipment?.accessory);
   const setBonus = rpgSetBonusSummary(person);
-  const basePower = [weapon, armor, accessory].reduce((sum, item) => sum + Number(item?.power || 0), 0);
+  const stats = rpgCurrentStats(person);
   return [
-    `${person.currentName}님의 장비`,
+    `⚔️ ${person.currentName}님의 장비`,
     "",
-    `• 무기 : ${weapon ? `${weapon.name} (#${weapon.id}, 전투력 +${weapon.power || 0})` : "미장착"}`,
-    `• 방어구 : ${armor ? `${armor.name} (#${armor.id}, 전투력 +${armor.power || 0})` : "미장착"}`,
-    `• 장신구 : ${accessory ? `${accessory.name} (#${accessory.id}, 전투력 +${accessory.power || 0})` : "미장착"}`,
+    `무기: ${weapon ? weapon.name : "미장착"}`,
+    `방어구: ${armor ? armor.name : "미장착"}`,
+    `장신구: ${accessory ? accessory.name : "미장착"}`,
     `• 세트 효과 : ${setBonus.active.length ? setBonus.active.join(", ") : "없음"}`,
-    `• 총 전투력 : +${basePower + setBonus.totalBonus}`,
+    `• 총 전투력 : +${Math.round(Object.values(stats).reduce((sum, value) => sum + Number(value || 0), 0))}`,
+    `• 핵심 스탯 : ${rpgStatSummary(stats, ["attack", "defense", "agility", "hp", "mp", "magicAttack"], 4)}`,
     "",
-    "/장착 번호 로 가방의 장비를 장착합니다.",
-    "/제작가능, /세트아이템 으로 다음 제작 목표를 확인하세요."
+    "상세: /장비상세",
+    "자동 추천: /자동장착 공격"
   ].join("\n");
 }
 
 function equipWeaponCommand(roomState, sender, text) {
-  const productId = parseProductIdFromCommand(text, /^\/장착\s*/i);
-  const product = systemProductById(productId);
-  const slot = rpgEquipmentSlot(product);
-  if (!product || !slot) return "형식: /장착 12001";
   const person = ensurePerson(roomState, sender);
-  if (inventoryQuantity(person, productId) <= 0) return "가방에 해당 장비가 없습니다.";
-  person.equipment[slot] = String(productId);
+  const body = compactSpaces(text.replace(/^\/장착\s*/i, ""));
+  const row = resolveInventoryRow(roomState, person, body, (item) => Boolean(rpgEquipmentSlot(inventoryProductById(roomState, item.productId))));
+  if (!row) return ["❌ 명령어를 확인해 주세요.", "사용 예시:", " /장착 1", " /장착 철검", " /자동장착 공격"].join("\n");
+  const product = systemProductById(row.productId);
+  const slot = rpgEquipmentSlot(product);
+  const current = systemProductById(person.equipment?.[slot]);
+  const comparison = rpgEquipmentComparison(current, product);
+  person.equipment[slot] = String(row.productId);
   return [
-    "장착 완료",
+    "⚔️ 장착 완료",
     "",
     `• 종류 : ${RPG_EQUIPMENT_SLOT_LABELS[slot] || "장비"}`,
     `• 장비 : ${product.name}`,
-    `• 전투력 : +${product.power || 0}`
+    `• 비교 : ${comparison}`
+  ].join("\n");
+}
+
+function autoEquipCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  const presetKey = rpgPresetFromText(text.replace(/^\/자동장착\s*/i, ""));
+  const result = autoEquipBestEquipment(person, presetKey);
+  const focus = result.preset.focus || ["attack", "defense", "hp"];
+  const diff = rpgStatDiffSummary(result.beforeStats, result.afterStats, focus, 4);
+  return [
+    "⚔️ 자동장착 완료",
+    "",
+    `• 기준 : ${result.preset.label}`,
+    ...(result.changes.length ? result.changes.map((item) => `${RPG_EQUIPMENT_SLOT_LABELS[item.slot] || "장비"}: ${item.from} → ${item.to}`) : ["변경: 현재 장비가 가장 적합합니다."]),
+    `• 변화 : ${diff}`,
+    `• 기준 스탯 : ${rpgStatSummary(result.afterStats, focus, 3)}`
+  ].join("\n");
+}
+
+function equipmentDetailCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const equipped = rpgEquippedProductsBySlot(person);
+  const setBonus = rpgSetBonusSummary(person);
+  return [
+    `🛡️ ${person.currentName}님의 장비 상세`,
+    "",
+    ...["weapon", "armor", "accessory"].map((slot) => {
+      const product = equipped[slot];
+      return `${RPG_EQUIPMENT_SLOT_LABELS[slot]}: ${product ? `${product.name} / ${rpgStatSummary(rpgEquipmentStats(product), RPG_STAT_KEYS, 5)}` : "미장착"}`;
+    }),
+    "",
+    `세트: ${setBonus.active.length ? setBonus.active.join(", ") : "없음"}`,
+    "스탯 전체: /스탯"
+  ].join("\n");
+}
+
+function rpgStatsCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const stats = rpgCurrentStats(person);
+  return [
+    `📈 ${person.currentName}님의 스탯`,
+    "",
+    `공격력 ${stats.attack} / 방어력 ${stats.defense} / 민첩 ${stats.agility}`,
+    `HP ${stats.hp} / MP ${stats.mp}`,
+    `마법 공격력 ${stats.magicAttack} / 마법 방어력 ${stats.magicDefense}`,
+    `치명타 ${stats.crit} / 회피 ${stats.evasion} / 명중 ${stats.accuracy}`,
+    `스킬 효과 ${stats.skillEffect}`
   ].join("\n");
 }
 
@@ -7940,15 +8512,39 @@ function gameHelpText(roomState) {
     "/낚시 - 물고기를 가방에 보관, 30초 쿨타임",
     "/어항 또는 /수족관 - 물고기 수집 현황",
     "/탐험 - 전리품을 가방에 보관, 20초 쿨타임",
-    "/던전, /대장간, /제작가능, /제작 번호, /장비, /세트아이템 - RPG 모험",
+    "/던전, /대장간, /제작가능, /장비, /자동장착 - RPG 모험",
     "/몬스터탐험, /포획, /몬스터목록, /몬스터훈련, /몬스터전투 - 수집 RPG",
     "/펫입양, /펫, /펫먹이, /펫놀기, /펫씻기, /펫재우기, /펫훈련 - 펫키우기",
     `/뽑기 - 가상 포인트 뽑기 ${formatPoint(LUCKY_DRAW_POINT_COST)}, 10초 쿨타임`,
     "/뽑기목록 - 뽑기 확률과 보상 확인",
     "/홀 금액 또는 /짝 금액 - 홀짝 베팅, 5초 쿨타임",
-    "/판매 번호 수량 - 가방 아이템을 포인트로 판매",
+    "/판매 1 또는 /판매 이름 - 가방 아이템을 포인트로 판매",
+    "/점메추 - 점심 메뉴 추천",
     "",
     enabled ? "게임 보상 아이템은 /가방 에 들어가며 /판매 로 포인트화할 수 있습니다." : "관리자가 /기능켜기 게임 을 실행하면 사용할 수 있습니다."
+  ].join("\n");
+}
+
+function lunchCategoryFromText(text = "") {
+  const body = compactSpaces(text.replace(/^\/점메추\s*/i, ""));
+  if (!body) return "";
+  const alias = LUNCH_CATEGORY_ALIASES[body] ?? LUNCH_CATEGORY_ALIASES[keyFor(body)];
+  if (alias !== undefined) return alias;
+  return LUNCH_MENU_ITEMS.some((item) => item.categories.includes(body)) ? body : "";
+}
+
+function lunchRecommendationCommand(text) {
+  const category = lunchCategoryFromText(text);
+  const candidates = category
+    ? LUNCH_MENU_ITEMS.filter((item) => item.categories.includes(category))
+    : LUNCH_MENU_ITEMS;
+  const item = candidates[Math.floor(Math.random() * candidates.length)] || LUNCH_MENU_ITEMS[0];
+  return [
+    `🍱 오늘 점심 추천${category ? ` (${category})` : ""}`,
+    `${item.name} 어떠세요?`,
+    item.note,
+    "",
+    "자세히: /점메추 한식 · /점메추 매운거 · /점메추 가벼운거"
   ].join("\n");
 }
 
@@ -8417,12 +9013,12 @@ function bridgeJsServerText() {
 const ACTIVE_GAME_ROOM_COMMANDS = new Set([
   "/게임", "/게임명령어", "/주사위", "/낚시", "/탐험", "/뽑기", "/확률뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝",
   "/미끼상점", "/미끼구매", "/어항", "/수족관",
-  "/던전", "/던전목록", "/대장간", "/제작가능", "/제작", "/장비", "/장착", "/세트아이템",
+  "/던전", "/던전목록", "/대장간", "/제작가능", "/제작", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템",
   "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감",
   "/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점"
 ]);
 const GAME_ROOM_ECONOMY_COMMANDS = new Set([
-  "/포인트", "/내포인트", "/내정보", "/레벨", "/정보", "/가방", "/판매", "/구매내역", "/상점", "/구매"
+  "/포인트", "/내포인트", "/내정보", "/레벨", "/정보", "/가방", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/일괄판매", "/판매", "/구매내역", "/상점", "/구매", "/점메추"
 ]);
 const GAME_ROOM_DIAGNOSTIC_COMMANDS = new Set([
   "/상태", "/status", "/브릿지", "/bridge", "/js상태", "/jsstatus", "/로컬상태", "/도움말", "/help", "/?", "/게임팩도움말"
@@ -8470,9 +9066,9 @@ function commandFeatureKey(command) {
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
   if (/^\/(?:프로필|프로칠|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
-  if (/^\/(?:게임|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|던전|던전목록|대장간|제작가능|제작|장비|장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터훈련|몬스터전투|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:게임|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|던전|던전목록|대장간|제작가능|제작|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터훈련|몬스터전투|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
-  if (/^\/(?:상점|구매|구매내역|가방|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
+  if (/^\/(?:상점|구매|구매내역|가방|아이템|보유아이템|아이템상세|판매목록|일괄판매|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
   return "";
 }
@@ -8534,7 +9130,10 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/어항", "게임", "보유 물고기와 수집률 확인", { aliases: ["/수족관"], requiresFeature: "games", searchableKeywords: ["낚시", "물고기", "수집"] }),
   registryEntry("/상점", "상점/가방", "구매 가능한 아이템 확인", { requiresFeature: "shop" }),
   registryEntry("/구매", "상점/가방", "포인트로 아이템 구매", { examples: ["/구매 1", "/구매 1 10"], requiresFeature: "shop" }),
-  registryEntry("/가방", "상점/가방", "내 아이템 확인", { requiresFeature: "shop" }),
+  registryEntry("/가방", "상점/가방", "내 아이템 확인", { aliases: ["/아이템", "/보유아이템"], examples: ["/아이템", "/아이템 다음"], requiresFeature: "shop" }),
+  registryEntry("/아이템상세", "상점/가방", "짧은 번호로 아이템 상세 확인", { examples: ["/아이템상세 2"], requiresFeature: "shop" }),
+  registryEntry("/판매목록", "상점/가방", "판매 가능한 보유 아이템 확인", { examples: ["/판매목록"], requiresFeature: "shop" }),
+  registryEntry("/일괄판매", "상점/가방", "일반 또는 중복 아이템 일괄 판매", { examples: ["/일괄판매 일반", "/일괄판매 중복"], requiresFeature: "shop" }),
   registryEntry("/사용", "상점/가방", "아이템 사용", { examples: ["/사용 1"], requiresFeature: "shop" }),
   registryEntry("/가방선물", "상점/가방", "아이템 선물", { examples: ["/가방선물 닉네임 1 1"], requiresFeature: "shop" }),
   registryEntry("/판매", "상점/가방", "가방 아이템을 포인트로 판매", { examples: ["/판매 10000 1"], requiresFeature: "shop" }),
@@ -8544,7 +9143,8 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/낚시", "게임", "낚시 보상 게임", { requiresFeature: "games" }),
   registryEntry("/탐험", "게임", "탐험 보상 게임", { requiresFeature: "games" }),
   registryEntry("/던전", "RPG", "던전 탐험과 재료 획득", { aliases: ["/던전목록"], examples: ["/던전", "/던전 중급"], requiresFeature: "games", searchableKeywords: ["RPG", "모험", "재료"] }),
-  registryEntry("/대장간", "RPG", "장비 제작 레시피 확인", { aliases: ["/제작", "/제작가능", "/장비", "/장착", "/세트아이템"], examples: ["/대장간", "/제작가능", "/제작 12001"], requiresFeature: "games", searchableKeywords: ["무기", "방어구", "장신구", "제작", "장비", "세트"] }),
+  registryEntry("/대장간", "RPG", "장비 제작 레시피 확인", { aliases: ["/제작", "/제작가능", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템"], examples: ["/대장간", "/제작가능", "/제작 12001", "/자동장착 공격"], requiresFeature: "games", searchableKeywords: ["무기", "방어구", "장신구", "제작", "장비", "세트"] }),
+  registryEntry("/점메추", "생활", "점심 메뉴 추천", { examples: ["/점메추", "/점메추 한식", "/점메추 매운거"], searchableKeywords: ["점심", "메뉴", "추천", "음식"] }),
   registryEntry("/몬스터탐험", "픽셀몬스터", "오리지널 몬스터 발견", { aliases: ["/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감"], requiresFeature: "games", searchableKeywords: ["몬스터", "수집", "도감"] }),
   registryEntry("/펫입양", "펫키우기", "개인 펫 입양과 성장", { aliases: ["/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점"], requiresFeature: "games", searchableKeywords: ["펫", "키우기", "훈련"] }),
   registryEntry("/명령어목록", "커스텀", "방별 커스텀 명령어 확인", { aliases: ["/커스텀명령어"], requiresFeature: "customCommands" }),
@@ -13193,6 +13793,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
     const helpTopic = parsed.args.join(" ");
     return helpTopic ? gamePackHelpText(helpTopic) : helpText(roomState, sender);
   }
+  if (command === "/점메추") return lunchRecommendationCommand(text);
   if (command === "/게임") return gameHelpText(roomState);
   if (command === "/주사위") return diceGameCommand(roomState, sender);
   if (command === "/미끼상점") return baitShopCommand(roomState, sender);
@@ -13206,7 +13807,10 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/제작가능") return craftableEquipmentCommand(roomState, sender);
   if (command === "/제작") return craftWeaponCommand(roomState, sender, text);
   if (command === "/장비") return equipmentCommand(roomState, sender);
+  if (command === "/장비상세") return equipmentDetailCommand(roomState, sender);
+  if (command === "/스탯") return rpgStatsCommand(roomState, sender);
   if (command === "/장착") return equipWeaponCommand(roomState, sender, text);
+  if (command === "/자동장착") return autoEquipCommand(roomState, sender, text);
   if (command === "/세트아이템") return rpgSetItemsCommand();
   if (command === "/몬스터도감") return monsterDexCommand();
   if (command === "/몬스터탐험") return monsterExploreCommand(roomState, sender);
@@ -13252,7 +13856,10 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/상점") return shopListCommand(roomState, sender);
   if (command === "/구매") return purchaseItemCommand(roomState, sender, text);
   if (command === "/구매내역") return purchaseHistoryCommand(roomState, sender);
-  if (command === "/가방") return inventoryCommand(roomState, sender, text);
+  if (command === "/가방" || command === "/아이템" || command === "/보유아이템") return inventoryCommand(roomState, sender, text);
+  if (command === "/아이템상세") return itemDetailCommand(roomState, sender, text);
+  if (command === "/판매목록") return saleListCommand(roomState, sender, text);
+  if (command === "/일괄판매") return bulkSellCommand(roomState, sender, text);
   if (command === "/사용") return useItemCommand(roomState, sender, text);
   if (command === "/가방선물") return giftItemCommand(roomState, sender, text);
   if (command === "/판매") return sellItemCommand(roomState, sender, text);
