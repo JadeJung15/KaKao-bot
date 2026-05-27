@@ -12106,11 +12106,33 @@ function adminDiagnosticsSummary(diagnosticRooms = []) {
   };
 }
 
+function analyticsWindowMs(windowText = "") {
+  const key = normalizeText(windowText || "");
+  if (!key || key === "all") return 0;
+  const named = {
+    "1h": 60 * 60 * 1000,
+    "6h": 6 * 60 * 60 * 1000,
+    "12h": 12 * 60 * 60 * 1000,
+    "24h": 24 * 60 * 60 * 1000,
+    "7d": 7 * 24 * 60 * 60 * 1000,
+    "30d": 30 * 24 * 60 * 60 * 1000
+  };
+  if (named[key]) return named[key];
+  const match = key.match(/^(\d+)(m|h|d)$/);
+  if (!match) return 24 * 60 * 60 * 1000;
+  const amount = Math.max(1, Math.min(365, Number(match[1]) || 1));
+  const unitMs = match[2] === "m" ? 60 * 1000 : match[2] === "h" ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+  return amount * unitMs;
+}
+
 function adminRoomLogsPayload(state = {}, query = {}) {
   const requestedRoom = normalizeText(query.room || query.roomName || "");
   const requestedType = normalizeText(query.type || query.eventType || "");
   const requestedCommand = normalizeText(query.command || "");
   const keyword = normalizeText(query.q || query.query || "");
+  const requestedWindow = normalizeText(query.window || "");
+  const windowMs = analyticsWindowMs(requestedWindow);
+  const now = Date.now();
   const limit = Math.min(
     Math.max(1, Number(query.limit || ROOM_ANALYTICS_EXPORT_LIMIT) || ROOM_ANALYTICS_EXPORT_LIMIT),
     ROOM_ANALYTICS_EXPORT_LIMIT
@@ -12124,6 +12146,11 @@ function adminRoomLogsPayload(state = {}, query = {}) {
     room: log.room || roomState.name || ""
   })));
   const filtered = allLogs
+    .filter((log) => {
+      if (!windowMs) return true;
+      const time = new Date(log.at || 0).getTime();
+      return Number.isFinite(time) && now - time <= windowMs;
+    })
     .filter((log) => !requestedType || log.eventType === requestedType)
     .filter((log) => !requestedCommand || log.command === requestedCommand || log.command === `/${requestedCommand.replace(/^\/+/, "")}`)
     .filter((log) => {
@@ -12142,7 +12169,6 @@ function adminRoomLogsPayload(state = {}, query = {}) {
       lastAt: logs.at(-1)?.at || ""
     };
   });
-  const now = Date.now();
   const recent24h = filtered.filter((log) => {
     const time = new Date(log.at || 0).getTime();
     return Number.isFinite(time) && now - time <= 24 * 60 * 60 * 1000;
@@ -12206,7 +12232,8 @@ function adminRoomLogsPayload(state = {}, query = {}) {
       room: requestedRoom,
       type: requestedType,
       command: requestedCommand,
-      q: keyword
+      q: keyword,
+      window: requestedWindow
     },
     summary: {
       rooms: roomSummaries.length,

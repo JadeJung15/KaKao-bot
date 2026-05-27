@@ -6126,6 +6126,19 @@ try {
     commandMs: 900,
     saveStateMs: 400,
     replyLength: 50
+  }, {
+    at: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+    eventId: `${slowEventId}-old`,
+    room: "테스트방",
+    sender: "느린사용자",
+    status: "handled",
+    isCommand: true,
+    command: "/오래된느린명령",
+    messagePreview: "/오래된느린명령",
+    totalMs: 9999,
+    commandMs: 9000,
+    saveStateMs: 900,
+    replyLength: 50
   });
   await writeFile(testDbPath, `${JSON.stringify(slowState, null, 2)}\n`, "utf8");
 
@@ -6207,6 +6220,7 @@ try {
   assert.ok(Number.isFinite(performanceSummary.json.summary.avgSaveStateMs));
   assert.ok(Number.isFinite(performanceSummary.json.summary.duplicateEvents));
   assert.ok(Array.isArray(performanceSummary.json.summary.slowCommands));
+  assert.ok(!performanceSummary.json.summary.slowCommands.some((row) => row.command === "/오래된느린명령"));
 
   const slashHelp = await chat("/", "사용자");
   assert.equal(slashHelp.json.reply, null);
