@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.24";
+export const APP_VERSION = "0.5.25";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -278,7 +278,10 @@ export const FEATURES = [
   "app-diagnostic-log-clarity",
   "admin-live-log-status-badges",
   "buyer-app-connection-check-card",
-  "ux-work-type-guide"
+  "ux-work-type-guide",
+  "pixel-monster-daily-loop",
+  "pixel-monster-team-evolution",
+  "pixel-monster-weekly-boss"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -869,6 +872,20 @@ const PIXEL_MONSTER_RARITIES = Object.freeze([
   { id: "rare", label: "희귀", catchRate: 0.30 },
   { id: "epic", label: "영웅", catchRate: 0.18 }
 ]);
+const PIXEL_MONSTER_REGIONS = Object.freeze({
+  숲: { label: "숲", elements: ["숲", "바람"], note: "초보자가 시작하기 좋은 지역입니다." },
+  동굴: { label: "동굴", elements: ["바위", "그림자"], note: "단단하고 희귀한 몬스터가 자주 보입니다." },
+  바다: { label: "바다", elements: ["물결"], note: "물결 속성 몬스터를 노리기 좋습니다." },
+  화산: { label: "화산", elements: ["불꽃", "바위"], note: "불꽃 속성 성장 재료가 잘 나옵니다." },
+  랜덤: { label: "랜덤", elements: [], note: "모든 속성이 고르게 등장합니다." }
+});
+const PIXEL_MONSTER_EVOLUTION_STAGES = Object.freeze([
+  { stage: 1, level: 5, shards: 3, suffix: "성장형", powerBonus: 8 },
+  { stage: 2, level: 15, shards: 10, suffix: "진화형", powerBonus: 20 },
+  { stage: 3, level: 30, shards: 25, suffix: "완전체", powerBonus: 45 }
+]);
+const PIXEL_MONSTER_DEX_REWARD_THRESHOLDS = Object.freeze([10, 30, 50, 100]);
+const PIXEL_MONSTER_BOSS_DAILY_LIMIT = 3;
 const PIXEL_MONSTER_NAME_PARTS = Object.freeze(["몽", "리프", "코어", "루미", "플레어", "아쿠", "윈디", "쉐도", "바니", "토리", "라온", "미루"]);
 const PIXEL_MONSTER_SPECIES = Object.freeze(Array.from({ length: PIXEL_MONSTER_SPECIES_COUNT }, (_, index) => {
   const rarity = PIXEL_MONSTER_RARITIES[Math.min(PIXEL_MONSTER_RARITIES.length - 1, Math.floor(index / 45))];
@@ -1302,7 +1319,7 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "point-economy": ["/포인트", "/내정보", "/좋아요", "/응원", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위"],
   "game-chance": ["/게임", "/오늘할일", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/포인트"],
   "rpg-adventure": ["/던전", "/던전목록", "/대장간", "/제작가능", "/제작", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/판매미리보기", "/판매추천", "/정리추천", "/일괄판매", "/가방", "/가방정리", "/판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/포인트"],
-  "pixel-monster-rpg": ["/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감", "/포인트"],
+  "pixel-monster-rpg": ["/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감", "/포인트"],
   "pet-raising": ["/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점", "/포인트"],
   "shop-inventory": ["/상점", "/구매", "/가방", "/가방정리", "/판매추천", "/정리추천", "/아이템상세", "/판매목록", "/판매미리보기", "/사용", "/가방선물", "/판매", "/일괄판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/구매내역"],
   "custom-command": ["/명령어목록", "/커스텀명령어", "/고정명령어", "/명령어등록", "/명령어수정", "/명령어삭제", "/커스텀등록", "/커스텀수정", "/커스텀삭제"],
@@ -1644,10 +1661,10 @@ const GAME_PACK_HELP_TOPICS = Object.freeze({
     path: "/help/monster",
     packIds: ["pixel-monster-rpg"],
     aliases: ["monster", "몬스터", "픽셀몬스터"],
-    intro: "오리지널 픽셀몬스터를 발견, 포획, 훈련, 전투하는 수집형 RPG 팩입니다.",
-    firstSteps: ["/명령어설치 pk.007", "/기능켜기 게임", "/몬스터탐험", "/포획", "/몬스터목록"],
+    intro: "오리지널 픽셀몬스터를 발견, 포획, 팀 편성, 오늘 퀘스트, 진화, 주간 보스로 이어가는 수집형 RPG 팩입니다.",
+    firstSteps: ["/명령어설치 pk.007", "/기능켜기 게임", "/몬스터", "/몬스터탐험", "/포획", "/몬스터퀘스트"],
     adminSetup: ["명령어팩 장착: /명령어설치 pk.007", "게임 기능 켜기: /기능켜기 게임", "설치 확인: /명령어설치목록"],
-    examples: ["/몬스터탐험", "/포획", "/몬스터목록", "/몬스터훈련", "/몬스터전투"],
+    examples: ["/몬스터", "/몬스터탐험 숲", "/포획", "/몬스터팀 1 2 3", "/몬스터진화", "/몬스터보스"],
     related: ["rpg-adventure", "game-chance"]
   },
   attendance: {
@@ -4091,14 +4108,22 @@ function normalizeOwnedMonsters(value = []) {
     .map((monster) => {
       const species = pixelMonsterSpeciesById(monster?.speciesId);
       if (!species) return null;
+      const level = Math.max(1, Math.trunc(Number(monster.level || 1)));
+      const evolutionStage = Math.min(3, Math.max(0, Math.trunc(Number(monster.evolutionStage || 0))));
       return {
         id: normalizeText(monster.id) || randomBytes(4).toString("hex"),
         speciesId: species.speciesId,
         name: compactSpaces(monster.name || species.name).slice(0, 24) || species.name,
         element: species.element,
         rarity: species.rarity,
-        level: Math.max(1, Math.trunc(Number(monster.level || 1))),
+        level,
         exp: Math.max(0, Math.trunc(Number(monster.exp || 0))),
+        teamSlot: Math.min(3, Math.max(0, Math.trunc(Number(monster.teamSlot || 0)))),
+        evolutionStage,
+        bond: Math.min(100, Math.max(0, Math.trunc(Number(monster.bond || 0)))),
+        wins: Math.max(0, Math.trunc(Number(monster.wins || 0))),
+        shards: Math.max(0, Math.trunc(Number(monster.shards || 0))),
+        lastUsedAt: normalizeText(monster.lastUsedAt || ""),
         caughtAt: normalizeText(monster.caughtAt) || nowIso()
       };
     })
@@ -4111,6 +4136,7 @@ function normalizePendingMonster(value = null) {
   if (!species) return null;
   return {
     speciesId: species.speciesId,
+    region: normalizeText(value.region || ""),
     discoveredAt: normalizeText(value.discoveredAt) || nowIso()
   };
 }
@@ -4805,6 +4831,26 @@ function normalizePersonState(person) {
   person.equipment = normalizeEquipment(person.equipment || {});
   person.monsters = normalizeOwnedMonsters(person.monsters || []);
   person.pendingMonster = normalizePendingMonster(person.pendingMonster || null);
+  person.monsterShards ||= {};
+  for (const [speciesId, count] of Object.entries(person.monsterShards || {})) {
+    const species = pixelMonsterSpeciesById(speciesId);
+    if (!species) delete person.monsterShards[speciesId];
+    else person.monsterShards[species.speciesId] = Math.max(0, Math.trunc(Number(count) || 0));
+  }
+  person.monsterQuestStats ||= {};
+  const monsterQuestDate = kstDateKey();
+  if (person.monsterQuestStats.date !== monsterQuestDate) {
+    person.monsterQuestStats = { date: monsterQuestDate, explore: 0, capture: 0, train: 0, battle: 0, boss: 0 };
+  } else {
+    for (const key of ["explore", "capture", "train", "battle", "boss"]) {
+      person.monsterQuestStats[key] = Math.max(0, Math.trunc(Number(person.monsterQuestStats[key] || 0)));
+    }
+  }
+  person.monsterQuests ||= {};
+  person.monsterDexRewards ||= [];
+  person.monsterDexRewards = Array.isArray(person.monsterDexRewards)
+    ? person.monsterDexRewards.map((value) => Math.trunc(Number(value) || 0)).filter((value) => PIXEL_MONSTER_DEX_REWARD_THRESHOLDS.includes(value))
+    : [];
   person.pet = normalizePetState(person.pet || null);
   person.identities ||= [];
   person.firstChatReentryNotices ||= [];
@@ -8753,38 +8799,157 @@ function rpgSetItemsCommand() {
   return lines.join("\n");
 }
 
-function monsterDexCommand() {
-  const preview = PIXEL_MONSTER_SPECIES.slice(0, 10)
-    .map((species, index) => `${index + 1}. ${species.name} [${species.element}/${species.rarityLabel}]`)
+function monsterRegionFromText(text = "") {
+  const body = compactSpaces(text.replace(/^\/몬스터탐험\s*/i, ""));
+  const key = body ? keyFor(body) : "랜덤";
+  if (["숲", "forest"].includes(key)) return PIXEL_MONSTER_REGIONS.숲;
+  if (["동굴", "굴", "cave"].includes(key)) return PIXEL_MONSTER_REGIONS.동굴;
+  if (["바다", "해변", "sea", "ocean"].includes(key)) return PIXEL_MONSTER_REGIONS.바다;
+  if (["화산", "volcano"].includes(key)) return PIXEL_MONSTER_REGIONS.화산;
+  return PIXEL_MONSTER_REGIONS.랜덤;
+}
+
+function randomPixelMonsterSpecies(region = PIXEL_MONSTER_REGIONS.랜덤) {
+  const pool = region?.elements?.length
+    ? PIXEL_MONSTER_SPECIES.filter((species) => region.elements.includes(species.element))
+    : PIXEL_MONSTER_SPECIES;
+  return pool[Math.floor(Math.random() * pool.length)] || PIXEL_MONSTER_SPECIES[0];
+}
+
+function monsterPower(monster = {}) {
+  const species = pixelMonsterSpeciesById(monster.speciesId);
+  const stage = Math.max(0, Math.trunc(Number(monster.evolutionStage || 0)));
+  const stageBonus = PIXEL_MONSTER_EVOLUTION_STAGES.slice(0, stage).reduce((sum, item) => sum + item.powerBonus, 0);
+  return (species?.basePower || 10) + Math.max(1, Number(monster.level) || 1) * 3 + stageBonus + Math.floor(Number(monster.bond || 0) / 10);
+}
+
+function monsterDisplayName(monster = {}) {
+  const stage = Math.max(0, Math.trunc(Number(monster.evolutionStage || 0)));
+  const suffix = stage > 0 ? PIXEL_MONSTER_EVOLUTION_STAGES[stage - 1]?.suffix || "" : "";
+  return suffix ? `${monster.name} ${suffix}` : monster.name;
+}
+
+function monsterTeam(person = {}) {
+  normalizePersonState(person);
+  const selected = person.monsters
+    .filter((monster) => monster.teamSlot > 0)
+    .sort((left, right) => left.teamSlot - right.teamSlot);
+  return selected.length ? selected : person.monsters.slice(0, 3);
+}
+
+function firstOwnedMonster(person) {
+  normalizePersonState(person);
+  return monsterTeam(person)[0] || person.monsters[0] || null;
+}
+
+function selectOwnedMonster(person, selector = "") {
+  normalizePersonState(person);
+  const body = compactSpaces(selector);
+  if (!body) return firstOwnedMonster(person);
+  const index = Math.trunc(Number(body));
+  if (Number.isFinite(index) && index >= 1 && index <= person.monsters.length) return person.monsters[index - 1];
+  const key = keyFor(body);
+  return person.monsters.find((monster) => keyFor(monster.name) === key || keyFor(monsterDisplayName(monster)) === key) || null;
+}
+
+function ensureMonsterQuestStats(person) {
+  normalizePersonState(person);
+  return person.monsterQuestStats;
+}
+
+function incrementMonsterQuestStat(person, key, amount = 1) {
+  const stats = ensureMonsterQuestStats(person);
+  stats[key] = Math.max(0, Math.trunc(Number(stats[key] || 0))) + amount;
+}
+
+function monsterQuestDefinitions() {
+  return [
+    { key: "explore", label: "몬스터 탐험 1회", target: 1, command: "/몬스터탐험" },
+    { key: "capture", label: "포획 1회", target: 1, command: "/포획" },
+    { key: "battle", label: "전투 또는 보스 1회", target: 1, command: "/몬스터전투" }
+  ];
+}
+
+function monsterQuestLines(person) {
+  const stats = ensureMonsterQuestStats(person);
+  return monsterQuestDefinitions().map((quest, index) => {
+    const current = quest.key === "battle" ? Math.max(stats.battle || 0, stats.boss || 0) : stats[quest.key] || 0;
+    const done = current >= quest.target;
+    return `${index + 1}. ${done ? "완료" : "진행"} ${quest.label} (${Math.min(current, quest.target)}/${quest.target})`;
+  });
+}
+
+function monsterQuestSummary(person) {
+  return monsterQuestLines(person).join(" · ");
+}
+
+function monsterDexSummary(person) {
+  normalizePersonState(person);
+  const uniqueCount = new Set(person.monsters.map((monster) => monster.speciesId)).size;
+  const nextGoal = PIXEL_MONSTER_DEX_REWARD_THRESHOLDS.find((goal) => uniqueCount < goal) || PIXEL_MONSTER_SPECIES_COUNT;
+  return { uniqueCount, percent: Math.floor((uniqueCount / PIXEL_MONSTER_SPECIES_COUNT) * 100), nextGoal };
+}
+
+function addMonsterShards(person, speciesId, amount = 1) {
+  normalizePersonState(person);
+  const species = pixelMonsterSpeciesById(speciesId);
+  if (!species) return 0;
+  const count = Math.max(0, Math.trunc(Number(amount) || 0));
+  person.monsterShards[species.speciesId] = Math.max(0, Number(person.monsterShards[species.speciesId] || 0)) + count;
+  return person.monsterShards[species.speciesId];
+}
+
+function levelUpMonster(monster, expGain) {
+  monster.exp += Math.max(0, Math.trunc(Number(expGain) || 0));
+  let leveled = false;
+  while (monster.exp >= monster.level * 50) {
+    monster.exp -= monster.level * 50;
+    monster.level += 1;
+    leveled = true;
+  }
+  return leveled;
+}
+
+function monsterDexCommand(roomState, sender, text = "") {
+  const person = ensurePerson(roomState, sender);
+  const requested = compactSpaces(text.replace(/^\/몬스터도감\s*/i, ""));
+  const filterElement = PIXEL_MONSTER_ELEMENTS.find((element) => keyFor(element) === keyFor(requested));
+  const speciesPool = filterElement ? PIXEL_MONSTER_SPECIES.filter((species) => species.element === filterElement) : PIXEL_MONSTER_SPECIES;
+  const owned = new Set(person.monsters.map((monster) => monster.speciesId));
+  const preview = speciesPool.slice(0, 6)
+    .map((species, index) => `${index + 1}. ${owned.has(species.speciesId) ? "보유" : "미발견"} ${species.name} [${species.element}/${species.rarityLabel}]`)
     .join("\n");
+  const dex = monsterDexSummary(person);
   return [
     "🔮 픽셀몬스터 도감",
-    "",
-    `총 ${PIXEL_MONSTER_SPECIES_COUNT}종`,
+    `수집률: ${dex.uniqueCount}/${PIXEL_MONSTER_SPECIES_COUNT}종 (${dex.percent}%)`,
+    `다음 목표: ${dex.nextGoal}종 보상`,
+    filterElement ? `속성 필터: ${filterElement}` : "속성 필터: 전체",
     preview,
-    "",
-    "/몬스터탐험 으로 발견하고 /포획 으로 수집합니다."
+    "상세: /몬스터상세 1"
   ].join("\n");
 }
 
-function randomPixelMonsterSpecies() {
-  return PIXEL_MONSTER_SPECIES[Math.floor(Math.random() * PIXEL_MONSTER_SPECIES.length)] || PIXEL_MONSTER_SPECIES[0];
-}
-
-function monsterExploreCommand(roomState, sender) {
+function monsterExploreCommand(roomState, sender, text = "") {
   const person = ensurePerson(roomState, sender);
   const displayName = displayNameForPerson(roomState, person, sender);
   const cooldown = gameCooldownText(person, "monsterExplore");
   if (cooldown) return cooldown;
-  const species = randomPixelMonsterSpecies();
-  person.pendingMonster = { speciesId: species.speciesId, discoveredAt: nowIso() };
+  const region = monsterRegionFromText(text);
+  const species = randomPixelMonsterSpecies(region);
+  const captureStones = inventoryQuantity(person, CAPTURE_STONE_ITEM_ID);
+  const captureBonus = captureStones > 0 ? 12 : 0;
+  const catchRate = Math.min(95, Math.round(species.catchRate * 100) + captureBonus);
+  person.pendingMonster = { speciesId: species.speciesId, region: region.label, discoveredAt: nowIso() };
+  incrementMonsterQuestStat(person, "explore");
   markGameCooldown(person, "monsterExplore");
   return [
-    "몬스터 탐험",
-    "",
-    `${displayName}님이 ${species.name}을(를) 발견했습니다.`,
-    `속성: ${species.element} / 등급: ${species.rarityLabel}`,
-    "/포획 으로 포획을 시도하세요."
+    "🔎 몬스터 탐험",
+    `${displayName}님이 ${region.label}에서 ${species.name}을(를) 발견했습니다.`,
+    `${species.element === "숲" ? "🌿" : "✨"} 속성: ${species.element} / 등급: ${species.rarityLabel}`,
+    `포획률: ${catchRate}%${captureStones > 0 ? " + 포획석 보너스" : ""}`,
+    "포획: /포획",
+    "다른 지역: /몬스터탐험 바다"
   ].join("\n");
 }
 
@@ -8792,17 +8957,21 @@ function monsterCaptureCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
   const displayName = displayNameForPerson(roomState, person, sender);
   const pending = normalizePendingMonster(person.pendingMonster);
-  if (!pending) return "발견한 몬스터가 없습니다. /몬스터탐험 으로 먼저 찾아주세요.";
+  if (!pending) return "❌ 발견한 몬스터가 없습니다.\n/몬스터탐험 으로 먼저 찾아주세요.";
   const species = pixelMonsterSpeciesById(pending.speciesId);
+  const captureStones = inventoryQuantity(person, CAPTURE_STONE_ITEM_ID);
+  const captureBonus = captureStones > 0 ? 0.12 : 0;
   const firstMonsterBonus = person.monsters.length === 0;
-  const success = firstMonsterBonus || Math.random() < species.catchRate;
+  const success = firstMonsterBonus || Math.random() < Math.min(0.95, species.catchRate + captureBonus);
+  if (captureStones > 0) removeInventory(person, CAPTURE_STONE_ITEM_ID, 1);
   person.pendingMonster = null;
   if (!success) {
+    const shards = addMonsterShards(person, species.speciesId, 1);
     return [
-      "포획 실패",
-      "",
+      "⚠️ 포획 실패",
       `${species.name}이(가) 도망갔습니다.`,
-      "다시 /몬스터탐험 으로 도전해 주세요."
+      `대신 조각 +1개 (보유 ${formatNumber(shards)}개)`,
+      "다음 행동: /몬스터탐험"
     ].join("\n");
   }
   const monster = {
@@ -8813,14 +8982,42 @@ function monsterCaptureCommand(roomState, sender) {
     rarity: species.rarity,
     level: 1,
     exp: 0,
+    teamSlot: person.monsters.length === 0 ? 1 : 0,
+    evolutionStage: 0,
+    bond: 5,
+    wins: 0,
+    shards: 1,
+    lastUsedAt: nowIso(),
     caughtAt: nowIso()
   };
   person.monsters.push(monster);
+  addMonsterShards(person, species.speciesId, 1);
+  incrementMonsterQuestStat(person, "capture");
   return [
-    "포획 성공",
-    "",
+    "✅ 포획 성공",
     `${displayName}님이 ${species.name}을(를) 동료로 맞이했습니다.`,
-    `보유 몬스터: ${person.monsters.length}마리`
+    `대표팀: ${monster.teamSlot ? "자동 등록" : "/몬스터팀 으로 편성"}`,
+    `퀘스트: ${monsterQuestSummary(person)}`,
+    "다음: /몬스터"
+  ].join("\n");
+}
+
+function monsterHubCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const displayName = displayNameForPerson(roomState, person, sender);
+  const team = monsterTeam(person);
+  const dex = monsterDexSummary(person);
+  const cooldowns = ["monsterExplore", "monsterTrain", "monsterBattle"]
+    .map((key) => gameCooldownText(person, key))
+    .filter(Boolean)
+    .slice(0, 1);
+  return [
+    "👾 몬스터 허브",
+    `${displayName}님의 수집률: ${dex.uniqueCount}/${PIXEL_MONSTER_SPECIES_COUNT}종 (${dex.percent}%)`,
+    `대표팀: ${team.length ? team.map((monster) => `${monsterDisplayName(monster)} Lv.${monster.level}`).join(", ") : "없음"}`,
+    `오늘 할 일: ${monsterQuestSummary(person)}`,
+    `추천: ${person.monsters.length ? "/몬스터훈련 · /몬스터전투 · /몬스터보스" : "/몬스터탐험 · /포획"}`,
+    cooldowns.length ? `쿨타임: ${cooldowns[0]}` : "쿨타임: 바로 진행 가능"
   ].join("\n");
 }
 
@@ -8829,18 +9026,67 @@ function monsterListCommand(roomState, sender) {
   const displayName = displayNameForPerson(roomState, person, sender);
   if (!person.monsters.length) return `${displayName}님의 몬스터가 없습니다. /몬스터탐험 으로 시작해 주세요.`;
   return [
-    `${displayName}님의 몬스터`,
-    "",
-    ...person.monsters.slice(0, 20).map((monster, index) => {
+    `👾 ${displayName}님의 몬스터`,
+    ...person.monsters.slice(0, 10).map((monster, index) => {
       const species = pixelMonsterSpeciesById(monster.speciesId);
-      return `${index + 1}. ${monster.name} Lv.${monster.level} [${species?.element || monster.element}] EXP ${monster.exp}`;
-    })
+      const team = monster.teamSlot ? ` 팀${monster.teamSlot}` : "";
+      return `${index + 1}. ${monsterDisplayName(monster)} Lv.${monster.level} [${species?.element || monster.element}] EXP ${monster.exp}${team}`;
+    }),
+    "상세: /몬스터상세 1",
+    "대표팀: /몬스터팀 1 2 3"
   ].join("\n");
 }
 
-function firstOwnedMonster(person) {
-  normalizePersonState(person);
-  return person.monsters[0] || null;
+function monsterDetailCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  const selector = compactSpaces(text.replace(/^\/몬스터상세\s*/i, ""));
+  const monster = selectOwnedMonster(person, selector || "1");
+  if (!monster) return "❌ 몬스터를 찾지 못했습니다.\n예시: /몬스터상세 1";
+  const species = pixelMonsterSpeciesById(monster.speciesId);
+  const nextEvolution = PIXEL_MONSTER_EVOLUTION_STAGES[monster.evolutionStage] || null;
+  const shardCount = Number(person.monsterShards?.[monster.speciesId] || 0);
+  return [
+    "🔍 몬스터 상세",
+    `${monsterDisplayName(monster)} Lv.${monster.level} [${species?.element || monster.element}/${species?.rarityLabel || monster.rarity}]`,
+    `전투력: ${formatNumber(monsterPower(monster))} / 친밀도: ${formatNumber(monster.bond)}`,
+    `승리: ${formatNumber(monster.wins)}회 / 조각: ${formatNumber(shardCount)}개`,
+    `진화: ${nextEvolution ? `Lv.${nextEvolution.level}, 조각 ${nextEvolution.shards}개 필요` : "최종 단계"}`,
+    `관리번호: ${monster.speciesId}`
+  ].join("\n");
+}
+
+function monsterQuestCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  return [
+    "📌 오늘 퀘스트",
+    ...monsterQuestLines(person),
+    "완료 보상: 포인트, 포획석, 조각",
+    "시작: /몬스터탐험"
+  ].join("\n");
+}
+
+function monsterTeamCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  const body = compactSpaces(text.replace(/^\/몬스터팀\s*/i, ""));
+  if (!body) {
+    const team = monsterTeam(person);
+    return [
+      "👥 대표팀",
+      team.length ? team.map((monster, index) => `${index + 1}. ${monsterDisplayName(monster)} Lv.${monster.level}`).join("\n") : "대표팀이 없습니다.",
+      "설정: /몬스터팀 1 2 3"
+    ].join("\n");
+  }
+  const indexes = body.split(/\s+/).map((value) => Math.trunc(Number(value))).filter((value) => Number.isFinite(value) && value > 0);
+  if (indexes.length > 3) return "❌ 대표팀은 최대 3마리까지 설정할 수 있습니다.\n예시: /몬스터팀 1 2 3";
+  if (!indexes.length || indexes.some((index) => !person.monsters[index - 1])) return "❌ 번호를 확인해 주세요.\n예시: /몬스터팀 1 2 3";
+  person.monsters.forEach((monster) => { monster.teamSlot = 0; });
+  indexes.forEach((index, slot) => { person.monsters[index - 1].teamSlot = slot + 1; });
+  const team = monsterTeam(person);
+  return [
+    "✅ 대표팀 설정",
+    `${team.length}마리 편성 완료`,
+    team.map((monster, index) => `${index + 1}. ${monsterDisplayName(monster)} Lv.${monster.level}`).join("\n")
+  ].join("\n");
 }
 
 function monsterTrainCommand(roomState, sender) {
@@ -8849,18 +9095,19 @@ function monsterTrainCommand(roomState, sender) {
   if (!monster) return "훈련할 몬스터가 없습니다. /몬스터탐험 과 /포획 을 먼저 진행해 주세요.";
   const cooldown = gameCooldownText(person, "monsterTrain");
   if (cooldown) return cooldown;
-  monster.exp += 25;
-  if (monster.exp >= monster.level * 50) {
-    monster.exp = 0;
-    monster.level += 1;
-  }
+  const firstTrainToday = (person.monsterQuestStats?.train || 0) === 0;
+  const expGain = firstTrainToday ? 35 : 25;
+  const leveled = levelUpMonster(monster, expGain);
+  monster.bond = Math.min(100, Number(monster.bond || 0) + 5);
+  monster.lastUsedAt = nowIso();
+  incrementMonsterQuestStat(person, "train");
   markGameCooldown(person, "monsterTrain");
   return [
-    "몬스터 훈련",
-    "",
-    `${monster.name} 훈련 완료`,
-    `레벨: ${monster.level}`,
-    `경험치: ${monster.exp}`
+    "📈 몬스터 훈련",
+    `${monsterDisplayName(monster)} 훈련 완료`,
+    `레벨: ${monster.level}${leveled ? " 상승" : ""} / 경험치: ${monster.exp}/${monster.level * 50}`,
+    `친밀도 +5 / 진화 게이지: Lv.${monster.level}`,
+    "다음: /몬스터진화"
   ].join("\n");
 }
 
@@ -8871,18 +9118,93 @@ function monsterBattleCommand(roomState, sender) {
   const cooldown = gameCooldownText(person, "monsterBattle");
   if (cooldown) return cooldown;
   const species = pixelMonsterSpeciesById(monster.speciesId);
-  const power = (species?.basePower || 10) + monster.level * 3;
-  const reward = 20 + monster.level * 5;
-  monster.exp += 15;
+  const opponent = randomPixelMonsterSpecies();
+  const advantage = species?.element === opponent.element ? 0 : (species?.element === "물결" && opponent.element === "불꽃") || (species?.element === "숲" && opponent.element === "바위") || (species?.element === "불꽃" && opponent.element === "숲") ? 8 : 0;
+  const power = monsterPower(monster) + advantage;
+  const enemyPower = opponent.basePower + Math.floor(Math.random() * 20);
+  const win = power >= enemyPower;
+  const reward = win ? 30 + monster.level * 6 : 10 + monster.level * 2;
+  levelUpMonster(monster, win ? 22 : 12);
+  if (win) monster.wins += 1;
+  monster.bond = Math.min(100, Number(monster.bond || 0) + (win ? 3 : 1));
+  monster.lastUsedAt = nowIso();
   person.points += reward;
+  incrementMonsterQuestStat(person, "battle");
   markGameCooldown(person, "monsterBattle");
   return [
-    "몬스터 전투",
-    "",
-    `${monster.name}이(가) 훈련용 상대와 전투했습니다.`,
-    `전투력: ${power}`,
-    `획득: ${formatPoint(reward)}`,
-    `보유 포인트: ${formatPoint(person.points)}`
+    "⚔️ 몬스터 전투",
+    `${monsterDisplayName(monster)} vs ${opponent.name}`,
+    `결과: ${win ? "승리" : "패배"} / 상성 보너스 ${advantage ? `+${advantage}` : "없음"}`,
+    `획득: ${formatPoint(reward)} / 보유 ${formatPoint(person.points)}`,
+    "다음: /몬스터퀘스트"
+  ].join("\n");
+}
+
+function monsterEvolutionCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const monster = firstOwnedMonster(person);
+  if (!monster) return "몬스터 진화 조건을 확인할 몬스터가 없습니다.\n/몬스터탐험 과 /포획 을 먼저 진행해 주세요.";
+  const next = PIXEL_MONSTER_EVOLUTION_STAGES[monster.evolutionStage] || null;
+  if (!next) return `✅ 몬스터 진화\n${monsterDisplayName(monster)}은(는) 이미 최종 단계입니다.`;
+  const shards = Number(person.monsterShards?.[monster.speciesId] || 0);
+  const ready = monster.level >= next.level && shards >= next.shards;
+  if (!ready) {
+    return [
+      "🧬 몬스터 진화 조건",
+      `${monsterDisplayName(monster)} → ${next.suffix}`,
+      `필요: Lv.${next.level}, 조각 ${next.shards}개`,
+      `현재: Lv.${monster.level}, 조각 ${formatNumber(shards)}개`,
+      "성장: /몬스터훈련, /몬스터보스"
+    ].join("\n");
+  }
+  person.monsterShards[monster.speciesId] = shards - next.shards;
+  monster.evolutionStage = next.stage;
+  monster.bond = Math.min(100, Number(monster.bond || 0) + 10);
+  return [
+    "✅ 몬스터 진화 완료",
+    `${monster.name}이(가) ${monsterDisplayName(monster)}로 진화했습니다.`,
+    `전투력 +${next.powerBonus}`,
+    "다음: /몬스터상세 1"
+  ].join("\n");
+}
+
+function monsterBossKey(date = new Date()) {
+  const parts = kstDateParts(date);
+  const week = Math.ceil(Number(parts.day) / 7);
+  return `${parts.year}-${parts.month}-W${week}`;
+}
+
+function ensureMonsterBoss(roomState) {
+  const key = monsterBossKey();
+  if (!roomState.monsterBoss || roomState.monsterBoss.weekKey !== key) {
+    roomState.monsterBoss = { weekKey: key, name: "균열의 픽셀괴수", hp: 5000, totalDamage: 0, damageBy: {}, updatedAt: nowIso() };
+  }
+  roomState.monsterBoss.damageBy ||= {};
+  return roomState.monsterBoss;
+}
+
+function monsterBossCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const team = monsterTeam(person);
+  if (!team.length) return "주간 보스에 참여할 몬스터가 없습니다.\n/몬스터탐험 과 /포획 으로 시작해 주세요.";
+  const stats = ensureMonsterQuestStats(person);
+  if ((stats.boss || 0) >= PIXEL_MONSTER_BOSS_DAILY_LIMIT) {
+    return `⚠️ 주간 보스\n오늘 참여 가능 횟수를 모두 사용했습니다. (${PIXEL_MONSTER_BOSS_DAILY_LIMIT}/일)`;
+  }
+  const boss = ensureMonsterBoss(roomState);
+  const damage = team.reduce((sum, monster) => sum + monsterPower(monster), 0);
+  const senderKey = personKey(sender);
+  boss.totalDamage = Math.max(0, Number(boss.totalDamage || 0)) + damage;
+  boss.damageBy[senderKey] = Math.max(0, Number(boss.damageBy[senderKey] || 0)) + damage;
+  boss.updatedAt = nowIso();
+  person.points += Math.max(10, Math.floor(damage / 4));
+  incrementMonsterQuestStat(person, "boss");
+  return [
+    "🐲 주간 보스",
+    `${boss.name}에게 ${formatNumber(damage)} 피해`,
+    `누적 피해: ${formatNumber(boss.totalDamage)}/${formatNumber(boss.hp)}`,
+    `오늘 참여: ${formatNumber(stats.boss)}/${PIXEL_MONSTER_BOSS_DAILY_LIMIT}`,
+    "보상: 포인트 + 조각 후보"
   ].join("\n");
 }
 
@@ -9012,7 +9334,7 @@ function gameHelpText(roomState) {
     "1. RPG 성장: /던전, /제작가능, /자동장착",
     "2. 낚시 수집: /미끼상점, /낚시, /어항",
     "3. 펫 돌보기: /펫입양, /펫, /펫먹이",
-    `4. 픽셀몬스터: /몬스터탐험, /포획, /몬스터도감 (${PIXEL_MONSTER_SPECIES_COUNT}종)`,
+    `4. 픽셀몬스터: /몬스터, /몬스터퀘스트, /몬스터보스 (${PIXEL_MONSTER_SPECIES_COUNT}종)`,
     "5. 가벼운 게임: /주사위, /뽑기, /홀 100",
     "6. 점메추: /점메추 한식, /점메추 매운거",
     "",
@@ -9033,9 +9355,10 @@ function dailyActionChecklistCommand(roomState, sender) {
     "1. /출석 - 오늘 보상 받기",
     `2. /낚시 - 미끼 ${formatNumber(bait)}개 확인`,
     "3. /던전 - 재료/장비 성장",
-    pet ? `4. /펫 - ${pet} 상태 확인` : "4. /펫입양 이름 - 첫 펫 시작",
-    `5. /가방정리 - 보유 ${formatNumber(inventoryCount)}개 정리`,
-    "6. /상점 - 필요한 아이템 확인",
+    "4. /몬스터퀘스트 - 수집 루틴 확인",
+    "5. /몬스터보스 - 방 전체 보스 참여",
+    pet ? `6. /펫 - ${pet} 상태 확인` : "6. /펫입양 이름 - 첫 펫 시작",
+    `7. /가방정리 - 보유 ${formatNumber(inventoryCount)}개 정리`,
     "",
     "빠른 추천: /추천 돈벌기 · /추천 RPG · /정리추천"
   ].join("\n");
@@ -9576,7 +9899,7 @@ const ACTIVE_GAME_ROOM_COMMANDS = new Set([
   "/게임", "/게임명령어", "/주사위", "/낚시", "/탐험", "/뽑기", "/확률뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝",
   "/미끼상점", "/미끼구매", "/어항", "/수족관",
   "/던전", "/던전목록", "/대장간", "/제작가능", "/제작", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템",
-  "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감",
+  "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감",
   "/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점"
 ]);
 const GAME_ROOM_ECONOMY_COMMANDS = new Set([
@@ -9628,7 +9951,7 @@ function commandFeatureKey(command) {
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
   if (/^\/(?:프로필|프로칠|내별명|별명목록|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
-  if (/^\/(?:게임|오늘할일|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|던전|던전목록|대장간|제작가능|제작|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터훈련|몬스터전투|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:게임|오늘할일|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|던전|던전목록|대장간|제작가능|제작|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
   if (/^\/(?:상점|구매|구매내역|가방|가방정리|정리추천|판매추천|아이템|보유아이템|아이템상세|판매목록|판매미리보기|일괄판매|아이템잠금|아이템잠금해제|잠금목록|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
@@ -9715,7 +10038,7 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/던전", "RPG", "던전 탐험과 재료 획득", { aliases: ["/던전목록"], examples: ["/던전", "/던전 중급"], requiresFeature: "games", searchableKeywords: ["RPG", "모험", "재료"] }),
   registryEntry("/대장간", "RPG", "장비 제작 레시피 확인", { aliases: ["/제작", "/제작가능", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템"], examples: ["/대장간", "/제작가능", "/제작 1", "/자동장착 공격"], requiresFeature: "games", searchableKeywords: ["무기", "방어구", "장신구", "제작", "장비", "세트"] }),
   registryEntry("/점메추", "생활", "점심 메뉴 추천", { examples: ["/점메추", "/점메추 한식", "/점메추 매운거"], searchableKeywords: ["점심", "메뉴", "추천", "음식"] }),
-  registryEntry("/몬스터탐험", "픽셀몬스터", "오리지널 몬스터 발견", { aliases: ["/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감"], requiresFeature: "games", searchableKeywords: ["몬스터", "수집", "도감"] }),
+  registryEntry("/몬스터탐험", "픽셀몬스터", "오리지널 몬스터 발견과 수집 성장", { aliases: ["/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감"], requiresFeature: "games", searchableKeywords: ["몬스터", "수집", "도감", "퀘스트", "보스", "진화"] }),
   registryEntry("/펫입양", "펫키우기", "개인 펫 입양과 성장", { aliases: ["/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점"], requiresFeature: "games", searchableKeywords: ["펫", "키우기", "훈련"] }),
   registryEntry("/명령어목록", "커스텀", "방별 커스텀 명령어 확인", { aliases: ["/커스텀명령어"], requiresFeature: "customCommands" }),
   registryEntry("/고정명령어", "커스텀", "예약된 기본 명령어 확인", { requiresFeature: "customCommands" }),
@@ -10331,13 +10654,16 @@ const COMMAND_RECOMMENDATION_PRESETS = Object.freeze({
     label: "수집",
     findHint: "/게임, /게임팩도움말 monster",
     commands: [
+      { command: "/몬스터", reason: "대표팀과 오늘 할 일 확인", feature: "games" },
+      { command: "/몬스터퀘스트", reason: "오늘 수집 목표 확인", feature: "games" },
       { command: "/몬스터탐험", reason: "픽셀몬스터 발견", feature: "games" },
       { command: "/포획", reason: "발견한 몬스터 포획", feature: "games" },
+      { command: "/몬스터팀", reason: "대표팀 3마리 편성", feature: "games" },
+      { command: "/몬스터보스", reason: "방 전체 주간 보스 참여", feature: "games" },
       { command: "/몬스터목록", reason: "보유 몬스터 확인", feature: "games" },
-      { command: "/몬스터도감", reason: "도감 수집률 확인", feature: "games" },
-      { command: "/몬스터훈련", reason: "몬스터 성장", feature: "games" }
+      { command: "/몬스터도감", reason: "도감 수집률 확인", feature: "games" }
     ],
-    topCommands: ["/몬스터탐험", "/포획", "/몬스터목록", "/몬스터도감", "/몬스터훈련", "/몬스터전투"]
+    topCommands: ["/몬스터", "/몬스터퀘스트", "/몬스터탐험", "/포획", "/몬스터팀", "/몬스터보스", "/몬스터도감", "/몬스터훈련", "/몬스터전투"]
   }
 });
 
@@ -15163,12 +15489,18 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/장착") return equipWeaponCommand(roomState, sender, text);
   if (command === "/자동장착") return autoEquipCommand(roomState, sender, text);
   if (command === "/세트아이템") return rpgSetItemsCommand();
-  if (command === "/몬스터도감") return monsterDexCommand();
-  if (command === "/몬스터탐험") return monsterExploreCommand(roomState, sender);
+  if (command === "/몬스터도감") return monsterDexCommand(roomState, sender, text);
+  if (command === "/몬스터탐험") return monsterExploreCommand(roomState, sender, text);
   if (command === "/포획") return monsterCaptureCommand(roomState, sender);
-  if (command === "/몬스터" || command === "/몬스터목록") return monsterListCommand(roomState, sender);
+  if (command === "/몬스터") return monsterHubCommand(roomState, sender);
+  if (command === "/몬스터목록") return monsterListCommand(roomState, sender);
+  if (command === "/몬스터상세") return monsterDetailCommand(roomState, sender, text);
+  if (command === "/몬스터팀") return monsterTeamCommand(roomState, sender, text);
+  if (command === "/몬스터퀘스트") return monsterQuestCommand(roomState, sender);
   if (command === "/몬스터훈련") return monsterTrainCommand(roomState, sender);
   if (command === "/몬스터전투") return monsterBattleCommand(roomState, sender);
+  if (command === "/몬스터진화") return monsterEvolutionCommand(roomState, sender);
+  if (command === "/몬스터보스") return monsterBossCommand(roomState, sender);
   if (command === "/펫입양") return petAdoptCommand(roomState, sender, text);
   if (command === "/펫") return petStatusCommand(roomState, sender);
   if (command === "/펫먹이") return petCareCommand(roomState, sender, { title: "펫 먹이 완료", cooldownKey: "petFeed", hunger: -20, happiness: 5, health: 2 });
