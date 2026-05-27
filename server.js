@@ -417,7 +417,6 @@ const RPG_ITEM_ID_START = 11000;
 const RPG_ITEM_CATALOG_SIZE = 500;
 const RPG_WEAPON_ITEM_ID_START = 12000;
 const RPG_AUTO_HUNT_RUNS = 10;
-const AUTO_GAME_MAX_TICKET_USE = 10;
 const RPG_MAX_ENHANCEMENT_LEVEL = 10;
 const RPG_REWARD_CHOICE_TTL_MS = 10 * 60 * 1000;
 const PIXEL_MONSTER_SPECIES_COUNT = 150;
@@ -7602,7 +7601,8 @@ function parseAutoGameCommand(text = "", commandPattern = /^\/자동던전\s*/i)
   const parts = body.split(/\s+/).filter(Boolean);
   let ticketUse = 1;
   if (/^[0-9]+$/.test(parts.at(-1) || "")) {
-    ticketUse = Math.min(AUTO_GAME_MAX_TICKET_USE, Math.max(1, Math.trunc(Number(parts.pop()))));
+    const requested = Number(parts.pop());
+    ticketUse = Number.isSafeInteger(requested) ? Math.max(1, requested) : 1;
   }
   return { subject: parts.join(" "), ticketUse };
 }

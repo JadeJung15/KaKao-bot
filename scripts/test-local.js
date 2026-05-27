@@ -5406,6 +5406,12 @@ try {
   assert.match(autoHuntBulkRun.json.reply, /남은 자동사냥권: 0장/);
   assert.doesNotMatch(autoHuntBulkRun.json.reply, /#11\d{3}|110\d{2}|9303/);
 
+  await chat("/아이템지급 자동무제한러 여 9303 12", "관리자");
+  const autoHuntUnlimitedRun = await chat("/자동던전 상급 12", "자동무제한러 여");
+  assert.match(autoHuntUnlimitedRun.json.reply, /자동던전 결과/);
+  assert.match(autoHuntUnlimitedRun.json.reply, /상급 심연 120회 요약/);
+  assert.match(autoHuntUnlimitedRun.json.reply, /남은 자동사냥권: 0장/);
+
   await chat("/아이템지급 자동호환러 여 9303 1", "관리자");
   const legacyAutoHuntRun = await chat("/자동사냥 중급", "자동호환러 여");
   assert.match(legacyAutoHuntRun.json.reply, /자동던전 결과/);
@@ -5427,6 +5433,12 @@ try {
   assert.match(autoExploreRun.json.reply, /남은 자동탐험권: 0장/);
   assert.doesNotMatch(autoExploreRun.json.reply, /9305|#\d+/);
 
+  await chat("/아이템지급 자동탐험무제한러 여 9305 12", "관리자");
+  const autoExploreUnlimitedRun = await chat("/자동탐험 12", "자동탐험무제한러 여");
+  assert.match(autoExploreUnlimitedRun.json.reply, /자동탐험 결과/);
+  assert.match(autoExploreUnlimitedRun.json.reply, /120회/);
+  assert.match(autoExploreUnlimitedRun.json.reply, /남은 자동탐험권: 0장/);
+
   await chat("/아이템지급 자동모험러 여 9305 1", "관리자");
   const autoAdventureRun = await chat("/자동모험 1", "자동모험러 여");
   assert.match(autoAdventureRun.json.reply, /자동탐험 결과/);
@@ -5441,6 +5453,15 @@ try {
   assert.match(autoFishingRun.json.reply, /남은 미끼: 0개/);
   assert.doesNotMatch(autoFishingRun.json.reply, /9306|9001|#\d+/);
 
+  await chat("/아이템지급 자동낚시무제한러 여 9306 12", "관리자");
+  await chat("/아이템지급 자동낚시무제한러 여 9001 99", "관리자");
+  await chat("/아이템지급 자동낚시무제한러 여 9001 21", "관리자");
+  const autoFishingUnlimitedRun = await chat("/자동낚시 12", "자동낚시무제한러 여");
+  assert.match(autoFishingUnlimitedRun.json.reply, /자동낚시 결과/);
+  assert.match(autoFishingUnlimitedRun.json.reply, /120회/);
+  assert.match(autoFishingUnlimitedRun.json.reply, /남은 자동낚시권: 0장/);
+  assert.match(autoFishingUnlimitedRun.json.reply, /남은 미끼: 0개/);
+
   await chat("/아이템지급 자동뽑기러 여 9307 2", "관리자");
   await chat("/포인트지급 자동뽑기러 여 3000", "관리자");
   const autoDrawRun = await chat("/자동뽑기 2", "자동뽑기러 여");
@@ -5449,6 +5470,13 @@ try {
   assert.match(autoDrawRun.json.reply, /남은 자동뽑기권: 0장/);
   assert.match(autoDrawRun.json.reply, /남은 포인트/);
   assert.doesNotMatch(autoDrawRun.json.reply, /9307|#\d+/);
+
+  await chat("/아이템지급 자동뽑기무제한러 여 9307 12", "관리자");
+  await chat("/포인트지급 자동뽑기무제한러 여 20000", "관리자");
+  const autoDrawUnlimitedRun = await chat("/자동뽑기 12", "자동뽑기무제한러 여");
+  assert.match(autoDrawUnlimitedRun.json.reply, /자동뽑기 결과/);
+  assert.match(autoDrawUnlimitedRun.json.reply, /120회/);
+  assert.match(autoDrawUnlimitedRun.json.reply, /남은 자동뽑기권: 0장/);
 
   const diamondGrant = await chat("/아이템지급 보석러 여 9404 1", "관리자");
   assert.match(diamondGrant.json.reply, /다이아/);
