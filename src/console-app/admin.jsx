@@ -637,6 +637,7 @@ function PaymentApprovalQueue({ applications = [], approvingApplicationId = "", 
 function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setToast }) {
   const [commandForm, setCommandForm] = useState({ quick: "", trigger: "", response: "" });
   const [adminName, setAdminName] = useState("");
+  const [mergeForm, setMergeForm] = useState({ targetName: "", sourceName: "", preview: null });
   const [saving, setSaving] = useState(false);
   const commands = baseRoom.customCommands || [];
   const admins = baseRoom.admins || [];
@@ -644,6 +645,7 @@ function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setTo
   useEffect(() => {
     setCommandForm({ quick: "", trigger: "", response: "" });
     setAdminName("");
+    setMergeForm({ targetName: "", sourceName: "", preview: null });
   }, [baseRoom.name]);
 
   async function saveRoomPatch(patch, successMessage) {
@@ -704,6 +706,55 @@ function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setTo
     await saveRoomPatch({ roomAdmins: nextAdmins }, "관리자를 삭제했습니다.");
   }
 
+  async function previewNicknameMerge(event) {
+    event.preventDefault();
+    if (saving || !baseRoom.name) return;
+    if (!mergeForm.targetName.trim() || !mergeForm.sourceName.trim()) {
+      setToast({ tone: "bad", message: "기준 닉과 합칠 닉을 모두 입력해 주세요." });
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await adminRequest("/api/admin/nickname-merge/preview", {
+        method: "POST",
+        body: {
+          roomName: baseRoom.name,
+          targetName: mergeForm.targetName,
+          sourceName: mergeForm.sourceName
+        }
+      });
+      setMergeForm((current) => ({ ...current, preview: result.preview }));
+      setToast({ tone: "good", message: "병합 미리보기를 불러왔습니다." });
+    } catch (error) {
+      setMergeForm((current) => ({ ...current, preview: null }));
+      setToast({ tone: "bad", message: formatError(error) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function executeNicknameMerge() {
+    if (saving || !baseRoom.name) return;
+    setSaving(true);
+    try {
+      const result = await adminRequest("/api/admin/nickname-merge", {
+        method: "POST",
+        body: {
+          roomName: baseRoom.name,
+          targetName: mergeForm.targetName,
+          sourceName: mergeForm.sourceName
+        }
+      });
+      setMergeForm({ targetName: result.preview?.target?.name || mergeForm.targetName, sourceName: "", preview: result.preview });
+      setToast({ tone: "good", message: "닉네임 데이터를 병합했습니다." });
+      await onSaved();
+    } catch (error) {
+      setToast({ tone: "bad", message: formatError(error) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <section className="console-detail-section console-utility-panel">
       <div className="console-section-head">
@@ -717,6 +768,30 @@ function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setTo
         <FieldRow label="설치 명령어">{baseRoom.commandCount || commands.length || 0}개</FieldRow>
         <FieldRow label="장착 팩">{(baseRoom.commandPacks?.installedPacks || []).length || 0}개</FieldRow>
       </div>
+      <form className="console-mini-form console-nickname-merge-form" onSubmit={previewNicknameMerge}>
+        <div className="console-section-head compact">
+          <div>
+            <p className="console-eyebrow">Nickname Merge</p>
+            <h3>닉네임 병합 도구</h3>
+            <p>일반방과 게임방에서 다른 닉을 쓰는 참여자의 포인트, 가방, 출석, 게임 데이터를 기준 닉으로 합칩니다.</p>
+          </div>
+        </div>
+        <div className="console-two-column-form">
+          <label>
+            <span>기준 닉</span>
+            <input value={mergeForm.targetName} onChange={(event) => setMergeForm({ ...mergeForm, targetName: event.target.value, preview: null })} placeholder="오리 95" />
+          </label>
+          <label>
+            <span>합칠 닉</span>
+            <input value={mergeForm.sourceName} onChange={(event) => setMergeForm({ ...mergeForm, sourceName: event.target.value, preview: null })} placeholder="오리" />
+          </label>
+        </div>
+        <div className="console-action-row">
+          <button type="submit" disabled={saving}>병합 미리보기</button>
+          <button type="button" onClick={executeNicknameMerge} disabled={saving || !mergeForm.preview}>닉네임 병합 실행</button>
+        </div>
+        {mergeForm.preview ? <NicknameMergePreview preview={mergeForm.preview} /> : null}
+      </form>
       <form className="console-mini-form console-command-form" onSubmit={saveCommand}>
         <label>
           <span>빠른 등록</span>
@@ -766,6 +841,32 @@ function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setTo
         {!admins.length ? <EmptyState title="등록된 관리자가 없습니다.">관리자 닉네임을 등록하면 채팅 관리자 명령어를 사용할 수 있습니다.</EmptyState> : null}
       </div>
     </section>
+  );
+}
+
+function formatCount(value = 0, suffix = "") {
+  return `${Math.max(0, Math.trunc(Number(value) || 0)).toLocaleString("ko-KR")}${suffix}`;
+}
+
+function NicknameMergePreview({ preview = {} }) {
+  const target = preview.target || {};
+  const source = preview.source || {};
+  const merged = preview.merged || {};
+  return (
+    <div className="console-preview-box console-nickname-merge-preview" data-nickname-merge-preview="true">
+      <strong>병합 미리보기</strong>
+      <span>기준: {target.name} · 합칠 닉: {source.name}</span>
+      <div className="console-field-grid console-compact-stats">
+        <FieldRow label="포인트">{formatCount(target.points)} + {formatCount(source.points)} = {formatCount(merged.points)}</FieldRow>
+        <FieldRow label="가방">{formatCount(merged.inventoryItemTypes, "종")} / {formatCount(merged.inventoryQuantity, "개")}</FieldRow>
+        <FieldRow label="출석">{formatCount(merged.attendanceCount, "일")}</FieldRow>
+        <FieldRow label="채팅">{formatCount(merged.chatTotal, "회")}</FieldRow>
+        <FieldRow label="몬스터">{formatCount(merged.monsterCount, "마리")}</FieldRow>
+        <FieldRow label="펫">{merged.hasPet ? "보유" : "없음"}</FieldRow>
+      </div>
+      <small>실행 명령어: {preview.command}</small>
+      <small>병합 후 합칠 닉은 기준 닉의 별명으로 연결되어 같은 사람 데이터로 조회됩니다.</small>
+    </div>
   );
 }
 

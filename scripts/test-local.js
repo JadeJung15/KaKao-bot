@@ -137,7 +137,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.5.04");
+  assert.equal(health.json.version, "0.5.05");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -151,6 +151,7 @@ try {
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
   assert.match(health.json.features.join(","), /profile-registry/);
+  assert.match(health.json.features.join(","), /admin-nickname-merge-tool/);
   assert.match(health.json.features.join(","), /message-inbox/);
   assert.match(health.json.features.join(","), /point-shop/);
   assert.match(health.json.features.join(","), /game-item-economy/);
@@ -546,7 +547,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.5.04");
+  assert.equal(commandTemplates.json.version, "0.5.05");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -575,7 +576,7 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.5.04");
+  assert.equal(commandPacks.json.version, "0.5.05");
   const profileHistoryPack = commandPacks.json.packs.find((pack) => pack.id === "profile-history");
   assert.ok(profileHistoryPack);
   assert.ok(profileHistoryPack.fixedCommands.includes("/닉병합"));
@@ -722,6 +723,10 @@ try {
   assert.match(adminReactSource, /사과=맛있어/);
   assert.match(adminReactSource, /명령어 저장/);
   assert.match(adminReactSource, /관리자 등록/);
+  assert.match(adminReactSource, /닉네임 병합 도구/);
+  assert.match(adminReactSource, /병합 미리보기/);
+  assert.match(adminReactSource, /\/api\/admin\/nickname-merge\/preview/);
+  assert.match(adminReactSource, /\/api\/admin\/nickname-merge/);
   assert.match(adminReactSource, /CSV 다운로드/);
   assert.match(adminReactSource, /JSON 다운로드/);
   assert.match(adminReactSource, /신고 상태/);
@@ -762,7 +767,7 @@ try {
   assert.match(sessionNavText, /href = "\/account"/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.5.04");
+  assert.equal(packageJson.version, "0.5.05");
   assert.equal(packageJson.scripts["build:console"], "vite build --config vite.console.config.mjs");
   assert.equal(packageJson.scripts["dev:console"], "vite --config vite.console.config.mjs");
   assert.equal(packageJson.scripts["check:deploy"], "npm run build:console && node scripts/predeploy-check.js");
@@ -1021,6 +1026,79 @@ try {
   assert.equal(adminUtilityDelete.json.room.customCommands.some((command) => command.trigger === "사과"), false);
   assert.equal(adminUtilityDelete.json.room.admins.includes("부관리자"), false);
 
+  await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "일반방 닉 데이터",
+    sender: "병합오리 95",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: adminRoom.json.room.licenseKey
+  });
+  await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "게임방 닉 데이터",
+    sender: "병합오리",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: adminRoom.json.room.licenseKey
+  });
+  await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/포인트지급 병합오리 95 100",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: adminRoom.json.room.licenseKey
+  });
+  await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/포인트지급 병합오리 200",
+    sender: "콘솔관리자",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: adminRoom.json.room.licenseKey
+  });
+  const nicknameMergePreviewUnauthorized = await request("/api/admin/nickname-merge/preview", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ roomName: "콘솔방", targetName: "병합오리 95", sourceName: "병합오리" })
+  });
+  assert.equal(nicknameMergePreviewUnauthorized.response.status, 401);
+  const nicknameMergePreview = await request("/api/admin/nickname-merge/preview?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ roomName: "콘솔방", targetName: "병합오리 95", sourceName: "병합오리" })
+  });
+  assert.equal(nicknameMergePreview.response.status, 200);
+  assert.equal(nicknameMergePreview.json.ok, true);
+  assert.equal(nicknameMergePreview.json.preview.target.name, "병합오리 95");
+  assert.equal(nicknameMergePreview.json.preview.source.name, "병합오리");
+  assert.equal(nicknameMergePreview.json.preview.merged.points >= 304, true);
+  assert.equal(nicknameMergePreview.json.preview.command, "/닉병합 병합오리 95 병합오리");
+  const nicknameMergeExecute = await request("/api/admin/nickname-merge?token=test-admin-token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ roomName: "콘솔방", targetName: "병합오리 95", sourceName: "병합오리" })
+  });
+  assert.equal(nicknameMergeExecute.response.status, 200);
+  assert.equal(nicknameMergeExecute.json.ok, true);
+  assert.equal(nicknameMergeExecute.json.result.merged, true);
+  assert.equal(nicknameMergeExecute.json.preview.target.name, "병합오리 95");
+  const nicknameMergedPoint = await chatPayload({
+    registeredRoom: false,
+    room: "콘솔방",
+    msg: "/포인트",
+    sender: "병합오리",
+    roomId: "consoleRoom1",
+    roomLink: "https://open.kakao.com/o/consoleRoom1",
+    licenseKey: adminRoom.json.room.licenseKey
+  });
+  assert.match(nicknameMergedPoint.json.reply, /병합오리 95님의 포인트 :/);
+
   const staleBridgeFeatures = await chatPayload({
     registeredRoom: false,
     room: "콘솔방",
@@ -1107,7 +1185,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.5.04");
+  assert.equal(adminDiagnostics.json.version, "0.5.05");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -1118,7 +1196,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.5.04");
+  assert.equal(adminBackup.json.version, "0.5.05");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -1462,7 +1540,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.5.04");
+  assert.equal(buyerGuideApproved.json.version, "0.5.05");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -1483,7 +1561,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.5.04");
+  assert.equal(buyerConsoleApproved.json.version, "0.5.05");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.appConnectCodes.length >= 1, true);
@@ -2177,7 +2255,7 @@ try {
   });
   assert.equal(validProfileSync.response.status, 200);
   assert.equal(validProfileSync.json.ok, true);
-  assert.equal(validProfileSync.json.version, "0.5.04");
+  assert.equal(validProfileSync.json.version, "0.5.05");
   assert.equal(validProfileSync.json.summary.requestedRoomCount, 1);
   assert.equal(validProfileSync.json.summary.syncedRoomCount, 2);
   assert.deepEqual(
@@ -4876,7 +4954,7 @@ try {
   });
   assert.equal(roomLogs.response.status, 200);
   assert.equal(roomLogs.json.ok, true);
-  assert.equal(roomLogs.json.version, "0.5.04");
+  assert.equal(roomLogs.json.version, "0.5.05");
   assert.ok(roomLogs.json.summary.totalLogs >= 1);
   assert.ok(Number.isFinite(roomLogs.json.summary.recent24h));
   assert.ok(Number.isFinite(roomLogs.json.summary.commandLogs));

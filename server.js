@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.04";
+export const APP_VERSION = "0.5.05";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -37,6 +37,7 @@ export const FEATURES = [
   "profile-registry",
   "alias-registry",
   "nickname-manual-merge",
+  "admin-nickname-merge-tool",
   "join-exit-history",
   "nickname-history",
   "detailed-member-history",
@@ -12492,6 +12493,120 @@ function adminApproveApplication(state, payload = {}, approvedBy = "admin_consol
   };
 }
 
+function adminNicknameMergeRoomState(state, payload = {}) {
+  const roomName = normalizeText(payload.roomName || payload.room || payload.name);
+  if (!roomName) return null;
+  const physicalRoomState = state.rooms?.[roomKey(roomName)];
+  if (!physicalRoomState) return null;
+  return canonicalDataRoomState(state, physicalRoomState);
+}
+
+function nicknameMergePersonSummary(roomState, key = "", fallbackName = "") {
+  const person = key ? roomState.people?.[key] : null;
+  const profile = key ? roomState.profiles?.[key] : null;
+  const aliases = Object.entries(roomState.aliases || {})
+    .filter(([, value]) => value === key)
+    .map(([alias]) => alias);
+  const normalized = person ? normalizePersonState(person) : null;
+  const inventory = normalized?.inventory || {};
+  const inventoryQuantity = Object.values(inventory).reduce((sum, quantity) => sum + Number(quantity || 0), 0);
+  return {
+    key,
+    name: normalized?.currentName || profile?.name || stripKakaoSuffix(fallbackName) || key,
+    exists: Boolean(person || profile),
+    points: Number(normalized?.points || 0),
+    level: Number(normalized?.level || 1),
+    exp: Number(normalized?.exp || 0),
+    attendanceCount: normalized?.attendance?.dates?.length || 0,
+    chatTotal: normalized?.chats?.total || 0,
+    inventoryItemTypes: Object.keys(inventory).length,
+    inventoryQuantity,
+    monsterCount: normalized?.monsters?.length || 0,
+    hasPet: Boolean(normalized?.pet),
+    aliases: uniqueNames([profile?.alias, ...(profile?.aliases || []), ...aliases])
+  };
+}
+
+function buildAdminNicknameMergePreview(state, payload = {}) {
+  const roomState = adminNicknameMergeRoomState(state, payload);
+  if (!roomState) return { ok: false, status: 404, error: "room_not_found" };
+  const targetName = stripKakaoSuffix(payload.targetName || payload.target || payload.baseName);
+  const sourceName = stripKakaoSuffix(payload.sourceName || payload.source || payload.mergeName);
+  if (!targetName || !sourceName) return { ok: false, status: 400, error: "nickname_merge_name_required" };
+  const targetKey = existingPersonKey(roomState, targetName);
+  const sourceKey = existingPersonKey(roomState, sourceName);
+  if (!targetKey) return { ok: false, status: 404, error: "target_nickname_not_found" };
+  if (!sourceKey) return { ok: false, status: 404, error: "source_nickname_not_found" };
+  if (targetKey === sourceKey) return { ok: false, status: 409, error: "nickname_already_merged" };
+  const target = nicknameMergePersonSummary(roomState, targetKey, targetName);
+  const source = nicknameMergePersonSummary(roomState, sourceKey, sourceName);
+  return {
+    ok: true,
+    version: APP_VERSION,
+    preview: {
+      roomName: roomState.name,
+      target,
+      source,
+      merged: {
+        name: target.name,
+        points: target.points + source.points,
+        level: Math.max(target.level, source.level),
+        exp: target.exp + source.exp,
+        attendanceCount: new Set([
+          ...(roomState.people?.[targetKey]?.attendance?.dates || []),
+          ...(roomState.people?.[sourceKey]?.attendance?.dates || [])
+        ]).size,
+        chatTotal: target.chatTotal + source.chatTotal,
+        inventoryItemTypes: Object.keys(normalizeInventory(mergeNumericMaps(roomState.people?.[targetKey]?.inventory, roomState.people?.[sourceKey]?.inventory))).length,
+        inventoryQuantity: target.inventoryQuantity + source.inventoryQuantity,
+        monsterCount: target.monsterCount + source.monsterCount,
+        hasPet: target.hasPet || source.hasPet,
+        aliases: uniqueNames([...(target.aliases || []), source.name, ...(source.aliases || [])])
+      },
+      command: `/닉병합 ${targetName} ${sourceName}`
+    }
+  };
+}
+
+function adminNicknameMergeExecute(state, payload = {}, by = "admin_console") {
+  const previewResult = buildAdminNicknameMergePreview(state, payload);
+  if (!previewResult.ok) return previewResult;
+  const roomState = adminNicknameMergeRoomState(state, payload);
+  const { target, source } = previewResult.preview;
+  const result = mergePersonData(roomState, target.key, source.key, {
+    targetName: target.name,
+    sourceName: source.name,
+    aliases: [source.name, ...(source.aliases || [])],
+    by,
+    source: "admin_console_nickname_merge"
+  });
+  if (!result.ok) return { ok: false, status: 400, error: result.error || "nickname_merge_failed" };
+  const afterPreview = buildAdminNicknameMergePreview({
+    ...state,
+    rooms: {
+      ...state.rooms,
+      [roomKey(roomState.name)]: roomState
+    }
+  }, {
+    roomName: roomState.name,
+    targetName: target.name,
+    sourceName: source.name
+  });
+  return {
+    ok: true,
+    version: APP_VERSION,
+    result,
+    preview: {
+      ...previewResult.preview,
+      target: nicknameMergePersonSummary(roomState, result.targetKey, result.targetName),
+      source,
+      merged: nicknameMergePersonSummary(roomState, result.targetKey, result.targetName),
+      after: afterPreview.ok ? afterPreview.preview : null
+    },
+    room: roomAdminView(roomState, state)
+  };
+}
+
 async function handleAdminApi(req, url) {
   if (req.method === "GET" && url.pathname === "/api/admin/me") {
     const auth = await requireAdminConsole(req, url);
@@ -12529,6 +12644,26 @@ async function handleAdminApi(req, url) {
     const roomState = roomStateFromAdminRequest(state, body);
     if (!roomState) return { status: 404, body: { ok: false, error: "room_not_found" } };
     return { status: 200, body: buildRoomCommandCatalog(state, roomState, {}, { query: body.q || body.query, isAdminUser: true }) };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/nickname-merge/preview") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = buildAdminNicknameMergePreview(state, body);
+    return { status: result.ok ? 200 : result.status || 400, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/nickname-merge") {
+    const body = await readBody(req);
+    const auth = await requireAdminConsole(req, url, body);
+    if (!auth.ok) return { status: auth.status, body: { ok: false, error: auth.error } };
+    const state = await loadState();
+    const result = adminNicknameMergeExecute(state, body, auth.by || "admin_console");
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/diagnostics") {
