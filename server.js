@@ -2,7 +2,7 @@ import http from "node:http";
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { copyFile, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.17";
+export const APP_VERSION = "0.5.18";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -265,7 +265,9 @@ export const FEATURES = [
   "console-dashboard-entrypoints",
   "console-search-result-accessibility",
   "console-search-deep-links",
-  "inventory-page-navigation"
+  "inventory-page-navigation",
+  "chat-state-warm-cache",
+  "chat-event-timing-diagnostics"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -275,6 +277,7 @@ const DEFAULT_SUBSCRIPTION_DAYS = Math.max(1, Number(process.env.DEFAULT_SUBSCRI
 const ROOM_ANALYTICS_LOG_LIMIT = Math.max(100, Number(process.env.ROOM_ANALYTICS_LOG_LIMIT || 5000));
 const ROOM_ANALYTICS_EXPORT_LIMIT = Math.max(10, Number(process.env.ROOM_ANALYTICS_EXPORT_LIMIT || 500));
 const ROOM_ANALYTICS_MESSAGE_PREVIEW_LIMIT = 240;
+const CHAT_STATE_CACHE_TTL_MS = Math.max(0, Number(process.env.CHAT_STATE_CACHE_TTL_MS || process.env.STATE_CACHE_TTL_MS || 5000));
 const ADMIN_CONSOLE_TOKEN = normalizeText(process.env.ADMIN_CONSOLE_TOKEN || process.env.PIXGOM_ADMIN_TOKEN || "");
 const OWNER_ADMIN_EMAILS = (process.env.OWNER_ADMIN_EMAILS || process.env.ADMIN_EMAILS || "jadejung15@gmail.com")
   .split(",")
@@ -1693,6 +1696,10 @@ const initialState = {
 };
 
 let pgPool;
+let stateCache = null;
+let stateCacheKey = "";
+let stateCacheLoadedAt = 0;
+let stateCacheFingerprint = "";
 
 function normalizeText(value) {
   return String(value ?? "").trim();
@@ -2484,7 +2491,9 @@ async function saveStateToPostgres(pool, state) {
 
 async function loadState() {
   const pool = await getPgPool();
-  if (pool) return normalizeState(await loadStateFromPostgres(pool));
+  const cached = cachedStateFor(pool);
+  if (cached) return cached;
+  if (pool) return rememberStateCache(pool, normalizeState(await loadStateFromPostgres(pool)));
 
   await mkdir(path.dirname(DB_PATH), { recursive: true });
   if (!existsSync(DB_PATH)) {
@@ -2493,13 +2502,14 @@ async function loadState() {
     return state;
   }
   const raw = await readFile(DB_PATH, "utf8");
-  return normalizeState(JSON.parse(raw));
+  return rememberStateCache(pool, normalizeState(JSON.parse(raw)));
 }
 
 async function saveState(state) {
   const pool = await getPgPool();
   if (pool) {
     await saveStateToPostgres(pool, state);
+    rememberStateCache(pool, state);
     return;
   }
 
@@ -2508,6 +2518,7 @@ async function saveState(state) {
   const tmpPath = `${DB_PATH}.tmp`;
   await writeFile(tmpPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
   await replaceStateFile(tmpPath, DB_PATH);
+  rememberStateCache(pool, state);
 }
 
 async function storageHealthStatus() {
@@ -2600,6 +2611,19 @@ function normalizeState(state) {
   state.archivedRooms ||= {};
   state.restoreRequests ||= {};
   return state;
+}
+
+function elapsedMs(startedAt) {
+  return Math.max(0, Math.round((performance.now() - startedAt) * 10) / 10);
+}
+
+function chatTimingPayload(startedAt, loadStateMs = 0, saveStateMs = 0, cacheHit = false) {
+  return {
+    totalMs: elapsedMs(startedAt),
+    loadStateMs: Math.max(0, Math.round(Number(loadStateMs || 0) * 10) / 10),
+    saveStateMs: Math.max(0, Math.round(Number(saveStateMs || 0) * 10) / 10),
+    cacheHit: Boolean(cacheHit)
+  };
 }
 
 function generateEntityId(prefix) {
@@ -3936,6 +3960,47 @@ function normalizeInventory(value = {}) {
     inventory[id] = (inventory[id] || 0) + quantity;
   }
   return inventory;
+}
+
+function storageCacheKey(pool) {
+  return pool ? `postgres:${STATE_ID}` : `local:${DB_PATH}`;
+}
+
+function localStateFingerprint() {
+  if (!existsSync(DB_PATH)) return "missing";
+  const stat = statSync(DB_PATH);
+  return `${stat.mtimeMs}:${stat.size}`;
+}
+
+function markStateCacheHit(state, cacheHit) {
+  if (!state || typeof state !== "object") return state;
+  Object.defineProperty(state, "__cacheHit", {
+    value: Boolean(cacheHit),
+    writable: true,
+    configurable: true,
+    enumerable: false
+  });
+  return state;
+}
+
+function cachedStateFor(pool) {
+  if (!CHAT_STATE_CACHE_TTL_MS) return null;
+  if (!pool && process.env.ENABLE_LOCAL_STATE_CACHE !== "true") return null;
+  const key = storageCacheKey(pool);
+  if (!stateCache || stateCacheKey !== key) return null;
+  if (!pool && stateCacheFingerprint !== localStateFingerprint()) return null;
+  if (Date.now() - stateCacheLoadedAt > CHAT_STATE_CACHE_TTL_MS) return null;
+  return markStateCacheHit(stateCache, true);
+}
+
+function rememberStateCache(pool, state) {
+  if (!CHAT_STATE_CACHE_TTL_MS || !state) return state;
+  if (!pool && process.env.ENABLE_LOCAL_STATE_CACHE !== "true") return state;
+  stateCache = markStateCacheHit(state, false);
+  stateCacheKey = storageCacheKey(pool);
+  stateCacheLoadedAt = Date.now();
+  stateCacheFingerprint = pool ? stateCacheKey : localStateFingerprint();
+  return stateCache;
 }
 
 function normalizeInventoryLocks(value = []) {
@@ -15043,45 +15108,62 @@ export async function handleSkill(payload) {
 }
 
 export async function handleChatEvent(payload) {
+  const timingStartedAt = performance.now();
+  let loadStateMs = 0;
+  let saveStateMs = 0;
+  let cacheHit = false;
+  const withTiming = (body) => ({
+    ...body,
+    timing: chatTimingPayload(timingStartedAt, loadStateMs, saveStateMs, cacheHit)
+  });
   const room = normalizeText(payload?.room);
   const message = normalizeText(payload?.msg || payload?.message);
   const sender = normalizeText(payload?.sender) || "익명";
   const event = payloadSystemEvent(payload, message);
   const identity = payloadIdentity(payload);
+  const loadStartedAt = performance.now();
   const state = await loadState();
+  loadStateMs = elapsedMs(loadStartedAt);
+  cacheHit = state?.__cacheHit === true;
   const roomState = ensureRoom(state, room);
   const registeredRoom = isRegisteredRoomPayload(payload, state, room);
   const registrationCommand = roomRegistrationCommand(message);
   if (!registeredRoom && registrationCommand && !isGroupChatPayload(payload)) {
-    return { ok: true, reply: null, ignored: true, reason: "non_group_chat" };
+    return withTiming({ ok: true, reply: null, ignored: true, reason: "non_group_chat" });
   }
   if (!registeredRoom && !registrationCommand && !isGroupChatPayload(payload)) {
-    return { ok: true, reply: null, ignored: true, reason: "non_group_chat" };
+    return withTiming({ ok: true, reply: null, ignored: true, reason: "non_group_chat" });
   }
   if (!registeredRoom && !registrationCommand) {
-    return { ok: true, reply: null, ignored: true, reason: "unregistered_room" };
+    return withTiming({ ok: true, reply: null, ignored: true, reason: "unregistered_room" });
   }
   const licenseGuard = licenseGuardResult(roomState, payload, message, registrationCommand);
   if (licenseGuard) {
+    const saveStartedAt = performance.now();
     await saveState(state);
-    return licenseGuard;
+    saveStateMs = elapsedMs(saveStartedAt);
+    return withTiming(licenseGuard);
   }
   // Runtime chat payloads must not overwrite admin-owned room settings.
   recordRawEvent(roomState, payload, { room, sender, message, event });
 
   if (!message || isBotSender(sender)) {
+    const saveStartedAt = performance.now();
     await saveState(state);
-    return { ok: true, reply: null, ignored: true };
+    saveStateMs = elapsedMs(saveStartedAt);
+    return withTiming({ ok: true, reply: null, ignored: true });
   }
 
   const reply = await handleMessage(state, room, sender, message, { ...identity, payload, physicalRoomState: roomState }, event);
+  const saveStartedAt = performance.now();
   await saveState(state);
-  return {
+  saveStateMs = elapsedMs(saveStartedAt);
+  return withTiming({
     ok: true,
     reply,
     ignored: false,
     handled: Boolean(reply)
-  };
+  });
 }
 
 async function readBody(req) {
