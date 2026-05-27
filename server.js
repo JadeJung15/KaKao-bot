@@ -1216,7 +1216,7 @@ const SYSTEM_PRODUCTS = Object.freeze([
   },
   {
     id: AUTO_HUNT_TICKET_ITEM_ID,
-    name: "자동사냥권",
+    name: "자동던전권",
     price: 250,
     sellPrice: 100,
     description: "RPG 던전 10회를 한 번에 요약 처리하는 티켓",
@@ -1336,7 +1336,7 @@ const SYSTEM_PRODUCTS = Object.freeze([
 ]);
 const SYSTEM_PRODUCT_MAP = new Map(SYSTEM_PRODUCTS.map((product) => [String(product.id), product]));
 const FUNCTIONAL_SHOP_ITEM_GUIDES = Object.freeze([
-  { name: "자동사냥권", systemId: AUTO_HUNT_TICKET_ITEM_ID, use: "/자동던전", example: "/상점추가 자동사냥권 250 던전 10회 자동던전 티켓" },
+  { name: "자동던전권", aliases: ["자동사냥권"], systemId: AUTO_HUNT_TICKET_ITEM_ID, use: "/자동던전", example: "/상점추가 자동던전권 250 던전 10회 자동던전 티켓" },
   { name: "자동탐험권", systemId: AUTO_EXPLORE_TICKET_ITEM_ID, use: "/자동탐험", example: "/상점추가 자동탐험권 160 탐험 10회 자동탐험 티켓" },
   { name: "자동낚시권", systemId: AUTO_FISHING_TICKET_ITEM_ID, use: "/자동낚시", example: "/상점추가 자동낚시권 180 낚시 10회 자동낚시 티켓" },
   { name: "자동뽑기권", systemId: AUTO_DRAW_TICKET_ITEM_ID, use: "/자동뽑기", example: "/상점추가 자동뽑기권 140 뽑기 10회 자동뽑기 티켓" },
@@ -7500,6 +7500,7 @@ function functionalShopGuideForProduct(product) {
   return FUNCTIONAL_SHOP_ITEM_GUIDES.find((guide) => (
     Number(product?.id) === guide.systemId
     || nameKey === keyFor(guide.name)
+    || (guide.aliases || []).some((alias) => nameKey === keyFor(alias))
   )) || null;
 }
 
@@ -7523,7 +7524,7 @@ function functionalShopItemListCommand(roomState, sender) {
 
 const AUTO_GAME_TICKET_CONFIGS = Object.freeze({
   hunt: {
-    name: "자동사냥권",
+    name: "자동던전권",
     systemId: AUTO_HUNT_TICKET_ITEM_ID,
     category: "rpg_ticket",
     command: "/자동던전",
@@ -9021,7 +9022,7 @@ function autoHuntDungeonCommand(roomState, sender, text) {
   recordShopTransaction(roomState, {
     type: "rpg_auto_hunt",
     productId: consumedTickets[0]?.productId || AUTO_HUNT_TICKET_ITEM_ID,
-    productName: consumedTickets[0]?.product?.name || "자동사냥권",
+    productName: consumedTickets[0]?.product?.name || AUTO_GAME_TICKET_CONFIGS.hunt.name,
     quantity: ticketUse,
     unitPrice: 0,
     totalPrice: totalSell,
@@ -9037,7 +9038,7 @@ function autoHuntDungeonCommand(roomState, sender, text) {
     craftingBonus.materialCount || craftingBonus.pointBonus ? `제작 보너스: 재료 ${craftingBonus.materialCount}개 / 지원금 ${formatPoint(craftingBonus.pointBonus)}` : "",
     `예상 판매가: ${formatPoint(totalSell)}`,
     `제작 가능: ${rpgCraftableCount(person)}개`,
-    `남은 자동사냥권: ${autoHuntTicketQuantity(roomState, person)}장`
+    `남은 ${AUTO_GAME_TICKET_CONFIGS.hunt.name}: ${autoHuntTicketQuantity(roomState, person)}장`
   ].filter(Boolean).join("\n");
 }
 
@@ -9233,7 +9234,7 @@ function rpgAdventureHubCommand(roomState, sender) {
   return [
     `🏰 ${displayName}님의 RPG 모험`,
     `오늘 할 일: /던전 → /제작가능 → /강화목록`,
-    `자동사냥권: ${ticketCount}장 · 자동탐험권 ${exploreTicketCount}장 · 자동낚시권 ${fishingTicketCount}장 · 자동뽑기권 ${drawTicketCount}장`,
+    `${AUTO_GAME_TICKET_CONFIGS.hunt.name}: ${ticketCount}장 · 자동탐험권 ${exploreTicketCount}장 · 자동낚시권 ${fishingTicketCount}장 · 자동뽑기권 ${drawTicketCount}장`,
     "대량 실행: /자동던전 상급 10",
     `제작 가능: ${craftableCount}개`,
     `강화 추천: ${enhanceText}`,
@@ -10391,7 +10392,7 @@ function dailyActionChecklistCommand(roomState, sender) {
     "1. /출석 - 오늘 보상 받기",
     `2. /낚시 - 미끼 ${formatNumber(bait)}개 확인`,
     "3. /모험 또는 /던전 - RPG 목표와 재료 성장",
-    "4. /자동던전 상급 10 - 자동사냥권 10장으로 100회 요약",
+    "4. /자동던전 상급 10 - 자동던전권 10장으로 100회 요약",
     "5. /몬스터퀘스트 - 수집 루틴 확인",
     "6. /몬스터보스 - 방 전체 보스 참여",
     pet ? `7. /펫 - ${pet} 상태 확인` : "7. /펫입양 이름 - 첫 펫 시작",
@@ -11669,7 +11670,7 @@ const COMMAND_RECOMMENDATION_PRESETS = Object.freeze({
     findHint: "/게임, /도움말 RPG",
     commands: [
       { command: "/모험", reason: "RPG 오늘 할 일과 성장 추천", feature: "games" },
-      { command: "/자동던전 상급 10", reason: "자동사냥권 10장으로 던전 100회 요약", feature: "games" },
+      { command: "/자동던전 상급 10", reason: "자동던전권 10장으로 던전 100회 요약", feature: "games" },
       { command: "/던전", reason: "재료와 장비 성장", feature: "games" },
       { command: "/강화목록", reason: "강화할 장비와 비용 확인", feature: "games" },
       { command: "/제작가능", reason: "지금 만들 수 있는 장비 확인", feature: "games" },

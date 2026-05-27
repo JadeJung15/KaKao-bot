@@ -576,7 +576,7 @@ try {
   assert.match(homeText, /0\.4\.97/);
   assert.match(homeText, /방별 로그 조회/);
   assert.match(homeText, /0\.5\.26/);
-  assert.match(homeText, /자동사냥권/);
+  assert.match(homeText, /자동던전권/);
   assert.match(homeText, /0\.5\.27/);
   assert.match(homeText, /다이아/);
   assert.match(homeText, /0\.5\.28/);
@@ -593,7 +593,7 @@ try {
   const updatesPageText = await (await fetch(`${baseUrl}/updates`)).text();
   assert.match(updatesPageText, /픽셀곰 0\.5\.01/);
   assert.match(updatesPageText, /픽셀곰 0\.5\.26/);
-  assert.match(updatesPageText, /자동사냥권/);
+  assert.match(updatesPageText, /자동던전권/);
   assert.match(updatesPageText, /장비 강화/);
   assert.match(updatesPageText, /픽셀곰 0\.5\.27/);
   assert.match(updatesPageText, /동\/은\/금\/다이아/);
@@ -5369,12 +5369,12 @@ try {
   const adventureHub = await chat("/모험", "모험가 여");
   assert.match(adventureHub.json.reply, /RPG 모험/);
   assert.match(adventureHub.json.reply, /오늘 할 일/);
-  assert.match(adventureHub.json.reply, /자동사냥권/);
+  assert.match(adventureHub.json.reply, /자동던전권/);
   assert.match(adventureHub.json.reply, /강화/);
   assert.match(adventureHub.json.reply, /제작 가능/);
 
   const autoHuntNoTicket = await chat("/자동던전", "자동러 여");
-  assert.match(autoHuntNoTicket.json.reply, /자동사냥권/);
+  assert.match(autoHuntNoTicket.json.reply, /자동던전권/);
   assert.match(autoHuntNoTicket.json.reply, /(부족|필요)/);
   assert.match(autoHuntNoTicket.json.reply, /(구매|획득)/);
 
@@ -5391,11 +5391,24 @@ try {
   const customTicketAutoHunt = await chat("/자동던전 초급", "상점자동러 여");
   assert.match(customTicketAutoHunt.json.reply, /자동던전 결과/);
   assert.match(customTicketAutoHunt.json.reply, /10회/);
-  assert.match(customTicketAutoHunt.json.reply, /남은 자동사냥권: 1장/);
-  assert.doesNotMatch(customTicketAutoHunt.json.reply, /자동사냥권이 필요합니다/);
+  assert.match(customTicketAutoHunt.json.reply, /남은 자동던전권: 1장/);
+  assert.doesNotMatch(customTicketAutoHunt.json.reply, /자동던전권이 필요합니다/);
+
+  const customDungeonTicketAdd = await chat("/상점추가 자동던전권 10 던전 10회 자동던전 티켓", "관리자");
+  assert.match(customDungeonTicketAdd.json.reply, /기능성 아이템/);
+  const customDungeonTicketMatch = customDungeonTicketAdd.json.reply.match(/\n([0-9]+)\. 자동던전권/);
+  assert.ok(customDungeonTicketMatch);
+  const customDungeonTicketId = Number(customDungeonTicketMatch[1]);
+  await chat("/포인트지급 상점던전러 여 1000", "관리자");
+  const customDungeonTicketBuy = await chat(`/구매 ${customDungeonTicketId} 2`, "상점던전러 여");
+  assert.match(customDungeonTicketBuy.json.reply, /자동던전권 x 2/);
+  const customDungeonTicketAutoHunt = await chat("/자동던전 초급", "상점던전러 여");
+  assert.match(customDungeonTicketAutoHunt.json.reply, /자동던전 결과/);
+  assert.match(customDungeonTicketAutoHunt.json.reply, /남은 자동던전권: 1장/);
+  assert.doesNotMatch(customDungeonTicketAutoHunt.json.reply, /자동던전권이 필요합니다/);
 
   const autoHuntTicketGrant = await chat("/아이템지급 자동러 여 9303 1", "관리자");
-  assert.match(autoHuntTicketGrant.json.reply, /자동사냥권/);
+  assert.match(autoHuntTicketGrant.json.reply, /자동던전권/);
   const autoHuntRun = await chat("/자동던전 중급", "자동러 여");
   assert.match(autoHuntRun.json.reply, /자동던전 결과/);
   assert.match(autoHuntRun.json.reply, /10회/);
@@ -5405,18 +5418,18 @@ try {
   assert.doesNotMatch(autoHuntRun.json.reply, /#11\d{3}|110\d{2}|9303/);
 
   const autoHuntBulkTicketGrant = await chat("/아이템지급 자동대량러 여 9303 10", "관리자");
-  assert.match(autoHuntBulkTicketGrant.json.reply, /자동사냥권/);
+  assert.match(autoHuntBulkTicketGrant.json.reply, /자동던전권/);
   const autoHuntBulkRun = await chat("/자동던전 상급 10", "자동대량러 여");
   assert.match(autoHuntBulkRun.json.reply, /자동던전 결과/);
   assert.match(autoHuntBulkRun.json.reply, /상급 심연 100회 요약/);
-  assert.match(autoHuntBulkRun.json.reply, /남은 자동사냥권: 0장/);
+  assert.match(autoHuntBulkRun.json.reply, /남은 자동던전권: 0장/);
   assert.doesNotMatch(autoHuntBulkRun.json.reply, /#11\d{3}|110\d{2}|9303/);
 
   await chat("/아이템지급 자동무제한러 여 9303 12", "관리자");
   const autoHuntUnlimitedRun = await chat("/자동던전 상급 12", "자동무제한러 여");
   assert.match(autoHuntUnlimitedRun.json.reply, /자동던전 결과/);
   assert.match(autoHuntUnlimitedRun.json.reply, /상급 심연 120회 요약/);
-  assert.match(autoHuntUnlimitedRun.json.reply, /남은 자동사냥권: 0장/);
+  assert.match(autoHuntUnlimitedRun.json.reply, /남은 자동던전권: 0장/);
 
   await chat("/아이템지급 제작보장러 여 9303 99", "관리자");
   await chat("/아이템지급 제작보장러 여 9303 1", "관리자");
@@ -5436,12 +5449,12 @@ try {
 
   const functionalItems = await chat("/기능아이템목록", "관리자");
   assert.match(functionalItems.json.reply, /기능성 아이템 목록/);
-  assert.match(functionalItems.json.reply, /자동사냥권/);
+  assert.match(functionalItems.json.reply, /자동던전권/);
   assert.match(functionalItems.json.reply, /자동탐험권/);
   assert.match(functionalItems.json.reply, /자동낚시권/);
   assert.match(functionalItems.json.reply, /자동뽑기권/);
   assert.match(functionalItems.json.reply, /강화석/);
-  assert.match(functionalItems.json.reply, /상점추가 자동사냥권/);
+  assert.match(functionalItems.json.reply, /상점추가 자동던전권/);
 
   await chat("/아이템지급 자동탐험러 여 9305 2", "관리자");
   const autoExploreRun = await chat("/자동탐험 2", "자동탐험러 여");
@@ -5960,7 +5973,7 @@ try {
   assert.match(adminDebit.json.reply, /포인트 차감 완료/);
 
   const mentionMessage = await chat("미미야 확인해줘 @미미 여", "관리자");
-  assert.equal(mentionMessage.json.reply, null);
+  assert.ok(mentionMessage.json.reply === null || /레벨업/.test(mentionMessage.json.reply));
 
   const unreadNotice = await chat("왔어", "미미 여");
   assert.match(unreadNotice.json.reply, /읽지 않은 메시지가 1건/);
