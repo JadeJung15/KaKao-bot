@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.12";
+export const APP_VERSION = "0.5.13";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -253,7 +253,8 @@ export const FEATURES = [
   "alias-preferred-display-names",
   "beginner-command-store-flow",
   "segmented-command-recommendations",
-  "log-based-command-top"
+  "log-based-command-top",
+  "alias-summary-console"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -469,7 +470,7 @@ const PAYMENT_STATUS_LABELS = Object.freeze({
 const FIXED_COMMAND_GROUPS = Object.freeze([
   {
     title: "기본 운영",
-    commands: ["/상태", "/도움말", "/브릿지", "/js상태", "/로컬상태", "/메시지", "/신고", "/출석", "/출첵", "/ㅊㅊ", "/포인트", "/내정보", "/프로필", "/닉이력"]
+    commands: ["/상태", "/도움말", "/브릿지", "/js상태", "/로컬상태", "/메시지", "/신고", "/출석", "/출첵", "/ㅊㅊ", "/포인트", "/내정보", "/프로필", "/내별명", "/닉이력"]
   },
   {
     title: "포인트/랭킹",
@@ -481,7 +482,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
   },
   {
     title: "관리자",
-    commands: ["/방등록", "/방정보", "/방목록", "/방삭제", "/입장문구", "/기능목록", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/관리자등록", "/관리자삭제", "/관리자목록", "/최근이벤트", "/원본로그", "/신고목록", "/신고처리", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/닉병합", "/입퇴장상세", "/고유값초기화", "/포인트지급", "/포인트차감", "/포인트설정", "/상점추가", "/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수", "/명령어등록", "/명령어삭제", "/명령어목록", "/명령어팩목록", "/명령어팩제거"]
+    commands: ["/방등록", "/방정보", "/방목록", "/방삭제", "/입장문구", "/기능목록", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/관리자등록", "/관리자삭제", "/관리자목록", "/최근이벤트", "/원본로그", "/신고목록", "/신고처리", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/별명목록", "/닉병합", "/입퇴장상세", "/고유값초기화", "/포인트지급", "/포인트차감", "/포인트설정", "/상점추가", "/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수", "/명령어등록", "/명령어삭제", "/명령어목록", "/명령어팩목록", "/명령어팩제거"]
   },
   {
     title: "게임/연동 예약",
@@ -1265,7 +1266,7 @@ const ADMIN_MANAGEMENT_COMMANDS = Object.freeze([
 const COMMAND_PACK_ALWAYS_INSTALLED_COMMANDS = Object.freeze([
   "/상태", "/도움말", "/메뉴", "/처음", "/시작", "/추천", "/찾기", "/명령어", "/방등록", "/신고", "/신고목록", "/신고처리",
   "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록",
-  "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말", "/점메추",
+  "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말", "/점메추", "/내별명", "/별명목록",
   ...ADMIN_MANAGEMENT_COMMANDS
 ]);
 
@@ -1279,7 +1280,7 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "pet-raising": ["/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점", "/포인트"],
   "shop-inventory": ["/상점", "/구매", "/가방", "/가방정리", "/아이템상세", "/판매목록", "/판매미리보기", "/사용", "/가방선물", "/판매", "/일괄판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/구매내역"],
   "custom-command": ["/명령어목록", "/커스텀명령어", "/고정명령어", "/명령어등록", "/명령어수정", "/명령어삭제", "/커스텀등록", "/커스텀수정", "/커스텀삭제"],
-  "profile-history": ["/프로필", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/닉병합", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
+  "profile-history": ["/프로필", "/내별명", "/별명목록", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/닉병합", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
   "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그", "/신고목록", "/신고처리", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록", "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말", ...ADMIN_MANAGEMENT_COMMANDS],
   "event-engagement": ["/출석", "/좋아요", "/응원", "/운세", "/날씨", "/채팅오늘", "/채팅금주", "/포인트순위", "/점메추"]
 });
@@ -3542,6 +3543,7 @@ function applicationRoomPayload(state, account = {}, application = {}) {
     customCommands,
     commandCount: customCommands.length,
     commandPacks: commandPackStatePayload(roomView?.commandPacks || {}),
+    aliasSummary: roomView?.aliasSummary || (roomState ? aliasSummaryPayload(roomState, { limit: 20 }) : { totalProfiles: 0, aliasCount: 0, mergedAliasCount: 0, items: [] }),
     gameSettings: roomView?.gameSettings || DEFAULT_GAME_SETTINGS,
     roomStatusSnapshot: roomView?.roomStatusSnapshot || (roomState ? roomStatusSnapshot(state, roomState, { application, account }) : null),
     subscription,
@@ -9361,7 +9363,7 @@ function commandFeatureKey(command) {
   if (/^\/포인트\s*순위$|^\/포인트순위$|^\/좋아요\s*순위$|^\/좋아요순위$|^\/레벨\s*순위$|^\/레벨순위$|^\/출석\s*순위$|^\/출석순위$/.test(command)) return "rankings";
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
-  if (/^\/(?:프로필|프로칠|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
+  if (/^\/(?:프로필|프로칠|내별명|별명목록|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
   if (/^\/(?:게임|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|던전|던전목록|대장간|제작가능|제작|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터훈련|몬스터전투|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
   if (/^\/(?:상점|구매|구매내역|가방|가방정리|아이템|보유아이템|아이템상세|판매목록|판매미리보기|일괄판매|아이템잠금|아이템잠금해제|잠금목록|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
@@ -9460,6 +9462,7 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/명령어팩제거", "스토어", "장착된 명령어 팩 제거", { aliases: ["/팩제거"], visibility: "admin", requiresRole: "admin", examples: ["/명령어팩제거 pk.004", "/팩제거 game-chance"], searchableKeywords: ["스토어", "팩", "제거"] }),
   registryEntry("/게임팩도움말", "스토어", "게임팩 도움말 링크 확인", { aliases: ["/게임팩 도움말"], examples: ["/게임팩도움말 pet"], searchableKeywords: ["게임팩", "도움말", "펫", "RPG"] }),
   registryEntry("/프로필", "프로필", "프로필 조회", { aliases: ["/프로칠"], examples: ["/프로필 닉네임"], requiresFeature: "profiles" }),
+  registryEntry("/내별명", "프로필", "내 대표 닉과 등록 별명 확인", { examples: ["/내별명"], requiresFeature: "profiles", searchableKeywords: ["별명", "닉네임", "내정보"] }),
   registryEntry("/입퇴장현황", "히스토리", "입퇴장과 닉네임 이력 조회", { aliases: ["/닉이력"], examples: ["/닉이력 닉네임"], requiresFeature: "history" }),
   registryEntry("/원본로그", "관리자", "최신 원본 JSON 확인", { aliases: ["/원본이벤트"], visibility: "admin", requiresRole: "admin", requiresFeature: "history" }),
   registryEntry("/최근이벤트", "관리자", "브릿지 원본 이벤트 요약", { aliases: ["/이벤트로그"], visibility: "admin", requiresRole: "admin", requiresFeature: "history" }),
@@ -9468,6 +9471,7 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/프로필등록", "관리자", "프로필 등록", { aliases: ["/프로필 등록"], visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
   registryEntry("/프로필삭제", "관리자", "프로필 삭제", { visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
   registryEntry("/별명등록", "관리자", "별명 등록", { visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
+  registryEntry("/별명목록", "관리자", "방 별명과 병합 상태 목록", { examples: ["/별명목록", "/별명목록 오리"], visibility: "admin", requiresRole: "admin", requiresFeature: "profiles", searchableKeywords: ["별명", "닉네임", "목록", "게임방"] }),
   registryEntry("/별명삭제", "관리자", "별명 삭제", { visibility: "admin", requiresRole: "admin", requiresFeature: "profiles" }),
   registryEntry("/닉병합", "관리자", "일반방/게임방 닉네임 데이터 병합", { aliases: ["/닉네임병합", "/별명병합"], examples: ["/닉병합 오리 95 오리"], visibility: "admin", requiresRole: "admin", requiresFeature: "profiles", searchableKeywords: ["닉네임", "별명", "병합", "게임방"] }),
   registryEntry("/입퇴장상세", "관리자", "입퇴장 상세 이력", { visibility: "admin", requiresRole: "admin", requiresFeature: "history" }),
@@ -10200,6 +10204,7 @@ function roomAdminView(roomState, state = null, options = {}) {
     customCommands: customCommandsList,
     commandCount: customCommandsList.length,
     commandPacks: commandPackStatePayload(settings.commandPacks || {}),
+    aliasSummary: aliasSummaryPayload(roomState, { limit: 20 }),
     gameSettings: gameSettings(roomState),
     settingsHistory: (settings.settingsHistory || []).slice(-20).reverse(),
     lastSettingsSavedAt: roomLastSettingsSavedAt(roomState),
@@ -13752,6 +13757,98 @@ function nicknameMergePersonSummary(roomState, key = "", fallbackName = "") {
   };
 }
 
+function aliasSummaryItem(roomState, key = "", fallbackName = "") {
+  const summary = nicknameMergePersonSummary(roomState, key, fallbackName);
+  const person = roomState.people?.[key] || null;
+  const profile = roomState.profiles?.[key] || null;
+  const activeMerges = (roomState.nicknameMergeHistory || [])
+    .filter((item) => item.status !== "undone" && (item.targetKey === key || item.sourceKey === key));
+  return {
+    ...summary,
+    displayName: displayNameForKey(roomState, key, summary.name),
+    names: uniqueNames([summary.name, profile?.name, ...(person?.names || [])]).filter(Boolean),
+    aliasCount: summary.aliases.length,
+    mergedAliasCount: activeMerges.length,
+    mergeStatus: activeMerges.length ? "merged" : "single"
+  };
+}
+
+function aliasSummaryPayload(roomState, options = {}) {
+  const limit = Math.max(1, Math.min(100, Number(options.limit || 20) || 20));
+  const keys = new Set([
+    ...Object.keys(roomState.people || {}),
+    ...Object.keys(roomState.profiles || {})
+  ]);
+  const items = [...keys]
+    .map((key) => aliasSummaryItem(roomState, key))
+    .filter((item) => item.exists && !isReservedPersonName(item.name))
+    .sort((left, right) => (
+      right.aliasCount - left.aliasCount
+      || right.mergedAliasCount - left.mergedAliasCount
+      || String(left.name).localeCompare(String(right.name), "ko")
+    ));
+  return {
+    totalProfiles: items.length,
+    aliasCount: items.reduce((sum, item) => sum + item.aliasCount, 0),
+    mergedAliasCount: items.reduce((sum, item) => sum + item.mergedAliasCount, 0),
+    items: items.slice(0, limit)
+  };
+}
+
+function aliasSummaryLine(item = {}, index = null) {
+  const prefix = index == null ? "" : `${index}. `;
+  const aliases = item.aliases?.length ? item.aliases.join(", ") : "등록 없음";
+  const names = (item.names || []).filter((name) => keyFor(name) !== keyFor(item.name));
+  const nameHint = names.length ? ` · 연결 ${names.slice(0, 2).join(", ")}` : "";
+  const mergeHint = item.mergedAliasCount ? ` · 병합 ${item.mergedAliasCount}건` : "";
+  return `${prefix}${item.name} → ${aliases}${nameHint}${mergeHint}`;
+}
+
+function myAliasSummaryCommand(roomState, sender) {
+  const key = roomState.aliases?.[keyFor(sender)] || existingPersonKey(roomState, sender) || personKey(sender);
+  const item = aliasSummaryItem(roomState, key, sender);
+  if (!item.exists) return "❌ 별명 데이터를 찾지 못했습니다. 먼저 방에서 채팅하거나 관리자에게 /별명등록을 요청해 주세요.";
+  return [
+    "🪪 별명 요약",
+    `대표 닉 : ${item.name}`,
+    `연결 닉 : ${item.names?.length ? item.names.join(", ") : item.name}`,
+    `등록 별명 : ${item.aliases.length ? item.aliases.join(", ") : "등록 없음"}`,
+    `병합 상태 : ${item.mergedAliasCount ? `연결 ${item.mergedAliasCount}건` : "단일 닉"}`,
+    "",
+    "별명으로도 /포인트, /가방, /프로필 조회가 가능합니다."
+  ].join("\n");
+}
+
+function aliasListCommand(roomState, text) {
+  const query = stripKakaoSuffix(text.replace(/^\/별명목록\s*/i, ""));
+  if (query) {
+    const key = existingPersonKey(roomState, query);
+    if (!key) return `❌ "${query}" 닉네임 또는 별명을 찾지 못했습니다.`;
+    const item = aliasSummaryItem(roomState, key, query);
+    return [
+      "🪪 별명 목록",
+      aliasSummaryLine(item),
+      "",
+      `상세: /닉이력 ${item.name}`,
+      `병합: /닉병합 기준닉 합칠닉`
+    ].join("\n");
+  }
+  const summary = aliasSummaryPayload(roomState, { limit: 20 });
+  const lines = summary.items
+    .filter((item) => item.aliasCount || item.mergedAliasCount)
+    .slice(0, 20)
+    .map((item, index) => aliasSummaryLine(item, index + 1));
+  return [
+    "🪪 별명 목록",
+    `대상 : ${summary.totalProfiles}명 / 별명 ${summary.aliasCount}개 / 병합 ${summary.mergedAliasCount}건`,
+    "",
+    ...(lines.length ? lines : ["등록된 별명이 없습니다."]),
+    "",
+    "조회: /별명목록 닉네임",
+    "내 별명: /내별명"
+  ].join("\n");
+}
+
 function publicNicknameMergeHistoryItem(roomState, item = {}) {
   return {
     id: item.id || "",
@@ -14464,6 +14561,8 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   }
   if (command === "/프로필삭제") return requireAdmin(roomState, sender) || profileDeleteCommand(roomState, text);
   if (command === "/프로필" || command === "/프로칠") return profileViewCommand(roomState, text, sender);
+  if (command === "/내별명") return myAliasSummaryCommand(roomState, sender);
+  if (command === "/별명목록") return requireAdmin(roomState, sender) || aliasListCommand(roomState, text);
   if (command === "/별명등록") return requireAdmin(roomState, sender) || aliasRegisterCommand(roomState, sender, text);
   if (command === "/별명삭제") return requireAdmin(roomState, sender) || aliasDeleteCommand(roomState, text);
   if (command === "/닉병합" || command === "/닉네임병합" || command === "/별명병합") return requireAdmin(roomState, sender) || nicknameMergeCommand(roomState, sender, text);

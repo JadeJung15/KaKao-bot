@@ -5438,6 +5438,23 @@ a {
   margin-bottom: 8px;
 }
 
+.console-alias-summary {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e3e8ef;
+  border-radius: 6px;
+  background: #fbfcfd;
+  padding: 10px;
+}
+
+.console-alias-summary .console-section-head {
+  margin-bottom: 0;
+}
+
+.console-alias-summary .console-compact-list {
+  gap: 6px;
+}
+
 .console-two-column-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

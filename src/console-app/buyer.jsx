@@ -407,6 +407,10 @@ function RoomGroupCard({ group = {}, onReload, setToast }) {
   const mode = group.roomModeSettings || {};
   const snapshotMode = snapshot(room).settings?.modeSplit || {};
   const hasGameRooms = Boolean((group.gameRooms || room.linkedGameRooms || []).length);
+  const aliasSummary = room.aliasSummary || {};
+  const aliasCount = Math.max(0, Number(aliasSummary.aliasCount || 0)).toLocaleString("ko-KR");
+  const aliasProfiles = Math.max(0, Number(aliasSummary.totalProfiles || 0)).toLocaleString("ko-KR");
+  const aliasMerges = Math.max(0, Number(aliasSummary.mergedAliasCount || 0)).toLocaleString("ko-KR");
   const [form, setForm] = useState({
     blockGamesInGeneralRoom: mode.blockGamesInGeneralRoom ?? mode.generalRoomGameBlocked ?? snapshotMode.blockGamesInGeneralRoom ?? true,
     blockOpsInGameRoom: mode.blockOpsInGameRoom ?? mode.gameRoomOpsBlocked ?? snapshotMode.blockOpsInGameRoom ?? true,
@@ -456,6 +460,22 @@ function RoomGroupCard({ group = {}, onReload, setToast }) {
         <FieldRow label="만료일">{formatDate(room.subscription?.expiresAt)}</FieldRow>
         <FieldRow label="월 이용료">{formatKrw(room.monthlyPriceKrw)}</FieldRow>
         <FieldRow label="연결코드">{room.bridgeConnectCode ? "발급됨" : "승인 후 표시"}</FieldRow>
+      </div>
+      <div className="console-alias-summary" data-alias-summary="buyer">
+        <div className="console-section-head compact">
+          <div>
+            <p className="console-eyebrow">Alias Summary</p>
+            <h3>별명 요약</h3>
+            <p>일반방과 게임방에서 다른 닉을 쓰는 참여자를 같은 사람 데이터로 연결해 관리합니다.</p>
+          </div>
+          <span>{aliasCount}개 별명</span>
+        </div>
+        <div className="console-field-grid console-compact-stats">
+          <FieldRow label="참여자">{aliasProfiles}명</FieldRow>
+          <FieldRow label="별명">{aliasCount}개</FieldRow>
+          <FieldRow label="병합">{aliasMerges}건</FieldRow>
+        </div>
+        <p className="console-settings-note">내 별명은 카톡에서 /내별명, 운영자는 /별명목록으로 확인할 수 있습니다.</p>
       </div>
       <details className="console-game-rooms" open>
         <summary>게임방 접기/펼치기</summary>

@@ -642,6 +642,7 @@ function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setTo
   const [saving, setSaving] = useState(false);
   const commands = baseRoom.customCommands || [];
   const admins = baseRoom.admins || [];
+  const aliasSummary = baseRoom.aliasSummary || {};
 
   useEffect(() => {
     setCommandForm({ quick: "", trigger: "", response: "" });
@@ -810,6 +811,7 @@ function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setTo
         <FieldRow label="설치 명령어">{baseRoom.commandCount || commands.length || 0}개</FieldRow>
         <FieldRow label="장착 팩">{(baseRoom.commandPacks?.installedPacks || []).length || 0}개</FieldRow>
       </div>
+      <AliasSummaryPanel summary={aliasSummary} />
       <form className="console-mini-form console-nickname-merge-form" onSubmit={previewNicknameMerge}>
         <div className="console-section-head compact">
           <div>
@@ -947,6 +949,39 @@ function NicknameMergeHistoryPanel({ candidates = [], history = [], onUseCandida
         </div>
       ))}
       {!history.length ? <small>아직 병합 이력이 없습니다.</small> : null}
+    </div>
+  );
+}
+
+function AliasSummaryPanel({ summary = {} }) {
+  const items = summary.items || [];
+  return (
+    <div className="console-alias-summary" data-alias-summary="admin">
+      <div className="console-section-head compact">
+        <div>
+          <p className="console-eyebrow">Alias Summary</p>
+          <h3>별명 요약</h3>
+          <p>카톡 별명, 일반방/게임방 닉 병합 상태를 같은 데이터 기준으로 확인합니다.</p>
+        </div>
+        <StatusBadge label={`${summary.aliasCount || 0}개 별명`} status="ok" />
+      </div>
+      <div className="console-field-grid console-compact-stats">
+        <FieldRow label="대상">{formatCount(summary.totalProfiles, "명")}</FieldRow>
+        <FieldRow label="별명">{formatCount(summary.aliasCount, "개")}</FieldRow>
+        <FieldRow label="병합">{formatCount(summary.mergedAliasCount, "건")}</FieldRow>
+      </div>
+      <div className="console-compact-list">
+        {items.slice(0, 6).map((item) => (
+          <div className="console-compact-row" key={item.key || item.name}>
+            <div>
+              <strong>{item.name}</strong>
+              <span>{(item.aliases || []).length ? item.aliases.join(", ") : "등록 별명 없음"}</span>
+            </div>
+            <small>{item.mergeStatus === "merged" ? "병합됨" : "단일 닉"}</small>
+          </div>
+        ))}
+        {!items.length ? <small>아직 표시할 별명 데이터가 없습니다.</small> : null}
+      </div>
     </div>
   );
 }
