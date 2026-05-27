@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.09";
+export const APP_VERSION = "0.5.10";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -247,7 +247,9 @@ export const FEATURES = [
   "inventory-item-locks",
   "hidden-item-id-chat-results",
   "hidden-system-shop-ids",
-  "command-discovery-hub"
+  "command-discovery-hub",
+  "starter-tutorial-command",
+  "personalized-command-recommendations"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -1257,7 +1259,7 @@ const ADMIN_MANAGEMENT_COMMANDS = Object.freeze([
   "/닉병합"
 ]);
 const COMMAND_PACK_ALWAYS_INSTALLED_COMMANDS = Object.freeze([
-  "/상태", "/도움말", "/메뉴", "/처음", "/찾기", "/명령어", "/방등록", "/신고", "/신고목록", "/신고처리",
+  "/상태", "/도움말", "/메뉴", "/처음", "/시작", "/추천", "/찾기", "/명령어", "/방등록", "/신고", "/신고목록", "/신고처리",
   "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록",
   "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말", "/점메추",
   ...ADMIN_MANAGEMENT_COMMANDS
@@ -5547,7 +5549,7 @@ function isSubscriptionExpired(roomState) {
 }
 
 function subscriptionBypassCommand(text) {
-  return /^\/(?:구독상태|구독연장|구독만료|방정보|방등록|방설정|입장문구|방목록|기능|기능목록|기능켜기|기능끄기|도움말|help|\?|메뉴|처음|찾기|명령어)(?:\s|$)/i.test(normalizeText(text));
+  return /^\/(?:구독상태|구독연장|구독만료|방정보|방등록|방설정|입장문구|방목록|기능|기능목록|기능켜기|기능끄기|도움말|help|\?|메뉴|처음|시작|추천|찾기|명령어)(?:\s|$)/i.test(normalizeText(text));
 }
 
 function subscriptionStatusLabel(status, days) {
@@ -9284,7 +9286,7 @@ const GAME_ROOM_ECONOMY_COMMANDS = new Set([
   "/포인트", "/내포인트", "/내정보", "/레벨", "/정보", "/가방", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/일괄판매", "/판매", "/구매내역", "/상점", "/구매", "/점메추"
 ]);
 const GAME_ROOM_DIAGNOSTIC_COMMANDS = new Set([
-  "/상태", "/status", "/브릿지", "/bridge", "/js상태", "/jsstatus", "/로컬상태", "/도움말", "/help", "/?", "/메뉴", "/처음", "/찾기", "/명령어", "/게임팩도움말"
+  "/상태", "/status", "/브릿지", "/bridge", "/js상태", "/jsstatus", "/로컬상태", "/도움말", "/help", "/?", "/메뉴", "/처음", "/시작", "/추천", "/찾기", "/명령어", "/게임팩도움말"
 ]);
 
 function commandForRoomRole(command) {
@@ -9370,6 +9372,8 @@ function registryEntry(command, category, description, options = {}) {
 const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/상태", "기본", "서버 연결 상태 확인", { aliases: ["/status"], searchableKeywords: ["서버", "연결"] }),
   registryEntry("/도움말", "기본", "현재 사용 가능한 명령어 확인", { aliases: ["/help", "/?", "/메뉴", "/처음", "/찾기", "/명령어"], examples: ["/메뉴", "/찾기 게임"], searchableKeywords: ["help", "명령어", "처음", "찾기"] }),
+  registryEntry("/시작", "기본", "처음 쓰는 사용자를 위한 5단계 시작 가이드", { aliases: ["/처음시작"], examples: ["/시작"], searchableKeywords: ["처음", "시작", "가이드", "튜토리얼"] }),
+  registryEntry("/추천", "기본", "현재 방 상태에 맞는 추천 명령어 확인", { aliases: ["/추천명령어"], examples: ["/추천"], searchableKeywords: ["추천", "명령어", "다음", "할일"] }),
   registryEntry("/브릿지", "기본", "브릿지 연결 진단", { aliases: ["/bridge"], searchableKeywords: ["연결", "진단"] }),
   registryEntry("/js상태", "기본", "브릿지 JS 호환 진단", { aliases: ["/jsstatus", "/로컬상태"], searchableKeywords: ["js", "로컬"] }),
   registryEntry("/메시지", "운영", "내 읽지 않은 메시지함 확인", { aliases: ["/메세지", "/메시지함"], searchableKeywords: ["읽지 않은", "쪽지"] }),
@@ -9742,7 +9746,7 @@ function helpText(roomStateOrAdmin = false, sender = "") {
   const lines = [
     `${DEFAULT_BOT_NAME} ${isAdminUser ? "관리자 명령어" : "참여자 명령어"}`,
     "",
-    "빠른 찾기: /메뉴, /찾기 게임, /찾기 가방",
+    "빠른 찾기: /시작, /추천, /찾기 게임, /찾기 가방",
     ""
   ];
   for (const [category, items] of groups.entries()) {
@@ -9835,7 +9839,7 @@ const COMMAND_DISCOVERY_TOPICS = Object.freeze([
     key: "도움",
     aliases: ["도움", "도움말", "처음", "시작"],
     title: "처음 시작",
-    commands: ["/메뉴", "/도움말", "/찾기 게임", "/찾기 가방", "/게임팩도움말", "/명령어팩"]
+    commands: ["/시작", "/추천", "/메뉴", "/도움말", "/찾기 게임", "/찾기 가방", "/게임팩도움말", "/명령어팩"]
   }
 ]);
 
@@ -9844,7 +9848,7 @@ function commandDiscoveryHubText(roomState = null, sender = "") {
   return [
     "📘 픽셀곰 메뉴",
     "",
-    "처음 시작: /도움말, /명령어팩",
+    "처음 시작: /시작, /추천",
     "게임 찾기: /찾기 게임",
     "가방 정리: /찾기 가방",
     "포인트/출석: /찾기 포인트",
@@ -9871,6 +9875,25 @@ function commandFindText(roomState = null, sender = "", query = "") {
   const normalized = normalizeText(query);
   const topic = commandDiscoveryTopic(normalized);
   if (!topic) {
+    const tokens = commandSearchTokens(normalized);
+    const isAdminUser = roomState ? isAdmin(roomState, sender) : false;
+    const matches = COMMAND_REGISTRY
+      .filter((item) => item.visibility !== "admin" || isAdminUser)
+      .filter((item) => commandSearchMatches(item, tokens))
+      .filter((item) => commandAvailability(item, roomState, sender, { isAdminUser }).available)
+      .slice(0, 8);
+    if (matches.length) {
+      return [
+        `🔎 명령어 찾기: ${normalized}`,
+        "",
+        ...matches.map((item, index) => {
+          const example = item.examples?.[0] && item.examples[0] !== item.command ? ` 예: ${item.examples[0]}` : "";
+          return `${index + 1}. ${item.command} - ${item.description}${example}`;
+        }),
+        "",
+        "처음이면 /시작, 추천은 /추천"
+      ].join("\n");
+    }
     return [
       "🔎 명령어 찾기",
       "",
@@ -9881,7 +9904,7 @@ function commandFindText(roomState = null, sender = "", query = "") {
       "/찾기 포인트",
       "/찾기 운영",
       "",
-      "처음이면 /메뉴 를 입력하세요."
+      "처음이면 /시작, 추천은 /추천"
     ].join("\n");
   }
   const isAdminUser = roomState ? isAdmin(roomState, sender) : false;
@@ -9896,6 +9919,52 @@ function commandFindText(roomState = null, sender = "", query = "") {
     "",
     "상세 도움말: /도움말",
     "팩 상세: /명령어팩 코드"
+  ].join("\n");
+}
+
+function starterTutorialText(roomState = null, sender = "") {
+  const isAdminUser = roomState ? isAdmin(roomState, sender) : false;
+  return [
+    "📘 픽셀곰 시작 가이드",
+    "",
+    "1. 상태 확인: /상태",
+    "2. 오늘 할 일: /추천",
+    "3. 콘텐츠 찾기: /찾기 게임",
+    "4. 보상 확인: /포인트, /가방",
+    "5. 정리/판매: /가방정리",
+    "",
+    isAdminUser ? "관리자는 /명령어팩목록, /기능목록도 함께 확인하세요." : "모르는 명령어는 /메뉴 또는 /찾기 단어 로 찾을 수 있습니다."
+  ].join("\n");
+}
+
+function commandRecommendationText(roomState = null, sender = "") {
+  const person = roomState && sender ? ensurePerson(roomState, sender) : null;
+  const isAdminUser = roomState ? isAdmin(roomState, sender) : false;
+  const suggestions = [
+    { command: "/출석", reason: "오늘 보상 받기", feature: "attendance" },
+    { command: "/포인트", reason: "현재 포인트 확인", feature: "points" },
+    { command: "/게임", reason: "즐길 콘텐츠 보기", feature: "games" },
+    { command: "/가방정리", reason: "아이템 판매/잠금 추천", feature: "shop" },
+    { command: "/점메추", reason: "점심 메뉴 빠르게 추천" }
+  ];
+  if (person && Object.keys(person.inventory || {}).length) {
+    suggestions.unshift({ command: "/판매미리보기 중복", reason: "중복 아이템 정리", feature: "shop" });
+  }
+  if (isAdminUser) {
+    suggestions.push({ command: "/명령어팩목록", reason: "장착된 팩 확인" });
+    suggestions.push({ command: "/기능목록", reason: "방 기능 ON/OFF 확인" });
+  }
+  const lines = suggestions
+    .filter((item) => !item.feature || !roomState || featureEnabled(roomState, item.feature))
+    .slice(0, 7)
+    .map((item, index) => `${index + 1}. ${item.command} - ${item.reason}`);
+  return [
+    "✨ 추천 명령어",
+    "",
+    ...lines,
+    "",
+    "더 찾기: /찾기 게임, /찾기 가방",
+    "처음 안내: /시작"
   ].join("\n");
 }
 
@@ -14179,6 +14248,8 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/명령어팩제거" || command === "/팩제거") return commandPackRemoveCommand(roomState, sender, parsed);
   if (command === "/게임팩도움말") return gamePackHelpText(parsed.args.join(" "));
   if (command === "/메뉴" || command === "/처음") return commandDiscoveryHubText(roomState, sender);
+  if (command === "/시작" || command === "/처음시작") return starterTutorialText(roomState, sender);
+  if (command === "/추천" || command === "/추천명령어") return commandRecommendationText(roomState, sender);
   if (command === "/찾기") return commandFindText(roomState, sender, parsed.args.join(" "));
   if (command === "/명령어") return parsed.args.length ? commandFindText(roomState, sender, parsed.args.join(" ")) : commandDiscoveryHubText(roomState, sender);
   const registryItem = resolveCommandRegistryItem(command, compactCommand);
