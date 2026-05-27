@@ -110,26 +110,6 @@
         </div>
       </section>
 
-      <section class="search-band" aria-label="서비스 검색">
-        <div class="search-panel reveal">
-          <label for="site-search">픽셀곰 검색</label>
-          <div class="search-input-wrap">
-            <input id="site-search" data-site-search type="search" placeholder="명령어, 요금, 콘솔, RPG, 개인정보처리방침 검색">
-            <span aria-hidden="true">Ctrl K</span>
-          </div>
-          <div class="category-chips" aria-label="카테고리">
-            <a href="#features">주요 기능</a>
-            <a href="#commands">명령어</a>
-            <a href="/command-store">명령어 스토어</a>
-            <a href="#pricing">요금제</a>
-            <a href="#updates">공지/업데이트</a>
-            <a href="/privacy">법적 고지</a>
-            <a href="/console">구매자 전용</a>
-          </div>
-          <div class="search-results" data-search-results aria-live="polite"></div>
-        </div>
-      </section>
-
       <section class="status-strip" aria-label="픽셀곰 시작 흐름">
         <div>
           <span class="step-label">Step 01</span>
@@ -479,6 +459,12 @@
           <p>변경 사항을 게시글 형태로 남겨 고객에게 현재 기능과 제한 범위를 투명하게 안내합니다.</p>
         </div>
         <div class="post-grid">
+          <article class="post-card reveal" data-search-source="업데이트 0.5.23 홈페이지 검색 제거 Android 1.0.31 내부 테스트">
+            <span>업데이트</span>
+            <h3>픽셀곰 0.5.23 업데이트</h3>
+            <time datetime="2026-05-28">2026년 5월 28일</time>
+            <p>홈페이지 상단 검색 박스를 제거해 첫 화면 동선을 더 단순하게 정리했습니다. Android 1.0.31(32) 내부 테스트 업로드와 실기기 QA 흐름도 함께 준비합니다.</p>
+          </article>
           <article class="post-card reveal" data-search-source="업데이트 0.5.22 앱 진단 실사용 QA 어드민 로그 구매자 연결 상태">
             <span>업데이트</span>
             <h3>픽셀곰 0.5.22 업데이트</h3>
@@ -1040,37 +1026,6 @@
     </footer>
 
     <script>
-      const searchItems = [...document.querySelectorAll("[data-search-source]")].map((element) => ({
-        title: element.querySelector("h3")?.textContent?.trim() || element.textContent.trim().slice(0, 28),
-        text: `${element.dataset.searchSource || ""} ${element.textContent || ""}`.toLowerCase(),
-        target: element.id ? `#${element.id}` : `#${element.closest("section")?.id || "top"}`
-      }));
-      const searchInput = document.querySelector("[data-site-search]");
-      const searchResults = document.querySelector("[data-search-results]");
-
-      function renderSearch(query) {
-        const value = query.trim().toLowerCase();
-        if (!value) {
-          searchResults.textContent = "검색어를 입력하면 관련 기능과 문서를 보여줍니다.";
-          return;
-        }
-        const matches = searchItems.filter((item) => item.text.includes(value)).slice(0, 6);
-        searchResults.innerHTML = matches.length
-          ? matches.map((item) => `<a href="${item.target}">${item.title}</a>`).join("")
-          : "<span>검색 결과가 없습니다. 공지, 요금, 명령어 같은 단어로 다시 검색해보세요.</span>";
-      }
-
-      if (searchInput && searchResults) {
-        renderSearch("");
-        searchInput.addEventListener("input", (event) => renderSearch(event.target.value));
-        window.addEventListener("keydown", (event) => {
-          if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-            event.preventDefault();
-            searchInput.focus();
-          }
-        });
-      }
-
       const observer = new IntersectionObserver((entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) entry.target.classList.add("is-visible");

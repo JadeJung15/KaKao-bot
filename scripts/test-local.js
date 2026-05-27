@@ -137,7 +137,7 @@ try {
   assert.equal(health.response.status, 200);
   assert.equal(health.json.ok, true);
   assert.equal(health.json.service, "kakao-room-ops-bot");
-  assert.equal(health.json.version, "0.5.22");
+  assert.equal(health.json.version, "0.5.23");
   assert.equal(health.json.dbStatus.ok, true);
   assert.equal(health.json.dbStatus.type, "local-json");
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
@@ -507,7 +507,10 @@ try {
   assert.match(homeText, /구매자 전용/);
   assert.match(homeText, /개인정보처리방침/);
   assert.match(homeText, /서비스 이용약관/);
-  assert.match(homeText, /data-site-search/);
+  assert.doesNotMatch(homeText, /픽셀곰 검색/);
+  assert.doesNotMatch(homeText, /data-site-search/);
+  assert.doesNotMatch(homeText, /data-search-results/);
+  assert.doesNotMatch(homeText, /Ctrl K/);
   assert.match(homeText, /href="https:\/\/open\.kakao\.com\/o\/gu25P5vi"/);
   assert.match(homeText, /오픈채팅 문의/);
   assert.match(homeText, /Kanana/);
@@ -692,7 +695,7 @@ try {
   const commandTemplates = await request("/api/command-templates");
   assert.equal(commandTemplates.response.status, 200);
   assert.equal(commandTemplates.json.ok, true);
-  assert.equal(commandTemplates.json.version, "0.5.22");
+  assert.equal(commandTemplates.json.version, "0.5.23");
   assert.equal(commandTemplates.json.total, commandTemplates.json.templates.length);
   assert.equal(commandTemplates.json.total < 400, true);
   assert.equal(commandTemplates.json.total > 100, true);
@@ -721,7 +724,7 @@ try {
   const commandPacks = await request("/api/command-packs");
   assert.equal(commandPacks.response.status, 200);
   assert.equal(commandPacks.json.ok, true);
-  assert.equal(commandPacks.json.version, "0.5.22");
+  assert.equal(commandPacks.json.version, "0.5.23");
   const profileHistoryPack = commandPacks.json.packs.find((pack) => pack.id === "profile-history");
   assert.ok(profileHistoryPack);
   assert.ok(profileHistoryPack.fixedCommands.includes("/닉병합"));
@@ -988,7 +991,7 @@ try {
   assert.match(sessionNavText, /href = "\/account"/);
 
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  assert.equal(packageJson.version, "0.5.22");
+  assert.equal(packageJson.version, "0.5.23");
   const uiUxWorkTypesDoc = await readFile(path.join(repoRoot, "docs", "ui-ux-work-types.md"), "utf8");
   const agentsGuide = await readFile(path.join(repoRoot, "AGENTS.md"), "utf8");
   for (const term of ["UI 개선", "UX 개선", "UI/UX 리디자인", "사용성 개선", "정보 구조 개선", "디자인 시스템 정비", "온보딩 개선", "접근성 개선", "인터랙션 개선", "마이크로카피 개선"]) {
@@ -1467,7 +1470,7 @@ try {
   const adminSearch = await request(`/api/admin/search?token=test-admin-token&roomName=${encodeURIComponent("콘솔방")}&q=${encodeURIComponent("중복오리")}`);
   assert.equal(adminSearch.response.status, 200);
   assert.equal(adminSearch.json.ok, true);
-  assert.equal(adminSearch.json.version, "0.5.22");
+  assert.equal(adminSearch.json.version, "0.5.23");
   assert.equal(adminSearch.json.sections.rooms.some((item) => item.roomName === "콘솔방"), true);
   assert.equal(adminSearch.json.sections.people.some((item) => item.displayName.includes("중복오리") && item.identityStatus === "conflict_possible"), true);
   assert.equal(adminSearch.json.sections.people.some((item) => /\/닉병합 기준닉 합칠닉/.test(item.mergeGuide || "") || /\/닉병합/.test(item.mergeCommand || "")), true);
@@ -1530,7 +1533,7 @@ try {
 
   const adminDiagnostics = await request("/api/admin/diagnostics?token=test-admin-token");
   assert.equal(adminDiagnostics.response.status, 200);
-  assert.equal(adminDiagnostics.json.version, "0.5.22");
+  assert.equal(adminDiagnostics.json.version, "0.5.23");
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.rooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.problemRooms));
   assert.ok(Number.isFinite(adminDiagnostics.json.summary.bridgeProblemRooms));
@@ -1541,7 +1544,7 @@ try {
   assert.equal(adminBackup.response.status, 200);
   assert.equal(adminBackup.json.ok, true);
   assert.equal(adminBackup.json.schemaVersion, 1);
-  assert.equal(adminBackup.json.version, "0.5.22");
+  assert.equal(adminBackup.json.version, "0.5.23");
   assert.ok(adminBackup.json.state.rooms);
 
   const backupValidation = await request("/api/admin/backup/validate?token=test-admin-token", {
@@ -1885,7 +1888,7 @@ try {
   });
   assert.equal(buyerGuideApproved.response.status, 200);
   assert.equal(buyerGuideApproved.json.ok, true);
-  assert.equal(buyerGuideApproved.json.version, "0.5.22");
+  assert.equal(buyerGuideApproved.json.version, "0.5.23");
   assert.equal(buyerGuideApproved.json.testAppUrl, "https://play.google.com/apps/internaltest/4700397680875890998");
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /판매신청방/);
   assert.match(JSON.stringify(buyerGuideApproved.json.rooms), /^.*PXG-.*$/);
@@ -1906,7 +1909,7 @@ try {
   });
   assert.equal(buyerConsoleApproved.response.status, 200);
   assert.equal(buyerConsoleApproved.json.ok, true);
-  assert.equal(buyerConsoleApproved.json.version, "0.5.22");
+  assert.equal(buyerConsoleApproved.json.version, "0.5.23");
   assert.match(buyerConsoleApproved.json.ownerAdminNotice, /\/admin/);
   assert.equal(buyerConsoleApproved.json.rooms.length, 1);
   assert.equal(buyerConsoleApproved.json.appConnectCodes.length >= 1, true);
@@ -1943,7 +1946,7 @@ try {
   const buyerSearch = await request(`/api/buyer/search?q=${encodeURIComponent("판매신청방")}&token=${encodeURIComponent(approvedLogin.json.guideToken)}`);
   assert.equal(buyerSearch.response.status, 200);
   assert.equal(buyerSearch.json.ok, true);
-  assert.equal(buyerSearch.json.version, "0.5.22");
+  assert.equal(buyerSearch.json.version, "0.5.23");
   assert.equal(buyerSearch.json.sections.rooms.some((item) => item.roomName === "판매신청방"), true);
   assert.equal(buyerSearch.json.sections.rooms.every((item) => item.roomName !== "콘솔방"), true);
   assert.equal(Array.isArray(buyerSearch.json.sections.commands), true);
@@ -2612,7 +2615,7 @@ try {
   });
   assert.equal(validProfileSync.response.status, 200);
   assert.equal(validProfileSync.json.ok, true);
-  assert.equal(validProfileSync.json.version, "0.5.22");
+  assert.equal(validProfileSync.json.version, "0.5.23");
   assert.equal(validProfileSync.json.summary.requestedRoomCount, 1);
   assert.equal(validProfileSync.json.summary.syncedRoomCount, 2);
   assert.deepEqual(
@@ -5699,7 +5702,7 @@ try {
   });
   assert.equal(roomLogs.response.status, 200);
   assert.equal(roomLogs.json.ok, true);
-  assert.equal(roomLogs.json.version, "0.5.22");
+  assert.equal(roomLogs.json.version, "0.5.23");
   assert.ok(roomLogs.json.summary.totalLogs >= 1);
   assert.ok(Number.isFinite(roomLogs.json.summary.recent24h));
   assert.ok(Number.isFinite(roomLogs.json.summary.commandLogs));
@@ -5744,7 +5747,7 @@ try {
   });
   assert.equal(liveEvents.response.status, 200);
   assert.equal(liveEvents.json.ok, true);
-  assert.equal(liveEvents.json.version, "0.5.22");
+  assert.equal(liveEvents.json.version, "0.5.23");
   assert.ok(Array.isArray(liveEvents.json.events));
   const performanceUnauthorized = await request(`/api/admin/performance-summary?roomName=${encodeURIComponent("테스트방")}`);
   assert.equal(performanceUnauthorized.response.status, 401);
@@ -5753,7 +5756,7 @@ try {
   });
   assert.equal(performanceSummary.response.status, 200);
   assert.equal(performanceSummary.json.ok, true);
-  assert.equal(performanceSummary.json.version, "0.5.22");
+  assert.equal(performanceSummary.json.version, "0.5.23");
   assert.ok(Number.isFinite(performanceSummary.json.summary.p50TotalMs));
   assert.ok(Number.isFinite(performanceSummary.json.summary.p95TotalMs));
   assert.ok(Number.isFinite(performanceSummary.json.summary.avgSaveStateMs));

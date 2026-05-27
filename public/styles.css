@@ -351,63 +351,6 @@ a {
   line-height: 1.55;
 }
 
-.search-band {
-  padding: 26px clamp(20px, 5vw, 72px);
-  background: #fffdf8;
-  border-bottom: 1px solid var(--line);
-}
-
-.search-panel {
-  width: min(1120px, 100%);
-  margin: 0 auto;
-  padding: 18px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 14px 35px rgba(55, 38, 23, 0.09);
-}
-
-.search-panel label {
-  display: block;
-  margin-bottom: 8px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.search-input-wrap {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  min-height: 52px;
-  padding: 7px 10px 7px 14px;
-  background: #fff8ec;
-  border: 2px solid rgba(43, 37, 31, 0.16);
-  border-radius: 8px;
-}
-
-.search-input-wrap input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: 17px;
-}
-
-.search-input-wrap span {
-  padding: 7px 9px;
-  color: #fff;
-  background: var(--navy);
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
 .category-chips,
 .legal-links {
   display: flex;
@@ -425,25 +368,6 @@ a {
   color: #285f4a;
   font-size: 14px;
   font-weight: 900;
-}
-
-.search-results {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  min-height: 42px;
-  margin-top: 14px;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.search-results a,
-.search-results span {
-  padding: 10px 12px;
-  background: #f7f1df;
-  border: 1px solid #eadbc8;
-  border-radius: 8px;
-  overflow-wrap: anywhere;
 }
 
 .section {
@@ -4198,7 +4122,6 @@ a {
   .split-room-grid,
   .post-grid,
   .listing-grid,
-  .search-results,
   .buyer-gate,
   .buyer-console-hero,
   .buyer-next-action,
