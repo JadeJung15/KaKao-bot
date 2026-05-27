@@ -50,6 +50,7 @@ final class BridgeConfig {
     private static final String KEY_LAST_SEND_SUCCESS = "last_send_success";
     private static final String KEY_LAST_SEND_FAILURE = "last_send_failure";
     private static final String KEY_LAST_SERVER_TIMING = "last_server_timing";
+    private static final String KEY_LAST_COMMAND_SUCCESS = "last_command_success";
     private static final String EMPTY_ROOM_PROFILES = "__PIXGOM_EMPTY_ROOM_PROFILES__";
     private static final int MAX_LOG_LINES = 80;
     private static final int MAX_PENDING_EVENTS = 80;
@@ -144,6 +145,7 @@ final class BridgeConfig {
                 .remove(KEY_LAST_SEND_SUCCESS)
                 .remove(KEY_LAST_SEND_FAILURE)
                 .remove(KEY_LAST_SERVER_TIMING)
+                .remove(KEY_LAST_COMMAND_SUCCESS)
                 .apply();
         appendLog(context, "서버 설정 초기화 / 등록 취소 완료");
     }
@@ -245,8 +247,10 @@ final class BridgeConfig {
         if (!TextUtils.isEmpty(lastConnect)) rows.add("최근 연결: " + lastConnect);
         String lastSync = lastProfileSyncSummary(context);
         if (!TextUtils.isEmpty(lastSync)) rows.add("최근 서버 동기화: " + lastSync);
+        String lastSuccess = lastCommandSuccessSummary(context);
+        if (!TextUtils.isEmpty(lastSuccess)) rows.add("최근 처리 성공: " + lastSuccess);
         String lastIgnore = lastIgnoreReason(context);
-        if (!TextUtils.isEmpty(lastIgnore)) rows.add("최근 무시: " + lastIgnore);
+        if (!TextUtils.isEmpty(lastIgnore)) rows.add("최근 무시 알림: " + lastIgnore);
         return rows.isEmpty() ? "등록된 방 없음" : TextUtils.join("\n", rows);
     }
 
@@ -538,8 +542,60 @@ final class BridgeConfig {
         prefs(context).edit().putString(KEY_LOGS, TextUtils.join("\n", lines)).apply();
     }
 
+    static void appendSuccessLog(Context context, String line) {
+        String text = textOrDefault(line, "처리 성공");
+        setLastCommandSuccessSummary(context, text);
+        appendLog(context, "성공: " + text);
+    }
+
+    static void appendNoiseLog(Context context, String line) {
+        String text = textOrDefault(line, "시스템 알림 무시");
+        setLastIgnoreReason(context, text);
+        appendLog(context, "노이즈: " + text);
+    }
+
+    static void appendDiagnosticLog(Context context, String line) {
+        appendLog(context, "진단 원문: " + textOrDefault(line, "상세 없음"));
+    }
+
     static String logs(Context context) {
         return prefs(context).getString(KEY_LOGS, "");
+    }
+
+    static String logsForDisplay(Context context) {
+        String logs = logs(context);
+        if (TextUtils.isEmpty(logs)) return "아직 전송 로그가 없습니다.";
+        List<String> success = new ArrayList<>();
+        List<String> noise = new ArrayList<>();
+        List<String> diagnostic = new ArrayList<>();
+        List<String> other = new ArrayList<>();
+        for (String line : logs.split("\\n")) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) continue;
+            if (trimmed.contains("  성공: ") || trimmed.contains("  응답: ")) {
+                success.add(trimmed);
+            } else if (trimmed.contains("  노이즈: ") || trimmed.contains("  무시: ")) {
+                noise.add(trimmed);
+            } else if (trimmed.contains("  진단 원문: ") || trimmed.contains("  진단: ") || trimmed.contains("진단 payload")) {
+                diagnostic.add(trimmed);
+            } else {
+                other.add(trimmed);
+            }
+        }
+        List<String> sections = new ArrayList<>();
+        sections.add("성공/응답 로그\n" + limitedLogSection(success, "최근 성공 응답 없음"));
+        sections.add("무시/노이즈 로그\n" + limitedLogSection(noise, "최근 무시 알림 없음"));
+        sections.add("진단 원문 로그\n" + limitedLogSection(diagnostic, "최근 진단 원문 없음"));
+        if (!other.isEmpty()) sections.add("기타 로그\n" + limitedLogSection(other, "기타 로그 없음"));
+        return TextUtils.join("\n\n", sections);
+    }
+
+    private static String limitedLogSection(List<String> lines, String emptyText) {
+        if (lines == null || lines.isEmpty()) return emptyText;
+        List<String> limited = new ArrayList<>();
+        int limit = Math.min(lines.size(), 12);
+        for (int i = 0; i < limit; i++) limited.add(lines.get(i));
+        return TextUtils.join("\n", limited);
     }
 
     static String newEventId() {
@@ -613,6 +669,14 @@ final class BridgeConfig {
 
     static String lastServerTimingSummary(Context context) {
         return prefs(context).getString(KEY_LAST_SERVER_TIMING, "");
+    }
+
+    static void setLastCommandSuccessSummary(Context context, String value) {
+        prefs(context).edit().putString(KEY_LAST_COMMAND_SUCCESS, textOrDefault(value, "")).apply();
+    }
+
+    static String lastCommandSuccessSummary(Context context) {
+        return prefs(context).getString(KEY_LAST_COMMAND_SUCCESS, "");
     }
 
     static void setLastConnectSummary(Context context, String value) {

@@ -41,14 +41,14 @@ public class PixelgomNotificationListener extends NotificationListenerService {
                 BridgeConfig.DEFAULT_ROOM_LINK
         );
         if (event == null) {
-            BridgeConfig.setLastIgnoreReason(this, "카카오 알림에서 방/메시지 추출 실패");
-            BridgeConfig.appendLog(this, "무시: 카카오 알림에서 방/메시지 추출 실패");
+            BridgeConfig.setLastIgnoreReason(this, "시스템 알림 무시: 방/메시지 없음");
+            BridgeConfig.appendNoiseLog(this, "시스템 알림 무시: 카카오 그룹 요약 또는 빈 알림");
             return;
         }
         BridgeConfig.RoomProfile profile = BridgeConfig.matchingProfile(this, event.rawRoom);
         if (profile == null) {
             BridgeConfig.setLastIgnoreReason(this, "등록방 아님 rawRoom=" + event.rawRoom + " / 등록방=" + BridgeConfig.roomNames(this));
-            BridgeConfig.appendLog(this, "무시: 등록방 아님 rawRoom=" + event.rawRoom);
+            BridgeConfig.appendNoiseLog(this, "등록방 아님 rawRoom=" + event.rawRoom);
             return;
         }
         BridgeConfig.applyRoomProfile(event, profile);
@@ -56,17 +56,17 @@ public class PixelgomNotificationListener extends NotificationListenerService {
         event.eventId = BridgeConfig.newEventId();
         if (!event.hasRequiredFields()) {
             BridgeConfig.setLastIgnoreReason(this, "필수값 부족 sender=" + event.sender + " msg=" + event.message);
-            BridgeConfig.appendLog(this, "무시: 필수값 부족 sender=" + event.sender + " msg=" + event.message);
+            BridgeConfig.appendNoiseLog(this, "필수값 부족 sender=" + event.sender + " msg=" + event.message);
             return;
         }
-        BridgeConfig.appendLog(this, "진단: " + event.diagnosticSummaryLine());
-        BridgeConfig.appendLog(this, "진단 payload v2 후보: " + event.diagnosticPayloadV2().toString());
+        BridgeConfig.appendDiagnosticLog(this, event.diagnosticSummaryLine());
+        BridgeConfig.appendDiagnosticLog(this, "payload v2 후보: " + event.diagnosticPayloadV2().toString());
         if (shouldIgnoreEchoOrPassiveNotice(event)) {
-            BridgeConfig.appendLog(this, "무시: 픽셀곰 답장/수동 알림 에코 " + preview(event.message));
+            BridgeConfig.appendNoiseLog(this, "픽셀곰 답장/수동 알림 에코 " + preview(event.message));
             return;
         }
         if (isDuplicate(event)) {
-            BridgeConfig.appendLog(this, "무시: 중복 알림 " + event.sender + " / " + preview(event.message));
+            BridgeConfig.appendNoiseLog(this, "중복 알림 " + event.sender + " / " + preview(event.message));
             return;
         }
 
@@ -75,7 +75,7 @@ public class PixelgomNotificationListener extends NotificationListenerService {
         executor.execute(() -> {
             String localReply = BridgeLocalCommands.reply(this, event);
             if (!TextUtils.isEmpty(localReply)) {
-                BridgeConfig.appendLog(this, "로컬 명령 응답 생성: " + preview(localReply));
+                BridgeConfig.appendSuccessLog(this, "로컬 명령 응답 생성: " + preview(localReply));
                 sendReply(notification, localReply);
                 return;
             }
@@ -87,11 +87,11 @@ public class PixelgomNotificationListener extends NotificationListenerService {
                 BridgeConfig.setLastSendFailure(this, event.eventId + " / " + result.error);
                 BridgeConfig.enqueuePendingEvent(this, EventSender.buildPayload(this, event, event.retryCount), result.error);
             } else if (result.ignored) {
-                BridgeConfig.appendLog(this, "서버 무시: " + event.sender + " / " + preview(event.message));
+                BridgeConfig.appendNoiseLog(this, "서버 무시: " + event.sender + " / " + preview(event.message));
                 BridgeConfig.setLastSendSuccess(this, event.eventId + " / ignored / " + result.timingSummary);
                 return;
             } else {
-                BridgeConfig.appendLog(this, "서버 전송 성공: " + event.sender + " / " + preview(event.message));
+                BridgeConfig.appendSuccessLog(this, "서버 전송 성공: " + event.sender + " / " + preview(event.message));
                 BridgeConfig.setLastSendSuccess(this, event.eventId + " / " + result.timingSummary);
                 reply = result.reply;
                 flushPendingQueue();
@@ -103,7 +103,7 @@ public class PixelgomNotificationListener extends NotificationListenerService {
                     BridgeConfig.appendLog(this, "JS 오류: " + scriptResult.error);
                 } else if (scriptResult.handled) {
                     reply = scriptResult.reply;
-                    BridgeConfig.appendLog(this, "JS 응답 생성: " + preview(reply));
+                    BridgeConfig.appendSuccessLog(this, "JS 응답 생성: " + preview(reply));
                 }
             }
 
@@ -122,7 +122,7 @@ public class PixelgomNotificationListener extends NotificationListenerService {
     private void sendReply(Notification notification, String reply) {
         NotificationReplier.Result replyResult = NotificationReplier.reply(this, notification, reply);
         if (replyResult.sent) {
-            BridgeConfig.appendLog(this, "카카오 답장 전송 성공");
+            BridgeConfig.appendSuccessLog(this, "카카오 답장 전송 성공");
         } else {
             BridgeConfig.appendLog(this, "카카오 답장 실패: " + replyResult.reason + " actions=" + replyResult.actionCount + " remoteInputs=" + replyResult.remoteInputCount);
         }

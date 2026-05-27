@@ -1005,8 +1005,8 @@ try {
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
   assert.equal(packageJson.scripts["android:release-report"], "node scripts/android-release-bundle.js --report-only");
   const androidGradle = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "build.gradle"), "utf8");
-  assert.match(androidGradle, /versionCode 30/);
-  assert.match(androidGradle, /versionName "1\.0\.29"/);
+  assert.match(androidGradle, /versionCode 31/);
+  assert.match(androidGradle, /versionName "1\.0\.30"/);
   const androidEventSender = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "EventSender.java"), "utf8");
   assert.match(androidEventSender, /optJSONArray\("rooms"\)/);
   assert.match(androidEventSender, /roomResults/);
@@ -1042,6 +1042,11 @@ try {
   assert.match(androidMainActivity, /전송 대기 재시도/);
   assert.match(androidMainActivity, /대기 큐 비우기/);
   assert.match(androidMainActivity, /최근 서버 timing/);
+  assert.match(androidMainActivity, /최근 처리 성공/);
+  assert.match(androidMainActivity, /최근 무시 알림/);
+  assert.match(androidMainActivity, /성공\/응답 로그/);
+  assert.match(androidMainActivity, /무시\/노이즈 로그/);
+  assert.match(androidMainActivity, /진단 원문 로그/);
   const androidBridgeConfig = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "BridgeConfig.java"), "utf8");
   assert.match(androidBridgeConfig, /KEY_PENDING_EVENTS/);
   assert.match(androidBridgeConfig, /enqueuePendingEvent/);
@@ -1060,6 +1065,11 @@ try {
   assert.match(androidBridgeConfig, /lastConnectSummary/);
   assert.match(androidBridgeConfig, /lastIgnoreReason/);
   assert.match(androidBridgeConfig, /lastProfileSyncSummary/);
+  assert.match(androidBridgeConfig, /appendSuccessLog/);
+  assert.match(androidBridgeConfig, /appendNoiseLog/);
+  assert.match(androidBridgeConfig, /appendDiagnosticLog/);
+  assert.match(androidBridgeConfig, /logsForDisplay/);
+  assert.match(androidBridgeConfig, /lastCommandSuccessSummary/);
   assert.match(androidBridgeConfig, /roomProfilesJson/);
   assert.match(androidBridgeConfig, /primaryGeneralRoomProfile/);
   assert.match(androidBridgeConfig, /generalRoomProfilesSummary/);
@@ -1077,6 +1087,10 @@ try {
   const androidNotificationListener = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "PixelgomNotificationListener.java"), "utf8");
   assert.match(androidNotificationListener, /setLastIgnoreReason/);
   assert.match(androidNotificationListener, /등록방 아님 rawRoom/);
+  assert.match(androidNotificationListener, /appendSuccessLog/);
+  assert.match(androidNotificationListener, /appendNoiseLog/);
+  assert.match(androidNotificationListener, /appendDiagnosticLog/);
+  assert.match(androidNotificationListener, /시스템 알림 무시/);
   assert.match(androidNotificationListener, /event\.senderId/);
   assert.match(androidNotificationListener, /event\.postedAtMs/);
   const androidChecklist = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "PLAY_STORE_CHECKLIST.md"), "utf8");

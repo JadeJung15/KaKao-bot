@@ -485,6 +485,10 @@ public class MainActivity extends Activity {
         logTitle.setPadding(0, dp(18), 0, dp(8));
         root.addView(logTitle);
 
+        TextView logHelp = text("아래 전송 로그는 성공/응답 로그, 무시/노이즈 로그, 진단 원문 로그로 나뉩니다. 그룹 요약/빈 카카오 알림은 실패가 아니라 무시/노이즈 로그로 분류됩니다.", 13, Color.rgb(111, 78, 49), false);
+        logHelp.setPadding(0, 0, 0, dp(8));
+        root.addView(logHelp);
+
         logView = text("", 13, Color.rgb(72, 52, 38), false);
         logView.setBackgroundResource(getResources().getIdentifier("panel_background", "drawable", getPackageName()));
         logView.setPadding(dp(14), dp(14), dp(14), dp(14));
@@ -761,8 +765,10 @@ public class MainActivity extends Activity {
         if (pendingQueueStatus == null) return;
         pendingQueueStatus.setText(
                 "대기 중 이벤트: " + BridgeConfig.pendingEventCount(this)
+                        + "\n최근 처리 성공: " + safeText(BridgeConfig.lastCommandSuccessSummary(this))
                         + "\n최근 전송 성공: " + safeText(BridgeConfig.lastSendSuccess(this))
                         + "\n최근 전송 실패: " + safeText(BridgeConfig.lastSendFailure(this))
+                        + "\n최근 무시 알림: " + safeText(BridgeConfig.lastIgnoreReason(this))
                         + "\n최근 서버 timing: " + safeText(BridgeConfig.lastServerTimingSummary(this))
                         + "\n등록 일반방/게임방: " + BridgeConfig.roomProfileCount(this) + "개 / 게임방 " + BridgeConfig.gameRoomProfileCount(this) + "개"
         );
@@ -848,8 +854,7 @@ public class MainActivity extends Activity {
 
     private void refreshLogs() {
         if (logView == null) return;
-        String logs = BridgeConfig.logs(this);
-        logView.setText(TextUtils.isEmpty(logs) ? "아직 전송 로그가 없습니다." : logs);
+        logView.setText(BridgeConfig.logsForDisplay(this));
     }
 
     private void refreshRoomProfilesSummary() {
