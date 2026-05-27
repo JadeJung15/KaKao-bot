@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.16";
+export const APP_VERSION = "0.5.17";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -264,7 +264,8 @@ export const FEATURES = [
   "console-game-ops-overview",
   "console-dashboard-entrypoints",
   "console-search-result-accessibility",
-  "console-search-deep-links"
+  "console-search-deep-links",
+  "inventory-page-navigation"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -369,6 +370,7 @@ const SHOP_PRODUCT_DESCRIPTION_LIMIT = 140;
 const SHOP_TRANSACTION_LIMIT = 300;
 const SHOP_MAX_PRICE = 1000000;
 const SHOP_MAX_QUANTITY = 99;
+const INVENTORY_PAGE_SIZE = 10;
 const BAIT_ITEM_ID = 9001;
 const CAPTURE_STONE_ITEM_ID = 9301;
 const PET_SNACK_ITEM_ID = 9302;
@@ -4688,6 +4690,8 @@ function normalizePersonState(person) {
   person.inventory = normalizeInventory(person.inventory || {});
   person.lockedInventory = normalizeInventoryLocks(person.lockedInventory || person.lockedItems || []);
   person.gameCooldowns = normalizeGameCooldowns(person.gameCooldowns || {});
+  person.uiState ||= {};
+  person.uiState.inventoryPages ||= {};
   person.equipment = normalizeEquipment(person.equipment || {});
   person.monsters = normalizeOwnedMonsters(person.monsters || []);
   person.pendingMonster = normalizePendingMonster(person.pendingMonster || null);
@@ -7173,12 +7177,29 @@ function itemIcon(rowOrProduct = {}) {
   return "🎒";
 }
 
-function inventoryPageFromText(text, pattern) {
+function clampPage(value, totalPages = 1) {
+  const maxPage = Math.max(1, Math.trunc(Number(totalPages) || 1));
+  const page = Math.trunc(Number(value) || 1);
+  return Math.min(Math.max(1, page), maxPage);
+}
+
+function inventoryPageFromText(text, pattern, person = null, pageKey = "items", totalPages = 1) {
   const body = compactSpaces(text.replace(pattern, ""));
-  if (!body || body === "1") return 1;
-  if (body === "다음") return 2;
-  const page = Math.trunc(Number(body));
-  return Number.isFinite(page) && page > 0 ? page : 1;
+  const rememberedPage = person?.uiState?.inventoryPages?.[pageKey] || 1;
+  let page = 1;
+  if (!body || body === "1") page = 1;
+  else if (body === "다음") page = Number(rememberedPage) + 1;
+  else if (body === "이전") page = Number(rememberedPage) - 1;
+  else {
+    const match = body.match(/^([0-9]+)(?:\s*페이지)?$/);
+    page = match ? Math.trunc(Number(match[1])) : 1;
+  }
+  const currentPage = clampPage(page, totalPages);
+  if (person) {
+    normalizePersonState(person);
+    person.uiState.inventoryPages[pageKey] = currentPage;
+  }
+  return currentPage;
 }
 
 function baitShopCommand(roomState, sender) {
@@ -7456,10 +7477,16 @@ function inventoryCommand(roomState, sender, text) {
       "/상점 으로 구매 가능한 상품을 확인하세요."
     ].join("\n");
   }
-  const page = inventoryPageFromText(text, isItemCommand ? /^\/(?:아이템|보유아이템)\s*/i : /^\/가방\s*/i);
-  const pageSize = 8;
+  const pageSize = INVENTORY_PAGE_SIZE;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
+  const baseCommand = isItemCommand ? "/아이템" : "/가방";
+  const currentPage = inventoryPageFromText(
+    text,
+    isItemCommand ? /^\/(?:아이템|보유아이템)\s*/i : /^\/가방\s*/i,
+    person,
+    isItemCommand ? "items" : "bag",
+    totalPages
+  );
   const displayRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
     .map((item, index) => ({ ...item, selectNo: (currentPage - 1) * pageSize + index + 1 }));
   return [
@@ -7468,7 +7495,8 @@ function inventoryCommand(roomState, sender, text) {
     ...displayRows.map((item) => `${item.selectNo}. ${item.name} x ${item.quantity} ${itemIcon(item)} / 판매가 ${formatPoint(item.sellPrice)}${item.locked ? " / 잠금" : ""}`),
     "",
     "자세히 보기: /아이템상세 번호",
-    currentPage < totalPages ? "다음 페이지: /아이템 다음" : "판매 예시: /판매 1"
+    totalPages > 1 ? `페이지 이동: ${baseCommand} 1~${totalPages}` : "",
+    currentPage < totalPages ? `다음 페이지: ${baseCommand} 다음 또는 ${baseCommand} ${currentPage + 1}` : "판매 예시: /판매 1"
   ].join("\n");
 }
 
@@ -7499,10 +7527,9 @@ function saleListCommand(roomState, sender, text) {
   const person = ensurePerson(roomState, sender);
   const rows = inventoryDisplayRows(roomState, person, (row) => productSellPrice(inventoryProductById(roomState, row.productId)) > 0);
   if (!rows.length) return "💰 판매 목록\n\n판매 가능한 아이템이 없습니다.";
-  const page = inventoryPageFromText(text, /^\/판매목록\s*/i);
-  const pageSize = 8;
+  const pageSize = INVENTORY_PAGE_SIZE;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
+  const currentPage = inventoryPageFromText(text, /^\/판매목록\s*/i, person, "saleList", totalPages);
   const displayRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   return [
     `💰 판매 목록 ${currentPage}/${totalPages}`,
@@ -7510,7 +7537,8 @@ function saleListCommand(roomState, sender, text) {
     ...displayRows.map((item) => `${item.selectNo}. ${item.name} x ${item.quantity} ${itemIcon(item)} / ${formatPoint(item.sellPrice)}${isEquippedProduct(person, item.productId) ? " / 장착중" : ""}${item.locked ? " / 잠금" : ""}`),
     "",
     "판매: /판매 1",
-    currentPage < totalPages ? "다음: /판매목록 다음" : "정리: /판매미리보기 중복"
+    totalPages > 1 ? `페이지 이동: /판매목록 1~${totalPages}` : "",
+    currentPage < totalPages ? `다음: /판매목록 다음 또는 /판매목록 ${currentPage + 1}` : "정리: /판매미리보기 중복"
   ].join("\n");
 }
 
@@ -9496,7 +9524,7 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/어항", "게임", "보유 물고기와 수집률 확인", { aliases: ["/수족관"], requiresFeature: "games", searchableKeywords: ["낚시", "물고기", "수집"] }),
   registryEntry("/상점", "상점/가방", "구매 가능한 아이템 확인", { requiresFeature: "shop" }),
   registryEntry("/구매", "상점/가방", "포인트로 아이템 구매", { examples: ["/구매 1", "/구매 1 10"], requiresFeature: "shop" }),
-  registryEntry("/가방", "상점/가방", "내 아이템 확인", { aliases: ["/아이템", "/보유아이템"], examples: ["/아이템", "/아이템 다음"], requiresFeature: "shop" }),
+  registryEntry("/가방", "상점/가방", "내 아이템 확인", { aliases: ["/아이템", "/보유아이템"], examples: ["/아이템", "/아이템 다음", "/아이템 2"], requiresFeature: "shop" }),
   registryEntry("/가방정리", "상점/가방", "가방 정리와 판매 추천", { examples: ["/가방정리"], requiresFeature: "shop" }),
   registryEntry("/판매추천", "상점/가방", "판매 가능한 품목과 일괄 판매 흐름 추천", { examples: ["/판매추천"], requiresFeature: "shop", searchableKeywords: ["판매", "추천", "정리"] }),
   registryEntry("/정리추천", "상점/가방", "잠금, 중복, 재료 정리 흐름 추천", { examples: ["/정리추천"], requiresFeature: "shop", searchableKeywords: ["가방", "정리", "추천"] }),
