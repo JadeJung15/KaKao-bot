@@ -1943,6 +1943,7 @@ const initialState = {
 };
 
 let pgPool;
+let pgSchemaReady = false;
 let stateCache = null;
 let stateCacheKey = "";
 let stateCacheLoadedAt = 0;
@@ -2033,12 +2034,28 @@ const READ_ONLY_SAVE_SKIP_COMMANDS = new Set([
   "/상태", "/status", "/브릿지", "/bridge", "/js상태", "/jsstatus", "/로컬상태",
   "/도움말", "/help", "/?", "/메뉴", "/처음", "/찾기", "/명령어",
   "/게임", "/게임명령어", "/점메추", "/명령어팩", "/게임팩도움말",
-  "/포인트", "/내포인트", "/고정명령어", "/추천", "/추천명령어", "/오늘할일", "/할일"
+  "/포인트", "/내포인트", "/고정명령어", "/추천", "/추천명령어", "/오늘할일", "/할일",
+  "/판매추천", "/정리추천", "/명령어목록", "/커스텀명령어", "/명령어검색", "/명령어설치목록",
+  "/명령어팩목록", "/장착팩", "/팩목록", "/방정보", "/방목록", "/구독상태", "/기능", "/기능목록",
+  "/상점", "/구매내역", "/상점내역", "/기능아이템목록",
+  "/판매미리보기", "/가방정리", "/아이템상세", "/잠금목록",
+  "/미끼상점", "/어항", "/수족관", "/던전목록", "/모험", "/대장간", "/제작가능",
+  "/강화목록", "/강화상세", "/장비", "/장비상세", "/스탯", "/세트아이템",
+  "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터퀘스트", "/몬스터도감",
+  "/펫", "/펫상점", "/미출석", "/출석순위", "/포인트순위", "/좋아요순위", "/레벨순위",
+  "/채팅오늘", "/채팅금주", "/포인트안내", "/포인트규칙", "/뽑기목록", "/내정보", "/정보",
+  "/관리자목록", "/프로필", "/내별명", "/별명목록", "/입퇴장상세", "/입퇴장현황", "/닉이력",
+  "/최근이벤트", "/이벤트로그", "/원본로그", "/원본이벤트", "/운세", "/오늘운세"
 ]);
 
 function isReadOnlySaveSkipCommand(message) {
   const parsed = parseBotCommand(message);
   if (!parsed.isCommandAttempt) return false;
+  const compactCommand = compactSpaces(message);
+  if (/^\/출석\s*순위$/.test(compactCommand)) return true;
+  if (/^\/포인트\s*순위$/.test(compactCommand)) return true;
+  if (/^\/좋아요\s*순위$/.test(compactCommand)) return true;
+  if (/^\/레벨\s*순위$/.test(compactCommand)) return true;
   return READ_ONLY_SAVE_SKIP_COMMANDS.has(parsed.command);
 }
 
@@ -2714,6 +2731,7 @@ async function getPgPool() {
 }
 
 async function ensurePgDb(pool) {
+  if (pgSchemaReady) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS kakao_room_ops_state (
       id text PRIMARY KEY,
@@ -2721,6 +2739,7 @@ async function ensurePgDb(pool) {
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `);
+  pgSchemaReady = true;
 }
 
 async function loadStateFromPostgres(pool) {

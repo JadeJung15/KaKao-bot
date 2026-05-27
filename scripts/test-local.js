@@ -417,6 +417,26 @@ try {
   assert.equal(readOnlyTiming.json.timing.saveStateMs, 0);
   assert.equal(typeof readOnlyTiming.json.timing.commandMs, "number");
 
+  const readOnlyShopTiming = await chatPayload({
+    room: "테스트방",
+    msg: "/상점",
+    sender: "조회사용자",
+    eventId: `readonly-shop-${process.pid}`
+  });
+  assert.equal(readOnlyShopTiming.response.status, 200);
+  assert.equal(readOnlyShopTiming.json.timing.saveRequired, false);
+  assert.equal(readOnlyShopTiming.json.timing.saveStateMs, 0);
+
+  const readOnlyDungeonListTiming = await chatPayload({
+    room: "테스트방",
+    msg: "/던전목록",
+    sender: "조회사용자",
+    eventId: `readonly-dungeon-list-${process.pid}`
+  });
+  assert.equal(readOnlyDungeonListTiming.response.status, 200);
+  assert.equal(readOnlyDungeonListTiming.json.timing.saveRequired, false);
+  assert.equal(readOnlyDungeonListTiming.json.timing.saveStateMs, 0);
+
   const duplicateEventId = `dup-${process.pid}`;
   const duplicateRoom = `중복검증방-${process.pid}`;
   const duplicateRoomId = `dupRoom${process.pid}`;
