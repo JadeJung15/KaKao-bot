@@ -437,6 +437,26 @@ try {
   assert.equal(readOnlyDungeonListTiming.json.timing.saveRequired, false);
   assert.equal(readOnlyDungeonListTiming.json.timing.saveStateMs, 0);
 
+  const readOnlyBagTiming = await chatPayload({
+    room: "테스트방",
+    msg: "/가방",
+    sender: "조회사용자",
+    eventId: `readonly-bag-${process.pid}`
+  });
+  assert.equal(readOnlyBagTiming.response.status, 200);
+  assert.equal(readOnlyBagTiming.json.timing.saveRequired, false);
+  assert.equal(readOnlyBagTiming.json.timing.saveStateMs, 0);
+
+  const readOnlySaleListTiming = await chatPayload({
+    room: "테스트방",
+    msg: "/판매목록",
+    sender: "조회사용자",
+    eventId: `readonly-sale-list-${process.pid}`
+  });
+  assert.equal(readOnlySaleListTiming.response.status, 200);
+  assert.equal(readOnlySaleListTiming.json.timing.saveRequired, false);
+  assert.equal(readOnlySaleListTiming.json.timing.saveStateMs, 0);
+
   const duplicateEventId = `dup-${process.pid}`;
   const duplicateRoom = `중복검증방-${process.pid}`;
   const duplicateRoomId = `dupRoom${process.pid}`;
@@ -5631,22 +5651,32 @@ try {
   }
   const pagerFirst = await chat("/아이템", "페이저");
   assert.match(pagerFirst.json.reply, /보유 아이템 1\/3/);
+  assert.equal(pagerFirst.json.timing.saveRequired, false);
+  assert.equal(pagerFirst.json.timing.saveStateMs, 0);
   assert.match(pagerFirst.json.reply, /10\./);
   assert.doesNotMatch(pagerFirst.json.reply, /11\./);
   assert.match(pagerFirst.json.reply, /다음 페이지: \/아이템 다음/);
   assert.match(pagerFirst.json.reply, /페이지 이동: \/아이템 1~3/);
   const pagerSecond = await chat("/아이템 다음", "페이저");
   assert.match(pagerSecond.json.reply, /보유 아이템 2\/3/);
+  assert.equal(pagerSecond.json.timing.saveRequired, false);
+  assert.equal(pagerSecond.json.timing.saveStateMs, 0);
   assert.match(pagerSecond.json.reply, /11\./);
   assert.match(pagerSecond.json.reply, /20\./);
   const pagerThird = await chat("/아이템 다음", "페이저");
   assert.match(pagerThird.json.reply, /보유 아이템 3\/3/);
+  assert.equal(pagerThird.json.timing.saveRequired, false);
+  assert.equal(pagerThird.json.timing.saveStateMs, 0);
   assert.match(pagerThird.json.reply, /21\./);
   const pagerExplicitSecond = await chat("/아이템 2", "페이저");
   assert.match(pagerExplicitSecond.json.reply, /보유 아이템 2\/3/);
+  assert.equal(pagerExplicitSecond.json.timing.saveRequired, false);
+  assert.equal(pagerExplicitSecond.json.timing.saveStateMs, 0);
   assert.match(pagerExplicitSecond.json.reply, /11\./);
   const pagerSaleList = await chat("/판매목록 2", "페이저");
   assert.match(pagerSaleList.json.reply, /판매 목록 2\/3/);
+  assert.equal(pagerSaleList.json.timing.saveRequired, false);
+  assert.equal(pagerSaleList.json.timing.saveStateMs, 0);
   assert.match(pagerSaleList.json.reply, /11\./);
 
   const rpgItemDetail = await chat("/아이템상세 1", "모험가 여");

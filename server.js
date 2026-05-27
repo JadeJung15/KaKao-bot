@@ -1948,6 +1948,8 @@ let stateCache = null;
 let stateCacheKey = "";
 let stateCacheLoadedAt = 0;
 let stateCacheFingerprint = "";
+const chatPageMemory = new Map();
+const CHAT_PAGE_MEMORY_TTL_MS = Math.max(60_000, Number(process.env.CHAT_PAGE_MEMORY_TTL_MS || 600_000));
 
 function normalizeText(value) {
   return String(value ?? "").trim();
@@ -2037,8 +2039,8 @@ const READ_ONLY_SAVE_SKIP_COMMANDS = new Set([
   "/포인트", "/내포인트", "/고정명령어", "/추천", "/추천명령어", "/오늘할일", "/할일",
   "/판매추천", "/정리추천", "/명령어목록", "/커스텀명령어", "/명령어검색", "/명령어설치목록",
   "/명령어팩목록", "/장착팩", "/팩목록", "/방정보", "/방목록", "/구독상태", "/기능", "/기능목록",
-  "/상점", "/구매내역", "/상점내역", "/기능아이템목록",
-  "/판매미리보기", "/가방정리", "/아이템상세", "/잠금목록",
+  "/상점", "/구매내역", "/상점내역", "/기능아이템목록", "/가방", "/아이템", "/보유아이템",
+  "/판매목록", "/판매미리보기", "/가방정리", "/아이템상세", "/잠금목록",
   "/미끼상점", "/어항", "/수족관", "/던전목록", "/모험", "/대장간", "/제작가능",
   "/강화목록", "/강화상세", "/장비", "/장비상세", "/스탯", "/세트아이템",
   "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터퀘스트", "/몬스터도감",
@@ -7651,6 +7653,12 @@ function consumeAutoHuntTicket(roomState, person) {
   return consumeAutoGameTickets(roomState, person, AUTO_GAME_TICKET_CONFIGS.hunt, 1)[0] || null;
 }
 
+function addInventoryCounts(person, counts) {
+  for (const [productId, quantity] of counts.entries()) {
+    addInventory(person, productId, quantity);
+  }
+}
+
 function parseProductIdFromCommand(text, pattern) {
   const body = compactSpaces(text.replace(pattern, ""));
   const productId = Math.trunc(Number(body));
@@ -7823,9 +7831,36 @@ function clampPage(value, totalPages = 1) {
   return Math.min(Math.max(1, page), maxPage);
 }
 
-function inventoryPageFromText(text, pattern, person = null, pageKey = "items", totalPages = 1) {
+function chatPageMemoryKey(roomState, person, fallback, pageKey) {
+  const roomPart = roomKey(roomState?.name || "");
+  const personPart = personKey(person?.currentName || fallback || "");
+  return `${roomPart}:${personPart}:${pageKey}`;
+}
+
+function rememberedChatPage(memoryKey, fallbackPage = 1) {
+  if (!memoryKey) return fallbackPage;
+  const record = chatPageMemory.get(memoryKey);
+  if (!record || Date.now() - Number(record.at || 0) > CHAT_PAGE_MEMORY_TTL_MS) {
+    chatPageMemory.delete(memoryKey);
+    return fallbackPage;
+  }
+  return Math.max(1, Math.trunc(Number(record.page || fallbackPage)) || fallbackPage);
+}
+
+function rememberChatPage(memoryKey, page) {
+  if (!memoryKey) return;
+  chatPageMemory.set(memoryKey, { page, at: Date.now() });
+  if (chatPageMemory.size <= 1000) return;
+  const cutoff = Date.now() - CHAT_PAGE_MEMORY_TTL_MS;
+  for (const [key, record] of chatPageMemory.entries()) {
+    if (Number(record.at || 0) < cutoff || chatPageMemory.size > 1000) chatPageMemory.delete(key);
+  }
+}
+
+function inventoryPageFromText(text, pattern, person = null, pageKey = "items", totalPages = 1, memoryKey = "") {
   const body = compactSpaces(text.replace(pattern, ""));
-  const rememberedPage = person?.uiState?.inventoryPages?.[pageKey] || 1;
+  const storedPage = person?.uiState?.inventoryPages?.[pageKey] || 1;
+  const rememberedPage = rememberedChatPage(memoryKey, storedPage);
   let page = 1;
   if (!body || body === "1") page = 1;
   else if (body === "다음") page = Number(rememberedPage) + 1;
@@ -7835,7 +7870,9 @@ function inventoryPageFromText(text, pattern, person = null, pageKey = "items", 
     page = match ? Math.trunc(Number(match[1])) : 1;
   }
   const currentPage = clampPage(page, totalPages);
-  if (person) {
+  if (memoryKey) {
+    rememberChatPage(memoryKey, currentPage);
+  } else if (person) {
     normalizePersonState(person);
     person.uiState.inventoryPages[pageKey] = currentPage;
   }
@@ -8121,12 +8158,14 @@ function inventoryCommand(roomState, sender, text) {
   const pageSize = INVENTORY_PAGE_SIZE;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const baseCommand = isItemCommand ? "/아이템" : "/가방";
+  const pageKey = isItemCommand ? "items" : "bag";
   const currentPage = inventoryPageFromText(
     text,
     isItemCommand ? /^\/(?:아이템|보유아이템)\s*/i : /^\/가방\s*/i,
     person,
-    isItemCommand ? "items" : "bag",
-    totalPages
+    pageKey,
+    totalPages,
+    chatPageMemoryKey(roomState, person, target, pageKey)
   );
   const displayRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
     .map((item, index) => ({ ...item, selectNo: (currentPage - 1) * pageSize + index + 1 }));
@@ -8170,7 +8209,14 @@ function saleListCommand(roomState, sender, text) {
   if (!rows.length) return "💰 판매 목록\n\n판매 가능한 아이템이 없습니다.";
   const pageSize = INVENTORY_PAGE_SIZE;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const currentPage = inventoryPageFromText(text, /^\/판매목록\s*/i, person, "saleList", totalPages);
+  const currentPage = inventoryPageFromText(
+    text,
+    /^\/판매목록\s*/i,
+    person,
+    "saleList",
+    totalPages,
+    chatPageMemoryKey(roomState, person, sender, "saleList")
+  );
   const displayRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   return [
     `💰 판매 목록 ${currentPage}/${totalPages}`,
@@ -9009,7 +9055,8 @@ function autoHuntDungeonCommand(roomState, sender, text) {
   if (person.rpgAutoHunt.date !== kstDateKey()) person.rpgAutoHunt = { date: kstDateKey(), count: 0 };
   person.rpgAutoHunt.count += ticketUse;
 
-  const rewards = [];
+  const rewardCounts = new Map();
+  let rewardCount = 0;
   let blanks = 0;
   let totalSell = 0;
   let rareCount = 0;
@@ -9019,11 +9066,12 @@ function autoHuntDungeonCommand(roomState, sender, text) {
       blanks += 1;
       continue;
     }
-    addInventory(person, item.id, 1);
+    rewardCounts.set(item.id, (rewardCounts.get(item.id) || 0) + 1);
+    rewardCount += 1;
     totalSell += productSellPrice(item);
     if (rpgRareReward(item)) rareCount += 1;
-    rewards.push(item);
   }
+  addInventoryCounts(person, rewardCounts);
   const craftingBonus = grantAutoDungeonCraftingSupport(roomState, person, config, runs);
   totalSell += craftingBonus.totalSell;
   recordRoomEvent(roomState, {
@@ -9032,7 +9080,7 @@ function autoHuntDungeonCommand(roomState, sender, text) {
     dungeon: config.title,
     runs,
     tickets: ticketUse,
-    rewards: rewards.length + craftingBonus.materialCount,
+    rewards: rewardCount + craftingBonus.materialCount,
     blanks,
     totalSell,
     craftingBonusMaterials: craftingBonus.materialCount,
@@ -9052,7 +9100,7 @@ function autoHuntDungeonCommand(roomState, sender, text) {
     "🏰 자동던전 결과",
     `${config.title} ${runs}회 요약`,
     "",
-    `획득: ${rewards.length + craftingBonus.materialCount}개 / 꽝 ${blanks}회`,
+    `획득: ${rewardCount + craftingBonus.materialCount}개 / 꽝 ${blanks}회`,
     `희귀 이상: ${rareCount}개`,
     craftingBonus.materialCount || craftingBonus.pointBonus ? `제작 보너스: 재료 ${craftingBonus.materialCount}개 / 지원금 ${formatPoint(craftingBonus.pointBonus)}` : "",
     `예상 판매가: ${formatPoint(totalSell)}`,
@@ -9070,17 +9118,19 @@ function autoExploreCommand(roomState, sender, text) {
   if (ticketCount < ticketUse) return autoGameTicketRequiredText(config, ticketUse);
   consumeAutoGameTickets(roomState, person, config, ticketUse);
   const runs = ticketUse * RPG_AUTO_HUNT_RUNS;
-  const rewards = [];
+  const rewardCounts = new Map();
+  let rewardCount = 0;
   let totalSell = 0;
   let rareCount = 0;
   for (let index = 0; index < runs; index += 1) {
     const item = randomExploreProduct();
-    addInventory(person, item.id, 1);
+    rewardCounts.set(item.id, (rewardCounts.get(item.id) || 0) + 1);
+    rewardCount += 1;
     totalSell += productSellPrice(item);
     if (rpgRareReward(item)) rareCount += 1;
-    rewards.push(item);
   }
-  recordRoomEvent(roomState, { type: "auto_explore", name: person.currentName, runs, tickets: ticketUse, rewards: rewards.length, totalSell });
+  addInventoryCounts(person, rewardCounts);
+  recordRoomEvent(roomState, { type: "auto_explore", name: person.currentName, runs, tickets: ticketUse, rewards: rewardCount, totalSell });
   recordShopTransaction(roomState, {
     type: "auto_explore",
     productId: AUTO_EXPLORE_TICKET_ITEM_ID,
@@ -9094,7 +9144,7 @@ function autoExploreCommand(roomState, sender, text) {
     "🧭 자동탐험 결과",
     `${runs}회 요약`,
     "",
-    `획득: ${rewards.length}개`,
+    `획득: ${rewardCount}개`,
     `희귀 이상: ${rareCount}개`,
     `예상 판매가: ${formatPoint(totalSell)}`,
     `남은 자동탐험권: ${autoGameTicketQuantity(roomState, person, config)}장`
@@ -9121,17 +9171,19 @@ function autoFishingCommand(roomState, sender, text) {
   }
   consumeAutoGameTickets(roomState, person, config, ticketUse);
   removeInventory(person, BAIT_ITEM_ID, runs);
-  const rewards = [];
+  const rewardCounts = new Map();
+  let rewardCount = 0;
   let totalSell = 0;
   let rareCount = 0;
   for (let index = 0; index < runs; index += 1) {
     const item = randomFishProduct();
-    addInventory(person, item.id, 1);
+    rewardCounts.set(item.id, (rewardCounts.get(item.id) || 0) + 1);
+    rewardCount += 1;
     totalSell += productSellPrice(item);
     if (rpgRareReward(item)) rareCount += 1;
-    rewards.push(item);
   }
-  recordRoomEvent(roomState, { type: "auto_fishing", name: person.currentName, runs, tickets: ticketUse, rewards: rewards.length, totalSell });
+  addInventoryCounts(person, rewardCounts);
+  recordRoomEvent(roomState, { type: "auto_fishing", name: person.currentName, runs, tickets: ticketUse, rewards: rewardCount, totalSell });
   recordShopTransaction(roomState, {
     type: "auto_fishing",
     productId: AUTO_FISHING_TICKET_ITEM_ID,
@@ -9145,7 +9197,7 @@ function autoFishingCommand(roomState, sender, text) {
     "🎣 자동낚시 결과",
     `${runs}회 요약`,
     "",
-    `획득: ${rewards.length}마리`,
+    `획득: ${rewardCount}마리`,
     `희귀 이상: ${rareCount}마리`,
     `예상 판매가: ${formatPoint(totalSell)}`,
     `남은 자동낚시권: ${autoGameTicketQuantity(roomState, person, config)}장`,
