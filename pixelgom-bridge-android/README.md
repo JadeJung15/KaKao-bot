@@ -20,9 +20,9 @@
 | 월 이용금액 | `5,500원` |
 | targetSdk | 35 |
 | 배포 형식 | Android App Bundle `.aab` |
-| 현재 서버 권장 | `1.0.29` / versionCode `30` |
-| 내부 테스트 등록 | `1.0.29` / versionCode `30` |
-| 다음 준비 AAB | `1.0.30` / versionCode `31` |
+| 현재 서버 권장 | `1.0.30` / versionCode `31` |
+| 내부 테스트 등록 | `1.0.30` / versionCode `31` |
+| 다음 준비 AAB | 없음 |
 
 ## 로컬 빌드
 
