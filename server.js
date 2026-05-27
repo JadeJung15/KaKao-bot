@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.25";
+export const APP_VERSION = "0.5.26";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -281,7 +281,10 @@ export const FEATURES = [
   "ux-work-type-guide",
   "pixel-monster-daily-loop",
   "pixel-monster-team-evolution",
-  "pixel-monster-weekly-boss"
+  "pixel-monster-weekly-boss",
+  "rpg-auto-hunt-ticket",
+  "rpg-equipment-enhancement",
+  "rpg-adventure-hub"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -391,6 +394,8 @@ const INVENTORY_PAGE_SIZE = 10;
 const BAIT_ITEM_ID = 9001;
 const CAPTURE_STONE_ITEM_ID = 9301;
 const PET_SNACK_ITEM_ID = 9302;
+const AUTO_HUNT_TICKET_ITEM_ID = 9303;
+const ENHANCEMENT_STONE_ITEM_ID = 9304;
 const FISH_ITEM_ID_START = 10000;
 const FISH_SPECIES_COUNT = 60;
 const FISH_GRADE_COUNT = 5;
@@ -398,6 +403,9 @@ const FISH_CATALOG_SIZE = FISH_SPECIES_COUNT * FISH_GRADE_COUNT;
 const RPG_ITEM_ID_START = 11000;
 const RPG_ITEM_CATALOG_SIZE = 500;
 const RPG_WEAPON_ITEM_ID_START = 12000;
+const RPG_AUTO_HUNT_RUNS = 10;
+const RPG_MAX_ENHANCEMENT_LEVEL = 10;
+const RPG_REWARD_CHOICE_TTL_MS = 10 * 60 * 1000;
 const PIXEL_MONSTER_SPECIES_COUNT = 150;
 const REENTRY_CANDIDATE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const SYSTEM_EVENT_DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
@@ -517,7 +525,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
     title: "게임/연동 예약",
     commands: [
       "/게임", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/미끼상점", "/미끼구매", "/어항", "/수족관",
-      "/던전", "/던전목록", "/대장간", "/제작", "/장비", "/장착",
+      "/모험", "/던전", "/던전목록", "/자동사냥", "/대장간", "/제작", "/제작가능", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장착",
       "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감",
       "/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점",
       "/픽셀곰게임", "/게임연동"
@@ -1077,6 +1085,30 @@ const SYSTEM_PRODUCTS = Object.freeze([
     system: true,
     category: "pet"
   },
+  {
+    id: AUTO_HUNT_TICKET_ITEM_ID,
+    name: "자동사냥권",
+    price: 250,
+    sellPrice: 100,
+    description: "RPG 던전 10회를 한 번에 요약 처리하는 티켓",
+    active: true,
+    system: true,
+    category: "rpg_ticket",
+    rarity: "uncommon",
+    gradeLabel: "고급"
+  },
+  {
+    id: ENHANCEMENT_STONE_ITEM_ID,
+    name: "강화석",
+    price: 120,
+    sellPrice: 45,
+    description: "RPG 장비 강화에 사용하는 재료",
+    active: true,
+    system: true,
+    category: "rpg_enhance",
+    rarity: "uncommon",
+    gradeLabel: "고급"
+  },
   ...EXPLORE_REWARD_ITEMS.map((item) => ({
     ...item,
     price: item.sellPrice * 2,
@@ -1318,7 +1350,7 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "attendance-growth": ["/출석", "/미출석", "/출석순위", "/포인트", "/내정보", "/포인트순위"],
   "point-economy": ["/포인트", "/내정보", "/좋아요", "/응원", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위"],
   "game-chance": ["/게임", "/오늘할일", "/주사위", "/낚시", "/탐험", "/뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/포인트"],
-  "rpg-adventure": ["/던전", "/던전목록", "/대장간", "/제작가능", "/제작", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/판매미리보기", "/판매추천", "/정리추천", "/일괄판매", "/가방", "/가방정리", "/판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/포인트"],
+  "rpg-adventure": ["/모험", "/던전", "/던전목록", "/자동사냥", "/대장간", "/제작가능", "/제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/판매미리보기", "/판매추천", "/정리추천", "/일괄판매", "/가방", "/가방정리", "/판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/포인트"],
   "pixel-monster-rpg": ["/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감", "/포인트"],
   "pet-raising": ["/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점", "/포인트"],
   "shop-inventory": ["/상점", "/구매", "/가방", "/가방정리", "/판매추천", "/정리추천", "/아이템상세", "/판매목록", "/판매미리보기", "/사용", "/가방선물", "/판매", "/일괄판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/구매내역"],
@@ -1650,10 +1682,10 @@ const GAME_PACK_HELP_TOPICS = Object.freeze({
     path: "/help/rpg",
     packIds: ["rpg-adventure"],
     aliases: ["rpg", "RPG", "모험", "던전"],
-    intro: "던전에서 재료를 얻고 대장간에서 무기를 제작해 장착하는 모험형 게임팩입니다.",
-    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/던전", "/제작가능", "/자동장착 공격", "/가방정리"],
+    intro: "던전, 자동사냥권 10회 요약, 장비 강화, 제작, 자동장착을 묶은 모험형 게임팩입니다.",
+    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/모험", "/자동사냥", "/제작가능", "/강화목록", "/자동장착 공격"],
     adminSetup: ["명령어팩 장착: /명령어설치 pk.006", "게임 기능 켜기: /기능켜기 게임", "상점/가방 기능 확인: /기능목록"],
-    examples: ["/던전", "/던전 중급", "/대장간", "/제작가능", "/장착 1", "/자동장착 공격", "/판매미리보기 재료", "/아이템잠금 2"],
+    examples: ["/모험", "/던전 중급", "/자동사냥 중급", "/대장간", "/제작가능", "/강화 무기", "/강화상세", "/자동장착 공격", "/보상선택 포인트"],
     related: ["shop-inventory", "pet-raising"]
   },
   monster: {
@@ -4098,6 +4130,34 @@ function normalizeEquipment(value = {}) {
   };
 }
 
+function normalizeEquipmentEnhancements(value = {}) {
+  const result = {};
+  for (const [rawId, rawLevel] of Object.entries(value || {})) {
+    const id = String(Math.max(0, Math.trunc(Number(rawId || 0))));
+    const product = systemProductById(id);
+    if (!id || id === "0" || !product || !rpgEquipmentSlot(product)) continue;
+    const level = Math.min(RPG_MAX_ENHANCEMENT_LEVEL, Math.max(0, Math.trunc(Number(rawLevel || 0))));
+    if (level > 0) result[id] = level;
+  }
+  return result;
+}
+
+function normalizePendingRpgReward(value = null) {
+  if (!value || typeof value !== "object") return null;
+  const expiresAt = Date.parse(value.expiresAt || "");
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+  const choices = Array.isArray(value.choices) ? value.choices.filter((choice) => ["재료", "포인트", "강화재료"].includes(choice)) : [];
+  if (!choices.length) return null;
+  return {
+    id: normalizeText(value.id) || randomBytes(4).toString("hex"),
+    source: normalizeText(value.source || "dungeon"),
+    dungeon: normalizeText(value.dungeon || ""),
+    choices,
+    createdAt: normalizeText(value.createdAt || nowIso()),
+    expiresAt: new Date(expiresAt).toISOString()
+  };
+}
+
 function pixelMonsterSpeciesById(speciesId = "") {
   const id = normalizeText(speciesId);
   return PIXEL_MONSTER_SPECIES.find((species) => species.speciesId === id) || null;
@@ -4829,6 +4889,11 @@ function normalizePersonState(person) {
   person.uiState ||= {};
   person.uiState.inventoryPages ||= {};
   person.equipment = normalizeEquipment(person.equipment || {});
+  person.equipmentEnhancements = normalizeEquipmentEnhancements(person.equipmentEnhancements || {});
+  person.pendingRpgReward = normalizePendingRpgReward(person.pendingRpgReward || null);
+  person.rpgAutoHunt ||= {};
+  person.rpgAutoHunt.date = person.rpgAutoHunt.date === kstDateKey() ? person.rpgAutoHunt.date : kstDateKey();
+  person.rpgAutoHunt.count = Math.max(0, Math.trunc(Number(person.rpgAutoHunt.count || 0)));
   person.monsters = normalizeOwnedMonsters(person.monsters || []);
   person.pendingMonster = normalizePendingMonster(person.pendingMonster || null);
   person.monsterShards ||= {};
@@ -8342,9 +8407,9 @@ function exploreGameCommand(roomState, sender) {
 }
 
 const DUNGEON_CONFIGS = Object.freeze([
-  { key: "beginner", names: ["", "초급", "초급 광산", "광산"], title: "초급 광산", blankChance: 0.25, itemStart: 0, itemEnd: 119 },
-  { key: "middle", names: ["중급", "중급 유적", "유적"], title: "중급 유적", blankChance: 0.30, itemStart: 80, itemEnd: 299 },
-  { key: "advanced", names: ["상급", "상급 심연", "심연"], title: "상급 심연", blankChance: 0.35, itemStart: 240, itemEnd: 499 }
+  { key: "beginner", names: ["", "초급", "초급 광산", "광산"], title: "초급 광산", purpose: "초급 재료", blankChance: 0.25, itemStart: 0, itemEnd: 119, treasureChance: 0.08 },
+  { key: "middle", names: ["중급", "중급 유적", "유적"], title: "중급 유적", purpose: "중급 제작", blankChance: 0.30, itemStart: 80, itemEnd: 299, treasureChance: 0.10 },
+  { key: "advanced", names: ["상급", "상급 심연", "심연"], title: "상급 심연", purpose: "상급 강화/희귀", blankChance: 0.35, itemStart: 240, itemEnd: 499, treasureChance: 0.12 }
 ]);
 
 function dungeonConfigFromText(text = "") {
@@ -8356,10 +8421,11 @@ function dungeonListCommand() {
   return [
     "픽셀곰 던전 목록",
     "",
-    ...DUNGEON_CONFIGS.map((config) => `• ${config.title}: 꽝 ${Math.round(config.blankChance * 100)}%, ${config.key === "beginner" ? "기본 재료 중심" : config.key === "middle" ? "중급 재료와 희귀 재료" : "상급 재료와 고급 전리품"}`),
+    ...DUNGEON_CONFIGS.map((config) => `• ${config.title}: ${config.purpose} / 꽝 ${Math.round(config.blankChance * 100)}%`),
     "",
     "/던전 또는 /던전 중급 으로 입장합니다.",
-    "/대장간 에서 재료 제작식을 확인할 수 있습니다."
+    "10회 요약: /자동사냥 중급",
+    "장비 성장: /제작가능, /강화목록"
   ].join("\n");
 }
 
@@ -8378,6 +8444,8 @@ function dungeonCommand(roomState, sender, text) {
   const config = dungeonConfigFromText(text);
   const item = randomDungeonItem(config);
   markGameCooldown(person, "dungeon");
+  const treasureFound = Math.random() < Number(config.treasureChance || 0);
+  if (treasureFound) createPendingRpgReward(person, config);
   if (!item) {
     recordRoomEvent(roomState, { type: "dungeon_blank", name: person.currentName, dungeon: config.title });
     return [
@@ -8385,7 +8453,7 @@ function dungeonCommand(roomState, sender, text) {
       "",
       `${displayName}님이 ${config.title}을(를) 탐험했습니다.`,
       "결과: 꽝",
-      "아무것도 얻지 못했습니다."
+      treasureFound ? "보물상자 발견: /보상선택 재료|포인트|강화재료" : "아무것도 얻지 못했습니다."
     ].join("\n");
   }
   const quantity = addInventory(person, item.id, 1);
@@ -8406,8 +8474,142 @@ function dungeonCommand(roomState, sender, text) {
     `${displayName}님이 ${config.title}에서 재료를 획득했습니다.`,
     `가방에 보관: ${item.name} x ${quantity}`,
     `판매가: ${formatPoint(item.sellPrice)}`,
+    treasureFound ? "보물상자: /보상선택 포인트" : "",
     "판매: /판매 1",
     "상세: /아이템상세 1"
+  ].filter(Boolean).join("\n");
+}
+
+function rpgRareReward(product) {
+  return ["rare", "epic", "legendary"].includes(product?.rarity) || Number(product?.sellPrice || 0) >= 48;
+}
+
+function createPendingRpgReward(person, config) {
+  person.pendingRpgReward = {
+    id: randomBytes(4).toString("hex"),
+    source: "dungeon",
+    dungeon: config.title,
+    choices: ["재료", "포인트", "강화재료"],
+    createdAt: nowIso(),
+    expiresAt: new Date(Date.now() + RPG_REWARD_CHOICE_TTL_MS).toISOString()
+  };
+  return person.pendingRpgReward;
+}
+
+function autoHuntDungeonCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  const ticketCount = inventoryQuantity(person, AUTO_HUNT_TICKET_ITEM_ID);
+  if (ticketCount < 1) {
+    return [
+      "🎫 자동사냥권이 필요합니다.",
+      "",
+      "자동사냥은 자동사냥권 1장으로 던전 10회를 요약 처리합니다.",
+      "구매/획득: 이벤트 보상, 관리자 지급, 방 상점 등록을 이용해 주세요.",
+      "직접 플레이: /던전"
+    ].join("\n");
+  }
+  const config = dungeonConfigFromText(text.replace(/^\/자동사냥\s*/i, "/던전 "));
+  removeInventory(person, AUTO_HUNT_TICKET_ITEM_ID, 1);
+  person.rpgAutoHunt ||= { date: kstDateKey(), count: 0 };
+  if (person.rpgAutoHunt.date !== kstDateKey()) person.rpgAutoHunt = { date: kstDateKey(), count: 0 };
+  person.rpgAutoHunt.count += 1;
+
+  const rewards = [];
+  let blanks = 0;
+  let totalSell = 0;
+  let rareCount = 0;
+  for (let index = 0; index < RPG_AUTO_HUNT_RUNS; index += 1) {
+    const item = randomDungeonItem(config);
+    if (!item) {
+      blanks += 1;
+      continue;
+    }
+    addInventory(person, item.id, 1);
+    totalSell += productSellPrice(item);
+    if (rpgRareReward(item)) rareCount += 1;
+    rewards.push(item);
+  }
+  recordRoomEvent(roomState, {
+    type: "rpg_auto_hunt",
+    name: person.currentName,
+    dungeon: config.title,
+    runs: RPG_AUTO_HUNT_RUNS,
+    rewards: rewards.length,
+    blanks,
+    totalSell
+  });
+  recordShopTransaction(roomState, {
+    type: "rpg_auto_hunt",
+    productId: AUTO_HUNT_TICKET_ITEM_ID,
+    productName: "자동사냥권",
+    quantity: 1,
+    unitPrice: 0,
+    totalPrice: totalSell,
+    to: person.currentName,
+    by: person.currentName
+  });
+  return [
+    "🏰 자동사냥 결과",
+    `${config.title} ${RPG_AUTO_HUNT_RUNS}회 요약`,
+    "",
+    `획득: ${rewards.length}개 / 꽝 ${blanks}회`,
+    `희귀 이상: ${rareCount}개`,
+    `예상 판매가: ${formatPoint(totalSell)}`,
+    `제작 가능: ${rpgCraftableCount(person)}개`,
+    `남은 자동사냥권: ${inventoryQuantity(person, AUTO_HUNT_TICKET_ITEM_ID)}장`
+  ].join("\n");
+}
+
+function rewardChoiceCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  const pending = normalizePendingRpgReward(person.pendingRpgReward);
+  person.pendingRpgReward = pending;
+  if (!pending) {
+    return [
+      "🎁 보상 선택",
+      "선택 가능한 보상이 없습니다.",
+      "던전에서 보물상자를 발견하면 /보상선택 재료|포인트|강화재료 를 사용할 수 있습니다."
+    ].join("\n");
+  }
+  const body = compactSpaces(text.replace(/^\/보상선택\s*/i, ""));
+  const choice = pending.choices.find((item) => keyFor(item) === keyFor(body)) || "";
+  if (!choice) return `보상 선택: ${pending.choices.join(" / ")}`;
+  let result = "";
+  if (choice === "포인트") {
+    person.points += 120;
+    result = `포인트 ${formatPoint(120)}`;
+  } else if (choice === "강화재료") {
+    const qty = addInventory(person, ENHANCEMENT_STONE_ITEM_ID, 1);
+    result = `강화석 x ${qty}`;
+  } else {
+    const item = randomDungeonItem(DUNGEON_CONFIGS[0]) || systemProductById(RPG_ITEM_ID_START);
+    const qty = addInventory(person, item.id, 1);
+    result = `${item.name} x ${qty}`;
+  }
+  person.pendingRpgReward = null;
+  recordRoomEvent(roomState, { type: "rpg_reward_choice", name: person.currentName, choice, result });
+  return ["🎁 보상 선택 완료", `선택: ${choice}`, `획득: ${result}`].join("\n");
+}
+
+function rpgAdventureHubCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const displayName = displayNameForPerson(roomState, person, sender);
+  const ticketCount = inventoryQuantity(person, AUTO_HUNT_TICKET_ITEM_ID);
+  const craftableCount = rpgCraftableCount(person);
+  const equipped = rpgEquippedProductsBySlot(person);
+  const enhanceTarget = equipped.weapon || equipped.armor || equipped.accessory;
+  const enhanceText = enhanceTarget
+    ? `${rpgEquipmentName(person, enhanceTarget)}`
+    : "장비 없음";
+  const cooldown = gameCooldownText(person, "dungeon") || "바로 가능";
+  return [
+    `🏰 ${displayName}님의 RPG 모험`,
+    `오늘 할 일: /던전 → /제작가능 → /강화목록`,
+    `자동사냥권: ${ticketCount}장 / /자동사냥 중급`,
+    `제작 가능: ${craftableCount}개`,
+    `강화 추천: ${enhanceText}`,
+    `던전 상태: ${cooldown}`,
+    "추천 행동: /자동장착 공격"
   ].join("\n");
 }
 
@@ -8435,6 +8637,10 @@ function rpgRecipeCanCraft(person, recipe) {
   return hasMaterials && Number(person.points || 0) >= Number(recipe.pointCost || 0);
 }
 
+function rpgCraftableCount(person) {
+  return RPG_WEAPON_RECIPES.filter((recipe) => rpgRecipeCanCraft(person, recipe)).length;
+}
+
 function rpgRecipeDisplayNo(recipe) {
   const index = RPG_WEAPON_RECIPES.findIndex((item) => item.itemId === recipe?.itemId);
   return index >= 0 ? index + 1 : 0;
@@ -8460,16 +8666,17 @@ function rpgRecipeFromCraftText(text = "") {
 
 function blacksmithCommand(roomState = null, sender = "") {
   const person = roomState && sender ? ensurePerson(roomState, sender) : null;
+  const craftableCount = person ? rpgCraftableCount(person) : 0;
   return [
     "픽셀곰 대장간",
     "",
     "제작 종류: 무기 / 방어구 / 장신구 / 세트",
+    person ? `지금 제작 가능: ${craftableCount}개` : "지금 제작 가능: /제작가능",
     "",
-    ...RPG_WEAPON_RECIPES.map((recipe) => rpgRecipeLine(recipe, person)),
-    "",
-    "/제작가능 으로 지금 만들 수 있는 장비를 확인합니다.",
-    "/제작 1 처럼 짧은 번호로 만들면 현재 장비보다 강할 때 자동 장착됩니다.",
-    "/세트아이템 으로 세트 보너스를 확인합니다."
+    "제작 확인: /제작가능",
+    "제작 실행: /제작 1",
+    "강화 추천: /강화목록",
+    "세트 보너스: /세트아이템"
   ].join("\n");
 }
 
@@ -8578,6 +8785,52 @@ function rpgEquippedProductsBySlot(person) {
   };
 }
 
+function rpgEnhancementLevel(person, productId) {
+  normalizePersonState(person);
+  return Math.min(RPG_MAX_ENHANCEMENT_LEVEL, Math.max(0, Math.trunc(Number(person.equipmentEnhancements?.[String(productId)] || 0))));
+}
+
+function rpgEnhancementStats(product, level = 0) {
+  const stats = emptyRpgStats();
+  const safeLevel = Math.min(RPG_MAX_ENHANCEMENT_LEVEL, Math.max(0, Math.trunc(Number(level || 0))));
+  if (!product || safeLevel <= 0) return stats;
+  const slot = rpgEquipmentSlot(product);
+  if (slot === "weapon") {
+    stats.attack = safeLevel * 2;
+    stats.crit = Math.floor(safeLevel / 2);
+  } else if (slot === "armor") {
+    stats.defense = safeLevel * 2;
+    stats.hp = safeLevel * 12;
+    stats.magicDefense = Math.floor(safeLevel / 2);
+  } else if (slot === "accessory") {
+    stats.agility = safeLevel;
+    stats.accuracy = safeLevel;
+    stats.evasion = Math.floor(safeLevel / 2);
+  }
+  return stats;
+}
+
+function rpgStatsWithEnhancement(person, product) {
+  const base = rpgEquipmentStats(product);
+  const bonus = rpgEnhancementStats(product, rpgEnhancementLevel(person, product?.id));
+  const merged = emptyRpgStats();
+  for (const key of RPG_STAT_KEYS) merged[key] = (base[key] || 0) + (bonus[key] || 0);
+  return merged;
+}
+
+function rpgEquipmentName(person, product) {
+  if (!product) return "미장착";
+  const level = rpgEnhancementLevel(person, product.id);
+  return `${product.name}${level ? ` +${level}` : ""}`;
+}
+
+function rpgScoreProductForPerson(person, product, presetKey = "balance") {
+  const preset = RPG_AUTO_EQUIP_PRESETS[presetKey] || RPG_AUTO_EQUIP_PRESETS.balance;
+  const weights = preset.weights || {};
+  const stats = rpgStatsWithEnhancement(person, product);
+  return RPG_STAT_KEYS.reduce((sum, key) => sum + ((stats[key] || 0) * (weights[key] ?? 0.4)), Number(product?.power || 0) * 0.5);
+}
+
 function rpgPresetFromText(value = "") {
   const key = keyFor(value || "balance");
   if (!key || key === "기본" || key === "자동") return "balance";
@@ -8606,7 +8859,11 @@ function rpgStatDiffSummary(before = {}, after = {}, keys = RPG_STAT_KEYS, limit
 
 function rpgCurrentStats(person) {
   const equipped = rpgEquippedProductsBySlot(person);
-  const stats = rpgCombinedStats(Object.values(equipped));
+  const stats = emptyRpgStats();
+  for (const product of Object.values(equipped).filter(Boolean)) {
+    const productStats = rpgStatsWithEnhancement(person, product);
+    for (const key of RPG_STAT_KEYS) stats[key] += productStats[key] || 0;
+  }
   const setBonus = rpgSetBonusSummary(person);
   if (setBonus.totalBonus) {
     stats.attack += setBonus.totalBonus;
@@ -8626,7 +8883,7 @@ function autoEquipIfBetter(person, product) {
   if (!slot) return false;
   person.equipment = normalizeEquipment(person.equipment || {});
   const current = systemProductById(person.equipment[slot]);
-  if (!current || rpgScoreProduct(product, "balance") > rpgScoreProduct(current, "balance")) {
+  if (!current || rpgScoreProductForPerson(person, product, "balance") > rpgScoreProductForPerson(person, current, "balance")) {
     person.equipment[slot] = String(product.id);
     return true;
   }
@@ -8644,13 +8901,13 @@ function autoEquipBestEquipment(person, presetKey = "balance") {
       .filter(([, quantity]) => Math.trunc(Number(quantity || 0)) > 0)
       .map(([productId]) => systemProductById(productId))
       .filter((product) => rpgEquipmentSlot(product) === slot)
-      .sort((left, right) => rpgScoreProduct(right, presetKey) - rpgScoreProduct(left, presetKey));
+      .sort((left, right) => rpgScoreProductForPerson(person, right, presetKey) - rpgScoreProductForPerson(person, left, presetKey));
     const best = candidates[0];
     if (best && String(person.equipment[slot] || "") !== String(best.id)) {
       changes.push({
         slot,
-        from: beforeEquipment[slot]?.name || "미장착",
-        to: best.name
+        from: rpgEquipmentName(person, beforeEquipment[slot]),
+        to: rpgEquipmentName(person, best)
       });
       person.equipment[slot] = String(best.id);
     }
@@ -8704,13 +8961,14 @@ function equipmentCommand(roomState, sender) {
   return [
     `⚔️ ${displayName}님의 장비`,
     "",
-    `무기: ${weapon ? weapon.name : "미장착"}`,
-    `방어구: ${armor ? armor.name : "미장착"}`,
-    `장신구: ${accessory ? accessory.name : "미장착"}`,
+    `무기: ${rpgEquipmentName(person, weapon)}`,
+    `방어구: ${rpgEquipmentName(person, armor)}`,
+    `장신구: ${rpgEquipmentName(person, accessory)}`,
     `• 세트 효과 : ${setBonus.active.length ? setBonus.active.join(", ") : "없음"}`,
     `• 총 전투력 : +${Math.round(Object.values(stats).reduce((sum, value) => sum + Number(value || 0), 0))}`,
     `• 핵심 스탯 : ${rpgStatSummary(stats, ["attack", "defense", "agility", "hp", "mp", "magicAttack"], 4)}`,
     "",
+    "강화: /강화목록",
     "상세: /장비상세",
     "자동 추천: /자동장착 공격"
   ].join("\n");
@@ -8751,6 +9009,154 @@ function autoEquipCommand(roomState, sender, text) {
   ].join("\n");
 }
 
+function rpgEnhancementCost(level = 0) {
+  const nextLevel = Math.min(RPG_MAX_ENHANCEMENT_LEVEL, Math.max(1, Math.trunc(Number(level || 0)) + 1));
+  return {
+    nextLevel,
+    materialId: nextLevel >= 4 ? ENHANCEMENT_STONE_ITEM_ID : RPG_ITEM_ID_START,
+    materialQty: nextLevel >= 4 ? Math.ceil(nextLevel / 2) : nextLevel + 1,
+    pointCost: nextLevel * 80,
+    successRate: nextLevel <= 3 ? 1 : Math.max(0.45, 0.95 - (nextLevel * 0.05))
+  };
+}
+
+function rpgEnhancementRecommendations(person) {
+  normalizePersonState(person);
+  const equipped = rpgEquippedProductsBySlot(person);
+  const rows = [];
+  for (const slot of ["weapon", "armor", "accessory"]) {
+    const product = equipped[slot];
+    if (product) rows.push({ slot, product, source: "equipped" });
+  }
+  for (const [productId, quantity] of Object.entries(person.inventory || {})) {
+    if (rows.some((row) => String(row.product.id) === String(productId))) continue;
+    if (Math.trunc(Number(quantity || 0)) <= 0) continue;
+    const product = systemProductById(productId);
+    if (product && rpgEquipmentSlot(product)) rows.push({ slot: rpgEquipmentSlot(product), product, source: "inventory" });
+  }
+  return rows
+    .sort((left, right) => rpgScoreProductForPerson(person, right.product, "balance") - rpgScoreProductForPerson(person, left.product, "balance"))
+    .slice(0, 8);
+}
+
+function rpgEnhanceTarget(roomState, person, text = "") {
+  const body = compactSpaces(text.replace(/^\/강화\s*/i, ""));
+  const equipped = rpgEquippedProductsBySlot(person);
+  const slotAliases = {
+    "": "weapon",
+    무기: "weapon",
+    검: "weapon",
+    방어구: "armor",
+    갑옷: "armor",
+    장신구: "accessory",
+    악세: "accessory",
+    액세서리: "accessory"
+  };
+  const slot = slotAliases[keyFor(body)];
+  if (slot) return equipped[slot] ? { slot, product: equipped[slot] } : null;
+
+  const numeric = Math.trunc(Number(body.replace(/,/g, "")));
+  if (numeric > 0 && String(numeric) === body.replace(/,/g, "")) {
+    const recommendations = rpgEnhancementRecommendations(person);
+    if (numeric < 1000 && recommendations[numeric - 1]) return recommendations[numeric - 1];
+    const product = systemProductById(numeric);
+    if (product && rpgEquipmentSlot(product) && inventoryQuantity(person, numeric) > 0) return { slot: rpgEquipmentSlot(product), product };
+  }
+
+  const row = resolveInventoryRow(roomState, person, body, (item) => Boolean(rpgEquipmentSlot(inventoryProductById(roomState, item.productId))));
+  if (!row) return null;
+  const product = systemProductById(row.productId);
+  return product ? { slot: rpgEquipmentSlot(product), product } : null;
+}
+
+function rpgEnhancementListCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const rows = rpgEnhancementRecommendations(person).slice(0, 3);
+  return [
+    "🛠️ 강화 추천",
+    "",
+    ...(rows.length ? rows.map((row, index) => {
+      const level = rpgEnhancementLevel(person, row.product.id);
+      const cost = rpgEnhancementCost(level);
+      const material = systemProductById(cost.materialId);
+      return `${index + 1}. ${rpgEquipmentName(person, row.product)} / 다음 +${cost.nextLevel} / ${material?.name || "재료"} x${cost.materialQty} + ${formatPoint(cost.pointCost)}`;
+    }) : ["강화할 장비가 없습니다. /던전과 /제작가능으로 장비를 먼저 준비해 주세요."]),
+    "",
+    "실행: /강화 1 또는 /강화 무기",
+    "상세: /강화상세"
+  ].join("\n");
+}
+
+function rpgEnhancementDetailCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const rows = rpgEnhancementRecommendations(person).slice(0, 5);
+  return [
+    "🛠️ 강화 상세",
+    "",
+    ...(rows.length ? rows.map((row, index) => {
+      const level = rpgEnhancementLevel(person, row.product.id);
+      const cost = rpgEnhancementCost(level);
+      const material = systemProductById(cost.materialId);
+      return `${index + 1}. ${rpgEquipmentName(person, row.product)} → +${cost.nextLevel} / 성공률 ${Math.round(cost.successRate * 100)}% / ${material?.name || "재료"} ${inventoryQuantity(person, cost.materialId)}/${cost.materialQty} / ${formatPoint(cost.pointCost)}`;
+    }) : ["강화할 장비가 없습니다."]),
+    "",
+    "실패해도 장비는 파괴되지 않습니다.",
+    "단, 재료와 포인트는 사용됩니다."
+  ].join("\n");
+}
+
+function rpgEnhanceCommand(roomState, sender, text) {
+  const person = ensurePerson(roomState, sender);
+  const target = rpgEnhanceTarget(roomState, person, text);
+  if (!target?.product) return "강화할 장비를 찾지 못했습니다.\n사용 예시: /강화 1, /강화 무기";
+  const level = rpgEnhancementLevel(person, target.product.id);
+  if (level >= RPG_MAX_ENHANCEMENT_LEVEL) return `${rpgEquipmentName(person, target.product)}은 이미 최대 강화입니다.`;
+  const cost = rpgEnhancementCost(level);
+  const material = systemProductById(cost.materialId);
+  if (inventoryQuantity(person, cost.materialId) < cost.materialQty) {
+    return [
+      "⚠️ 강화 재료가 부족합니다.",
+      `${material?.name || "재료"}: ${inventoryQuantity(person, cost.materialId)}/${cost.materialQty}`,
+      "재료 획득: /던전 또는 /자동사냥"
+    ].join("\n");
+  }
+  if (person.points < cost.pointCost) {
+    return [
+      "⚠️ 포인트가 부족합니다.",
+      `필요: ${formatPoint(cost.pointCost)}`,
+      `보유: ${formatPoint(person.points)}`
+    ].join("\n");
+  }
+  removeInventory(person, cost.materialId, cost.materialQty);
+  person.points -= cost.pointCost;
+  person.spentPoints += cost.pointCost;
+  const success = Math.random() <= cost.successRate;
+  if (success) person.equipmentEnhancements[String(target.product.id)] = cost.nextLevel;
+  recordRoomEvent(roomState, {
+    type: success ? "rpg_equipment_enhanced" : "rpg_equipment_enhance_failed",
+    name: person.currentName,
+    productId: target.product.id,
+    productName: target.product.name,
+    level: success ? cost.nextLevel : level,
+    costPoint: cost.pointCost
+  });
+  if (!success) {
+    return [
+      "🛠️ 강화 실패",
+      `${target.product.name} +${level} 유지`,
+      "장비는 파괴되지 않습니다.",
+      `남은 포인트: ${formatPoint(person.points)}`
+    ].join("\n");
+  }
+  return [
+    "🛠️ 강화 완료",
+    `${target.product.name} +${cost.nextLevel}`,
+    `사용: ${material?.name || "재료"} x${cost.materialQty}, ${formatPoint(cost.pointCost)}`,
+    `남은 포인트: ${formatPoint(person.points)}`,
+    "스탯 확인: /장비"
+  ].join("\n");
+}
+
 function equipmentDetailCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
   const displayName = displayNameForPerson(roomState, person, sender);
@@ -8761,7 +9167,7 @@ function equipmentDetailCommand(roomState, sender) {
     "",
     ...["weapon", "armor", "accessory"].map((slot) => {
       const product = equipped[slot];
-      return `${RPG_EQUIPMENT_SLOT_LABELS[slot]}: ${product ? `${product.name} / ${rpgStatSummary(rpgEquipmentStats(product), RPG_STAT_KEYS, 5)}` : "미장착"}`;
+      return `${RPG_EQUIPMENT_SLOT_LABELS[slot]}: ${product ? `${rpgEquipmentName(person, product)} / ${rpgStatSummary(rpgStatsWithEnhancement(person, product), RPG_STAT_KEYS, 5)}` : "미장착"}`;
     }),
     "",
     `세트: ${setBonus.active.length ? setBonus.active.join(", ") : "없음"}`,
@@ -9331,7 +9737,7 @@ function gameHelpText(roomState) {
     gameSeasonPeriodText(settings),
     `주사위 기본 보상: ${formatPoint(settings.diceReward)} x 결과`,
     "",
-    "1. RPG 성장: /던전, /제작가능, /자동장착",
+    "1. RPG 성장: /모험, /자동사냥, /강화목록",
     "2. 낚시 수집: /미끼상점, /낚시, /어항",
     "3. 펫 돌보기: /펫입양, /펫, /펫먹이",
     `4. 픽셀몬스터: /몬스터, /몬스터퀘스트, /몬스터보스 (${PIXEL_MONSTER_SPECIES_COUNT}종)`,
@@ -9354,11 +9760,12 @@ function dailyActionChecklistCommand(roomState, sender) {
     "",
     "1. /출석 - 오늘 보상 받기",
     `2. /낚시 - 미끼 ${formatNumber(bait)}개 확인`,
-    "3. /던전 - 재료/장비 성장",
-    "4. /몬스터퀘스트 - 수집 루틴 확인",
-    "5. /몬스터보스 - 방 전체 보스 참여",
-    pet ? `6. /펫 - ${pet} 상태 확인` : "6. /펫입양 이름 - 첫 펫 시작",
-    `7. /가방정리 - 보유 ${formatNumber(inventoryCount)}개 정리`,
+    "3. /모험 또는 /던전 - RPG 목표와 재료 성장",
+    "4. /자동사냥 중급 - 10회 요약 사냥",
+    "5. /몬스터퀘스트 - 수집 루틴 확인",
+    "6. /몬스터보스 - 방 전체 보스 참여",
+    pet ? `7. /펫 - ${pet} 상태 확인` : "7. /펫입양 이름 - 첫 펫 시작",
+    `8. /가방정리 - 보유 ${formatNumber(inventoryCount)}개 정리`,
     "",
     "빠른 추천: /추천 돈벌기 · /추천 RPG · /정리추천"
   ].join("\n");
@@ -9898,7 +10305,7 @@ function bridgeJsServerText() {
 const ACTIVE_GAME_ROOM_COMMANDS = new Set([
   "/게임", "/게임명령어", "/주사위", "/낚시", "/탐험", "/뽑기", "/확률뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝",
   "/미끼상점", "/미끼구매", "/어항", "/수족관",
-  "/던전", "/던전목록", "/대장간", "/제작가능", "/제작", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템",
+  "/모험", "/던전", "/던전목록", "/자동사냥", "/대장간", "/제작가능", "/제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템",
   "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감",
   "/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점"
 ]);
@@ -9951,7 +10358,7 @@ function commandFeatureKey(command) {
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
   if (/^\/(?:프로필|프로칠|내별명|별명목록|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
-  if (/^\/(?:게임|오늘할일|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|던전|던전목록|대장간|제작가능|제작|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:게임|오늘할일|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|모험|던전|던전목록|자동사냥|대장간|제작가능|제작|강화|강화목록|강화상세|보상선택|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
   if (/^\/(?:상점|구매|구매내역|가방|가방정리|정리추천|판매추천|아이템|보유아이템|아이템상세|판매목록|판매미리보기|일괄판매|아이템잠금|아이템잠금해제|잠금목록|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
@@ -10035,8 +10442,9 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/주사위", "게임", "주사위 보상 게임", { requiresFeature: "games" }),
   registryEntry("/낚시", "게임", "낚시 보상 게임", { requiresFeature: "games" }),
   registryEntry("/탐험", "게임", "탐험 보상 게임", { requiresFeature: "games" }),
-  registryEntry("/던전", "RPG", "던전 탐험과 재료 획득", { aliases: ["/던전목록"], examples: ["/던전", "/던전 중급"], requiresFeature: "games", searchableKeywords: ["RPG", "모험", "재료"] }),
-  registryEntry("/대장간", "RPG", "장비 제작 레시피 확인", { aliases: ["/제작", "/제작가능", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템"], examples: ["/대장간", "/제작가능", "/제작 1", "/자동장착 공격"], requiresFeature: "games", searchableKeywords: ["무기", "방어구", "장신구", "제작", "장비", "세트"] }),
+  registryEntry("/모험", "RPG", "RPG 오늘 할 일과 추천 행동 확인", { aliases: ["/RPG", "/알피지"], examples: ["/모험"], requiresFeature: "games", searchableKeywords: ["RPG", "허브", "모험", "자동사냥", "강화"] }),
+  registryEntry("/던전", "RPG", "던전 탐험과 재료 획득", { aliases: ["/던전목록", "/자동사냥", "/보상선택"], examples: ["/던전", "/던전 중급", "/자동사냥 중급"], requiresFeature: "games", searchableKeywords: ["RPG", "모험", "재료", "자동사냥", "보상"] }),
+  registryEntry("/대장간", "RPG", "장비 제작과 강화 흐름 확인", { aliases: ["/제작", "/제작가능", "/강화", "/강화목록", "/강화상세", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템"], examples: ["/대장간", "/제작가능", "/제작 1", "/강화 무기", "/자동장착 공격"], requiresFeature: "games", searchableKeywords: ["무기", "방어구", "장신구", "제작", "장비", "세트", "강화"] }),
   registryEntry("/점메추", "생활", "점심 메뉴 추천", { examples: ["/점메추", "/점메추 한식", "/점메추 매운거"], searchableKeywords: ["점심", "메뉴", "추천", "음식"] }),
   registryEntry("/몬스터탐험", "픽셀몬스터", "오리지널 몬스터 발견과 수집 성장", { aliases: ["/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감"], requiresFeature: "games", searchableKeywords: ["몬스터", "수집", "도감", "퀘스트", "보스", "진화"] }),
   registryEntry("/펫입양", "펫키우기", "개인 펫 입양과 성장", { aliases: ["/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점"], requiresFeature: "games", searchableKeywords: ["펫", "키우기", "훈련"] }),
@@ -10440,7 +10848,7 @@ const COMMAND_DISCOVERY_TOPICS = Object.freeze([
     key: "게임",
     aliases: ["게임", "미니게임", "낚시", "던전", "rpg"],
     title: "게임/RPG",
-    commands: ["/게임", "/오늘할일", "/낚시", "/어항", "/던전", "/대장간", "/자동장착", "/가방정리"]
+    commands: ["/게임", "/오늘할일", "/모험", "/자동사냥", "/낚시", "/던전", "/가방정리", "/강화목록", "/어항", "/대장간", "/자동장착"]
   },
   {
     key: "가방",
@@ -10630,13 +11038,16 @@ const COMMAND_RECOMMENDATION_PRESETS = Object.freeze({
     label: "RPG",
     findHint: "/게임, /도움말 RPG",
     commands: [
+      { command: "/모험", reason: "RPG 오늘 할 일과 성장 추천", feature: "games" },
+      { command: "/자동사냥", reason: "자동사냥권으로 던전 10회 요약", feature: "games" },
       { command: "/던전", reason: "재료와 장비 성장", feature: "games" },
+      { command: "/강화목록", reason: "강화할 장비와 비용 확인", feature: "games" },
       { command: "/제작가능", reason: "지금 만들 수 있는 장비 확인", feature: "games" },
       { command: "/자동장착", reason: "보유 장비 자동 추천", feature: "games" },
       { command: "/장비", reason: "현재 장비 요약", feature: "games" },
       { command: "/스탯", reason: "전투 능력치 확인", feature: "games" }
     ],
-    topCommands: ["/던전", "/제작가능", "/제작", "/자동장착", "/장비", "/스탯", "/세트아이템"]
+    topCommands: ["/모험", "/자동사냥", "/던전", "/강화목록", "/강화", "/제작가능", "/제작", "/자동장착", "/장비", "/스탯", "/세트아이템"]
   },
   pet: {
     label: "펫",
@@ -10817,7 +11228,7 @@ function roomStatusSnapshot(state = {}, roomState = {}, options = {}) {
 
 function gameCommandTopObjects(roomState = {}, limit = 5) {
   const gameCommands = new Set([
-    "/게임", "/오늘할일", "/주사위", "/낚시", "/탐험", "/던전", "/몬스터탐험", "/포획", "/펫", "/펫먹이", "/점메추",
+    "/게임", "/오늘할일", "/주사위", "/낚시", "/탐험", "/모험", "/자동사냥", "/던전", "/강화", "/강화목록", "/몬스터탐험", "/포획", "/펫", "/펫먹이", "/점메추",
     "/판매추천", "/정리추천", "/가방정리", "/판매미리보기", "/자동장착"
   ]);
   const counts = new Map();
@@ -15478,11 +15889,17 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/낚시") return fishingGameCommand(roomState, sender);
   if (command === "/어항" || command === "/수족관") return aquariumCommand(roomState, sender, text);
   if (command === "/탐험") return exploreGameCommand(roomState, sender);
+  if (command === "/모험") return rpgAdventureHubCommand(roomState, sender);
   if (command === "/던전목록") return dungeonListCommand();
   if (command === "/던전") return dungeonCommand(roomState, sender, text);
+  if (command === "/자동사냥") return autoHuntDungeonCommand(roomState, sender, text);
   if (command === "/대장간") return blacksmithCommand(roomState, sender);
   if (command === "/제작가능") return craftableEquipmentCommand(roomState, sender);
   if (command === "/제작") return craftWeaponCommand(roomState, sender, text);
+  if (command === "/강화") return rpgEnhanceCommand(roomState, sender, text);
+  if (command === "/강화목록") return rpgEnhancementListCommand(roomState, sender);
+  if (command === "/강화상세") return rpgEnhancementDetailCommand(roomState, sender);
+  if (command === "/보상선택") return rewardChoiceCommand(roomState, sender, text);
   if (command === "/장비") return equipmentCommand(roomState, sender);
   if (command === "/장비상세") return equipmentDetailCommand(roomState, sender);
   if (command === "/스탯") return rpgStatsCommand(roomState, sender);
