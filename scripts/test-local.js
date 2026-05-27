@@ -5418,6 +5418,17 @@ try {
   assert.match(autoHuntUnlimitedRun.json.reply, /상급 심연 120회 요약/);
   assert.match(autoHuntUnlimitedRun.json.reply, /남은 자동사냥권: 0장/);
 
+  await chat("/아이템지급 제작보장러 여 9303 99", "관리자");
+  await chat("/아이템지급 제작보장러 여 9303 1", "관리자");
+  const autoHuntCraftingRun = await chat("/자동던전 상급 100", "제작보장러 여");
+  assert.match(autoHuntCraftingRun.json.reply, /상급 심연 1000회 요약/);
+  assert.match(autoHuntCraftingRun.json.reply, /제작 보너스/);
+  assert.match(autoHuntCraftingRun.json.reply, /제작 가능: [1-9][0-9]*개/);
+  const autoHuntCraftableList = await chat("/제작가능", "제작보장러 여");
+  assert.match(autoHuntCraftableList.json.reply, /제작 가능 목록/);
+  assert.doesNotMatch(autoHuntCraftableList.json.reply, /현재 제작 가능한 장비가 없습니다/);
+  assert.match(autoHuntCraftableList.json.reply, /(용암|천공|왕릉|심연)/);
+
   await chat("/아이템지급 자동호환러 여 9303 1", "관리자");
   const legacyAutoHuntRun = await chat("/자동사냥 중급", "자동호환러 여");
   assert.match(legacyAutoHuntRun.json.reply, /자동던전 결과/);

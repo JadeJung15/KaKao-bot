@@ -8556,6 +8556,7 @@ function shopTransactionLabel(transaction) {
     product_deleted: "상품삭제",
     product_purged: "상품완전삭제",
     shop_cleanup: "상점정리",
+    rpg_auto_hunt_crafting_bonus: "자동던전제작보너스",
     shop_reset: "상점초기화",
     item_granted: "아이템지급",
     item_revoked: "아이템회수"
@@ -8812,13 +8813,22 @@ function exploreGameCommand(roomState, sender) {
   ].join("\n");
 }
 
+const DUNGEON_CRAFT_MATERIAL_IDS = Object.freeze({
+  beginner: [0, 1, 4, 9, 14].map((offset) => RPG_ITEM_ID_START + offset),
+  middle: [6, 13, 19, 21, 22].map((offset) => RPG_ITEM_ID_START + offset),
+  advanced: [16, 18, 19, 22].map((offset) => RPG_ITEM_ID_START + offset),
+  royal: [22, 21, 8, 19].map((offset) => RPG_ITEM_ID_START + offset),
+  volcanic: [16, 17, 20, 4].map((offset) => RPG_ITEM_ID_START + offset),
+  sky: [18, 6, 13, 5].map((offset) => RPG_ITEM_ID_START + offset)
+});
+
 const DUNGEON_CONFIGS = Object.freeze([
-  { key: "beginner", names: ["", "초급", "초급 광산", "광산"], title: "초급 광산", purpose: "초급 재료", blankChance: 0.25, itemStart: 0, itemEnd: 119, treasureChance: 0.08, preciousChance: 0.015 },
-  { key: "middle", names: ["중급", "중급 유적", "유적"], title: "중급 유적", purpose: "중급 제작", blankChance: 0.30, itemStart: 80, itemEnd: 299, treasureChance: 0.10, preciousChance: 0.025 },
-  { key: "advanced", names: ["상급", "상급 심연", "심연"], title: "상급 심연", purpose: "상급 강화/희귀", blankChance: 0.35, itemStart: 240, itemEnd: 499, treasureChance: 0.12, preciousChance: 0.04 },
-  { key: "royal", names: ["왕릉", "고대 왕릉"], title: "고대 왕릉", purpose: "왕릉 세트/룬 재료", blankChance: 0.32, itemStart: 200, itemEnd: 380, treasureChance: 0.14, preciousChance: 0.035 },
-  { key: "volcanic", names: ["용암", "용암 성채", "성채"], title: "용암 성채", purpose: "용암 세트/화염석", blankChance: 0.38, itemStart: 160, itemEnd: 340, treasureChance: 0.16, preciousChance: 0.05 },
-  { key: "sky", names: ["천공", "천공 유적", "하늘"], title: "천공 유적", purpose: "천공 세트/바람 재료", blankChance: 0.34, itemStart: 180, itemEnd: 420, treasureChance: 0.15, preciousChance: 0.045 }
+  { key: "beginner", names: ["", "초급", "초급 광산", "광산"], title: "초급 광산", purpose: "초급 재료", blankChance: 0.25, itemStart: 0, itemEnd: 119, treasureChance: 0.08, preciousChance: 0.015, craftMaterialChance: 0.35, craftMaterialIds: DUNGEON_CRAFT_MATERIAL_IDS.beginner },
+  { key: "middle", names: ["중급", "중급 유적", "유적"], title: "중급 유적", purpose: "중급 제작", blankChance: 0.30, itemStart: 80, itemEnd: 299, treasureChance: 0.10, preciousChance: 0.025, craftMaterialChance: 0.30, craftMaterialIds: DUNGEON_CRAFT_MATERIAL_IDS.middle },
+  { key: "advanced", names: ["상급", "상급 심연", "심연"], title: "상급 심연", purpose: "상급 강화/희귀", blankChance: 0.35, itemStart: 240, itemEnd: 499, treasureChance: 0.12, preciousChance: 0.04, craftMaterialChance: 0.32, craftMaterialIds: DUNGEON_CRAFT_MATERIAL_IDS.advanced },
+  { key: "royal", names: ["왕릉", "고대 왕릉"], title: "고대 왕릉", purpose: "왕릉 세트/룬 재료", blankChance: 0.32, itemStart: 200, itemEnd: 380, treasureChance: 0.14, preciousChance: 0.035, craftMaterialChance: 0.34, craftMaterialIds: DUNGEON_CRAFT_MATERIAL_IDS.royal },
+  { key: "volcanic", names: ["용암", "용암 성채", "성채"], title: "용암 성채", purpose: "용암 세트/화염석", blankChance: 0.38, itemStart: 160, itemEnd: 340, treasureChance: 0.16, preciousChance: 0.05, craftMaterialChance: 0.36, craftMaterialIds: DUNGEON_CRAFT_MATERIAL_IDS.volcanic },
+  { key: "sky", names: ["천공", "천공 유적", "하늘"], title: "천공 유적", purpose: "천공 세트/바람 재료", blankChance: 0.34, itemStart: 180, itemEnd: 420, treasureChance: 0.15, preciousChance: 0.045, craftMaterialChance: 0.35, craftMaterialIds: DUNGEON_CRAFT_MATERIAL_IDS.sky }
 ]);
 
 function dungeonConfigFromText(text = "") {
@@ -8844,9 +8854,18 @@ function randomDungeonItem(config) {
   if (Math.random() < config.blankChance) return null;
   const precious = randomDungeonPreciousDrop(config);
   if (precious) return precious;
+  const craftMaterial = randomDungeonCraftMaterial(config);
+  if (craftMaterial && Math.random() < Number(config.craftMaterialChance || 0)) return craftMaterial;
   const span = Math.max(1, config.itemEnd - config.itemStart + 1);
   const offset = config.itemStart + Math.floor(Math.random() * span);
   return systemProductById(RPG_ITEM_ID_START + offset) || systemProductById(RPG_ITEM_ID_START);
+}
+
+function randomDungeonCraftMaterial(config) {
+  const ids = Array.isArray(config.craftMaterialIds) ? config.craftMaterialIds.filter(Boolean) : [];
+  if (!ids.length) return null;
+  const id = ids[Math.floor(Math.random() * ids.length)];
+  return systemProductById(id);
 }
 
 function randomDungeonPreciousDrop(config) {
@@ -8920,6 +8939,43 @@ function createPendingRpgReward(person, config) {
   return person.pendingRpgReward;
 }
 
+function grantAutoDungeonCraftingSupport(roomState, person, config, runs) {
+  const materialIds = Array.isArray(config.craftMaterialIds) ? config.craftMaterialIds.filter(Boolean) : [];
+  const materialCount = materialIds.length ? Math.floor(Math.max(0, runs) / 50) : 0;
+  const pointBonus = Math.floor(Math.max(0, runs) / 100) * 100;
+  const materialCounts = new Map();
+  let totalSell = 0;
+  for (let index = 0; index < materialCount; index += 1) {
+    const product = systemProductById(materialIds[index % materialIds.length]);
+    if (!product) continue;
+    addInventory(person, product.id, 1);
+    totalSell += productSellPrice(product);
+    materialCounts.set(product.id, {
+      product,
+      quantity: (materialCounts.get(product.id)?.quantity || 0) + 1
+    });
+  }
+  if (pointBonus > 0) person.points += pointBonus;
+  const materials = [...materialCounts.values()];
+  if (materials.length || pointBonus > 0) {
+    recordShopTransaction(roomState, {
+      type: "rpg_auto_hunt_crafting_bonus",
+      productId: materials[0]?.product?.id || 0,
+      productName: materials.map((item) => item.product.name).slice(0, 4).join(", "),
+      quantity: materials.reduce((sum, item) => sum + item.quantity, 0),
+      totalPrice: pointBonus,
+      to: person.currentName,
+      by: person.currentName
+    });
+  }
+  return {
+    materials,
+    materialCount: materials.reduce((sum, item) => sum + item.quantity, 0),
+    pointBonus,
+    totalSell
+  };
+}
+
 function autoHuntDungeonCommand(roomState, sender, text) {
   const person = ensurePerson(roomState, sender);
   const parsed = parseAutoGameCommand(text, /^\/자동(?:던전|사냥)\s*/i);
@@ -8948,15 +9004,19 @@ function autoHuntDungeonCommand(roomState, sender, text) {
     if (rpgRareReward(item)) rareCount += 1;
     rewards.push(item);
   }
+  const craftingBonus = grantAutoDungeonCraftingSupport(roomState, person, config, runs);
+  totalSell += craftingBonus.totalSell;
   recordRoomEvent(roomState, {
     type: "rpg_auto_hunt",
     name: person.currentName,
     dungeon: config.title,
     runs,
     tickets: ticketUse,
-    rewards: rewards.length,
+    rewards: rewards.length + craftingBonus.materialCount,
     blanks,
-    totalSell
+    totalSell,
+    craftingBonusMaterials: craftingBonus.materialCount,
+    craftingBonusPoints: craftingBonus.pointBonus
   });
   recordShopTransaction(roomState, {
     type: "rpg_auto_hunt",
@@ -8972,12 +9032,13 @@ function autoHuntDungeonCommand(roomState, sender, text) {
     "🏰 자동던전 결과",
     `${config.title} ${runs}회 요약`,
     "",
-    `획득: ${rewards.length}개 / 꽝 ${blanks}회`,
+    `획득: ${rewards.length + craftingBonus.materialCount}개 / 꽝 ${blanks}회`,
     `희귀 이상: ${rareCount}개`,
+    craftingBonus.materialCount || craftingBonus.pointBonus ? `제작 보너스: 재료 ${craftingBonus.materialCount}개 / 지원금 ${formatPoint(craftingBonus.pointBonus)}` : "",
     `예상 판매가: ${formatPoint(totalSell)}`,
     `제작 가능: ${rpgCraftableCount(person)}개`,
     `남은 자동사냥권: ${autoHuntTicketQuantity(roomState, person)}장`
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function autoExploreCommand(roomState, sender, text) {
