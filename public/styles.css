@@ -5487,6 +5487,30 @@ a {
   word-break: break-word;
 }
 
+button.console-compact-row {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+button.console-compact-row:hover,
+button.console-compact-row:focus-visible {
+  background: #f8fafc;
+}
+
+.console-search-result-button small {
+  flex: 0 0 auto;
+  color: #0f766e;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .console-admin-archive-tools {
   margin: 14px 0;
   background: #fffdf8;

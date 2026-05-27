@@ -84,7 +84,7 @@ function adminSummaryItems(rooms = [], archivedRooms = [], applications = [], in
   ));
 }
 
-function IntegratedAdminSearch({ selectedRoomName = "", onToast }) {
+function IntegratedAdminSearch({ selectedRoomName = "", onToast, onOpenResult }) {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -130,18 +130,18 @@ function IntegratedAdminSearch({ selectedRoomName = "", onToast }) {
           검색 결과 요약: {resultCounts.map(([label, count]) => `${label} ${count}개`).join(" · ")}
         </p>
         <div className="console-search-results" aria-label="운영자 통합 검색 결과">
-          <SearchSection title="방" items={sections.rooms || []} render={(item) => `${item.roomName} · ${item.roleLabel || item.role} · ${item.bridgeStatus}`} />
-          <SearchSection title="명령어" items={sections.commands || []} render={(item) => `${item.command} · ${item.description}`} />
-          <SearchSection title="로그" items={sections.logs || []} render={(item) => `${item.roomName} · ${item.command || item.eventType} · ${item.messagePreview}`} />
-          <SearchSection title="문의" items={sections.inquiries || []} render={(item) => `${item.roomName} · ${item.statusLabel} · ${item.message}`} />
+          <SearchSection title="방" items={sections.rooms || []} render={(item) => `${item.roomName} · ${item.roleLabel || item.role} · ${item.bridgeStatus}`} actionLabel="방 상세 열기" onOpen={(item) => onOpenResult?.({ roomName: item.roomName, tab: "settings", label: "방 상세" })} />
+          <SearchSection title="명령어" items={sections.commands || []} render={(item) => `${item.command} · ${item.description}`} actionLabel="명령어 탭 열기" onOpen={() => onOpenResult?.({ tab: "commands", label: "명령어/운영자" })} />
+          <SearchSection title="로그" items={sections.logs || []} render={(item) => `${item.roomName} · ${item.command || item.eventType} · ${item.messagePreview}`} actionLabel="로그 탭 열기" onOpen={(item) => onOpenResult?.({ roomName: item.roomName, tab: "logs", label: "방별 로그" })} />
+          <SearchSection title="문의" items={sections.inquiries || []} render={(item) => `${item.roomName} · ${item.statusLabel} · ${item.message}`} actionLabel="문의 탭 열기" onOpen={(item) => onOpenResult?.({ roomName: item.roomName || item.mainRoomName, tab: "inquiries", label: "문의" })} />
           <div className="console-search-section" aria-label={`동명이인 후보 검색 결과 ${people.length}개`}>
             <strong>동명이인 후보 <span>{people.length}개</span></strong>
             {people.length ? people.map((item) => (
-              <div className="console-compact-row" key={`${item.roomName}-${item.personKey}`}>
+              <button type="button" className="console-compact-row console-search-result-button" key={`${item.roomName}-${item.personKey}`} onClick={() => onOpenResult?.({ roomName: item.roomName, tab: "commands", label: "닉병합 도구" })}>
                 <span>{item.displayName} · {item.roomName}</span>
                 <small>{item.identityStatus === "conflict_possible" ? "동명이인 후보" : item.identitySummary} · 별명 {item.aliases?.join(", ") || "없음"} · 가방 {item.inventoryQuantity}</small>
                 <code>{item.mergeCommand || "닉병합 기준닉 합칠닉"}</code>
-              </div>
+              </button>
             )) : <p>검색된 참여자가 없습니다.</p>}
           </div>
         </div>
@@ -151,14 +151,15 @@ function IntegratedAdminSearch({ selectedRoomName = "", onToast }) {
   );
 }
 
-function SearchSection({ title, items = [], render }) {
+function SearchSection({ title, items = [], render, actionLabel = "열기", onOpen }) {
   return (
     <div className="console-search-section" aria-label={`${title} 검색 결과 ${items.length}개`}>
       <strong>{title} <span>{items.length}개</span></strong>
       {items.length ? items.slice(0, 5).map((item, index) => (
-        <div className="console-compact-row" key={`${title}-${index}`}>
+        <button type="button" className="console-compact-row console-search-result-button" key={`${title}-${index}`} onClick={() => onOpen?.(item)}>
           <span>{render(item)}</span>
-        </div>
+          <small>{actionLabel}</small>
+        </button>
       )) : <p>결과 없음</p>}
     </div>
   );
@@ -478,6 +479,24 @@ function AdminApp() {
     }
   }
 
+  function openAdminSearchResult({ roomName = "", tab: nextTab = "settings", label = "상세" } = {}) {
+    const targetRoomName = roomName || baseRoom.name || selected?.name || "";
+    const matchedRow = rows.find((row) => (
+      row.name === targetRoomName || row.raw?.gameRooms?.some((room) => room.name === targetRoomName)
+    ));
+    if (matchedRow) {
+      setFilter("all");
+      setSelectedId(matchedRow.id);
+    } else if (targetRoomName) {
+      setSearch(targetRoomName);
+    }
+    setTab(nextTab);
+    setToast({ tone: "good", message: `${targetRoomName ? `${targetRoomName} · ` : ""}${label}로 이동했습니다.` });
+    window.setTimeout(() => {
+      document.getElementById("일반방")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }
+
   if (!ownerToken() && state.error) {
     return (
       <main className="console-app-shell">
@@ -508,7 +527,7 @@ function AdminApp() {
       </header>
       <DashboardIntro />
       <SummaryGrid id="dashboard" label="운영자 대시보드 요약" items={summaryItems} />
-      <IntegratedAdminSearch selectedRoomName={baseRoom.name || selected?.name || ""} onToast={setToast} />
+      <IntegratedAdminSearch selectedRoomName={baseRoom.name || selected?.name || ""} onToast={setToast} onOpenResult={openAdminSearchResult} />
       <PaymentApprovalQueue
         applications={paymentApprovalRequests}
         approvingApplicationId={approvingApplicationId}

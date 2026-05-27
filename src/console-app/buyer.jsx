@@ -33,7 +33,7 @@ async function copyTextToClipboard(value = "") {
   return copied;
 }
 
-function BuyerSearchPanel({ onToast }) {
+function BuyerSearchPanel({ onToast, onOpenResult }) {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -83,12 +83,12 @@ function BuyerSearchPanel({ onToast }) {
           검색 결과 요약: {resultCounts.map(([label, count]) => `${label} ${count}개`).join(" · ")}
         </p>
         <div className="console-search-results" aria-label="구매자 콘솔 검색 결과">
-          <BuyerSearchSection title="방" items={sections.rooms || []} render={(item) => `${item.roomName} · ${item.subscriptionStatusLabel || ""} · ${item.bridgeStatus}`} />
-          <BuyerSearchSection title="결제" items={sections.payments || []} render={(item) => `${item.roomName} · ${item.statusLabel} · ${item.paymentStatusLabel}`} />
-          <BuyerSearchSection title="앱 연결" items={sections.appConnection || []} render={(item) => `${item.roomName} · ${item.appConnectCodeStatus}`} />
-          <BuyerSearchSection title="명령어" items={sections.commands || []} render={(item) => `${item.command} · ${item.description}`} />
-          <BuyerSearchSection title="게임/가방" items={sections.games || []} render={(item) => `${item.title} · ${item.installCode}`} />
-          <BuyerSearchSection title="별명" items={sections.aliases || []} render={(item) => `${item.displayName} · ${item.conflictNotice || item.identitySummary}`} />
+          <BuyerSearchSection title="방" items={sections.rooms || []} render={(item) => `${item.roomName} · ${item.subscriptionStatusLabel || ""} · ${item.bridgeStatus}`} actionLabel="내 방 열기" onOpen={(item) => onOpenResult?.({ view: "rooms", target: "rooms", label: item.roomName || "내 방" })} />
+          <BuyerSearchSection title="결제" items={sections.payments || []} render={(item) => `${item.roomName} · ${item.statusLabel} · ${item.paymentStatusLabel}`} actionLabel="라이선스 열기" onOpen={(item) => onOpenResult?.({ view: "license", target: "dashboard", label: item.roomName || "결제" })} />
+          <BuyerSearchSection title="앱 연결" items={sections.appConnection || []} render={(item) => `${item.roomName} · ${item.appConnectCodeStatus}`} actionLabel="코드 보기" onOpen={(item) => onOpenResult?.({ view: "setup", target: "app-connect-code", label: item.roomName || "앱 연결 코드" })} />
+          <BuyerSearchSection title="명령어" items={sections.commands || []} render={(item) => `${item.command} · ${item.description}`} actionLabel="스토어 열기" onOpen={() => onOpenResult?.({ href: "/command-store", label: "명령어 스토어" })} />
+          <BuyerSearchSection title="게임/가방" items={sections.games || []} render={(item) => `${item.title} · ${item.installCode}`} actionLabel="팩 보기" onOpen={() => onOpenResult?.({ href: "/command-store", label: "명령어팩" })} />
+          <BuyerSearchSection title="별명" items={sections.aliases || []} render={(item) => `${item.displayName} · ${item.conflictNotice || item.identitySummary}`} actionLabel="내 방 열기" onOpen={(item) => onOpenResult?.({ view: "rooms", target: "rooms", label: item.displayName || "별명" })} />
         </div>
         </>
       ) : null}
@@ -96,12 +96,15 @@ function BuyerSearchPanel({ onToast }) {
   );
 }
 
-function BuyerSearchSection({ title, items = [], render }) {
+function BuyerSearchSection({ title, items = [], render, actionLabel = "열기", onOpen }) {
   return (
     <div className="console-search-section" aria-label={`${title} 검색 결과 ${items.length}개`}>
       <strong>{title} <span>{items.length}개</span></strong>
       {items.length ? items.slice(0, 5).map((item, index) => (
-        <div className="console-compact-row" key={`${title}-${index}`}>{render(item)}</div>
+        <button type="button" className="console-compact-row console-search-result-button" key={`${title}-${index}`} onClick={() => onOpen?.(item)}>
+          <span>{render(item)}</span>
+          <small>{actionLabel}</small>
+        </button>
       )) : <p>결과 없음</p>}
     </div>
   );
@@ -205,6 +208,19 @@ function BuyerApp() {
     }
   }
 
+  function handleBuyerSearchOpen({ view = "overview", target = "", href = "", label = "결과" } = {}) {
+    if (href) {
+      window.location.href = href;
+      return;
+    }
+    setActiveView(view);
+    setToast({ tone: "good", message: `${label} 위치로 이동합니다.` });
+    window.setTimeout(() => {
+      const selector = target ? `#${target}` : "#dashboard";
+      document.querySelector(selector)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }
+
   const groups = useMemo(() => payload?.roomGroups || [], [payload]);
   const appConnectCodeRooms = useMemo(() => (
     payload?.appConnectCodes?.length ? payload.appConnectCodes : payload?.rooms || []
@@ -251,10 +267,10 @@ function BuyerApp() {
       {payload ? <DashboardIntro type="buyer" /> : null}
       {payload ? <SummaryGrid id="dashboard" label="구매자 대시보드 요약" items={buyerSummaries(payload)} /> : null}
       {payload ? <BuyerStepOverview payload={payload} onRefresh={() => load()} /> : null}
-      {payload ? <BuyerSearchPanel onToast={setToast} /> : null}
+      {payload ? <BuyerSearchPanel onToast={setToast} onOpenResult={handleBuyerSearchOpen} /> : null}
       {payload ? <AppConnectCodePanel rooms={appConnectCodeRooms} applications={payload.applications || []} onCopy={copyAppConnectCode} /> : null}
       {payload ? <BuyerGuidePanel payload={payload} activeView={activeView} /> : null}
-      <section className="buyer-room-grid">
+      <section className="buyer-room-grid" id="rooms">
         {(groups.length ? groups : payload?.rooms?.map((room) => ({ baseRoom: room, gameRooms: [], roomModeSettings: null })) || []).map((group) => (
           <RoomGroupCard key={group.baseRoom?.applicationId || group.baseRoom?.roomName || group.baseApplication?.id} group={group} onReload={load} setToast={setToast} />
         ))}
