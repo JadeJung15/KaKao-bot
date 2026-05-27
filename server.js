@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.26";
+export const APP_VERSION = "0.5.27";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -284,7 +284,9 @@ export const FEATURES = [
   "pixel-monster-weekly-boss",
   "rpg-auto-hunt-ticket",
   "rpg-equipment-enhancement",
-  "rpg-adventure-hub"
+  "rpg-adventure-hub",
+  "functional-shop-item-mapping",
+  "dungeon-precious-metal-drops"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];
@@ -396,6 +398,10 @@ const CAPTURE_STONE_ITEM_ID = 9301;
 const PET_SNACK_ITEM_ID = 9302;
 const AUTO_HUNT_TICKET_ITEM_ID = 9303;
 const ENHANCEMENT_STONE_ITEM_ID = 9304;
+const COPPER_TREASURE_ITEM_ID = 9401;
+const SILVER_TREASURE_ITEM_ID = 9402;
+const GOLD_TREASURE_ITEM_ID = 9403;
+const DIAMOND_TREASURE_ITEM_ID = 9404;
 const FISH_ITEM_ID_START = 10000;
 const FISH_SPECIES_COUNT = 60;
 const FISH_GRADE_COUNT = 5;
@@ -577,6 +583,12 @@ const RPG_MATERIAL_RARITIES = Object.freeze([
   { id: "rare", label: "희귀", sellBase: 48, priceMultiplier: 2 },
   { id: "epic", label: "영웅", sellBase: 110, priceMultiplier: 2 },
   { id: "legendary", label: "전설", sellBase: 260, priceMultiplier: 2 }
+]);
+const RPG_PRECIOUS_DROPS = Object.freeze([
+  { id: COPPER_TREASURE_ITEM_ID, name: "동", sellPrice: 3000, rarity: "rare", weight: 70 },
+  { id: SILVER_TREASURE_ITEM_ID, name: "은", sellPrice: 10000, rarity: "epic", weight: 22 },
+  { id: GOLD_TREASURE_ITEM_ID, name: "금", sellPrice: 50000, rarity: "legendary", weight: 7 },
+  { id: DIAMOND_TREASURE_ITEM_ID, name: "다이아", sellPrice: 100000, rarity: "legendary", weight: 1 }
 ]);
 function generatedRpgAdventureItems() {
   return Array.from({ length: RPG_ITEM_CATALOG_SIZE }, (_, index) => {
@@ -1109,6 +1121,18 @@ const SYSTEM_PRODUCTS = Object.freeze([
     rarity: "uncommon",
     gradeLabel: "고급"
   },
+  ...RPG_PRECIOUS_DROPS.map((item) => ({
+    id: item.id,
+    name: item.name,
+    price: item.sellPrice * 2,
+    sellPrice: item.sellPrice,
+    description: `던전에서 낮은 확률로 발견되는 ${item.name} 보상`,
+    active: true,
+    system: true,
+    category: "rpg_treasure",
+    rarity: item.rarity,
+    gradeLabel: item.rarity === "legendary" ? "전설" : item.rarity === "epic" ? "영웅" : "희귀"
+  })),
   ...EXPLORE_REWARD_ITEMS.map((item) => ({
     ...item,
     price: item.sellPrice * 2,
@@ -1158,6 +1182,13 @@ const SYSTEM_PRODUCTS = Object.freeze([
   }))
 ]);
 const SYSTEM_PRODUCT_MAP = new Map(SYSTEM_PRODUCTS.map((product) => [String(product.id), product]));
+const FUNCTIONAL_SHOP_ITEM_GUIDES = Object.freeze([
+  { name: "자동사냥권", systemId: AUTO_HUNT_TICKET_ITEM_ID, use: "/자동사냥", example: "/상점추가 자동사냥권 250 던전 10회 자동사냥 티켓" },
+  { name: "강화석", systemId: ENHANCEMENT_STONE_ITEM_ID, use: "/강화", example: "/상점추가 강화석 120 장비 강화 재료" },
+  { name: "기본 미끼", systemId: BAIT_ITEM_ID, use: "/낚시", example: "/상점추가 기본 미끼 20 낚시용 미끼" },
+  { name: "기본 포획석", systemId: CAPTURE_STONE_ITEM_ID, use: "/포획", example: "/상점추가 기본 포획석 30 몬스터 포획 도구" },
+  { name: "펫 간식", systemId: PET_SNACK_ITEM_ID, use: "/펫먹이", example: "/상점추가 펫 간식 15 펫 돌봄 간식" }
+]);
 const MAX_LIKE_AMOUNT = 999;
 const STORE_TEMPLATE_VERSION = 2;
 const COMMAND_INSTALL_DRAFT_TTL_MS = 10 * 60 * 1000;
@@ -1335,7 +1366,7 @@ const COMMAND_TEMPLATE_BUNDLES = Object.freeze([
 const ADMIN_MANAGEMENT_COMMANDS = Object.freeze([
   "/포인트지급", "/포인트차감", "/포인트설정",
   "/상점추가", "/상점수정", "/상점삭제", "/상점초기화", "/상점내역",
-  "/아이템지급", "/아이템회수",
+  "/아이템지급", "/아이템회수", "/기능아이템목록",
   "/닉병합"
 ]);
 const COMMAND_PACK_ALWAYS_INSTALLED_COMMANDS = Object.freeze([
@@ -1353,10 +1384,10 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "rpg-adventure": ["/모험", "/던전", "/던전목록", "/자동사냥", "/대장간", "/제작가능", "/제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/판매미리보기", "/판매추천", "/정리추천", "/일괄판매", "/가방", "/가방정리", "/판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/포인트"],
   "pixel-monster-rpg": ["/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감", "/포인트"],
   "pet-raising": ["/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점", "/포인트"],
-  "shop-inventory": ["/상점", "/구매", "/가방", "/가방정리", "/판매추천", "/정리추천", "/아이템상세", "/판매목록", "/판매미리보기", "/사용", "/가방선물", "/판매", "/일괄판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/구매내역"],
+  "shop-inventory": ["/상점", "/구매", "/가방", "/가방정리", "/판매추천", "/정리추천", "/아이템상세", "/판매목록", "/판매미리보기", "/사용", "/가방선물", "/판매", "/일괄판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/구매내역", "/기능아이템목록"],
   "custom-command": ["/명령어목록", "/커스텀명령어", "/고정명령어", "/명령어등록", "/명령어수정", "/명령어삭제", "/커스텀등록", "/커스텀수정", "/커스텀삭제"],
   "profile-history": ["/프로필", "/내별명", "/별명목록", "/프로필등록", "/프로필삭제", "/별명등록", "/별명삭제", "/닉병합", "/입퇴장현황", "/닉이력", "/입퇴장상세"],
-  "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그", "/신고목록", "/신고처리", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록", "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말", ...ADMIN_MANAGEMENT_COMMANDS],
+  "admin-ops": ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자초기화", "/관리자목록", "/방등록", "/방정보", "/방목록", "/방삭제", "/기능목록", "/기능", "/기능켜기", "/기능끄기", "/구독상태", "/구독연장", "/구독만료", "/원본로그", "/원본이벤트", "/최근이벤트", "/이벤트로그", "/신고목록", "/신고처리", "/명령어검색", "/명령어설치", "/설치확인", "/설치취소", "/명령어설치목록", "/명령어팩", "/명령어팩목록", "/명령어팩제거", "/게임팩도움말", "/기능아이템목록", ...ADMIN_MANAGEMENT_COMMANDS],
   "event-engagement": ["/출석", "/오늘할일", "/좋아요", "/응원", "/운세", "/날씨", "/채팅오늘", "/채팅금주", "/포인트순위", "/점메추"]
 });
 const ALL_IN_ONE_PACK_COMMANDS = Object.freeze([...new Set(Object.values(COMMAND_PACK_COMMANDS).flat())]);
@@ -7294,11 +7325,36 @@ function removeInventory(person, productId, quantity) {
   return next;
 }
 
+function functionalShopGuideForProduct(product) {
+  const nameKey = keyFor(product?.name || "");
+  return FUNCTIONAL_SHOP_ITEM_GUIDES.find((guide) => (
+    Number(product?.id) === guide.systemId
+    || nameKey === keyFor(guide.name)
+  )) || null;
+}
+
+function functionalShopItemListCommand(roomState, sender) {
+  const denied = requireAdmin(roomState, sender);
+  if (denied) return denied;
+  return [
+    "🛒 기능성 아이템 목록",
+    "",
+    ...FUNCTIONAL_SHOP_ITEM_GUIDES.map((guide) => {
+      const product = systemProductById(guide.systemId);
+      return `• ${guide.name}: ${guide.use} / 시스템 ${guide.systemId} / 판매가 ${formatPoint(productSellPrice(product))}`;
+    }),
+    "",
+    "상점 등록 예시",
+    ...FUNCTIONAL_SHOP_ITEM_GUIDES.slice(0, 3).map((guide) => `- ${guide.example}`),
+    "",
+    "위 이름과 같게 등록하면 구매한 방 상점 상품도 기능 아이템으로 인식됩니다."
+  ].join("\n");
+}
+
 function isAutoHuntTicketProduct(product) {
   if (!product) return false;
-  if (Number(product.id) === AUTO_HUNT_TICKET_ITEM_ID) return true;
-  if (product.category === "rpg_ticket") return true;
-  return keyFor(product.name || "") === keyFor("자동사냥권");
+  const guide = functionalShopGuideForProduct(product);
+  return guide?.systemId === AUTO_HUNT_TICKET_ITEM_ID || product.category === "rpg_ticket";
 }
 
 function autoHuntTicketRows(roomState, person) {
@@ -8092,11 +8148,16 @@ function shopAddCommand(roomState, sender, text) {
     productName: product.name,
     by: sender
   });
+  const functionalGuide = functionalShopGuideForProduct(product);
   return [
     "상점 상품이 추가되었습니다.",
     "",
-    productLine(product)
-  ].join("\n");
+    productLine(product),
+    functionalGuide ? "" : "",
+    functionalGuide ? `기능성 아이템: ${functionalGuide.name}으로 인식됩니다.` : "",
+    functionalGuide ? `사용 명령어: ${functionalGuide.use}` : "",
+    functionalGuide ? "목록: /기능아이템목록" : ""
+  ].filter((line) => line !== "").join("\n");
 }
 
 function parseShopUpdate(text) {
@@ -8441,9 +8502,9 @@ function exploreGameCommand(roomState, sender) {
 }
 
 const DUNGEON_CONFIGS = Object.freeze([
-  { key: "beginner", names: ["", "초급", "초급 광산", "광산"], title: "초급 광산", purpose: "초급 재료", blankChance: 0.25, itemStart: 0, itemEnd: 119, treasureChance: 0.08 },
-  { key: "middle", names: ["중급", "중급 유적", "유적"], title: "중급 유적", purpose: "중급 제작", blankChance: 0.30, itemStart: 80, itemEnd: 299, treasureChance: 0.10 },
-  { key: "advanced", names: ["상급", "상급 심연", "심연"], title: "상급 심연", purpose: "상급 강화/희귀", blankChance: 0.35, itemStart: 240, itemEnd: 499, treasureChance: 0.12 }
+  { key: "beginner", names: ["", "초급", "초급 광산", "광산"], title: "초급 광산", purpose: "초급 재료", blankChance: 0.25, itemStart: 0, itemEnd: 119, treasureChance: 0.08, preciousChance: 0.015 },
+  { key: "middle", names: ["중급", "중급 유적", "유적"], title: "중급 유적", purpose: "중급 제작", blankChance: 0.30, itemStart: 80, itemEnd: 299, treasureChance: 0.10, preciousChance: 0.025 },
+  { key: "advanced", names: ["상급", "상급 심연", "심연"], title: "상급 심연", purpose: "상급 강화/희귀", blankChance: 0.35, itemStart: 240, itemEnd: 499, treasureChance: 0.12, preciousChance: 0.04 }
 ]);
 
 function dungeonConfigFromText(text = "") {
@@ -8455,7 +8516,9 @@ function dungeonListCommand() {
   return [
     "픽셀곰 던전 목록",
     "",
-    ...DUNGEON_CONFIGS.map((config) => `• ${config.title}: ${config.purpose} / 꽝 ${Math.round(config.blankChance * 100)}%`),
+    ...DUNGEON_CONFIGS.map((config) => `• ${config.title}: ${config.purpose} / 꽝 ${Math.round(config.blankChance * 100)}% / 보석 ${Math.round(config.preciousChance * 1000) / 10}%`),
+    "• 낮은 확률 보석: 동/은/금/다이아",
+    "  판매가: 동 3,000 / 은 10,000 / 금 50,000 / 다이아 100,000",
     "",
     "/던전 또는 /던전 중급 으로 입장합니다.",
     "10회 요약: /자동사냥 중급",
@@ -8465,9 +8528,22 @@ function dungeonListCommand() {
 
 function randomDungeonItem(config) {
   if (Math.random() < config.blankChance) return null;
+  const precious = randomDungeonPreciousDrop(config);
+  if (precious) return precious;
   const span = Math.max(1, config.itemEnd - config.itemStart + 1);
   const offset = config.itemStart + Math.floor(Math.random() * span);
   return systemProductById(RPG_ITEM_ID_START + offset) || systemProductById(RPG_ITEM_ID_START);
+}
+
+function randomDungeonPreciousDrop(config) {
+  if (Math.random() >= Number(config.preciousChance || 0)) return null;
+  const totalWeight = RPG_PRECIOUS_DROPS.reduce((sum, item) => sum + item.weight, 0);
+  let roll = Math.random() * totalWeight;
+  for (const item of RPG_PRECIOUS_DROPS) {
+    roll -= item.weight;
+    if (roll <= 0) return systemProductById(item.id);
+  }
+  return systemProductById(COPPER_TREASURE_ITEM_ID);
 }
 
 function dungeonCommand(roomState, sender, text) {
@@ -10394,7 +10470,7 @@ function commandFeatureKey(command) {
   if (/^\/(?:프로필|프로칠|내별명|별명목록|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
   if (/^\/(?:게임|오늘할일|주사위|낚시|탐험|확률뽑기|뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|모험|던전|던전목록|자동사냥|대장간|제작가능|제작|강화|강화목록|강화상세|보상선택|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
-  if (/^\/(?:상점|구매|구매내역|가방|가방정리|정리추천|판매추천|아이템|보유아이템|아이템상세|판매목록|판매미리보기|일괄판매|아이템잠금|아이템잠금해제|잠금목록|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수)(?:\s|$)/.test(command)) return "shop";
+  if (/^\/(?:상점|구매|구매내역|가방|가방정리|정리추천|판매추천|아이템|보유아이템|아이템상세|판매목록|판매미리보기|일괄판매|아이템잠금|아이템잠금해제|잠금목록|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점초기화|상점내역|아이템지급|아이템회수|기능아이템목록)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
   return "";
 }
@@ -10519,7 +10595,7 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/구독상태", "관리자", "구독 상태 관리", { aliases: ["/구독연장", "/구독만료"], visibility: "admin", requiresRole: "admin" }),
   registryEntry("/명령어등록", "관리자", "커스텀 명령어 등록과 삭제", { aliases: ["/명령어수정", "/커스텀등록", "/커스텀수정", "/명령어삭제", "/커스텀삭제"], visibility: "admin", requiresRole: "admin", requiresFeature: "customCommands" }),
   registryEntry("/포인트지급", "관리자", "참여자 포인트 관리", { aliases: ["/포인트차감", "/포인트설정"], visibility: "admin", requiresRole: "admin", requiresFeature: "points" }),
-  registryEntry("/상점추가", "관리자", "상점과 아이템 관리", { aliases: ["/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수"], visibility: "admin", requiresRole: "admin", requiresFeature: "shop" })
+  registryEntry("/상점추가", "관리자", "상점과 아이템 관리", { aliases: ["/상점수정", "/상점삭제", "/상점초기화", "/상점내역", "/아이템지급", "/아이템회수", "/기능아이템목록"], visibility: "admin", requiresRole: "admin", requiresFeature: "shop" })
 ]);
 
 function resolveCommandRegistryItem(command, compactCommand = "") {
@@ -16007,6 +16083,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/상점삭제") return shopDeleteCommand(roomState, sender, text);
   if (command === "/상점초기화") return shopResetCommand(roomState, sender);
   if (command === "/상점내역") return shopHistoryCommand(roomState, sender);
+  if (command === "/기능아이템목록") return functionalShopItemListCommand(roomState, sender);
   if (command === "/아이템지급") return adminItemTransferCommand(roomState, sender, text, "grant");
   if (command === "/아이템회수") return adminItemTransferCommand(roomState, sender, text, "revoke");
   if (/^\/(?:내정보|레벨)(?:\s|$)/.test(command) || command === "/정보") return memberInfoCommand(roomState, text, sender);
