@@ -1,4 +1,5 @@
 {
+  "regions": ["hnd1"],
   "rewrites": [
     { "source": "/", "destination": "/index.html" },
     { "source": "/health", "destination": "/api/health" },
