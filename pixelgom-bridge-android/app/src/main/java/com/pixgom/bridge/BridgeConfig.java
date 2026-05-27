@@ -551,7 +551,13 @@ final class BridgeConfig {
     static void appendNoiseLog(Context context, String line) {
         String text = textOrDefault(line, "시스템 알림 무시");
         setLastIgnoreReason(context, text);
-        appendLog(context, "노이즈: " + text);
+        appendLog(context, "무시: " + text);
+    }
+
+    static void appendFailureLog(Context context, String line) {
+        String text = textOrDefault(line, "전송 실패");
+        setLastSendFailure(context, text);
+        appendLog(context, "실패: " + text);
     }
 
     static void appendDiagnosticLog(Context context, String line) {
@@ -567,6 +573,7 @@ final class BridgeConfig {
         if (TextUtils.isEmpty(logs)) return "아직 전송 로그가 없습니다.";
         List<String> success = new ArrayList<>();
         List<String> noise = new ArrayList<>();
+        List<String> failure = new ArrayList<>();
         List<String> diagnostic = new ArrayList<>();
         List<String> other = new ArrayList<>();
         for (String line : logs.split("\\n")) {
@@ -576,6 +583,8 @@ final class BridgeConfig {
                 success.add(trimmed);
             } else if (trimmed.contains("  노이즈: ") || trimmed.contains("  무시: ")) {
                 noise.add(trimmed);
+            } else if (trimmed.contains("  실패: ") || trimmed.contains("  재시도: ") || trimmed.contains("전송 실패") || trimmed.contains("카카오 답장 실패")) {
+                failure.add(trimmed);
             } else if (trimmed.contains("  진단 원문: ") || trimmed.contains("  진단: ") || trimmed.contains("진단 payload")) {
                 diagnostic.add(trimmed);
             } else {
@@ -584,7 +593,8 @@ final class BridgeConfig {
         }
         List<String> sections = new ArrayList<>();
         sections.add("성공/응답 로그\n" + limitedLogSection(success, "최근 성공 응답 없음"));
-        sections.add("무시/노이즈 로그\n" + limitedLogSection(noise, "최근 무시 알림 없음"));
+        sections.add("실패/재시도 필요 로그\n" + limitedLogSection(failure, "최근 실패 또는 재시도 필요 없음"));
+        sections.add("무시된 알림 로그\n" + limitedLogSection(noise, "최근 무시 알림 없음"));
         sections.add("진단 원문 로그\n" + limitedLogSection(diagnostic, "최근 진단 원문 없음"));
         if (!other.isEmpty()) sections.add("기타 로그\n" + limitedLogSection(other, "기타 로그 없음"));
         return TextUtils.join("\n\n", sections);

@@ -4711,6 +4711,31 @@ a {
   margin: 0 0 16px;
 }
 
+.buyer-app-check-card {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(260px, 1.1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #d9dee7;
+  border-left: 4px solid #2c8c6f;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(23, 32, 42, 0.04);
+  padding: 14px;
+  margin: 0 0 16px;
+}
+
+.buyer-app-check-card h2 {
+  margin: 3px 0 6px;
+  font-size: 1.16rem;
+}
+
+.buyer-app-check-card p {
+  margin: 0;
+  color: #465364;
+  line-height: 1.5;
+}
+
 .buyer-connect-code-list {
   display: grid;
   gap: 10px;
@@ -5655,6 +5680,7 @@ button.console-compact-row:focus-visible {
   .console-summary-grid,
   .console-field-grid,
   .buyer-step-overview,
+  .buyer-app-check-card,
   .buyer-connect-code-card,
   .console-log-filters,
   .console-search-form,

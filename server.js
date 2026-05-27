@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.21";
+export const APP_VERSION = "0.5.22";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -274,6 +274,10 @@ export const FEATURES = [
   "admin-live-event-diagnostics",
   "read-only-command-save-skip",
   "android-1030-play-latest",
+  "android-1031-release-prep",
+  "app-diagnostic-log-clarity",
+  "admin-live-log-status-badges",
+  "buyer-app-connection-check-card",
   "ux-work-type-guide"
 ];
 

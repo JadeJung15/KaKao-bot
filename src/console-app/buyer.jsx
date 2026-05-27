@@ -267,6 +267,7 @@ function BuyerApp() {
       {payload ? <DashboardIntro type="buyer" /> : null}
       {payload ? <SummaryGrid id="dashboard" label="구매자 대시보드 요약" items={buyerSummaries(payload)} /> : null}
       {payload ? <BuyerStepOverview payload={payload} onRefresh={() => load()} /> : null}
+      {payload ? <BuyerAppConnectionCheckCard rooms={appConnectCodeRooms} onRefresh={() => load()} /> : null}
       {payload ? <BuyerSearchPanel onToast={setToast} onOpenResult={handleBuyerSearchOpen} /> : null}
       {payload ? <AppConnectCodePanel rooms={appConnectCodeRooms} applications={payload.applications || []} onCopy={copyAppConnectCode} /> : null}
       {payload ? <BuyerGuidePanel payload={payload} activeView={activeView} /> : null}
@@ -382,6 +383,31 @@ function BuyerStepOverview({ payload = {}, onRefresh }) {
           <div className="buyer-step-action">{step.action}</div>
         </article>
       ))}
+    </section>
+  );
+}
+
+function BuyerAppConnectionCheckCard({ rooms = [], onRefresh }) {
+  const issuedRooms = rooms.filter((room) => room.bridgeConnectCode);
+  const readyRooms = rooms.filter((room) => room.bridgeStatus === "ready" || snapshot(room).bridge?.status === "ready");
+  const gameRooms = rooms.filter((room) => room.roomRole === "game" || snapshot(room).role === "game");
+  return (
+    <section className="buyer-app-check-card" aria-label="앱 연결 상태 확인">
+      <div>
+        <p className="console-eyebrow">App QA</p>
+        <h2>앱 연결 상태 확인</h2>
+        <p>실제 방 QA는 앱 업데이트 후 카카오방에서 /브릿지, /상태, /주사위를 보내고 앱의 성공/응답 로그와 실패/재시도 필요 로그를 확인하는 순서로 진행합니다.</p>
+      </div>
+      <div className="console-compact-list">
+        <span>연결코드 발급: {issuedRooms.length}개</span>
+        <span>앱 연결 준비: {readyRooms.length}개</span>
+        <span>게임방 연결: {gameRooms.length}개</span>
+        <span>확인 위치: 앱 전송 로그의 성공/응답 로그, 실패/재시도 필요 로그, 무시된 알림 로그</span>
+      </div>
+      <div className="console-action-row">
+        <a href="/console?from=android&view=setup#app-connect-code">연결코드 보기</a>
+        <button type="button" onClick={onRefresh}>상태 새로고침</button>
+      </div>
     </section>
   );
 }

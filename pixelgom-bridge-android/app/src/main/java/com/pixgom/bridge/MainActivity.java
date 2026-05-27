@@ -485,7 +485,7 @@ public class MainActivity extends Activity {
         logTitle.setPadding(0, dp(18), 0, dp(8));
         root.addView(logTitle);
 
-        TextView logHelp = text("아래 전송 로그는 성공/응답 로그, 무시/노이즈 로그, 진단 원문 로그로 나뉩니다. 그룹 요약/빈 카카오 알림은 실패가 아니라 무시/노이즈 로그로 분류됩니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView logHelp = text("정상 응답과 재시도 필요 항목을 먼저 확인하세요. 아래 전송 로그는 성공/응답 로그, 실패/재시도 필요 로그, 무시된 알림 로그, 진단 원문 로그로 나뉩니다. 그룹 요약/빈 카카오 알림은 실패가 아니라 무시된 알림으로 분류됩니다.", 13, Color.rgb(111, 78, 49), false);
         logHelp.setPadding(0, 0, 0, dp(8));
         root.addView(logHelp);
 
@@ -616,7 +616,7 @@ public class MainActivity extends Activity {
                     String reply = TextUtils.isEmpty(result.reply) ? "응답 없음" : result.reply.replace("\n", " / ");
                     BridgeConfig.appendLog(this, "서버 테스트 성공: " + reply);
                 } else {
-                    BridgeConfig.appendLog(this, "서버 테스트 실패: " + result.error);
+                    BridgeConfig.appendFailureLog(this, "서버 테스트 실패: " + result.error);
                 }
                 refreshLogs();
             });
@@ -676,7 +676,7 @@ public class MainActivity extends Activity {
                     refreshProfileSyncStatus();
                     Toast.makeText(this, "방 설정이 추가/갱신되었습니다.", Toast.LENGTH_SHORT).show();
                 } else {
-                    BridgeConfig.appendLog(this, "앱 자동 연결 실패: " + result.error);
+                    BridgeConfig.appendFailureLog(this, "앱 자동 연결 실패: " + result.error);
                     Toast.makeText(this, "연결코드를 확인하세요.", Toast.LENGTH_SHORT).show();
                 }
                 refreshLogs();
@@ -720,7 +720,7 @@ public class MainActivity extends Activity {
                 } else {
                     String summary = "실패: " + result.error;
                     BridgeConfig.setLastProfileSyncSummary(this, summary);
-                    BridgeConfig.appendLog(this, "서버 방 프로필 동기화 실패: " + result.error);
+                    BridgeConfig.appendFailureLog(this, "서버 방 프로필 동기화 실패: " + result.error);
                     refreshProfileSyncStatus();
                     Toast.makeText(this, "동기화 실패: 등록 방과 라이선스를 확인하세요.", Toast.LENGTH_SHORT).show();
                 }

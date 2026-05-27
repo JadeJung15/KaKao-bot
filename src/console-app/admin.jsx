@@ -1358,6 +1358,20 @@ function TransfersPanel({ items = [] }) {
   );
 }
 
+function liveLogStatusLabel(log = {}) {
+  const status = String(log.status || "").toLowerCase();
+  const ignoreReason = String(log.ignoreReason || "").trim();
+  const errorReason = String(log.errorReason || "").trim();
+  const saveMs = Number(log.saveStateMs || 0);
+  if (status === "duplicate") return { label: "중복 차단", tone: "warn" };
+  if (status === "ignored" || ignoreReason) return { label: "무시된 알림", tone: "neutral" };
+  if (status === "error" || errorReason) return { label: "실패/재시도 필요", tone: "bad" };
+  if (status === "no_reply") return { label: "응답 없음", tone: "warn" };
+  if (saveMs >= 500) return { label: "저장 지연", tone: "warn" };
+  if (status === "handled" || log.replyLength > 0 || log.command) return { label: "정상 처리", tone: "good" };
+  return { label: "상태 확인", tone: "neutral" };
+}
+
 function RoomLogsPanel({ roomOptions = [], filters = {}, setFilters, logState = {}, onLoad }) {
   const update = (patch) => setFilters((current) => ({ ...current, ...patch }));
   function logCsv(logs = []) {
@@ -1464,10 +1478,11 @@ function RoomLogsPanel({ roomOptions = [], filters = {}, setFilters, logState = 
           <article className="console-card console-log-card" key={`${log.at}-${log.messageHash}-${log.senderHash}`}>
             <div>
               <strong>{log.command || log.eventType || "채팅"} · {formatDate(log.serverReceivedAt || log.at)}</strong>
-              <span>{log.room || "-"} · {log.sender || "익명"} · 상태 {log.status || "-"} · 응답 {log.replyLength || 0}자</span>
+              <span>{log.room || "-"} · {log.sender || "익명"} · 응답 {log.replyLength || 0}자</span>
               <small>{log.messagePreview || "메시지 없음"}</small>
             </div>
             <div className="console-log-meta">
+              <StatusBadge label={liveLogStatusLabel(log).label} tone={liveLogStatusLabel(log).tone} />
               <StatusBadge label={log.command ? "명령어" : "일반"} status={log.command ? "ok" : "neutral"} />
               <StatusBadge label={`총 ${log.totalMs || 0}ms`} status={(log.totalMs || 0) > 1000 ? "expired" : "ok"} />
               <small>앱 수신 {formatDate(log.bridgeReceivedAt)} · 서버 수신 {formatDate(log.serverReceivedAt)}</small>

@@ -83,8 +83,7 @@ public class PixelgomNotificationListener extends NotificationListenerService {
             EventSender.SendResult result = EventSender.send(this, event);
             String reply = "";
             if (!result.ok()) {
-                BridgeConfig.appendLog(this, "전송 실패: " + result.error);
-                BridgeConfig.setLastSendFailure(this, event.eventId + " / " + result.error);
+                BridgeConfig.appendFailureLog(this, event.eventId + " / 전송 실패: " + result.error);
                 BridgeConfig.enqueuePendingEvent(this, EventSender.buildPayload(this, event, event.retryCount), result.error);
             } else if (result.ignored) {
                 BridgeConfig.appendNoiseLog(this, "서버 무시: " + event.sender + " / " + preview(event.message));
@@ -100,7 +99,7 @@ public class PixelgomNotificationListener extends NotificationListenerService {
             if (TextUtils.isEmpty(reply) || isServerUnknownCommand(reply)) {
                 ScriptBotEngine.Result scriptResult = ScriptBotEngine.handle(this, event);
                 if (!scriptResult.ok()) {
-                    BridgeConfig.appendLog(this, "JS 오류: " + scriptResult.error);
+                    BridgeConfig.appendFailureLog(this, "JS 오류: " + scriptResult.error);
                 } else if (scriptResult.handled) {
                     reply = scriptResult.reply;
                     BridgeConfig.appendSuccessLog(this, "JS 응답 생성: " + preview(reply));
@@ -124,7 +123,7 @@ public class PixelgomNotificationListener extends NotificationListenerService {
         if (replyResult.sent) {
             BridgeConfig.appendSuccessLog(this, "카카오 답장 전송 성공");
         } else {
-            BridgeConfig.appendLog(this, "카카오 답장 실패: " + replyResult.reason + " actions=" + replyResult.actionCount + " remoteInputs=" + replyResult.remoteInputCount);
+            BridgeConfig.appendFailureLog(this, "카카오 답장 실패: " + replyResult.reason + " actions=" + replyResult.actionCount + " remoteInputs=" + replyResult.remoteInputCount);
         }
     }
 
