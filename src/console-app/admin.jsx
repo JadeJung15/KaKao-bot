@@ -106,25 +106,36 @@ function IntegratedAdminSearch({ selectedRoomName = "", onToast }) {
 
   const sections = result?.sections || {};
   const people = sections.people || [];
+  const resultCounts = result ? [
+    ["방", sections.rooms?.length || 0],
+    ["명령어", sections.commands?.length || 0],
+    ["로그", sections.logs?.length || 0],
+    ["문의", sections.inquiries?.length || 0],
+    ["동명이인 후보", people.length]
+  ] : [];
   return (
-    <section className="console-search-panel">
+    <section className="console-search-panel" aria-labelledby="admin-search-title">
       <form onSubmit={submit} className="console-search-form">
         <div>
           <p className="console-eyebrow">운영자 통합 검색</p>
-          <h2>방, 신청자, 닉네임, 별명, 로그, 문의 검색</h2>
+          <h2 id="admin-search-title">방, 신청자, 닉네임, 별명, 로그, 문의 검색</h2>
           <p>동명이인 후보는 자동 병합하지 않고 닉병합 도구로 연결합니다.</p>
         </div>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="방명, 닉네임, 별명, 명령어, 로그 검색" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="방명, 닉네임, 별명, 명령어, 로그 검색" aria-label="운영자 통합 검색어" />
         <button type="submit" disabled={loading}>{loading ? "검색 중" : "검색"}</button>
       </form>
       {result ? (
-        <div className="console-search-results">
+        <>
+        <p className="console-search-status" role="status" aria-live="polite">
+          검색 결과 요약: {resultCounts.map(([label, count]) => `${label} ${count}개`).join(" · ")}
+        </p>
+        <div className="console-search-results" aria-label="운영자 통합 검색 결과">
           <SearchSection title="방" items={sections.rooms || []} render={(item) => `${item.roomName} · ${item.roleLabel || item.role} · ${item.bridgeStatus}`} />
           <SearchSection title="명령어" items={sections.commands || []} render={(item) => `${item.command} · ${item.description}`} />
           <SearchSection title="로그" items={sections.logs || []} render={(item) => `${item.roomName} · ${item.command || item.eventType} · ${item.messagePreview}`} />
           <SearchSection title="문의" items={sections.inquiries || []} render={(item) => `${item.roomName} · ${item.statusLabel} · ${item.message}`} />
-          <div className="console-search-section">
-            <strong>동명이인 후보</strong>
+          <div className="console-search-section" aria-label={`동명이인 후보 검색 결과 ${people.length}개`}>
+            <strong>동명이인 후보 <span>{people.length}개</span></strong>
             {people.length ? people.map((item) => (
               <div className="console-compact-row" key={`${item.roomName}-${item.personKey}`}>
                 <span>{item.displayName} · {item.roomName}</span>
@@ -134,6 +145,7 @@ function IntegratedAdminSearch({ selectedRoomName = "", onToast }) {
             )) : <p>검색된 참여자가 없습니다.</p>}
           </div>
         </div>
+        </>
       ) : null}
     </section>
   );
@@ -141,8 +153,8 @@ function IntegratedAdminSearch({ selectedRoomName = "", onToast }) {
 
 function SearchSection({ title, items = [], render }) {
   return (
-    <div className="console-search-section">
-      <strong>{title}</strong>
+    <div className="console-search-section" aria-label={`${title} 검색 결과 ${items.length}개`}>
+      <strong>{title} <span>{items.length}개</span></strong>
       {items.length ? items.slice(0, 5).map((item, index) => (
         <div className="console-compact-row" key={`${title}-${index}`}>
           <span>{render(item)}</span>
@@ -487,14 +499,15 @@ function AdminApp() {
         <div>
           <p className="console-eyebrow">Pixgom Admin</p>
           <h1>일반방 중심 통합 운영 콘솔</h1>
-          <p>신청, 결제, 설정, 신고, 이관, 문의, 백업/복구를 방 단위로 한 화면에서 관리합니다.</p>
+          <p>대시보드에서 운영 방, 결제 확인, 문제 방을 먼저 보고 신청, 결제, 설정, 신고, 이관, 문의, 백업/복구를 방 단위로 관리합니다.</p>
         </div>
         <div className="console-hero-actions">
           <a className="console-secondary-link" href="/">홈으로</a>
           <button type="button" onClick={load}>새로고침</button>
         </div>
       </header>
-      <SummaryGrid items={summaryItems} />
+      <DashboardIntro />
+      <SummaryGrid id="dashboard" label="운영자 대시보드 요약" items={summaryItems} />
       <IntegratedAdminSearch selectedRoomName={baseRoom.name || selected?.name || ""} onToast={setToast} />
       <PaymentApprovalQueue
         applications={paymentApprovalRequests}
@@ -503,7 +516,8 @@ function AdminApp() {
       />
       <section className="console-layout">
         <aside className="console-sidebar" aria-label="운영 메뉴">
-          {["운영현황", "일반방", "신청/결제", "신고", "이관", "문의", "방별 로그", "종료 보관", "백업/복구"].map((item) => <a href={`#${item}`} key={item}>{item}</a>)}
+          <a href="#dashboard">대시보드</a>
+          {["일반방", "신청/결제", "신고", "이관", "문의", "방별 로그", "종료 보관", "백업/복구"].map((item) => <a href={`#${item}`} key={item}>{item}</a>)}
         </aside>
         <section className="console-main-panel" id="일반방">
           <Toolbar search={search} onSearch={setSearch} filter={filter} onFilter={setFilter} />
@@ -1453,6 +1467,18 @@ function ListPanel({ items = [], empty }) {
         </article>
       ))}
     </div>
+  );
+}
+
+function DashboardIntro() {
+  return (
+    <section className="console-dashboard-intro" aria-label="운영자 대시보드 위치 안내">
+      <div>
+        <p className="console-eyebrow">Dashboard</p>
+        <h2>운영자 대시보드</h2>
+        <p>/admin 첫 화면입니다. 운영 방, 결제 확인, 문제 방, 종료 보관을 먼저 확인한 뒤 아래에서 방 상세를 관리합니다.</p>
+      </div>
+    </section>
   );
 }
 

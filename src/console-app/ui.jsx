@@ -5,11 +5,11 @@ export function StatusBadge({ label, status, tone }) {
   return <span className={`console-status console-status-${tone || statusTone(status)}`}>{label || status || "확인"}</span>;
 }
 
-export function SummaryGrid({ items = [] }) {
+export function SummaryGrid({ items = [], id, label = "대시보드 요약" }) {
   return (
-    <section className="console-summary-grid" aria-label="요약">
+    <section className="console-summary-grid" id={id} aria-label={label}>
       {items.map((item) => (
-        <article className={`console-summary-card console-summary-${item.tone || "neutral"}`} key={item.label}>
+        <article className={`console-summary-card console-summary-${item.tone || "neutral"}`} key={item.label} aria-label={`${item.label}: ${item.value}`}>
           <span>{item.label}</span>
           <strong>{item.value}</strong>
           {item.help ? <small>{item.help}</small> : null}

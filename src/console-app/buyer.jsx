@@ -58,19 +58,31 @@ function BuyerSearchPanel({ onToast }) {
   }
 
   const sections = result?.sections || {};
+  const resultCounts = result ? [
+    ["방", sections.rooms?.length || 0],
+    ["결제", sections.payments?.length || 0],
+    ["앱 연결", sections.appConnection?.length || 0],
+    ["명령어", sections.commands?.length || 0],
+    ["게임/가방", sections.games?.length || 0],
+    ["별명", sections.aliases?.length || 0]
+  ] : [];
   return (
-    <section className="console-search-panel">
+    <section className="console-search-panel" aria-labelledby="buyer-search-title">
       <form className="console-search-form" onSubmit={submit}>
         <div>
           <p className="console-eyebrow">내 콘솔 검색</p>
-          <h2>방, 결제, 앱 연결, 명령어, 게임/가방, 별명 검색</h2>
+          <h2 id="buyer-search-title">방, 결제, 앱 연결, 명령어, 게임/가방, 별명 검색</h2>
           <p>동명이인 가능성 있음, 관리자 확인 필요 상태는 자동 병합하지 않습니다.</p>
         </div>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="방명, 명령어, 별명, 앱 연결 상태 검색" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="방명, 명령어, 별명, 앱 연결 상태 검색" aria-label="구매자 콘솔 통합 검색어" />
         <button type="submit" disabled={loading}>{loading ? "검색 중" : "검색"}</button>
       </form>
       {result ? (
-        <div className="console-search-results">
+        <>
+        <p className="console-search-status" role="status" aria-live="polite">
+          검색 결과 요약: {resultCounts.map(([label, count]) => `${label} ${count}개`).join(" · ")}
+        </p>
+        <div className="console-search-results" aria-label="구매자 콘솔 검색 결과">
           <BuyerSearchSection title="방" items={sections.rooms || []} render={(item) => `${item.roomName} · ${item.subscriptionStatusLabel || ""} · ${item.bridgeStatus}`} />
           <BuyerSearchSection title="결제" items={sections.payments || []} render={(item) => `${item.roomName} · ${item.statusLabel} · ${item.paymentStatusLabel}`} />
           <BuyerSearchSection title="앱 연결" items={sections.appConnection || []} render={(item) => `${item.roomName} · ${item.appConnectCodeStatus}`} />
@@ -78,6 +90,7 @@ function BuyerSearchPanel({ onToast }) {
           <BuyerSearchSection title="게임/가방" items={sections.games || []} render={(item) => `${item.title} · ${item.installCode}`} />
           <BuyerSearchSection title="별명" items={sections.aliases || []} render={(item) => `${item.displayName} · ${item.conflictNotice || item.identitySummary}`} />
         </div>
+        </>
       ) : null}
     </section>
   );
@@ -85,8 +98,8 @@ function BuyerSearchPanel({ onToast }) {
 
 function BuyerSearchSection({ title, items = [], render }) {
   return (
-    <div className="console-search-section">
-      <strong>{title}</strong>
+    <div className="console-search-section" aria-label={`${title} 검색 결과 ${items.length}개`}>
+      <strong>{title} <span>{items.length}개</span></strong>
       {items.length ? items.slice(0, 5).map((item, index) => (
         <div className="console-compact-row" key={`${title}-${index}`}>{render(item)}</div>
       )) : <p>결과 없음</p>}
@@ -227,7 +240,7 @@ function BuyerApp() {
         <div>
           <p className="console-eyebrow">Pixgom Console</p>
           <h1>구매자 셀프 관리 콘솔</h1>
-          <p>방 상태, 결제/라이선스, 앱 연결 상태, 게임방 분리 설정과 문의 흐름을 한곳에서 확인합니다.</p>
+          <p>대시보드에서 방 상태, 결제/라이선스, 앱 연결 상태, 게임방 분리 설정과 문의 흐름을 한곳에서 확인합니다.</p>
         </div>
         <div className="console-hero-actions">
           <a className="console-secondary-link" href="/">홈으로</a>
@@ -235,7 +248,8 @@ function BuyerApp() {
         </div>
       </header>
       <BuyerConsoleTabs activeView={activeView} onChange={setActiveView} />
-      {payload ? <SummaryGrid items={buyerSummaries(payload)} /> : null}
+      {payload ? <DashboardIntro type="buyer" /> : null}
+      {payload ? <SummaryGrid id="dashboard" label="구매자 대시보드 요약" items={buyerSummaries(payload)} /> : null}
       {payload ? <BuyerStepOverview payload={payload} onRefresh={() => load()} /> : null}
       {payload ? <BuyerSearchPanel onToast={setToast} /> : null}
       {payload ? <AppConnectCodePanel rooms={appConnectCodeRooms} applications={payload.applications || []} onCopy={copyAppConnectCode} /> : null}
@@ -402,7 +416,7 @@ function AppConnectCodePanel({ rooms = [], applications = [], onCopy }) {
 
 function BuyerConsoleTabs({ activeView, onChange }) {
   const tabs = [
-    ["overview", "요약"],
+    ["overview", "대시보드"],
     ["setup", "설치 안내"],
     ["rooms", "내 방"],
     ["license", "라이선스"],
@@ -411,11 +425,24 @@ function BuyerConsoleTabs({ activeView, onChange }) {
   return (
     <nav className="buyer-console-tabs" aria-label="구매자 콘솔 보기">
       {tabs.map(([value, label]) => (
-        <button key={value} type="button" className={activeView === value ? "is-active" : ""} onClick={() => onChange(value)}>
+        <button key={value} type="button" className={activeView === value ? "is-active" : ""} aria-current={activeView === value ? "page" : undefined} onClick={() => onChange(value)}>
           {label}
         </button>
       ))}
     </nav>
+  );
+}
+
+function DashboardIntro({ type }) {
+  const isBuyer = type === "buyer";
+  return (
+    <section className="console-dashboard-intro" aria-label={isBuyer ? "구매자 대시보드 위치 안내" : "운영자 대시보드 위치 안내"}>
+      <div>
+        <p className="console-eyebrow">Dashboard</p>
+        <h2>{isBuyer ? "구매자 대시보드" : "운영자 대시보드"}</h2>
+        <p>{isBuyer ? "/console 첫 화면입니다. 상단 대시보드 탭에서 결제, 앱 연결, 내 방 상태를 바로 확인합니다." : "/admin 첫 화면입니다. 운영 방, 결제 확인, 문제 방, 종료 보관을 먼저 확인합니다."}</p>
+      </div>
+    </section>
   );
 }
 

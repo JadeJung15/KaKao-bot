@@ -26,7 +26,7 @@ const STATIC_CONTENT_TYPES = {
   ".webp": "image/webp"
 };
 
-export const APP_VERSION = "0.5.14";
+export const APP_VERSION = "0.5.15";
 const BACKUP_SCHEMA_VERSION = 1;
 export const FEATURES = [
   "health-check",
@@ -261,7 +261,9 @@ export const FEATURES = [
   "dashboard-integrated-search",
   "duplicate-identity-search-disambiguation",
   "command-store-journey-sections",
-  "console-game-ops-overview"
+  "console-game-ops-overview",
+  "console-dashboard-entrypoints",
+  "console-search-result-accessibility"
 ];
 
 const DEFAULT_REGISTERED_ROOM_LINKS = ["https://open.kakao.com/o/gu25P5vi"];

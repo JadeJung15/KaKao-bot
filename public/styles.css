@@ -5502,6 +5502,27 @@ a {
   padding: 14px;
 }
 
+.console-dashboard-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #dfe5ee;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.console-dashboard-intro h2 {
+  margin: 3px 0 5px;
+  font-size: 1.2rem;
+}
+
+.console-dashboard-intro p:last-child {
+  margin: 0;
+  color: #465364;
+}
+
 .console-search-form {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(180px, 320px) auto;
@@ -5520,6 +5541,12 @@ a {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.console-search-status {
+  margin: 0;
+  color: #465364;
+  font-size: 0.9rem;
 }
 
 .console-search-section {
