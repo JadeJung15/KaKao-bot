@@ -17,6 +17,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -32,11 +33,11 @@ public class MainActivity extends Activity {
     private static final String BUYER_CONSOLE_URL = WEBSITE_URL + "/console";
     private static final String BUYER_SETUP_URL = WEBSITE_URL + "/console?from=android&view=setup";
     private static final String BUYER_CONNECT_CODE_URL = BUYER_SETUP_URL + "#app-connect-code";
-    private static final int COLOR_BG = Color.rgb(246, 248, 252);
-    private static final int COLOR_TITLE = Color.rgb(23, 32, 51);
-    private static final int COLOR_TEXT = Color.rgb(43, 52, 69);
-    private static final int COLOR_MUTED = Color.rgb(104, 116, 139);
-    private static final int COLOR_BLUE = Color.rgb(37, 99, 235);
+    private static final int COLOR_BG = Color.rgb(255, 248, 239);
+    private static final int COLOR_TITLE = Color.rgb(43, 33, 24);
+    private static final int COLOR_TEXT = Color.rgb(67, 51, 39);
+    private static final int COLOR_MUTED = Color.rgb(126, 104, 82);
+    private static final int COLOR_BLUE = Color.rgb(47, 125, 89);
     private static final int COLOR_GOLD = Color.rgb(244, 176, 45);
     private static final int COLOR_GOOD = Color.rgb(22, 163, 74);
     private static final int COLOR_WARN = Color.rgb(217, 119, 6);
@@ -95,17 +96,30 @@ public class MainActivity extends Activity {
     }
 
     private void showMain() {
-        setContentView(buildMainContent());
+        showSettings();
+    }
+
+    private void showSettings() {
+        clearMainRefs();
+        setContentView(buildSettingsContent());
         refreshStatus();
         refreshPendingQueueStatus();
-        refreshLogs();
     }
 
     private void showMainLogs() {
-        showMain();
-        if (mainScrollView != null && logSectionView != null) {
-            mainScrollView.post(() -> mainScrollView.smoothScrollTo(0, logSectionView.getTop()));
-        }
+        showLogs();
+    }
+
+    private void showLogs() {
+        clearMainRefs();
+        setContentView(buildLogsContent());
+        refreshLogs();
+    }
+
+    private void showAdvanced() {
+        clearMainRefs();
+        setContentView(buildAdvancedContent());
+        refreshLogs();
     }
 
     private void showChecklist() {
@@ -120,6 +134,8 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(20), dp(18), dp(20), dp(28));
         scrollView.addView(root);
+
+        root.addView(topBar("픽셀곰 브릿지", "카카오 응답 상태", false));
 
         BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
         root.addView(heroPanel(
@@ -159,22 +175,15 @@ public class MainActivity extends Activity {
         Button logButton = secondaryButton("로그 보기");
         logButton.setOnClickListener(v -> showMainLogs());
 
-        Button refreshDiagnosticsButton = secondaryButton("진단 새로고침");
-        refreshDiagnosticsButton.setOnClickListener(v -> refreshHomeDiagnostics());
-
-        Button permissionButton = secondaryButton("알림 권한 열기");
-        permissionButton.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
-
         Button checklistButton = secondaryButton("체크리스트");
         checklistButton.setOnClickListener(v -> showChecklist());
 
-        Button openChatButton = secondaryButton("오픈채팅방 열기");
-        openChatButton.setOnClickListener(v -> openUrl(BridgeConfig.roomLink(this)));
-
-        Button guideButton = secondaryButton("구매자 콘솔 열기");
-        guideButton.setOnClickListener(v -> openUrl(BUYER_CONSOLE_URL));
-
-        root.addView(compactActionGrid(syncButton, setupButton, logButton, refreshDiagnosticsButton, permissionButton, checklistButton, openChatButton, guideButton));
+        root.addView(quickActionGrid(
+                quickAction(R.drawable.ic_sync, "동기화", "서버", v -> syncRoomProfiles()),
+                quickAction(R.drawable.ic_link, "연결코드", "방 추가", v -> showMain()),
+                quickAction(R.drawable.ic_log, "로그", "확인", v -> showLogs()),
+                quickAction(R.drawable.ic_checklist, "체크", "테스트", v -> showChecklist())
+        ));
 
         root.addView(featurePanel(
                 R.drawable.pixgom_chat_portal,
@@ -205,9 +214,7 @@ public class MainActivity extends Activity {
         root.setPadding(dp(20), dp(18), dp(20), dp(28));
         scrollView.addView(root);
 
-        Button homeButton = secondaryButton("홈으로");
-        homeButton.setOnClickListener(v -> showHome());
-        root.addView(homeButton);
+        root.addView(topBar("체크리스트", "테스트 순서", true));
 
         root.addView(heroPanel(
                 R.drawable.pixgom_checklist_calendar,
@@ -272,7 +279,7 @@ public class MainActivity extends Activity {
         return scrollView;
     }
 
-    private View buildMainContent() {
+    private View buildSettingsContent() {
         ScrollView scrollView = baseScrollView();
         mainScrollView = scrollView;
 
@@ -281,15 +288,13 @@ public class MainActivity extends Activity {
         root.setPadding(dp(20), dp(18), dp(20), dp(28));
         scrollView.addView(root);
 
-        Button homeButton = secondaryButton("홈으로");
-        homeButton.setOnClickListener(v -> showHome());
-        root.addView(homeButton);
+        root.addView(topBar("연결/방 설정", "방 연결과 기능 토글", true));
 
         root.addView(heroPanel(
                 R.drawable.pixgom_dashboard_monitor,
-                "SETUP & DIAGNOSIS",
-                "연결 상태를 빠르게 정리",
-                "필요한 설정만 카드별로 확인합니다."));
+                "SETUP",
+                "연결 정보만 빠르게 정리",
+                "방 설정과 서버 연결을 한 화면에서 저장합니다."));
 
         permissionStatus = text("", 14, COLOR_TEXT, false);
         permissionStatus.setPadding(0, dp(14), 0, dp(8));
@@ -422,6 +427,76 @@ public class MainActivity extends Activity {
         diagnosisButton.setOnClickListener(v -> copyDiagnosis());
         roomPanel.addView(diagnosisButton);
 
+        return scrollView;
+    }
+
+    private View buildLogsContent() {
+        ScrollView scrollView = baseScrollView();
+        mainScrollView = scrollView;
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        scrollView.addView(root);
+
+        root.addView(topBar("전송 로그", "성공/실패/무시 기록", true));
+
+        LinearLayout actionPanel = panel();
+        actionPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        root.addView(actionPanel);
+        actionPanel.addView(sectionHeader(R.drawable.pixgom_speech_bubble, "로그 작업", "버튼은 항상 로그 위에 표시됩니다."));
+        actionPanel.addView(quickActionGrid(
+                quickAction(R.drawable.ic_sync, "새로고침", "갱신", v -> refreshLogs()),
+                quickAction(R.drawable.ic_copy, "복사", "로그", v -> copyLogs()),
+                quickAction(R.drawable.ic_share, "공유", "로그", v -> shareLogs()),
+                quickAction(R.drawable.ic_delete, "삭제", "비우기", v -> {
+                    BridgeConfig.clearLogs(this);
+                    refreshLogs();
+                })
+        ));
+
+        TextView logHelp = text("정상 응답과 재시도 필요 항목을 먼저 확인하세요. 성공/응답 로그, 실패/재시도 필요 로그, 무시된 알림 로그, 진단 원문 로그를 짧게 표시합니다.", 13, COLOR_MUTED, false);
+        logHelp.setPadding(0, dp(10), 0, dp(10));
+        actionPanel.addView(logHelp);
+
+        logView = text("", 13, COLOR_TEXT, false);
+        logView.setBackgroundResource(getResources().getIdentifier("log_background", "drawable", getPackageName()));
+        logView.setPadding(dp(14), dp(14), dp(14), dp(14));
+        root.addView(logView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        return scrollView;
+    }
+
+    private View buildAdvancedContent() {
+        ScrollView scrollView = baseScrollView();
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        scrollView.addView(root);
+
+        root.addView(topBar("고급 설정", "자주 쓰지 않는 기능", true));
+
+        LinearLayout supportPanel = panel();
+        supportPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.addView(supportPanel);
+        supportPanel.addView(sectionHeader(R.drawable.pixgom_support_bear, "지원", "도움말과 외부 링크"));
+
+        Button privacyButton = secondaryButton("개인정보처리방침 열기");
+        privacyButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/privacy"));
+        supportPanel.addView(privacyButton);
+
+        Button guideButton = secondaryButton("구매자 콘솔 열기");
+        guideButton.setOnClickListener(v -> openUrl(BUYER_CONSOLE_URL));
+        supportPanel.addView(guideButton);
+
+        Button setupButton = secondaryButton("설치 안내 열기");
+        setupButton.setOnClickListener(v -> openUrl(BUYER_SETUP_URL));
+        supportPanel.addView(setupButton);
+
+        Button diagnosisShareButton = secondaryButton("진단 공유");
+        diagnosisShareButton.setOnClickListener(v -> shareDiagnosis());
+        supportPanel.addView(diagnosisShareButton);
+
         LinearLayout scriptPanel = panel();
         scriptPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
         root.addView(scriptPanel);
@@ -439,7 +514,7 @@ public class MainActivity extends Activity {
         scriptPanel.addView(scriptSourceInput);
 
         Button scriptSaveButton = primaryButton("JS 저장");
-        scriptSaveButton.setOnClickListener(v -> saveSettings());
+        scriptSaveButton.setOnClickListener(v -> saveScriptSettings());
         scriptPanel.addView(scriptSaveButton);
 
         Button scriptTestButton = secondaryButton("JS 테스트");
@@ -450,65 +525,16 @@ public class MainActivity extends Activity {
         scriptResetButton.setOnClickListener(v -> scriptSourceInput.setText(BridgeConfig.defaultScriptSource()));
         scriptPanel.addView(scriptResetButton);
 
-        LinearLayout logPanel = panel();
-        logPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
-        logSectionView = logPanel;
-        root.addView(logPanel);
-
-        logPanel.addView(sectionHeader(R.drawable.pixgom_speech_bubble, "전송 로그", "성공, 실패, 대기, 무시 항목을 확인합니다."));
-        TextView logHelp = text("정상 응답과 재시도 필요 항목을 먼저 확인하세요. 성공/응답 로그, 실패/재시도 필요 로그, 무시된 알림 로그, 진단 원문 로그를 짧게 표시합니다.", 13, COLOR_MUTED, false);
-        logHelp.setPadding(0, 0, 0, dp(10));
-        logPanel.addView(logHelp);
-
-        logView = text("", 13, COLOR_TEXT, false);
-        logView.setBackgroundResource(getResources().getIdentifier("status_tile_background", "drawable", getPackageName()));
-        logView.setPadding(dp(14), dp(14), dp(14), dp(14));
-        logPanel.addView(logView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        Button refreshButton = secondaryButton("로그 새로고침");
-        refreshButton.setOnClickListener(v -> refreshLogs());
-        logPanel.addView(refreshButton);
-
-        Button copyLogButton = secondaryButton("로그 복사");
-        copyLogButton.setOnClickListener(v -> copyLogs());
-        logPanel.addView(copyLogButton);
-
-        Button shareButton = secondaryButton("진단 공유");
-        shareButton.setOnClickListener(v -> shareDiagnosis());
-        logPanel.addView(shareButton);
-
-        Button shareLogButton = secondaryButton("로그 공유");
-        shareLogButton.setOnClickListener(v -> shareLogs());
-        logPanel.addView(shareLogButton);
-
-        Button clearButton = secondaryButton("로그 지우기");
-        clearButton.setOnClickListener(v -> {
-            BridgeConfig.clearLogs(this);
-            refreshLogs();
-        });
-        logPanel.addView(clearButton);
-
-        LinearLayout supportPanel = panel();
-        supportPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
-        root.addView(supportPanel);
-        supportPanel.addView(sectionHeader(R.drawable.pixgom_support_bear, "지원/고급", "도움말과 초기화"));
-
-        Button privacyButton = secondaryButton("개인정보처리방침 열기");
-        privacyButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/privacy"));
-        supportPanel.addView(privacyButton);
-
-        Button guideButton = secondaryButton("구매자 콘솔 열기");
-        guideButton.setOnClickListener(v -> openUrl(BUYER_CONSOLE_URL));
-        supportPanel.addView(guideButton);
-
-        Button setupButton = secondaryButton("설치 안내 열기");
-        setupButton.setOnClickListener(v -> openUrl(BUYER_SETUP_URL));
-        supportPanel.addView(setupButton);
+        LinearLayout resetPanel = panel();
+        resetPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.addView(resetPanel);
+        resetPanel.addView(sectionHeader(R.drawable.pixgom_support_bear, "초기화", "기기 저장값만 지웁니다."));
+        TextView resetHelp = text("구매자 계정과 서버 결제/신청 데이터는 삭제되지 않습니다.", 13, COLOR_MUTED, false);
+        resetPanel.addView(resetHelp);
 
         Button resetButton = secondaryButton("서버 설정 초기화 / 등록 취소");
         resetButton.setOnClickListener(v -> confirmResetServerSettings());
-        supportPanel.addView(resetButton);
-
+        resetPanel.addView(resetButton);
         return scrollView;
     }
 
@@ -547,6 +573,105 @@ public class MainActivity extends Activity {
         historyFeatureSwitch = null;
         profilesFeatureSwitch = null;
         gamesFeatureSwitch = null;
+    }
+
+    private LinearLayout topBar(String title, String subtitle, boolean showHomeButton) {
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        barParams.setMargins(0, 0, 0, dp(12));
+        bar.setLayoutParams(barParams);
+
+        if (showHomeButton) {
+            bar.addView(iconButton(R.drawable.ic_home, "홈으로", v -> showHome()));
+        } else {
+            ImageView logo = new ImageView(this);
+            logo.setImageResource(R.mipmap.ic_launcher);
+            logo.setAdjustViewBounds(true);
+            logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(42), dp(42));
+            logo.setLayoutParams(logoParams);
+            bar.addView(logo);
+        }
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(12), 0, dp(12), 0);
+        TextView titleView = text(title, 18, COLOR_TITLE, true);
+        TextView subtitleView = text(subtitle, 12, COLOR_MUTED, false);
+        copy.addView(titleView);
+        copy.addView(subtitleView);
+        bar.addView(copy, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        if (!showHomeButton) {
+            bar.addView(iconButton(R.drawable.ic_settings, "설정", v -> showAdvanced()));
+        }
+        return bar;
+    }
+
+    private ImageButton iconButton(int iconRes, String description, View.OnClickListener listener) {
+        ImageButton button = new ImageButton(this);
+        button.setImageResource(iconRes);
+        button.setColorFilter(COLOR_TITLE);
+        button.setBackgroundResource(getResources().getIdentifier("icon_button_background", "drawable", getPackageName()));
+        button.setContentDescription(description);
+        button.setPadding(dp(10), dp(10), dp(10), dp(10));
+        button.setOnClickListener(listener);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(46), dp(46));
+        button.setLayoutParams(params);
+        return button;
+    }
+
+    private LinearLayout quickAction(int iconRes, String label, String hint, View.OnClickListener listener) {
+        LinearLayout action = new LinearLayout(this);
+        action.setOrientation(LinearLayout.VERTICAL);
+        action.setGravity(Gravity.CENTER);
+        action.setPadding(dp(10), dp(12), dp(10), dp(12));
+        action.setBackgroundResource(getResources().getIdentifier("icon_button_background", "drawable", getPackageName()));
+        action.setOnClickListener(listener);
+        action.setClickable(true);
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(iconRes);
+        icon.setColorFilter(COLOR_BLUE);
+        icon.setAdjustViewBounds(true);
+        action.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
+
+        TextView labelView = text(label, 14, COLOR_TITLE, true);
+        labelView.setGravity(Gravity.CENTER);
+        labelView.setPadding(0, dp(7), 0, 0);
+        action.addView(labelView);
+
+        TextView hintView = text(hint, 11, COLOR_MUTED, false);
+        hintView.setGravity(Gravity.CENTER);
+        action.addView(hintView);
+        return action;
+    }
+
+    private LinearLayout quickActionGrid(View... actions) {
+        LinearLayout grid = new LinearLayout(this);
+        grid.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        gridParams.setMargins(0, dp(12), 0, 0);
+        grid.setLayoutParams(gridParams);
+
+        for (int i = 0; i < actions.length; i += 2) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            rowParams.setMargins(0, dp(8), 0, 0);
+            row.setLayoutParams(rowParams);
+            for (int offset = 0; offset < 2 && i + offset < actions.length; offset++) {
+                View action = actions[i + offset];
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+                params.setMargins(offset == 0 ? 0 : dp(6), 0, offset == 0 ? dp(6) : 0, 0);
+                action.setLayoutParams(params);
+                row.addView(action);
+            }
+            grid.addView(row);
+        }
+        return grid;
     }
 
     private LinearLayout heroPanel(int imageRes, String eyebrow, String title, String body) {
@@ -650,12 +775,28 @@ public class MainActivity extends Activity {
         BridgeConfig.setHistoryEnabled(this, historyFeatureSwitch.isChecked());
         BridgeConfig.setProfilesEnabled(this, profilesFeatureSwitch.isChecked());
         BridgeConfig.setGamesEnabled(this, gamesFeatureSwitch.isChecked());
-        BridgeConfig.setScriptEnabled(this, scriptEnabledSwitch.isChecked());
-        BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
+        if (scriptEnabledSwitch != null) {
+            BridgeConfig.setScriptEnabled(this, scriptEnabledSwitch.isChecked());
+        }
+        if (scriptSourceInput != null) {
+            BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
+        }
         BridgeConfig.appendLog(this, "설정 저장됨 room=" + BridgeConfig.roomName(this) + " id=" + BridgeConfig.roomId(this) + " features=" + BridgeConfig.featureSummary(this));
         refreshStatus();
         refreshRoomProfilesSummary();
         refreshLogs();
+    }
+
+    private void saveScriptSettings() {
+        if (scriptEnabledSwitch != null) {
+            BridgeConfig.setScriptEnabled(this, scriptEnabledSwitch.isChecked());
+        }
+        if (scriptSourceInput != null) {
+            BridgeConfig.setScriptSource(this, scriptSourceInput.getText().toString());
+        }
+        BridgeConfig.appendLog(this, "JS 자동응답 설정 저장됨");
+        refreshLogs();
+        Toast.makeText(this, "JS 설정을 저장했습니다.", Toast.LENGTH_SHORT).show();
     }
 
     private void sendTestEvent() {
