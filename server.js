@@ -9477,19 +9477,20 @@ function craftWeaponCommand(roomState, sender, text) {
 
 function autoCraftCandidateRecipes(person) {
   normalizePersonState(person);
-  const equipped = rpgEquippedProductsBySlot(person);
   return RPG_WEAPON_RECIPES
     .filter((recipe) => rpgRecipeCanCraft(person, recipe))
     .map((recipe) => {
       const product = systemProductById(recipe.itemId);
       const slot = rpgEquipmentSlot(product);
-      const current = equipped[slot];
-      const currentScore = current ? rpgScoreProductForPerson(person, current, "balance") : 0;
-      const nextScore = rpgScoreProductForPerson(person, product, "balance");
-      return { recipe, product, slot, improvement: nextScore - currentScore };
+      const score = rpgScoreProductForPerson(person, product, "balance");
+      return { recipe, product, slot, score };
     })
-    .filter((item) => item.slot && item.improvement > 0)
-    .sort((left, right) => right.improvement - left.improvement || Number(right.recipe.power || 0) - Number(left.recipe.power || 0));
+    .filter((item) => item.slot)
+    .sort((left, right) => (
+      right.score - left.score
+      || Number(right.recipe.power || 0) - Number(left.recipe.power || 0)
+      || Number(right.recipe.itemId || 0) - Number(left.recipe.itemId || 0)
+    ));
 }
 
 function autoCraftEquipmentCommand(roomState, sender) {
@@ -9506,7 +9507,7 @@ function autoCraftEquipmentCommand(roomState, sender) {
   if (!crafted.length) {
     return [
       "자동제작할 장비가 없습니다.",
-      "현재 장비보다 강한 제작 가능 장비가 없습니다.",
+      "현재 재료와 포인트로 제작 가능한 장비가 없습니다.",
       "",
       "확인: /제작가능",
       "재료 획득: /던전 또는 /자동던전"
@@ -11833,7 +11834,7 @@ const COMMAND_RECOMMENDATION_PRESETS = Object.freeze({
       { command: "/던전", reason: "재료와 장비 성장", feature: "games" },
       { command: "/강화목록", reason: "강화할 장비와 비용 확인", feature: "games" },
       { command: "/제작가능", reason: "지금 만들 수 있는 장비 확인", feature: "games" },
-      { command: "/자동제작", reason: "강한 제작 가능 장비 자동 제작", feature: "games" },
+      { command: "/자동제작", reason: "제작 가능한 장비 중 강한 장비 자동 제작", feature: "games" },
       { command: "/자동장착", reason: "보유 장비 자동 추천", feature: "games" },
       { command: "/장비", reason: "현재 장비 요약", feature: "games" },
       { command: "/스탯", reason: "전투 능력치 확인", feature: "games" }

@@ -5755,10 +5755,17 @@ try {
   assert.match(autoCraftEquipment.json.reply, /수습 모험검/);
   assert.match(autoCraftEquipment.json.reply, /수습 가죽갑옷/);
   assert.match(autoCraftEquipment.json.reply, /광부 부적/);
+  await chat("/아이템지급 자동제작러 여 12003 1", "관리자");
+  const autoCraftEquipStrongWeapon = await chat("/장착 별빛 룬소드", "자동제작러 여");
+  assert.match(autoCraftEquipStrongWeapon.json.reply, /장착 완료/);
   await chat("/아이템지급 자동제작러 여 11000 2", "관리자");
-  await chat("/포인트지급 자동제작러 여 100", "관리자");
-  const autoCraftNoUpgrade = await chat("/자동제작", "자동제작러 여");
-  assert.match(autoCraftNoUpgrade.json.reply, /현재 장비보다 강한 제작 가능 장비가 없습니다/);
+  await chat("/아이템지급 자동제작러 여 11001 3", "관리자");
+  await chat("/포인트지급 자동제작러 여 500", "관리자");
+  const autoCraftCraftableBest = await chat("/자동제작", "자동제작러 여");
+  assert.match(autoCraftCraftableBest.json.reply, /자동제작 완료/);
+  assert.match(autoCraftCraftableBest.json.reply, /광산 파쇄도끼/);
+  assert.doesNotMatch(autoCraftCraftableBest.json.reply, /수습 모험검/);
+  assert.match(autoCraftCraftableBest.json.reply, /자동 장착 0개/);
 
   await chat("/아이템지급 모험가 여 11000 5", "관리자");
   await chat("/포인트지급 모험가 여 500", "관리자");
