@@ -1,5 +1,5 @@
 <resources>
-    <style name="PixelgomBridgeTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+    <style name="PixelgomBridgeTheme" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">@color/pixelgom_accent</item>
         <item name="android:navigationBarColor">@color/pixelgom_background</item>
