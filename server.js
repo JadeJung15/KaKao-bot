@@ -414,7 +414,7 @@ const SHOP_PRODUCT_DESCRIPTION_LIMIT = 140;
 const SHOP_TRANSACTION_LIMIT = 300;
 const SHOP_MAX_PRICE = 1000000;
 const SHOP_MAX_QUANTITY = 99;
-const INVENTORY_PAGE_SIZE = 10;
+const INVENTORY_PAGE_SIZE = 5;
 const BAIT_ITEM_ID = 9001;
 const CAPTURE_STONE_ITEM_ID = 9301;
 const PET_SNACK_ITEM_ID = 9302;
@@ -4635,43 +4635,23 @@ function customCommandSummary(roomState) {
 
 function fixedCommandCatalogText(isAdminUser = false) {
   const groups = isAdminUser ? FIXED_COMMAND_GROUPS : FIXED_COMMAND_GROUPS.filter((group) => group.title !== "관리자");
+  const preview = (commands) => `${commands.slice(0, 8).join(", ")}${commands.length > 8 ? ` 외 ${commands.length - 8}개` : ""}`;
   return [
     "픽셀곰 고정 명령어",
-    "",
-    "고정 명령어는 기본 운영과 향후 게임 연동을 위해 예약되어 있어 커스텀 명령어로 덮어쓸 수 없습니다.",
-    "",
-    ...groups.flatMap((group) => [group.title, group.commands.join(", "), ""]),
-    "커스텀 명령어는 /명령어등록 /공지 내용, /명령어등록 공지 내용, /명령어등록 !공지 내용처럼 추가합니다.",
-    "/공지, 공지, !공지, .공지 는 서로 다른 명령어로 구분됩니다."
+    ...groups.map((group) => `${group.title}: ${preview(group.commands)}`),
+    "커스텀 등록: /명령어등록 /공지 내용 · 검색: /찾기 게임"
   ].join("\n").trim();
 }
 
 function gameCommandCatalogText() {
   return [
     "픽셀곰 게임 명령어",
-    "",
-    "현재 사용",
-    "/게임 - 미니게임 안내",
-    "/확률게임 - 포인트 확률 게임팩 10종 안내",
-    "/주사위 - 1~6 결과에 따라 포인트 획득",
-    "/낚시 - 랜덤 보상 획득",
-    "/탐험 - 랜덤 보상 획득",
-    "/뽑기 - 가상 포인트 뽑기",
-    "/뽑기목록 - 뽑기 확률과 보상 확인",
-    "/홀 금액 또는 /짝 금액 - 홀짝 베팅",
-    "/코인 앞 100 - 앞/뒤 맞히기",
-    "/룰렛 빨강 100 - 빨강/검정/초록 룰렛",
-    "/슬롯 100 - 3릴 슬롯",
-    "/복권 100 - 즉석 복권",
-    "/하이로우 하이 100 - 숫자 높낮이 맞히기",
-    "/폭탄피하기 3 100 - 1~5 중 폭탄 피하기",
-    "/보물상자 2 100 - 1~4 상자 선택",
-    "",
-    "예약",
-    "/픽셀곰게임 - 별도 픽셀곰 게임 연동 예정",
-    "/게임연동 - 모바일게임 포인트 연동 예정",
-    "",
-    "게임 예약 명령어는 커스텀 명령어로 등록할 수 없습니다."
+    "허브: /게임, /확률게임, /오늘할일",
+    "기본: /주사위, /낚시, /탐험, /뽑기",
+    "베팅: /홀 금액, /짝 금액, /코인 앞 100, /룰렛 빨강 100",
+    "확률팩: /슬롯 100, /복권 100, /하이로우 하이 100, /폭탄피하기 3 100, /보물상자 2 100",
+    "RPG: /모험, /던전목록, /자동던전, /강화목록, /자동제작",
+    "예약: /픽셀곰게임, /게임연동 · 상세: /게임팩도움말 RPG"
   ].join("\n");
 }
 
@@ -4836,14 +4816,18 @@ function featureLines(roomState) {
 }
 
 function featureSettingsCommand(roomState) {
+  const features = roomFeatures(roomState);
+  const enabled = [];
+  const disabled = [];
+  for (const [key, label] of Object.entries(FEATURE_LABELS)) {
+    (features[key] ? enabled : disabled).push(label);
+  }
   return [
     "방별 기능 설정",
-    "",
-    ...featureLines(roomState),
-    "",
-    "관리자 명령",
-    "/기능켜기 출석",
-    "/기능끄기 게임"
+    `켜짐: ${enabled.join(", ") || "없음"}`,
+    `꺼짐: ${disabled.join(", ") || "없음"}`,
+    "관리: /기능켜기 출석 · /기능끄기 게임",
+    "상세 설정은 운영 콘솔에서 확인하세요."
   ].join("\n");
 }
 
@@ -6265,17 +6249,20 @@ function payloadAdminNames(payload = {}) {
 function roomSettingsLines(roomState) {
   const settings = roomState.settings || {};
   const subscription = updateSubscriptionStatus(roomState);
+  const features = roomFeatures(roomState);
+  const featureEntries = Object.entries(FEATURE_LABELS);
+  const enabledCount = featureEntries.filter(([key]) => features[key]).length;
+  const focusFeatureText = ["attendance", "games", "shop", "customCommands"]
+    .map((key) => `${featureLabel(key)} ${features[key] ? "켜짐" : "꺼짐"}`)
+    .join(" · ");
   return [
     `${roomState.name || "현재방"} 방 설정`,
-    "",
-    `등록: ${settings.registered ? "켜짐" : "꺼짐"}`,
+    `등록: ${settings.registered ? "켜짐" : "꺼짐"} · 구독: ${subscription.status === "expired" ? "만료" : subscription.status === "active" ? "정상" : "미설정"}`,
     `입장확인 문구: ${settings.joinPhrase || DEFAULT_JOIN_PHRASE}`,
     `관리자: ${(roomState.admins || []).length ? `${roomState.admins.length}명 등록` : "미등록"}`,
-    `구독 상태: ${subscription.status === "expired" ? "만료" : subscription.status === "active" ? "정상" : "미설정"}`,
-    "상세 운영 정보는 관리 콘솔에서만 확인합니다.",
-    "",
-    "방별 기능",
-    ...featureLines(roomState)
+    `기능: ${enabledCount}/${featureEntries.length} 켜짐`,
+    `주요 기능: ${focusFeatureText}`,
+    "상세 운영 정보는 관리 콘솔에서만 확인합니다."
   ];
 }
 
@@ -8197,13 +8184,11 @@ function inventoryCommand(roomState, sender, text) {
     .map((item, index) => ({ ...item, selectNo: (currentPage - 1) * pageSize + index + 1 }));
   return [
     `🎒 ${displayName}님의 ${isItemCommand ? "보유 아이템" : "가방"} ${currentPage}/${totalPages}`,
-    "",
     ...displayRows.map((item) => `${item.selectNo}. ${item.name} x ${item.quantity} ${itemIcon(item)} / 판매가 ${formatPoint(item.sellPrice)}${item.locked ? " / 잠금" : ""}`),
-    "",
-    "자세히 보기: /아이템상세 번호",
-    totalPages > 1 ? `페이지 이동: ${baseCommand} 1~${totalPages}` : "",
-    currentPage < totalPages ? `다음 페이지: ${baseCommand} 다음 또는 ${baseCommand} ${currentPage + 1}` : "판매 예시: /판매 1"
-  ].join("\n");
+    totalPages > 1
+      ? `자세히 보기: /아이템상세 번호 · 이동: ${baseCommand} 1~${totalPages} · ${currentPage < totalPages ? `다음: ${baseCommand} 다음 또는 ${baseCommand} ${currentPage + 1}` : "마지막 페이지"}`
+      : "자세히 보기: /아이템상세 번호 · 판매 예시: /판매 1"
+  ].filter(Boolean).join("\n");
 }
 
 function itemDetailCommand(roomState, sender, text) {
@@ -8246,13 +8231,11 @@ function saleListCommand(roomState, sender, text) {
   const displayRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   return [
     `💰 판매 목록 ${currentPage}/${totalPages}`,
-    "",
     ...displayRows.map((item) => `${item.selectNo}. ${item.name} x ${item.quantity} ${itemIcon(item)} / ${formatPoint(item.sellPrice)}${isEquippedProduct(person, item.productId) ? " / 장착중" : ""}${item.locked ? " / 잠금" : ""}`),
-    "",
-    "판매: /판매 1",
-    totalPages > 1 ? `페이지 이동: /판매목록 1~${totalPages}` : "",
-    currentPage < totalPages ? `다음: /판매목록 다음 또는 /판매목록 ${currentPage + 1}` : "정리: /판매미리보기 중복"
-  ].join("\n");
+    totalPages > 1
+      ? `판매: /판매 1 · 이동: /판매목록 1~${totalPages} · ${currentPage < totalPages ? `다음: /판매목록 다음 또는 /판매목록 ${currentPage + 1}` : "정리: /판매미리보기 중복"}`
+      : "판매: /판매 1 · 정리: /판매미리보기 중복"
+  ].filter(Boolean).join("\n");
 }
 
 function bulkSellCommand(roomState, sender, text) {
@@ -9249,14 +9232,11 @@ function dungeonConfigFromText(text = "") {
 function dungeonListCommand() {
   return [
     "픽셀곰 던전 목록",
-    "",
-    ...DUNGEON_CONFIGS.map((config) => `• ${config.title}: ${config.purpose} / 꽝 ${Math.round(config.blankChance * 100)}% / 보석 ${Math.round(config.preciousChance * 1000) / 10}%`),
-    "• 낮은 확률 보석: 동/은/금/다이아",
-    "  판매가: 동 3,000 / 은 10,000 / 금 50,000 / 다이아 100,000",
-    "",
-    "/던전 또는 /던전 중급 으로 입장합니다.",
-    "10회 요약: /자동던전 중급",
-    "장비 성장: /제작가능, /강화목록"
+    "초급 광산: 초급 재료 · 중급 유적: 중급 제작 · 상급 심연: 상급 강화/희귀",
+    "고대 왕릉: 왕릉 세트 · 용암 성채: 용암 세트 · 천공 유적: 천공 세트",
+    "낮은 확률 보석: 동/은/금/다이아",
+    "입장: /던전 중급 · 자동: /자동던전 상급 10",
+    "성장: /제작가능 · /강화목록"
   ].join("\n");
 }
 
@@ -9681,11 +9661,9 @@ function rpgAdventureHubCommand(roomState, sender) {
     `🏰 ${displayName}님의 RPG 모험`,
     `오늘 할 일: /던전 → /제작가능 → /강화목록`,
     `${AUTO_GAME_TICKET_CONFIGS.hunt.name}: ${ticketCount}장 · 자동탐험권 ${exploreTicketCount}장 · 자동낚시권 ${fishingTicketCount}장 · 자동뽑기권 ${drawTicketCount}장`,
-    "대량 실행: /자동던전 상급 10",
-    `제작 가능: ${craftableCount}개`,
-    `강화 추천: ${enhanceText}`,
+    `제작 가능: ${craftableCount}개 · 강화 추천: ${enhanceText}`,
     `던전 상태: ${cooldown}`,
-    "추천 행동: /자동장착 공격"
+    "대량 실행: /자동던전 상급 10 · 추천 행동: /자동장착 공격"
   ].join("\n");
 }
 
@@ -9745,16 +9723,11 @@ function blacksmithCommand(roomState = null, sender = "") {
   const craftableCount = person ? rpgCraftableCount(person) : 0;
   return [
     "픽셀곰 대장간",
-    "",
     "제작 종류: 무기 / 방어구 / 장신구 / 세트",
     `확장 제작식: ${RPG_WEAPON_RECIPES.length}종`,
     person ? `지금 제작 가능: ${craftableCount}개` : "지금 제작 가능: /제작가능",
-    "",
-    "제작 확인: /제작가능",
-    "제작 실행: /제작 1",
-    "자동 제작: /자동제작",
-    "강화 추천: /강화목록",
-    "세트 보너스: /세트아이템"
+    "제작: /제작가능 → /제작 1 · 자동 제작: /자동제작",
+    "강화 추천: /강화목록 · 세트 보너스: /세트아이템"
   ].join("\n");
 }
 
@@ -9869,17 +9842,20 @@ function autoCraftEquipmentCommand(roomState, sender) {
 
 function craftableEquipmentCommand(roomState, sender) {
   const person = ensurePerson(roomState, sender);
-  const craftable = RPG_WEAPON_RECIPES.filter((recipe) => rpgRecipeCanCraft(person, recipe));
+  const craftable = RPG_WEAPON_RECIPES
+    .filter((recipe) => rpgRecipeCanCraft(person, recipe))
+    .sort((left, right) => (
+      Number(right.power || 0) - Number(left.power || 0)
+      || Number(right.itemId || 0) - Number(left.itemId || 0)
+    ));
+  const visible = craftable.slice(0, 4);
   return [
     "제작 가능 목록",
-    "",
     ...(craftable.length
-      ? craftable.map((recipe) => rpgRecipeLine(recipe, person))
+      ? visible.map((recipe) => rpgRecipeLine(recipe, person))
       : ["현재 제작 가능한 장비가 없습니다. /던전에서 재료를 모아주세요."]),
-    "",
-    `보유 포인트 : ${formatPoint(person.points)}`,
-    "전체 제작식: /대장간",
-    "세트 보너스: /세트아이템"
+    craftable.length > visible.length ? `외 ${craftable.length - visible.length}개 · 전체 제작식: /대장간` : "전체 제작식: /대장간",
+    `포인트: ${formatPoint(person.points)} · 세트: /세트아이템 · 자동: /자동제작`
   ].join("\n");
 }
 
@@ -10093,16 +10069,10 @@ function equipmentCommand(roomState, sender) {
   const stats = rpgCurrentStats(person);
   return [
     `⚔️ ${displayName}님의 장비`,
-    "",
-    `무기: ${rpgEquipmentName(person, weapon)}`,
-    `방어구: ${rpgEquipmentName(person, armor)}`,
-    `장신구: ${rpgEquipmentName(person, accessory)}`,
-    `• 세트 효과 : ${setBonus.active.length ? setBonus.active.join(", ") : "없음"}`,
-    `• 총 전투력 : +${Math.round(Object.values(stats).reduce((sum, value) => sum + Number(value || 0), 0))}`,
-    `• 핵심 스탯 : ${rpgStatSummary(stats, ["attack", "defense", "agility", "hp", "mp", "magicAttack"], 4)}`,
-    "",
-    "강화: /강화목록",
-    "상세: /장비상세",
+    `장비: 무기 ${rpgEquipmentName(person, weapon)} / 방어구 ${rpgEquipmentName(person, armor)} / 장신구 ${rpgEquipmentName(person, accessory)}`,
+    `세트 효과: ${setBonus.active.length ? setBonus.active.join(", ") : "없음"}`,
+    `총 전투력: +${Math.round(Object.values(stats).reduce((sum, value) => sum + Number(value || 0), 0))} · 핵심 스탯: ${rpgStatSummary(stats, ["attack", "defense", "agility", "hp", "mp", "magicAttack"], 4)}`,
+    "강화: /강화목록 · 상세: /장비상세",
     "자동 추천: /자동장착 공격"
   ].join("\n");
 }
@@ -10324,18 +10294,16 @@ function rpgStatsCommand(roomState, sender) {
 }
 
 function rpgSetItemsCommand() {
-  const lines = ["RPG 세트 아이템", ""];
-  for (const [setId, set] of Object.entries(RPG_EQUIPMENT_SETS)) {
-    const pieces = set.pieces.map((id) => {
-      const product = systemProductById(id);
-      return product?.name || String(id);
-    }).join(", ");
-    lines.push(`• ${set.name}: ${set.description}`);
-    lines.push(`  구성: ${pieces}`);
-    lines.push(`  보너스: 2세트 +${set.bonuses[2] || 0}, 3세트 +${set.bonuses[3] || 0}`);
-  }
-  lines.push("", "제작식: /대장간", "지금 가능한 제작: /제작가능");
-  return lines.join("\n");
+  const sets = Object.values(RPG_EQUIPMENT_SETS);
+  return [
+    "RPG 세트 아이템",
+    sets.slice(0, 2).map((set) => set.name).join(" · "),
+    sets.slice(2, 4).map((set) => set.name).join(" · "),
+    sets.slice(4, 6).map((set) => set.name).join(" · "),
+    sets.slice(6, 8).map((set) => set.name).join(" · "),
+    "보너스: 2세트/3세트 장착 시 전투력 추가",
+    "제작식: /대장간 · 지금 가능한 제작: /제작가능"
+  ].join("\n");
 }
 
 function monsterRegionFromText(text = "") {
@@ -10863,22 +10831,11 @@ function gameHelpText(roomState) {
   const settings = gameSettings(roomState);
   return [
     "🎮 게임 허브",
-    "",
-    `상태: ${enabled ? "켜짐" : "꺼짐"}`,
-    `시즌: ${settings.seasonName}`,
-    gameSeasonStatusText(settings),
-    gameSeasonPeriodText(settings),
+    `상태: ${enabled ? "켜짐" : "꺼짐"} · 시즌: ${settings.seasonName} · ${gameSeasonStatusText(settings)} · ${gameSeasonPeriodText(settings)}`,
     `주사위 기본 보상: ${formatPoint(settings.diceReward)} x 결과`,
-    "",
-    "1. RPG 성장: /모험, /자동던전 상급 10, /강화목록",
-    "2. 낚시 수집: /미끼상점, /낚시, /자동낚시",
-    "3. 펫 돌보기: /펫입양, /펫, /펫먹이",
-    `4. 픽셀몬스터: /몬스터, /몬스터퀘스트, /몬스터보스 (${PIXEL_MONSTER_SPECIES_COUNT}종)`,
-    "5. 포인트 확률게임: /확률게임, /코인 앞 100, /룰렛 빨강 100",
-    "6. 점메추: /점메추 한식, /점메추 매운거",
-    "",
-    "오늘 루틴: /오늘할일",
-    "정리 추천: /정리추천",
+    "RPG: /모험, /자동던전 상급 10, /강화목록 · 낚시: /낚시, /자동낚시",
+    `펫: /펫입양, /펫 · 픽셀몬스터: /몬스터, /몬스터퀘스트, /몬스터보스 (${PIXEL_MONSTER_SPECIES_COUNT}종)`,
+    "확률/점메추: /확률게임, /코인 앞 100, /룰렛 빨강 100, /점메추 한식",
     enabled ? "보상 아이템은 /가방 에 보관되고 /판매추천 으로 정리할 수 있습니다." : "관리자가 /기능켜기 게임 을 실행하면 사용할 수 있습니다."
   ].join("\n");
 }
@@ -10890,16 +10847,11 @@ function dailyActionChecklistCommand(roomState, sender) {
   const inventoryCount = Object.values(person.inventory || {}).reduce((sum, count) => sum + Math.max(0, Number(count) || 0), 0);
   return [
     "📌 오늘 할 일",
-    "",
-    "1. /출석 - 오늘 보상 받기",
-    `2. /낚시 - 미끼 ${formatNumber(bait)}개 확인`,
-    "3. /모험 또는 /던전 - RPG 목표와 재료 성장",
-    "4. /자동던전 상급 10 - 자동던전권 10장으로 100회 요약",
-    "5. /몬스터퀘스트 - 수집 루틴 확인",
-    "6. /몬스터보스 - 방 전체 보스 참여",
-    pet ? `7. /펫 - ${pet} 상태 확인` : "7. /펫입양 이름 - 첫 펫 시작",
-    `8. /가방정리 - 보유 ${formatNumber(inventoryCount)}개 정리`,
-    "",
+    `1. /출석 · /낚시 - 미끼 ${formatNumber(bait)}개`,
+    "2. /모험 또는 /던전 · /자동던전 상급 10",
+    "3. /몬스터퀘스트 · /몬스터보스",
+    pet ? `4. /펫 - ${pet} 상태 확인` : "4. /펫입양 이름 - 첫 펫 시작",
+    `5. /가방정리 - 보유 ${formatNumber(inventoryCount)}개 정리`,
     "빠른 추천: /추천 돈벌기 · /추천 RPG · /정리추천"
   ].join("\n");
 }
@@ -14795,7 +14747,7 @@ function commandInstallSearchText(query = "") {
       const haystack = [item.code, item.title, item.description, item.type, ...(item.commands || []), ...(item.search || [])].join(" ").toLowerCase();
       return tokens.every((token) => haystack.includes(token));
     })
-    .slice(0, 12);
+    .slice(0, 6);
   if (!items.length) return "검색 결과가 없습니다. 다른 키워드로 다시 검색해 주세요.";
   return [
     "명령어 설치 코드 검색 결과",
@@ -14925,20 +14877,19 @@ function commandInstallListText(roomState, sender, identity = {}) {
   const packs = activeCommandPacks(roomState).filter((pack) => !pack.hidden);
   const commands = customCommandDeleteItems(roomState);
   const draft = roomState.commandInstallDrafts?.[commandInstallDraftKey(roomState, sender, identity)];
-  const lines = ["명령어 설치 현황"];
-  lines.push("", "장착된 팩", ...(packs.length ? packs.map((pack) => {
+  const packSummary = packs.length ? packs.map((pack) => {
     const detail = publicCommandPack(pack, current);
-    const commandNames = detail.commandsDetailed.map((item) => item.command).join(", ");
-    return `- ${detail.installCode || pack.id} ${pack.title} · ${detail.commandCount}개\n  포함 명령어: ${commandNames}`;
-  }) : ["- 없음"]));
-  lines.push("", `커스텀 명령어 ${commands.length}개`, ...(commands.length ? commands.slice(0, 12).map((command) => [
-    `- ${command.trigger}`,
-    `  설치 코드 : ${command.installCode || "직접등록"}`,
-    `  삭제 코드 : ${command.deleteCode}`,
-    `  예: ${command.deleteCommand}`
-  ].join("\n")) : ["- 없음"]));
-  if (draft) lines.push("", `확인 대기: /설치확인 ${draft.code} (${draft.expiresAt.slice(11, 16)}까지)`);
-  if (!current.installedPackIds.length && !current.basePackId && !current.addonPackIds.length) lines.push("", "추천: /명령어설치 pk.001 로 운영 기본팩을 먼저 장착해 보세요.");
+    return `${detail.installCode || pack.id} ${pack.title} ${detail.commandCount}개`;
+  }).join(" · ") : "없음";
+  const commandLines = commands.slice(0, 3).map((command) => `${command.trigger} · 설치 코드 : ${command.installCode || "직접등록"} · 삭제 코드 : ${command.deleteCode} · 예: ${command.deleteCommand}`);
+  const lines = [
+    "명령어 설치 현황",
+    `장착된 팩: ${packSummary}`,
+    `커스텀 명령어 ${commands.length}개${commands.length > commandLines.length ? ` · 상위 ${commandLines.length}개 표시` : ""}`,
+    ...(commandLines.length ? commandLines : ["커스텀 명령어 없음"])
+  ];
+  if (draft) lines.push(`확인 대기: /설치확인 ${draft.code} (${draft.expiresAt.slice(11, 16)}까지)`);
+  if (!current.installedPackIds.length && !current.basePackId && !current.addonPackIds.length) lines.push("추천: /명령어설치 pk.001 로 운영 기본팩");
   return lines.join("\n");
 }
 
@@ -14967,39 +14918,30 @@ function commandPackListText(roomState, sender, parsed = {}) {
 
 function commandPackCatalogText() {
   const packs = visibleCommandPacks();
+  const featured = ["ops-core", "game-chance", "rpg-adventure", "pet-raising", "admin-ops"]
+    .map((id) => packs.find((pack) => pack.id === id))
+    .filter(Boolean)
+    .map((pack) => `${commandPackInstallCode(pack)} ${pack.title}`);
   return [
     "사용 가능한 명령어팩",
-    "",
-    ...packs.map((pack) => {
-      const detail = publicCommandPack(pack);
-      return `- ${detail.installCode} ${pack.title} · ${detail.commandCount}개`;
-    }),
-    "",
-    "상세: /명령어팩 pk.001",
-    "설치: /명령어설치 pk.001",
-    "제거: /명령어팩제거 pk.001"
+    `추천: ${featured.slice(0, 2).join(" · ")}`,
+    `게임/RPG: ${featured.slice(1, 4).join(" · ")}`,
+    `운영: ${featured[0]} · ${featured[4] || "관리자팩"}`,
+    `전체 ${packs.length}개 · 상세: /명령어팩 pk.001`,
+    "설치: /명령어설치 pk.001 · 제거: /명령어팩제거 pk.001"
   ].join("\n");
 }
 
 function commandPackDetailText(pack, roomState = null) {
   const detail = publicCommandPack(pack, roomState?.settings?.commandPacks || {});
-  const commands = detail.commandsDetailed.map((item) => {
-    const featureText = item.requiresFeature ? ` / 기능:${featureLabel(item.requiresFeature)}` : "";
-    const roleText = item.requiresRole === "admin" ? " / 관리자" : "";
-    return `- ${item.command} - ${item.description}${roleText}${featureText}`;
-  });
+  const commands = detail.commandsDetailed.map((item) => item.command);
+  const commandPreview = `${commands.slice(0, 10).join(", ")}${commands.length > 10 ? ` 외 ${commands.length - 10}개` : ""}`;
   return [
     `${detail.title}`,
-    "",
     detail.description,
-    "",
-    `팩 코드: ${detail.installCode || detail.id}`,
-    `포함 명령어: ${detail.commandCount}개`,
+    `팩 코드: ${detail.installCode || detail.id} · 포함 명령어: ${detail.commandCount}개`,
+    `포함 명령어: ${commandPreview}`,
     `도움말: ${detail.helpPath || "/command-store"}`,
-    "",
-    "포함 명령어",
-    ...commands,
-    "",
     `설치: ${detail.installCommand || "/명령어설치 코드"}`,
     `제거: ${detail.removeCommand || "/명령어팩제거 코드"}`
   ].join("\n");

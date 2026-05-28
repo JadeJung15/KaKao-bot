@@ -1,17 +1,17 @@
 :root {
-  --ink: #2b251f;
-  --muted: #675c51;
-  --paper: #fff8ec;
+  --ink: #202934;
+  --muted: #5c6673;
+  --paper: #f6f8fb;
   --surface: #ffffff;
-  --line: #eadbc8;
+  --line: #dce3ec;
   --green: #3e806a;
   --mint: #dff2e8;
   --amber: #f3bf62;
   --coral: #e87961;
   --blue: #4e85a8;
   --violet: #7663a8;
-  --navy: #24384d;
-  --shadow: 0 22px 55px rgba(55, 38, 23, 0.16);
+  --navy: #25313f;
+  --shadow: 0 18px 42px rgba(31, 45, 61, 0.13);
 }
 
 * {
@@ -4526,9 +4526,9 @@ a {
 }
 
 .buyer-console-tabs button {
-  border: 1px solid rgba(80, 55, 35, 0.18);
-  background: #fffaf1;
-  color: #3a2518;
+  border: 1px solid #cbd3de;
+  background: #ffffff;
+  color: #25313f;
   border-radius: 8px;
   padding: 9px 12px;
   font-weight: 700;
@@ -4536,9 +4536,9 @@ a {
 }
 
 .buyer-console-tabs button.is-active {
-  background: #3a2518;
-  border-color: #3a2518;
-  color: #fffaf1;
+  background: #267d6c;
+  border-color: #1f6f5f;
+  color: #ffffff;
 }
 
 .buyer-step-overview {
@@ -5483,6 +5483,37 @@ button.console-compact-row:focus-visible {
   border-radius: 8px;
   background: #ffffff;
   padding: 14px;
+}
+
+.console-density-panel {
+  border-left: 4px solid #2b8a78;
+  background: #fbfcfe;
+}
+
+.console-ops-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(320px, 0.88fr);
+  gap: 14px;
+  margin: 16px 0;
+  align-items: start;
+}
+
+.console-ops-grid .console-search-panel,
+.console-ops-grid .console-payment-approval-panel {
+  height: 100%;
+  box-shadow: none;
+}
+
+.console-command-ops-grid {
+  gap: 12px;
+  background: #fbfcfe;
+}
+
+.console-command-ops-grid .console-mini-form {
+  padding: 12px;
+  border: 1px solid #dfe5ee;
+  border-radius: 8px;
+  background: #ffffff;
 }
 
 .console-dashboard-intro h2 {

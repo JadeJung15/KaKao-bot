@@ -542,12 +542,14 @@ function AdminApp() {
       </header>
       <DashboardIntro />
       <SummaryGrid id="dashboard" label="운영자 대시보드 요약" items={summaryItems} />
-      <IntegratedAdminSearch selectedRoomName={baseRoom.name || selected?.name || ""} onToast={setToast} onOpenResult={openAdminSearchResult} />
-      <PaymentApprovalQueue
-        applications={paymentApprovalRequests}
-        approvingApplicationId={approvingApplicationId}
-        onApprove={approveApplication}
-      />
+      <section className="console-ops-grid" aria-label="운영 우선 확인">
+        <IntegratedAdminSearch selectedRoomName={baseRoom.name || selected?.name || ""} onToast={setToast} onOpenResult={openAdminSearchResult} />
+        <PaymentApprovalQueue
+          applications={paymentApprovalRequests}
+          approvingApplicationId={approvingApplicationId}
+          onApprove={approveApplication}
+        />
+      </section>
       <section className="console-layout">
         <aside className="console-sidebar" aria-label="운영 메뉴">
           <a href="#dashboard">대시보드</a>
@@ -938,7 +940,7 @@ function AdminCommandToolsPanel({ baseRoom = {}, roomSavePayload, onSaved, setTo
   }
 
   return (
-    <section className="console-detail-section console-utility-panel">
+    <section className="console-detail-section console-utility-panel console-command-ops-grid">
       <div className="console-section-head">
         <div>
           <p className="console-eyebrow">Commands & Admins</p>
@@ -1560,11 +1562,11 @@ function ListPanel({ items = [], empty }) {
 
 function DashboardIntro() {
   return (
-    <section className="console-dashboard-intro" aria-label="운영자 대시보드 위치 안내">
+    <section className="console-dashboard-intro console-density-panel" aria-label="운영자 대시보드 위치 안내">
       <div>
         <p className="console-eyebrow">Dashboard</p>
         <h2>운영자 대시보드</h2>
-        <p>/admin 첫 화면입니다. 운영 방, 결제 확인, 문제 방, 종료 보관을 먼저 확인한 뒤 아래에서 방 상세를 관리합니다.</p>
+        <p>운영 방, 결제 확인, 문제 방, 종료 보관을 한 화면에서 먼저 확인합니다.</p>
       </div>
     </section>
   );

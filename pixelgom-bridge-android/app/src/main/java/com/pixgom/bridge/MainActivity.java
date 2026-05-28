@@ -106,87 +106,71 @@ public class MainActivity extends Activity {
         ImageView hero = new ImageView(this);
         hero.setImageResource(getResources().getIdentifier("pixelgom_home", "drawable", getPackageName()));
         hero.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        root.addView(hero, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220)));
+        root.addView(hero, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(172)));
 
-        TextView title = text("픽셀곰 브릿지", 30, Color.rgb(58, 37, 24), true);
-        title.setPadding(0, dp(18), 0, dp(4));
+        TextView title = text("픽셀곰 브릿지", 28, Color.rgb(31, 42, 55), true);
+        title.setPadding(0, dp(16), 0, dp(4));
         root.addView(title);
 
-        TextView version = text("버전 " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")", 14, Color.rgb(111, 78, 49), true);
-        version.setPadding(0, 0, 0, dp(12));
+        TextView version = text("버전 " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")", 13, Color.rgb(78, 91, 110), true);
+        version.setPadding(0, 0, 0, dp(8));
         root.addView(version);
 
-        TextView subtitle = text("오픈채팅 운영봇을 카카오 알림 기반으로 연결합니다. 화면 감지는 사용하지 않습니다.", 15, Color.rgb(87, 64, 47), false);
+        TextView subtitle = text("카카오 알림으로 서버와 방을 연결합니다.", 15, Color.rgb(78, 91, 110), false);
         root.addView(subtitle);
 
-        LinearLayout infoPanel = panel();
-        infoPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
-        root.addView(infoPanel);
-
         BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
-        infoPanel.addView(statusRow("알림 권한", notificationPermissionEnabled() ? "허용됨" : "필요", notificationPermissionEnabled()));
-        infoPanel.addView(labelValue("대표방(일반방)", profile.name));
-        infoPanel.addView(labelValue("등록 방 수", BridgeConfig.roomProfileCount(this) + "개"));
-        infoPanel.addView(labelValue("등록 방 목록", BridgeConfig.roomProfilesSummary(this)));
-        infoPanel.addView(labelValue("입장확인 문구", profile.joinPhrase));
-        infoPanel.addView(labelValue("라이선스 키", TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey));
-        infoPanel.addView(labelValue("월 이용금액", "5,500원 / 방 1개 / 30일"));
-        infoPanel.addView(labelValue("사용 기능", BridgeConfig.featureSummary(this)));
-        infoPanel.addView(labelValue("구매자 콘솔", BUYER_CONSOLE_URL));
-        infoPanel.addView(labelValue("설치 안내", BUYER_SETUP_URL));
-        infoPanel.addView(labelValue("서버 동기화", BridgeConfig.lastProfileSyncSummary(this)));
-        homeDiagnosticsStatus = text("서버 진단: 확인 중", 14, Color.rgb(111, 78, 49), true);
+        LinearLayout statusPanel = panel();
+        statusPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        root.addView(statusPanel);
+        statusPanel.addView(sectionTitle("오늘 확인"));
+        statusPanel.addView(statusTile("알림 권한", notificationPermissionEnabled() ? "허용됨" : "필요", notificationPermissionEnabled()));
+        statusPanel.addView(statusTile("대표방", profile.name, !TextUtils.isEmpty(profile.name)));
+        statusPanel.addView(statusTile("등록 방", BridgeConfig.roomProfileCount(this) + "개", BridgeConfig.roomProfileCount(this) > 0));
+        statusPanel.addView(statusTile("동기화", BridgeConfig.lastProfileSyncSummary(this), true));
+        homeDiagnosticsStatus = text("서버 진단: 확인 중", 14, Color.rgb(78, 91, 110), true);
         homeDiagnosticsStatus.setPadding(0, dp(12), 0, 0);
-        infoPanel.addView(homeDiagnosticsStatus);
+        statusPanel.addView(homeDiagnosticsStatus);
 
         LinearLayout stepsPanel = panel();
         stepsPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
         root.addView(stepsPanel);
-        stepsPanel.addView(text("처음 설정 순서", 18, Color.rgb(58, 37, 24), true));
-        stepsPanel.addView(stepText("1", "알림 접근 권한을 허용합니다."));
-        stepsPanel.addView(stepText("2", "구매자 콘솔의 설치 안내에서 앱 연결코드를 복사해 자동 설정합니다."));
-        stepsPanel.addView(stepText("3", "일반방 연결코드 1번으로 연결된 게임방까지 함께 등록되는지 확인합니다."));
-        stepsPanel.addView(stepText("4", "서버 테스트 전송 후 각 카카오방에서 /브릿지를 확인합니다."));
+        stepsPanel.addView(sectionTitle("빠른 설정"));
+        stepsPanel.addView(stepText("1", "알림 접근 권한 허용"));
+        stepsPanel.addView(stepText("2", "연결코드 붙여넣기"));
+        stepsPanel.addView(stepText("3", "서버 테스트 후 /브릿지 확인"));
 
         Button startButton = primaryButton("시작하기");
         startButton.setOnClickListener(v -> showMain());
-        root.addView(startButton);
 
         Button checklistButton = secondaryButton("테스트 체크리스트");
         checklistButton.setOnClickListener(v -> showChecklist());
-        root.addView(checklistButton);
 
         Button refreshDiagnosticsButton = secondaryButton("서버 진단 새로고침");
         refreshDiagnosticsButton.setOnClickListener(v -> refreshHomeDiagnostics());
-        root.addView(refreshDiagnosticsButton);
 
         Button permissionButton = secondaryButton("알림 권한 열기");
         permissionButton.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
-        root.addView(permissionButton);
 
         Button openChatButton = secondaryButton("오픈채팅방 열기");
         openChatButton.setOnClickListener(v -> openUrl(BridgeConfig.roomLink(this)));
-        root.addView(openChatButton);
 
         Button websiteButton = secondaryButton("홈페이지 열기");
         websiteButton.setOnClickListener(v -> openUrl(WEBSITE_URL));
-        root.addView(websiteButton);
 
         Button guideButton = secondaryButton("구매자 콘솔 열기");
         guideButton.setOnClickListener(v -> openUrl(BUYER_CONSOLE_URL));
-        root.addView(guideButton);
 
         Button setupButton = secondaryButton("설치 안내 열기");
         setupButton.setOnClickListener(v -> openUrl(BUYER_SETUP_URL));
-        root.addView(setupButton);
 
         Button syncButton = secondaryButton("서버와 다시 동기화");
         syncButton.setOnClickListener(v -> syncRoomProfiles());
-        root.addView(syncButton);
 
         Button resetButton = secondaryButton("서버 설정 초기화 / 등록 취소");
         resetButton.setOnClickListener(v -> confirmResetServerSettings());
-        root.addView(resetButton);
+
+        root.addView(compactActionGrid(startButton, checklistButton, refreshDiagnosticsButton, permissionButton, guideButton, setupButton, openChatButton, websiteButton, syncButton, resetButton));
 
         return scrollView;
     }
@@ -278,7 +262,7 @@ public class MainActivity extends Activity {
         homeButton.setOnClickListener(v -> showHome());
         root.addView(homeButton);
 
-        TextView version = text("버전 " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")", 13, Color.rgb(111, 78, 49), true);
+        TextView version = text("버전 " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")", 13, Color.rgb(78, 91, 110), true);
         version.setPadding(0, dp(12), 0, 0);
         root.addView(version);
 
@@ -287,14 +271,14 @@ public class MainActivity extends Activity {
         hero.setScaleType(ImageView.ScaleType.CENTER_CROP);
         root.addView(hero, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(160)));
 
-        TextView title = text("픽셀곰 브릿지", 28, Color.rgb(58, 37, 24), true);
+        TextView title = text("픽셀곰 브릿지", 28, Color.rgb(31, 42, 55), true);
         title.setPadding(0, dp(18), 0, dp(4));
         root.addView(title);
 
-        TextView subtitle = text("방 설정은 한 칸씩 입력하면 됩니다. 복잡한 구분자 형식은 더 이상 직접 입력하지 않아도 됩니다.", 15, Color.rgb(87, 64, 47), false);
+        TextView subtitle = text("연결, 방 설정, 진단을 한 화면에서 확인합니다.", 15, Color.rgb(78, 91, 110), false);
         root.addView(subtitle);
 
-        permissionStatus = text("", 14, Color.rgb(58, 37, 24), false);
+        permissionStatus = text("", 14, Color.rgb(31, 42, 55), false);
         permissionStatus.setPadding(0, dp(14), 0, dp(8));
         root.addView(permissionStatus);
 
@@ -309,7 +293,7 @@ public class MainActivity extends Activity {
         enabledSwitch = new Switch(this);
         enabledSwitch.setText("브릿지 사용");
         enabledSwitch.setTextSize(16);
-        enabledSwitch.setTextColor(Color.rgb(58, 37, 24));
+        enabledSwitch.setTextColor(Color.rgb(31, 42, 55));
         enabledSwitch.setChecked(BridgeConfig.isEnabled(this));
         enabledSwitch.setOnCheckedChangeListener((button, checked) -> BridgeConfig.setEnabled(this, checked));
         panel.addView(enabledSwitch);
@@ -317,11 +301,11 @@ public class MainActivity extends Activity {
         serverUrlInput = input("서버 URL", BridgeConfig.serverUrl(this));
         panel.addView(serverUrlInput);
 
-        TextView connectTitle = text("앱 자동 연결", 20, Color.rgb(58, 37, 24), true);
+        TextView connectTitle = text("앱 자동 연결", 20, Color.rgb(31, 42, 55), true);
         connectTitle.setPadding(0, dp(16), 0, 0);
         panel.addView(connectTitle);
 
-        TextView connectHelp = text("앱 연결코드 입력칸 아래의 연결코드 찾기/복사 버튼을 누르면 외부 브라우저에서 구매자 콘솔의 앱 연결 코드 카드가 열립니다. 코드를 복사해 여기에 붙여넣으면 방 이름, roomId, 링크, 관리자, 라이선스가 자동 추가됩니다. Android 1.0.27 이상은 서버와 다시 동기화로 저장된 방의 최신 설정도 확인하고, 게임방 알림의 발신자명도 보강합니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView connectHelp = text("연결코드를 붙여넣으면 방 정보와 라이선스를 자동으로 채웁니다.", 13, Color.rgb(78, 91, 110), false);
         connectHelp.setPadding(0, dp(8), 0, 0);
         panel.addView(connectHelp);
 
@@ -336,7 +320,7 @@ public class MainActivity extends Activity {
         connectButton.setOnClickListener(v -> connectWithCode());
         panel.addView(connectButton);
 
-        profileSyncStatus = text("서버 동기화: " + safeText(BridgeConfig.lastProfileSyncSummary(this)), 13, Color.rgb(111, 78, 49), false);
+        profileSyncStatus = text("서버 동기화: " + safeText(BridgeConfig.lastProfileSyncSummary(this)), 13, Color.rgb(78, 91, 110), false);
         profileSyncStatus.setPadding(0, dp(8), 0, 0);
         panel.addView(profileSyncStatus);
 
@@ -344,7 +328,7 @@ public class MainActivity extends Activity {
         profileSyncButton.setOnClickListener(v -> syncRoomProfiles());
         panel.addView(profileSyncButton);
 
-        pendingQueueStatus = text("전송 대기 상태 확인 중", 13, Color.rgb(111, 78, 49), false);
+        pendingQueueStatus = text("전송 대기 상태 확인 중", 13, Color.rgb(78, 91, 110), false);
         pendingQueueStatus.setPadding(0, dp(8), 0, 0);
         panel.addView(pendingQueueStatus);
 
@@ -356,7 +340,7 @@ public class MainActivity extends Activity {
         clearPendingButton.setOnClickListener(v -> confirmClearPendingEvents());
         panel.addView(clearPendingButton);
 
-        TextView resetHelp = text("기기를 바꾸거나 다른 곳에 다시 등록할 때는 이 앱의 저장된 방/라이선스/동기화 기록만 초기화합니다. 구매자 계정과 서버 결제/신청 데이터는 삭제되지 않습니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView resetHelp = text("초기화는 이 기기의 저장값만 지웁니다. 결제/신청 데이터는 유지됩니다.", 13, Color.rgb(78, 91, 110), false);
         resetHelp.setPadding(0, dp(10), 0, 0);
         panel.addView(resetHelp);
 
@@ -364,11 +348,11 @@ public class MainActivity extends Activity {
         resetButton.setOnClickListener(v -> confirmResetServerSettings());
         panel.addView(resetButton);
 
-        TextView roomTitle = text("대표방(일반방) 설정", 20, Color.rgb(58, 37, 24), true);
+        TextView roomTitle = text("대표방(일반방) 설정", 20, Color.rgb(31, 42, 55), true);
         roomTitle.setPadding(0, dp(16), 0, 0);
         panel.addView(roomTitle);
 
-        roomProfilesSummaryView = text("일반방 목록\n" + BridgeConfig.generalRoomProfilesSummary(this), 13, Color.rgb(111, 78, 49), false);
+        roomProfilesSummaryView = text("일반방 목록\n" + BridgeConfig.generalRoomProfilesSummary(this), 13, Color.rgb(78, 91, 110), false);
         roomProfilesSummaryView.setPadding(0, dp(8), 0, 0);
         panel.addView(roomProfilesSummaryView);
 
@@ -376,7 +360,7 @@ public class MainActivity extends Activity {
         gameRoomToggleButton.setOnClickListener(v -> toggleGameRoomList());
         panel.addView(gameRoomToggleButton);
 
-        gameRoomProfilesView = text(BridgeConfig.gameRoomProfilesSummary(this), 13, Color.rgb(111, 78, 49), false);
+        gameRoomProfilesView = text(BridgeConfig.gameRoomProfilesSummary(this), 13, Color.rgb(78, 91, 110), false);
         gameRoomProfilesView.setPadding(0, dp(8), 0, dp(4));
         gameRoomProfilesView.setVisibility(View.GONE);
         panel.addView(gameRoomProfilesView);
@@ -401,11 +385,11 @@ public class MainActivity extends Activity {
         licenseKeyInput = input("라이선스 키", TextUtils.isEmpty(profile.licenseKey) ? BridgeConfig.deviceLicenseKey(this) : profile.licenseKey);
         panel.addView(licenseKeyInput);
 
-        TextView roomHelp = text("대표방은 일반방을 우선 표시합니다. 게임방은 접기/펼치기 목록에서 확인하고, 여러 방은 구매자 콘솔의 설치 안내에서 연결코드를 확인하거나 서버와 다시 동기화하면 됩니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView roomHelp = text("게임방은 펼치기 목록과 서버 동기화로 확인합니다.", 13, Color.rgb(78, 91, 110), false);
         roomHelp.setPadding(0, dp(10), 0, 0);
         panel.addView(roomHelp);
 
-        TextView featureTitle = text("방별 기능", 20, Color.rgb(58, 37, 24), true);
+        TextView featureTitle = text("방별 기능", 20, Color.rgb(31, 42, 55), true);
         featureTitle.setPadding(0, dp(18), 0, 0);
         panel.addView(featureTitle);
 
@@ -450,7 +434,7 @@ public class MainActivity extends Activity {
         setupButton.setOnClickListener(v -> openUrl(BUYER_SETUP_URL));
         panel.addView(setupButton);
 
-        TextView scriptTitle = text("로컬 JS 자동응답", 20, Color.rgb(58, 37, 24), true);
+        TextView scriptTitle = text("로컬 JS 자동응답", 20, Color.rgb(31, 42, 55), true);
         scriptTitle.setPadding(0, dp(18), 0, dp(8));
         root.addView(scriptTitle);
 
@@ -461,7 +445,7 @@ public class MainActivity extends Activity {
         scriptEnabledSwitch = new Switch(this);
         scriptEnabledSwitch.setText("JS 자동응답 사용");
         scriptEnabledSwitch.setTextSize(16);
-        scriptEnabledSwitch.setTextColor(Color.rgb(58, 37, 24));
+        scriptEnabledSwitch.setTextColor(Color.rgb(31, 42, 55));
         scriptEnabledSwitch.setChecked(BridgeConfig.scriptEnabled(this));
         scriptEnabledSwitch.setOnCheckedChangeListener((button, checked) -> BridgeConfig.setScriptEnabled(this, checked));
         scriptPanel.addView(scriptEnabledSwitch);
@@ -481,15 +465,15 @@ public class MainActivity extends Activity {
         scriptResetButton.setOnClickListener(v -> scriptSourceInput.setText(BridgeConfig.defaultScriptSource()));
         scriptPanel.addView(scriptResetButton);
 
-        TextView logTitle = text("전송 로그", 20, Color.rgb(58, 37, 24), true);
+        TextView logTitle = text("전송 로그", 20, Color.rgb(31, 42, 55), true);
         logTitle.setPadding(0, dp(18), 0, dp(8));
         root.addView(logTitle);
 
-        TextView logHelp = text("정상 응답과 재시도 필요 항목을 먼저 확인하세요. 아래 전송 로그는 성공/응답 로그, 실패/재시도 필요 로그, 무시된 알림 로그, 진단 원문 로그로 나뉩니다. 그룹 요약/빈 카카오 알림은 실패가 아니라 무시된 알림으로 분류됩니다.", 13, Color.rgb(111, 78, 49), false);
+        TextView logHelp = text("정상 응답과 재시도 필요 항목을 먼저 확인하세요. 성공/응답 로그, 실패/재시도 필요 로그, 무시된 알림 로그, 진단 원문 로그를 나눠 확인합니다.", 13, Color.rgb(78, 91, 110), false);
         logHelp.setPadding(0, 0, 0, dp(8));
         root.addView(logHelp);
 
-        logView = text("", 13, Color.rgb(72, 52, 38), false);
+        logView = text("", 13, Color.rgb(31, 42, 55), false);
         logView.setBackgroundResource(getResources().getIdentifier("panel_background", "drawable", getPackageName()));
         logView.setPadding(dp(14), dp(14), dp(14), dp(14));
         root.addView(logView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -523,7 +507,7 @@ public class MainActivity extends Activity {
     private ScrollView baseScrollView() {
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
-        scrollView.setBackgroundColor(Color.rgb(255, 246, 231));
+        scrollView.setBackgroundColor(Color.rgb(246, 248, 251));
         return scrollView;
     }
 
@@ -1035,12 +1019,18 @@ public class MainActivity extends Activity {
         editText.setMinLines(minLines);
         editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         editText.setHorizontallyScrolling(false);
-        editText.setBackgroundColor(Color.rgb(255, 252, 246));
+        editText.setBackgroundColor(Color.rgb(255, 255, 255));
         editText.setPadding(dp(10), dp(10), dp(10), dp(10));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(150));
         params.setMargins(0, dp(10), 0, 0);
         editText.setLayoutParams(params);
         return editText;
+    }
+
+    private TextView sectionTitle(String value) {
+        TextView title = text(value, 17, Color.rgb(31, 42, 55), true);
+        title.setPadding(0, 0, 0, dp(8));
+        return title;
     }
 
     private LinearLayout labelValue(String label, String value) {
@@ -1050,18 +1040,27 @@ public class MainActivity extends Activity {
         params.setMargins(0, 0, 0, dp(10));
         layout.setLayoutParams(params);
 
-        TextView labelView = text(label, 12, Color.rgb(111, 78, 49), true);
-        TextView valueView = text(value, 15, Color.rgb(58, 37, 24), false);
+        TextView labelView = text(label, 12, Color.rgb(78, 91, 110), true);
+        TextView valueView = text(value, 15, Color.rgb(31, 42, 55), false);
         valueView.setPadding(0, dp(2), 0, 0);
         layout.addView(labelView);
         layout.addView(valueView);
         return layout;
     }
 
+    private LinearLayout statusTile(String label, String value, boolean ok) {
+        LinearLayout layout = labelValue(label, value);
+        layout.setPadding(dp(10), dp(8), dp(10), dp(8));
+        TextView valueView = (TextView) layout.getChildAt(1);
+        valueView.setTextColor(ok ? Color.rgb(31, 111, 95) : Color.rgb(204, 83, 65));
+        valueView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        return layout;
+    }
+
     private LinearLayout statusRow(String label, String value, boolean ok) {
         LinearLayout layout = labelValue(label, value);
         TextView valueView = (TextView) layout.getChildAt(1);
-        valueView.setTextColor(ok ? Color.rgb(30, 104, 58) : Color.rgb(184, 74, 43));
+        valueView.setTextColor(ok ? Color.rgb(31, 111, 95) : Color.rgb(204, 83, 65));
         valueView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         return layout;
     }
@@ -1076,10 +1075,10 @@ public class MainActivity extends Activity {
 
         TextView badge = text(number, 13, Color.WHITE, true);
         badge.setGravity(Gravity.CENTER);
-        badge.setBackgroundColor(Color.rgb(62, 128, 106));
+        badge.setBackgroundColor(Color.rgb(38, 125, 108));
         layout.addView(badge, new LinearLayout.LayoutParams(dp(28), dp(28)));
 
-        TextView body = text(value, 14, Color.rgb(87, 64, 47), false);
+        TextView body = text(value, 14, Color.rgb(78, 91, 110), false);
         body.setPadding(dp(10), 0, 0, 0);
         layout.addView(body, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         return layout;
@@ -1089,7 +1088,7 @@ public class MainActivity extends Activity {
         Switch sw = new Switch(this);
         sw.setText(label);
         sw.setTextSize(15);
-        sw.setTextColor(Color.rgb(58, 37, 24));
+        sw.setTextColor(Color.rgb(31, 42, 55));
         sw.setChecked(checked);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(8), 0, 0);
@@ -1107,7 +1106,7 @@ public class MainActivity extends Activity {
         editText.setMinLines(10);
         editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         editText.setHorizontallyScrolling(false);
-        editText.setBackgroundColor(Color.rgb(255, 252, 246));
+        editText.setBackgroundColor(Color.rgb(255, 255, 255));
         editText.setPadding(dp(10), dp(10), dp(10), dp(10));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(240));
         params.setMargins(0, dp(10), 0, 0);
@@ -1134,9 +1133,34 @@ public class MainActivity extends Activity {
 
     private Button secondaryButton(String label) {
         Button button = baseButton(label);
-        button.setTextColor(Color.rgb(58, 37, 24));
+        button.setTextColor(Color.rgb(31, 42, 55));
         button.setBackgroundResource(getResources().getIdentifier("button_secondary", "drawable", getPackageName()));
         return button;
+    }
+
+    private LinearLayout compactActionGrid(Button... buttons) {
+        LinearLayout grid = new LinearLayout(this);
+        grid.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        gridParams.setMargins(0, dp(12), 0, 0);
+        grid.setLayoutParams(gridParams);
+
+        for (int i = 0; i < buttons.length; i += 2) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            rowParams.setMargins(0, dp(8), 0, 0);
+            row.setLayoutParams(rowParams);
+            for (int offset = 0; offset < 2 && i + offset < buttons.length; offset++) {
+                Button button = buttons[i + offset];
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(46), 1);
+                params.setMargins(offset == 0 ? 0 : dp(6), 0, offset == 0 ? dp(6) : 0, 0);
+                button.setLayoutParams(params);
+                row.addView(button);
+            }
+            grid.addView(row);
+        }
+        return grid;
     }
 
     private Button baseButton(String label) {

@@ -134,6 +134,17 @@ async function chatPayload(payload) {
   });
 }
 
+function replyText(result) {
+  return result?.json?.reply || result?.json?.template?.outputs?.[0]?.simpleText?.text || "";
+}
+
+function assertCompactReply(result, label, { maxLines = 7, maxChars = 900 } = {}) {
+  const text = replyText(result);
+  const lines = text.split(/\n/).filter((line) => line.trim());
+  assert.ok(lines.length <= maxLines, `${label} nonblank lines ${lines.length}/${maxLines}\n${text}`);
+  assert.ok(text.length <= maxChars, `${label} chars ${text.length}/${maxChars}\n${text}`);
+}
+
 try {
   const health = await request("/health");
   assert.equal(health.response.status, 200);
@@ -881,7 +892,16 @@ try {
     && pack.fixedCommands.includes("/자동탐험")
     && pack.fixedCommands.includes("/자동낚시")
     && pack.fixedCommands.includes("/자동뽑기")), true);
-  assert.equal(commandPacks.json.packs.some((pack) => pack.id === "admin-ops" && pack.fixedCommands.includes("/포인트차감") && pack.fixedCommands.includes("/상점추가") && pack.fixedCommands.includes("/기능아이템목록") && pack.fixedCommands.includes("/명령어팩제거")), true);
+  const adminOpsPack = commandPacks.json.packs.find((pack) => pack.id === "admin-ops");
+  assert.ok(adminOpsPack);
+  for (const command of ["/관리자등록", "/관리자삭제", "/관리자재설정", "/관리자목록", "/방정보", "/방삭제", "/기능목록", "/기능켜기", "/기능끄기", "/구독연장", "/구독만료", "/명령어검색", "/명령어설치목록", "/명령어팩제거", "/포인트차감", "/상점추가", "/상점수정", "/상점삭제", "/상점초기화", "/아이템지급", "/아이템회수", "/기능아이템목록"]) {
+    assert.ok(adminOpsPack.fixedCommands.includes(command), `admin-ops 누락: ${command}`);
+  }
+  const rpgAdventurePack = commandPacks.json.packs.find((pack) => pack.id === "rpg-adventure");
+  assert.ok(rpgAdventurePack);
+  for (const command of ["/모험", "/던전목록", "/던전", "/자동던전", "/대장간", "/제작가능", "/제작", "/자동제작", "/강화목록", "/강화", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템"]) {
+    assert.ok(rpgAdventurePack.fixedCommands.includes(command), `rpg-adventure 누락: ${command}`);
+  }
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "rpg-adventure"
     && pack.fixedCommands.includes("/던전")
     && pack.fixedCommands.includes("/제작")
@@ -1063,6 +1083,9 @@ try {
   assert.match(adminReactSource, /운영자 대시보드/);
   assert.match(adminReactSource, /id="dashboard"/);
   assert.match(adminReactSource, /운영자 대시보드 요약/);
+  assert.match(adminReactSource, /console-ops-grid/);
+  assert.match(adminReactSource, /console-density-panel/);
+  assert.match(adminReactSource, /console-command-ops-grid/);
   assert.match(adminReactSource, /검색 결과 요약/);
   assert.match(adminReactSource, /aria-live="polite"/);
   assert.match(adminReactSource, /운영자 통합 검색어/);
@@ -1144,6 +1167,10 @@ try {
   assert.match(consoleStylesText, /console-compact-row/);
   assert.match(consoleStylesText, /console-two-column-form/);
   assert.match(consoleStylesText, /console-alias-summary/);
+  assert.match(consoleStylesText, /console-ops-grid/);
+  assert.match(consoleStylesText, /console-density-panel/);
+  assert.match(consoleStylesText, /console-command-ops-grid/);
+  assert.doesNotMatch(consoleStylesText, /--paper: #fff8ec/i);
 
   const authScript = await fetch(`${baseUrl}/auth.js`);
   assert.equal(authScript.status, 200);
@@ -1210,6 +1237,12 @@ try {
   assert.match(androidEventSender, /retryCount/);
   assert.match(androidEventSender, /timing/);
   const androidMainActivity = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "MainActivity.java"), "utf8");
+  const androidColors = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "res", "values", "colors.xml"), "utf8");
+  assert.match(androidMainActivity, /sectionTitle\("오늘 확인"\)/);
+  assert.match(androidMainActivity, /compactActionGrid/);
+  assert.match(androidMainActivity, /statusTile/);
+  assert.doesNotMatch(androidMainActivity, /오픈채팅 운영봇을 카카오 알림 기반으로 연결합니다\. 화면 감지는 사용하지 않습니다\./);
+  assert.doesNotMatch(androidColors, /#FFF6E7|#7A4A2A|#3A2518/i);
   assert.match(androidMainActivity, /for \(EventSender\.RoomConnectResult room/);
   assert.match(androidMainActivity, /addOrUpdateRoomProfile/);
   assert.match(androidMainActivity, /연결된 게임방까지 자동 등록/);
@@ -2433,6 +2466,7 @@ try {
   assert.match(commandPackCatalogReply.json.reply, /사용 가능한 명령어팩/);
   assert.match(commandPackCatalogReply.json.reply, /pk\.001 운영 기본팩/);
   assert.match(commandPackCatalogReply.json.reply, /pk\.008 펫키우기팩/);
+  assertCompactReply(commandPackCatalogReply, "/명령어팩");
 
   const commandPackDetailReply = await chatPayload({
     registeredRoom: false,
@@ -2447,6 +2481,7 @@ try {
   assert.match(commandPackDetailReply.json.reply, /포함 명령어/);
   assert.match(commandPackDetailReply.json.reply, /\/상태/);
   assert.match(commandPackDetailReply.json.reply, /\/명령어설치 pk\.001/);
+  assertCompactReply(commandPackDetailReply, "/명령어팩 pk.001");
 
   const commandPackPetAliasReply = await chatPayload({
     registeredRoom: false,
@@ -3572,6 +3607,7 @@ try {
   assert.match(commandInstallSearch.json.reply, /명령어 설치 코드 검색 결과/);
   assert.match(commandInstallSearch.json.reply, /no\.100/);
   assert.match(commandInstallSearch.json.reply, /st\.001/);
+  assertCompactReply(commandInstallSearch, "/명령어검색");
 
   const commandInstallDenied = await chatPayload({
     registeredRoom: false,
@@ -3664,6 +3700,7 @@ try {
   assert.match(commandInstallList.json.reply, /설치 코드 : no\.\d{3}/);
   assert.match(commandInstallList.json.reply, /삭제 코드 : \d{4}/);
   assert.match(commandInstallList.json.reply, /\/설치취소 \d{4}/);
+  assertCompactReply(commandInstallList, "/명령어설치목록");
   const deleteCodeMatch = commandInstallList.json.reply.match(/\/규칙[\s\S]*?삭제 코드 : (\d{4})/);
   assert.ok(deleteCodeMatch, "설치목록에서 /규칙 삭제 코드를 확인할 수 있어야 합니다.");
   const invalidDeleteCode = deleteCodeMatch[1] === "9999" ? "9998" : "9999";
@@ -4195,6 +4232,7 @@ try {
   assert.match(gameHelp.json.reply, /콘솔 시즌/);
   assert.match(gameHelp.json.reply, /시즌 기간/);
   assert.match(gameHelp.json.reply, /주사위 기본 보상: 🅟7/);
+  assertCompactReply(gameHelp, "/게임");
 
   const petHelp = await chatPayload({
     registeredRoom: false,
@@ -4439,6 +4477,7 @@ try {
   assert.match(gameHub.json.reply, /점메추/);
   assert.match(gameHub.json.reply, /몬스터퀘스트|몬스터보스|몬스터팀/);
   assert.match(gameHub.json.reply, /\/모험|\/자동던전/);
+  assertCompactReply(gameHub, "/게임");
 
   const dailyChecklist = await chatPayload({
     registeredRoom: false,
@@ -4457,6 +4496,7 @@ try {
   assert.match(dailyChecklist.json.reply, /\/펫/);
   assert.match(dailyChecklist.json.reply, /\/몬스터퀘스트|\/몬스터보스/);
   assert.match(dailyChecklist.json.reply, /\/가방정리|\/정리추천/);
+  assertCompactReply(dailyChecklist, "/오늘할일");
 
   const saleRecommendation = await chatPayload({
     registeredRoom: false,
@@ -4686,6 +4726,7 @@ try {
   assert.match(roomInfo.json.reply, /판매테스트방 방 설정/);
   assert.match(roomInfo.json.reply, /입장확인 문구: 픽셀곰 입장확인/);
   assert.doesNotMatch(roomInfo.json.reply, /월 이용금액|5,500원|라이선스|PXG-SALES-1234|salesRoom1|open\.kakao/);
+  assertCompactReply(roomInfo, "/방정보");
 
   const roomInfoDenied = await chatPayload({
     registeredRoom: false,
@@ -4900,6 +4941,7 @@ try {
   const fixedCommands = await chat("/고정명령어", "관리자");
   assert.match(fixedCommands.json.reply, /픽셀곰 고정 명령어/);
   assert.match(fixedCommands.json.reply, /게임\/연동 예약/);
+  assertCompactReply(fixedCommands, "/고정명령어");
 
   const gameCommands = await chat("/게임명령어", "관리자");
   assert.match(gameCommands.json.reply, /픽셀곰 게임 명령어/);
@@ -4909,6 +4951,7 @@ try {
   assert.match(gameCommands.json.reply, /\/코인/);
   assert.match(gameCommands.json.reply, /\/보물상자/);
   assert.match(gameCommands.json.reply, /픽셀곰게임/);
+  assertCompactReply(gameCommands, "/게임명령어");
 
   const reservedCustomCommand = await chat("/명령어등록 /상태 상태 덮어쓰기", "관리자");
   assert.match(reservedCustomCommand.json.reply, /고정 명령어/);
@@ -5489,6 +5532,12 @@ try {
   const enableDrawGames = await chat("/기능켜기 게임", "관리자");
   assert.match(enableDrawGames.json.reply, /게임 기능이 켜졌습니다/);
 
+  const featureList = await chat("/기능목록", "관리자");
+  assert.match(featureList.json.reply, /방별 기능 설정/);
+  assert.match(featureList.json.reply, /게임/);
+  assert.match(featureList.json.reply, /\/기능끄기 게임/);
+  assertCompactReply(featureList, "/기능목록");
+
   const drawCatalog = await chat("/뽑기목록", "포순이 여");
   assert.match(drawCatalog.json.reply, /뽑기 목록/);
   assert.match(drawCatalog.json.reply, /대박/);
@@ -5504,6 +5553,7 @@ try {
   assert.match(dungeonList.json.reply, /용암 성채/);
   assert.match(dungeonList.json.reply, /천공 유적/);
   assert.doesNotMatch(dungeonList.json.reply, /#11\d{3}/);
+  assertCompactReply(dungeonList, "/던전목록");
 
   const dungeonRun = await chat("/던전", "모험가 여");
   assert.match(dungeonRun.json.reply, /던전 결과/);
@@ -5520,6 +5570,7 @@ try {
   assert.match(adventureHub.json.reply, /자동던전권/);
   assert.match(adventureHub.json.reply, /강화/);
   assert.match(adventureHub.json.reply, /제작 가능/);
+  assertCompactReply(adventureHub, "/모험");
 
   const autoHuntNoTicket = await chat("/자동던전", "자동러 여");
   assert.match(autoHuntNoTicket.json.reply, /자동던전권/);
@@ -5589,6 +5640,7 @@ try {
   assert.match(autoHuntCraftableList.json.reply, /제작 가능 목록/);
   assert.doesNotMatch(autoHuntCraftableList.json.reply, /현재 제작 가능한 장비가 없습니다/);
   assert.match(autoHuntCraftableList.json.reply, /(용암|천공|왕릉|심연)/);
+  assertCompactReply(autoHuntCraftableList, "/제작가능");
 
   const autoHuntTimingState = await readTestState();
   const autoHuntTimingPerson = autoHuntTimingState.rooms["테스트방"].people["자동던전타이밍러 여"] || {};
@@ -5739,10 +5791,12 @@ try {
   assert.match(smith.json.reply, /\/제작가능/);
   assert.match(smith.json.reply, /\/강화목록/);
   assert.match(smith.json.reply, /\/자동제작/);
+  assertCompactReply(smith, "/대장간");
 
   const craftableList = await chat("/제작가능", "모험가 여");
   assert.match(craftableList.json.reply, /제작 가능 목록/);
   assert.match(craftableList.json.reply, /수습 모험검/);
+  assertCompactReply(craftableList, "/제작가능");
 
   const craftWeapon = await chat("/제작 1", "모험가 여");
   assert.match(craftWeapon.json.reply, /제작 완료/);
@@ -5753,6 +5807,7 @@ try {
   assert.match(equipment.json.reply, /모험가 여님의 장비/);
   assert.match(equipment.json.reply, /수습 모험검/);
   assert.match(equipment.json.reply, /총 전투력/);
+  assertCompactReply(equipment, "/장비");
 
   await chat("/아이템지급 자동제작러 여 11000 2", "관리자");
   await chat("/아이템지급 자동제작러 여 11009 2", "관리자");
@@ -5766,6 +5821,7 @@ try {
   assert.match(autoCraft.json.reply, /광부 부적/);
   assert.match(autoCraft.json.reply, /자동 장착 3개/);
   assert.doesNotMatch(autoCraft.json.reply, /#\d+|12001|12005|12009/);
+  assertCompactReply(autoCraft, "/자동제작");
   const autoCraftEquipment = await chat("/장비", "자동제작러 여");
   assert.match(autoCraftEquipment.json.reply, /수습 모험검/);
   assert.match(autoCraftEquipment.json.reply, /수습 가죽갑옷/);
@@ -5781,12 +5837,14 @@ try {
   assert.match(autoCraftCraftableBest.json.reply, /광산 파쇄도끼/);
   assert.doesNotMatch(autoCraftCraftableBest.json.reply, /수습 모험검/);
   assert.match(autoCraftCraftableBest.json.reply, /자동 장착 0개/);
+  assertCompactReply(autoCraftCraftableBest, "/자동제작");
 
   await chat("/아이템지급 모험가 여 11000 5", "관리자");
   await chat("/포인트지급 모험가 여 500", "관리자");
   const enhanceList = await chat("/강화목록", "모험가 여");
   assert.match(enhanceList.json.reply, /강화 (추천|목록)/);
   assert.match(enhanceList.json.reply, /(수습 모험검|무기)/);
+  assertCompactReply(enhanceList, "/강화목록");
   const enhanceWeapon = await chat("/강화 무기", "모험가 여");
   assert.match(enhanceWeapon.json.reply, /강화 완료/);
   assert.match(enhanceWeapon.json.reply, /\+1/);
@@ -5808,11 +5866,13 @@ try {
   assert.match(rpgSetList.json.reply, /용암 세트/);
   assert.match(rpgSetList.json.reply, /천공 세트/);
   assert.match(rpgSetList.json.reply, /왕릉 세트/);
+  assertCompactReply(rpgSetList, "/세트아이템");
 
   await chat("/아이템지급 확장장비러 여 11016 10", "관리자");
   await chat("/포인트지급 확장장비러 여 5000", "관리자");
   const expandedCraftable = await chat("/제작가능", "확장장비러 여");
   assert.match(expandedCraftable.json.reply, /용암 대검/);
+  assertCompactReply(expandedCraftable, "/제작가능");
   const craftExpandedWeapon = await chat("/제작 12100", "확장장비러 여");
   assert.match(craftExpandedWeapon.json.reply, /용암 대검/);
   assert.match(craftExpandedWeapon.json.reply, /자동 장착/);
@@ -5834,44 +5894,51 @@ try {
   assert.match(miningSetEquipment.json.reply, /광산 세트/);
   assert.match(miningSetEquipment.json.reply, /3세트/);
   assert.doesNotMatch(miningSetEquipment.json.reply, /#120/);
+  assertCompactReply(miningSetEquipment, "/장비");
 
   const rpgItems = await chat("/아이템", "모험가 여");
   assert.match(rpgItems.json.reply, /보유 아이템 1\//);
   assert.match(rpgItems.json.reply, /1\./);
   assert.match(rpgItems.json.reply, /자세히 보기: \/아이템상세 번호/);
+  assertCompactReply(rpgItems, "/아이템");
 
   for (let itemId = 11000; itemId < 11025; itemId += 1) {
     await chat(`/아이템지급 페이저 ${itemId} 1`, "관리자");
   }
   const pagerFirst = await chat("/아이템", "페이저");
-  assert.match(pagerFirst.json.reply, /보유 아이템 1\/3/);
+  assert.match(pagerFirst.json.reply, /보유 아이템 1\/5/);
   assert.equal(pagerFirst.json.timing.saveRequired, false);
   assert.equal(pagerFirst.json.timing.saveStateMs, 0);
-  assert.match(pagerFirst.json.reply, /10\./);
-  assert.doesNotMatch(pagerFirst.json.reply, /11\./);
-  assert.match(pagerFirst.json.reply, /다음 페이지: \/아이템 다음/);
-  assert.match(pagerFirst.json.reply, /페이지 이동: \/아이템 1~3/);
+  assert.match(pagerFirst.json.reply, /5\./);
+  assert.doesNotMatch(pagerFirst.json.reply, /6\./);
+  assert.match(pagerFirst.json.reply, /다음: \/아이템 다음/);
+  assert.match(pagerFirst.json.reply, /이동: \/아이템 1~5/);
+  assertCompactReply(pagerFirst, "/아이템");
   const pagerSecond = await chat("/아이템 다음", "페이저");
-  assert.match(pagerSecond.json.reply, /보유 아이템 2\/3/);
+  assert.match(pagerSecond.json.reply, /보유 아이템 2\/5/);
   assert.equal(pagerSecond.json.timing.saveRequired, false);
   assert.equal(pagerSecond.json.timing.saveStateMs, 0);
-  assert.match(pagerSecond.json.reply, /11\./);
-  assert.match(pagerSecond.json.reply, /20\./);
+  assert.match(pagerSecond.json.reply, /6\./);
+  assert.match(pagerSecond.json.reply, /10\./);
+  assertCompactReply(pagerSecond, "/아이템 다음");
   const pagerThird = await chat("/아이템 다음", "페이저");
-  assert.match(pagerThird.json.reply, /보유 아이템 3\/3/);
+  assert.match(pagerThird.json.reply, /보유 아이템 3\/5/);
   assert.equal(pagerThird.json.timing.saveRequired, false);
   assert.equal(pagerThird.json.timing.saveStateMs, 0);
-  assert.match(pagerThird.json.reply, /21\./);
+  assert.match(pagerThird.json.reply, /11\./);
+  assertCompactReply(pagerThird, "/아이템 다음");
   const pagerExplicitSecond = await chat("/아이템 2", "페이저");
-  assert.match(pagerExplicitSecond.json.reply, /보유 아이템 2\/3/);
+  assert.match(pagerExplicitSecond.json.reply, /보유 아이템 2\/5/);
   assert.equal(pagerExplicitSecond.json.timing.saveRequired, false);
   assert.equal(pagerExplicitSecond.json.timing.saveStateMs, 0);
-  assert.match(pagerExplicitSecond.json.reply, /11\./);
+  assert.match(pagerExplicitSecond.json.reply, /6\./);
+  assertCompactReply(pagerExplicitSecond, "/아이템 2");
   const pagerSaleList = await chat("/판매목록 2", "페이저");
-  assert.match(pagerSaleList.json.reply, /판매 목록 2\/3/);
+  assert.match(pagerSaleList.json.reply, /판매 목록 2\/5/);
   assert.equal(pagerSaleList.json.timing.saveRequired, false);
   assert.equal(pagerSaleList.json.timing.saveStateMs, 0);
-  assert.match(pagerSaleList.json.reply, /11\./);
+  assert.match(pagerSaleList.json.reply, /6\./);
+  assertCompactReply(pagerSaleList, "/판매목록");
 
   const rpgItemDetail = await chat("/아이템상세 1", "모험가 여");
   assert.match(rpgItemDetail.json.reply, /아이템 상세/);
@@ -5896,6 +5963,7 @@ try {
   const saleList = await chat("/판매목록", "모험가 여");
   assert.match(saleList.json.reply, /판매 목록/);
   assert.match(saleList.json.reply, /\/판매 1/);
+  assertCompactReply(saleList, "/판매목록");
 
   const cleanupGrantA = await chat("/아이템지급 정리러 여 11000 3", "관리자");
   assert.match(cleanupGrantA.json.reply, /철광석/);
@@ -5968,6 +6036,7 @@ try {
   const equipmentDetail = await chat("/장비상세", "모험가 여");
   assert.match(equipmentDetail.json.reply, /장비 상세/);
   assert.match(equipmentDetail.json.reply, /마법 공격력/);
+  assertCompactReply(equipmentDetail, "/장비상세");
 
   const statsView = await chat("/스탯", "모험가 여");
   assert.match(statsView.json.reply, /스탯/);
