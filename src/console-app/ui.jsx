@@ -19,6 +19,33 @@ export function SummaryGrid({ items = [], id, label = "대시보드 요약" }) {
   );
 }
 
+export function ActionQueue({ eyebrow = "Queue", title, items = [] }) {
+  return (
+    <section className="console-action-queue" aria-label={title || eyebrow}>
+      <div className="console-action-queue-head">
+        <p className="console-eyebrow">{eyebrow}</p>
+        <h2>{title}</h2>
+      </div>
+      <div className="console-action-queue-list">
+        {items.map((item) => (
+          <article className={`console-action-queue-item console-action-queue-${item.tone || "neutral"}`} key={item.label}>
+            <div>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              {item.detail ? <small>{item.detail}</small> : null}
+            </div>
+            {item.href ? (
+              <a href={item.href}>{item.actionLabel || "열기"}</a>
+            ) : (
+              <button type="button" onClick={item.onAction} disabled={item.disabled}>{item.actionLabel || "확인"}</button>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function Toolbar({ search, onSearch, filter, onFilter, actions }) {
   return (
     <div className="console-toolbar">

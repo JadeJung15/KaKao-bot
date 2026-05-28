@@ -264,9 +264,8 @@ function BuyerApp() {
         </div>
       </header>
       <BuyerConsoleTabs activeView={activeView} onChange={setActiveView} />
-      {payload ? <DashboardIntro type="buyer" /> : null}
-      {payload ? <SummaryGrid id="dashboard" label="구매자 대시보드 요약" items={buyerSummaries(payload)} /> : null}
       {payload ? <BuyerStepOverview payload={payload} onRefresh={() => load()} /> : null}
+      {payload ? <SummaryGrid id="dashboard" label="구매자 대시보드 요약" items={buyerSummaries(payload)} /> : null}
       {payload ? <BuyerAppConnectionCheckCard rooms={appConnectCodeRooms} onRefresh={() => load()} /> : null}
       {payload ? <BuyerSearchPanel onToast={setToast} onOpenResult={handleBuyerSearchOpen} /> : null}
       {payload ? <AppConnectCodePanel rooms={appConnectCodeRooms} applications={payload.applications || []} onCopy={copyAppConnectCode} /> : null}
@@ -350,11 +349,12 @@ function BuyerStepOverview({ payload = {}, onRefresh }) {
   )).length;
   const approvedCount = appConnectCodes.length;
   const connectedCount = rooms.filter((room) => room.bridgeStatus === "ready" || snapshot(room).bridge?.status === "ready").length;
+  const syncWaitingCount = Math.max(approvedCount - connectedCount, 0);
   const steps = [
     {
       title: "승인 전",
       value: pendingCount ? `${pendingCount}건 대기` : "대기 없음",
-      text: "입금 후 결제 확인 요청",
+      text: "입금 확인 요청",
       tone: pendingCount ? "warn" : "good",
       action: <a href="#requests">문의 등록</a>
     },
@@ -366,10 +366,17 @@ function BuyerStepOverview({ payload = {}, onRefresh }) {
       action: <a href="#app-connect-code">코드 보기</a>
     },
     {
-      title: "앱 연결 완료",
-      value: connectedCount ? `${connectedCount}개 준비` : "동기화 필요",
-      text: "앱에서 붙여넣고 동기화",
-      tone: connectedCount ? "good" : "neutral",
+      title: "앱 동기화",
+      value: syncWaitingCount ? `${syncWaitingCount}개 남음` : "완료",
+      text: "앱에서 붙여넣기",
+      tone: syncWaitingCount ? "warn" : "good",
+      action: <a href="/console?from=android&view=setup#app-connect-code">붙여넣기</a>
+    },
+    {
+      title: "방 상태",
+      value: rooms.length ? `${connectedCount}/${rooms.length} 준비` : "방 없음",
+      text: "앱 연결 완료 확인",
+      tone: rooms.length && connectedCount === rooms.length ? "good" : "neutral",
       action: <button type="button" onClick={onRefresh}>새로고침</button>
     }
   ];
@@ -396,13 +403,13 @@ function BuyerAppConnectionCheckCard({ rooms = [], onRefresh }) {
       <div>
         <p className="console-eyebrow">App QA</p>
         <h2>앱 연결 상태 확인</h2>
-        <p>실제 방 QA는 앱 업데이트 후 카카오방에서 /브릿지, /상태, /주사위를 보내고 앱의 성공/응답 로그와 실패/재시도 필요 로그를 확인하는 순서로 진행합니다.</p>
+        <p>실제 방 QA는 /브릿지, /상태, /주사위 후 앱 로그만 확인합니다.</p>
       </div>
       <div className="console-compact-list">
         <span>연결코드 발급: {issuedRooms.length}개</span>
         <span>앱 연결 준비: {readyRooms.length}개</span>
         <span>게임방 연결: {gameRooms.length}개</span>
-        <span>확인 위치: 앱 전송 로그의 성공/응답 로그, 실패/재시도 필요 로그, 무시된 알림 로그</span>
+        <span>확인 위치: 성공/응답 로그, 실패/재시도 로그, 무시 로그</span>
       </div>
       <div className="console-action-row">
         <a href="/console?from=android&view=setup#app-connect-code">연결코드 보기</a>
@@ -421,7 +428,7 @@ function AppConnectCodePanel({ rooms = [], applications = [], onCopy }) {
         <div>
           <p className="console-eyebrow">App Connect Code</p>
           <h2>앱 연결 코드</h2>
-          <p>앱의 연결코드 입력칸 옆에서 이 위치를 외부 브라우저로 열고, 코드를 복사해 앱에 바로 붙여넣을 수 있습니다.</p>
+          <p>코드를 복사해 Android 앱에 붙여넣으면 방 설정이 동기화됩니다.</p>
         </div>
         <StatusBadge label={`${connectRooms.length}개 발급`} status={connectRooms.length ? "ready" : "needs_setup"} />
       </div>

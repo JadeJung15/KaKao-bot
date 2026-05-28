@@ -4518,6 +4518,87 @@ a {
   text-decoration: none;
 }
 
+.console-action-queue {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(23, 32, 42, 0.04);
+  margin: 14px 0;
+  padding: 14px;
+}
+
+.console-action-queue-head h2 {
+  margin: 3px 0 0;
+  font-size: 1.18rem;
+  letter-spacing: 0;
+}
+
+.console-action-queue-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.console-action-queue-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 104px;
+  border: 1px solid #e3e8ef;
+  border-left: 4px solid #7a8797;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.console-action-queue-good {
+  border-left-color: #2c8c6f;
+}
+
+.console-action-queue-warn {
+  border-left-color: #c9822a;
+}
+
+.console-action-queue-bad {
+  border-left-color: #c94b4b;
+}
+
+.console-action-queue-item span,
+.console-action-queue-item small {
+  display: block;
+  color: #657080;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.console-action-queue-item strong {
+  display: block;
+  margin: 5px 0 4px;
+  color: #17202a;
+  font-size: 1.36rem;
+  letter-spacing: 0;
+}
+
+.console-action-queue-item a,
+.console-action-queue-item button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border: 1px solid #cbd3de;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #25313f;
+  padding: 7px 10px;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 .buyer-console-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -4543,7 +4624,7 @@ a {
 
 .buyer-step-overview {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin: 0 0 16px;
 }
@@ -5609,6 +5690,11 @@ button.console-compact-row:focus-visible {
   .console-detail-panel {
     order: 3;
   }
+
+  .console-action-queue-list,
+  .buyer-step-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -5634,6 +5720,8 @@ button.console-compact-row:focus-visible {
   .console-summary-grid,
   .console-field-grid,
   .buyer-step-overview,
+  .console-action-queue-list,
+  .console-action-queue-item,
   .buyer-app-check-card,
   .buyer-connect-code-card,
   .console-log-filters,

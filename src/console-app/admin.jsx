@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { adminRequest, formatError, ownerToken } from "./api.js";
 import { bridgeLabel, combinedGameOpsOverview, formatDate, formatKrw, preferredAdminRow, roomRoleLabel, roomRowFromGroup, roomSummaries, snapshot } from "./domain.js";
-import { DetailTabs, EmptyState, FieldRow, StatusBadge, SummaryGrid, ToastHost, Toolbar } from "./ui.jsx";
+import { ActionQueue, DetailTabs, EmptyState, FieldRow, StatusBadge, SummaryGrid, ToastHost, Toolbar } from "./ui.jsx";
 
 const DETAIL_TABS = [
   { id: "settings", label: "설정" },
@@ -82,6 +82,21 @@ function adminSummaryItems(rooms = [], archivedRooms = [], applications = [], in
       ? { ...item, value: Math.max(Number(item.value) || 0, paymentReviewNeeded), help: "신청/결제 승인 요청 기준" }
       : item
   ));
+}
+
+function openItems(items = []) {
+  return items.filter((item) => !["resolved", "closed", "done"].includes(String(item.status || "").toLowerCase()));
+}
+
+function roomNeedsAttention(row = {}) {
+  const bridge = String(row.bridge || "").toLowerCase();
+  return (
+    ["pending_payment", "approved_unpaid", "needs_setup", "expired", "expiring_soon"].includes(row.lifecycleStatus) ||
+    bridge.includes("필요") ||
+    bridge.includes("오류") ||
+    bridge.includes("대기") ||
+    bridge.includes("미연결")
+  );
 }
 
 function hydratedRoomGroup(group = {}, roomByName = new Map()) {
@@ -240,14 +255,15 @@ function AdminApp() {
   useEffect(() => { load(); }, []);
 
   const roomByName = useMemo(() => new Map((state.rooms || []).map((room) => [room.name, room])), [state.rooms]);
-  const rows = useMemo(() => {
+  const allRows = useMemo(() => {
     const grouped = (state.roomGroups || []).map((group) => roomRowFromGroup(hydratedRoomGroup(group, roomByName)));
     const groupedNames = new Set(grouped.map((row) => row.name));
     const looseRooms = (state.rooms || [])
       .filter((room) => !groupedNames.has(room.name))
       .map((room) => ({ id: room.name, name: room.name, role: room.roomRole, lifecycle: snapshot(room).lifecycle?.label || room.subscription?.statusLabel, lifecycleStatus: snapshot(room).lifecycle?.status || "", lifecycleTone: snapshot(room).lifecycle?.tone, bridge: bridgeLabel(room), games: [], raw: { baseRoom: room, gameRooms: [] } }));
-    return [...grouped, ...looseRooms].filter((row) => roomMatches(row, search, filter));
-  }, [state.roomGroups, state.rooms, roomByName, search, filter]);
+    return [...grouped, ...looseRooms];
+  }, [state.roomGroups, state.rooms, roomByName]);
+  const rows = useMemo(() => allRows.filter((row) => roomMatches(row, search, filter)), [allRows, search, filter]);
 
   const selected = preferredAdminRow(rows, selectedId);
   const baseRoom = selected?.raw?.baseRoom || selected?.raw?.room || {};
@@ -257,6 +273,9 @@ function AdminApp() {
     [state.applications, state.inquiries]
   );
   const summaryItems = useMemo(() => adminSummaryItems(state.rooms, state.archivedRooms, state.applications, state.inquiries), [state.rooms, state.archivedRooms, state.applications, state.inquiries]);
+  const problemRows = useMemo(() => allRows.filter(roomNeedsAttention), [allRows]);
+  const openInquiries = useMemo(() => openItems(state.inquiries || []), [state.inquiries]);
+  const pendingRestoreRequests = useMemo(() => openItems(state.restoreRequests || []), [state.restoreRequests]);
   const logRoomOptions = useMemo(() => {
     const candidates = [baseRoom, ...(selected?.raw?.gameRooms || [])]
       .map((room) => room?.name)
@@ -266,6 +285,56 @@ function AdminApp() {
   const gameOverview = useMemo(() => (
     combinedGameOpsOverview([baseRoom, ...(selected?.raw?.gameRooms || [])])
   ), [baseRoom, selected?.raw?.gameRooms]);
+  const adminQueueItems = useMemo(() => {
+    const slowCount = Number(logState.summary?.slowLogs || logState.summary?.slowCommands?.length || 0);
+    const firstProblem = problemRows[0] || null;
+    const firstLogRow = selected || allRows[0] || null;
+    return [
+      {
+        label: "결제 확인",
+        value: paymentApprovalRequests.length ? `${paymentApprovalRequests.length}건` : "대기 없음",
+        detail: "입금승인 요청",
+        tone: paymentApprovalRequests.length ? "warn" : "good",
+        href: "#신청/결제",
+        actionLabel: "승인 큐"
+      },
+      {
+        label: "문제 방",
+        value: problemRows.length ? `${problemRows.length}개` : "정상",
+        detail: "만료, 설정, 브릿지 확인",
+        tone: problemRows.length ? "warn" : "good",
+        actionLabel: "필터 적용",
+        onAction: () => {
+          setFilter("pending");
+          if (firstProblem?.id) setSelectedId(firstProblem.id);
+        }
+      },
+      {
+        label: "느린 응답/로그",
+        value: slowCount ? `${slowCount}건` : "조회",
+        detail: "최근 로그에서 slow만 확인",
+        tone: slowCount ? "warn" : "neutral",
+        actionLabel: "느린 로그",
+        disabled: !firstLogRow,
+        onAction: () => {
+          if (firstLogRow?.id) setSelectedId(firstLogRow.id);
+          setTab("logs");
+          loadRoomLogs({ room: firstLogRow?.raw?.baseRoom?.name || firstLogRow?.name || "", status: "slow", window: "24h" });
+        }
+      },
+      {
+        label: "문의/복구",
+        value: `${openInquiries.length + pendingRestoreRequests.length}건`,
+        detail: `문의 ${openInquiries.length} / 복구 ${pendingRestoreRequests.length}`,
+        tone: openInquiries.length + pendingRestoreRequests.length ? "warn" : "good",
+        actionLabel: "문의 탭",
+        onAction: () => {
+          if (!selected?.id && allRows[0]?.id) setSelectedId(allRows[0].id);
+          setTab("inquiries");
+        }
+      }
+    ];
+  }, [allRows, logState.summary, openInquiries.length, paymentApprovalRequests.length, pendingRestoreRequests.length, problemRows, selected]);
 
   function roomSavePayload(overrides = {}) {
     return {
@@ -540,7 +609,7 @@ function AdminApp() {
           <button type="button" onClick={load}>새로고침</button>
         </div>
       </header>
-      <DashboardIntro />
+      <ActionQueue eyebrow="Ops Queue" title="오늘 먼저 볼 운영 큐" items={adminQueueItems} />
       <SummaryGrid id="dashboard" label="운영자 대시보드 요약" items={summaryItems} />
       <section className="console-ops-grid" aria-label="운영 우선 확인">
         <IntegratedAdminSearch selectedRoomName={baseRoom.name || selected?.name || ""} onToast={setToast} onOpenResult={openAdminSearchResult} />
