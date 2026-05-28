@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { adminRequest, formatError, ownerToken } from "./api.js";
-import { bridgeLabel, formatDate, formatKrw, roomRoleLabel, roomRowFromGroup, roomSummaries, snapshot } from "./domain.js";
+import { bridgeLabel, combinedGameOpsOverview, formatDate, formatKrw, preferredAdminRow, roomRoleLabel, roomRowFromGroup, roomSummaries, snapshot } from "./domain.js";
 import { DetailTabs, EmptyState, FieldRow, StatusBadge, SummaryGrid, ToastHost, Toolbar } from "./ui.jsx";
 
 const DETAIL_TABS = [
@@ -82,6 +82,15 @@ function adminSummaryItems(rooms = [], archivedRooms = [], applications = [], in
       ? { ...item, value: Math.max(Number(item.value) || 0, paymentReviewNeeded), help: "신청/결제 승인 요청 기준" }
       : item
   ));
+}
+
+function hydratedRoomGroup(group = {}, roomByName = new Map()) {
+  const hydrate = (room) => roomByName.get(room?.name) || room || null;
+  return {
+    ...group,
+    baseRoom: hydrate(group.baseRoom),
+    gameRooms: (group.gameRooms || []).map(hydrate).filter(Boolean)
+  };
 }
 
 function IntegratedAdminSearch({ selectedRoomName = "", onToast, onOpenResult }) {
@@ -230,16 +239,17 @@ function AdminApp() {
 
   useEffect(() => { load(); }, []);
 
+  const roomByName = useMemo(() => new Map((state.rooms || []).map((room) => [room.name, room])), [state.rooms]);
   const rows = useMemo(() => {
-    const grouped = (state.roomGroups || []).map(roomRowFromGroup);
+    const grouped = (state.roomGroups || []).map((group) => roomRowFromGroup(hydratedRoomGroup(group, roomByName)));
     const groupedNames = new Set(grouped.map((row) => row.name));
     const looseRooms = (state.rooms || [])
       .filter((room) => !groupedNames.has(room.name))
       .map((room) => ({ id: room.name, name: room.name, role: room.roomRole, lifecycle: snapshot(room).lifecycle?.label || room.subscription?.statusLabel, lifecycleStatus: snapshot(room).lifecycle?.status || "", lifecycleTone: snapshot(room).lifecycle?.tone, bridge: bridgeLabel(room), games: [], raw: { baseRoom: room, gameRooms: [] } }));
     return [...grouped, ...looseRooms].filter((row) => roomMatches(row, search, filter));
-  }, [state.roomGroups, state.rooms, search, filter]);
+  }, [state.roomGroups, state.rooms, roomByName, search, filter]);
 
-  const selected = rows.find((row) => row.id === selectedId) || rows[0] || null;
+  const selected = preferredAdminRow(rows, selectedId);
   const baseRoom = selected?.raw?.baseRoom || selected?.raw?.room || {};
   const baseApp = selected?.raw?.baseApplication || {};
   const paymentApprovalRequests = useMemo(
@@ -253,6 +263,9 @@ function AdminApp() {
       .filter(Boolean);
     return [...new Set(candidates)];
   }, [baseRoom.name, selected?.id, selected?.raw?.gameRooms]);
+  const gameOverview = useMemo(() => (
+    combinedGameOpsOverview([baseRoom, ...(selected?.raw?.gameRooms || [])])
+  ), [baseRoom, selected?.raw?.gameRooms]);
 
   function roomSavePayload(overrides = {}) {
     return {
@@ -584,7 +597,7 @@ function AdminApp() {
                 <StatusBadge label={roomRoleLabel(baseRoom)} status={snapshot(baseRoom).role} />
               </div>
               <DetailTabs tabs={DETAIL_TABS} current={tab} onChange={setTab} />
-              <GameOpsOverviewPanel overview={baseRoom.gameOpsOverview || {}} />
+              <GameOpsOverviewPanel overview={gameOverview} />
               {tab === "settings" && (
                 <AdminSettingsPanel
                   baseRoom={baseRoom}

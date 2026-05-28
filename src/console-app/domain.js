@@ -57,6 +57,84 @@ export function roomRowFromGroup(group = {}) {
   };
 }
 
+function roomActivityTime(room = {}) {
+  const diagnostics = room.diagnostics || snapshot(room).diagnostics || {};
+  const candidates = [
+    diagnostics.lastAnalyticsLogAt,
+    diagnostics.lastRawEventAt,
+    diagnostics.lastEventAt
+  ];
+  return Math.max(0, ...candidates.map((value) => {
+    const time = new Date(value || 0).getTime();
+    return Number.isFinite(time) ? time : 0;
+  }));
+}
+
+function rowActivityTime(row = {}) {
+  const rooms = [
+    row.raw?.baseRoom,
+    row.raw?.room,
+    ...(row.raw?.gameRooms || [])
+  ].filter(Boolean);
+  return Math.max(0, ...rooms.map(roomActivityTime));
+}
+
+export function preferredAdminRow(rows = [], selectedId = "") {
+  const selected = rows.find((row) => row.id === selectedId);
+  if (selected) return selected;
+  const withActivity = rows
+    .map((row, index) => ({ row, index, activityAt: rowActivityTime(row) }))
+    .filter((item) => item.activityAt > 0)
+    .sort((left, right) => right.activityAt - left.activityAt || left.index - right.index);
+  return withActivity[0]?.row || rows[0] || null;
+}
+
+export function combinedGameOpsOverview(rooms = []) {
+  const overviews = rooms
+    .map((room) => room?.gameOpsOverview)
+    .filter(Boolean);
+  if (!overviews.length) return {};
+
+  const first = overviews[0] || {};
+  const packs = new Map();
+  const cooldowns = new Map();
+  const commandCounts = new Map();
+  let shopItemCount = 0;
+  let enabled = false;
+
+  for (const overview of overviews) {
+    if (overview.enabled !== false) enabled = true;
+    shopItemCount += Math.max(0, Number(overview.shopItemCount || 0));
+    for (const pack of overview.installedGamePacks || []) {
+      const key = pack.id || pack.code || pack.title;
+      if (key && !packs.has(key)) packs.set(key, pack);
+    }
+    for (const cooldown of overview.cooldowns || []) {
+      const key = cooldown.command || "";
+      if (key && !cooldowns.has(key)) cooldowns.set(key, cooldown);
+    }
+    for (const item of overview.recentTopCommands || []) {
+      const command = item.command || "";
+      if (!command) continue;
+      commandCounts.set(command, (commandCounts.get(command) || 0) + Math.max(0, Number(item.count || 0)));
+    }
+  }
+
+  return {
+    ...first,
+    enabled,
+    statusLabel: enabled ? "게임 사용 가능" : (first.statusLabel || "게임 꺼짐"),
+    installedGamePacks: [...packs.values()],
+    cooldowns: [...cooldowns.values()],
+    rewards: first.rewards || {},
+    shopItemCount,
+    recentTopCommands: [...commandCounts.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .slice(0, 5)
+      .map(([command, count]) => ({ command, count }))
+  };
+}
+
 export function roomSummaries(rooms = [], archivedRooms = []) {
   const active = rooms.filter((room) => ["active", "expiring_soon"].includes(snapshot(room).lifecycle?.status)).length;
   const paymentReviewNeeded = rooms.filter((room) => ["pending_payment", "approved_unpaid"].includes(snapshot(room).lifecycle?.status)).length;

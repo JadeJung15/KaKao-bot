@@ -285,6 +285,7 @@ export const FEATURES = [
   "rpg-auto-hunt-ticket",
   "rpg-equipment-enhancement",
   "rpg-adventure-hub",
+  "rpg-auto-crafting",
   "functional-shop-item-mapping",
   "dungeon-precious-metal-drops",
   "multi-auto-game-tickets",
@@ -538,7 +539,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
     title: "게임/연동 예약",
     commands: [
       "/게임", "/주사위", "/낚시", "/탐험", "/자동탐험", "/자동모험", "/자동낚시", "/뽑기", "/자동뽑기", "/뽑기목록", "/홀", "/짝", "/미끼상점", "/미끼구매", "/어항", "/수족관",
-      "/모험", "/던전", "/던전목록", "/자동던전", "/대장간", "/제작", "/제작가능", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장착",
+      "/모험", "/던전", "/던전목록", "/자동던전", "/대장간", "/제작", "/자동제작", "/제작가능", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장착",
       "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감",
       "/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점",
       "/픽셀곰게임", "/게임연동"
@@ -1537,7 +1538,7 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "attendance-growth": ["/출석", "/미출석", "/출석순위", "/포인트", "/내정보", "/포인트순위"],
   "point-economy": ["/포인트", "/내정보", "/좋아요", "/응원", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위"],
   "game-chance": ["/게임", "/오늘할일", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/포인트"],
-  "rpg-adventure": ["/모험", "/던전", "/던전목록", "/자동던전", "/자동탐험", "/자동모험", "/자동낚시", "/자동뽑기", "/대장간", "/제작가능", "/제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/판매미리보기", "/판매추천", "/정리추천", "/일괄판매", "/가방", "/가방정리", "/판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/포인트"],
+  "rpg-adventure": ["/모험", "/던전", "/던전목록", "/자동던전", "/자동탐험", "/자동모험", "/자동낚시", "/자동뽑기", "/대장간", "/제작가능", "/제작", "/자동제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/판매미리보기", "/판매추천", "/정리추천", "/일괄판매", "/가방", "/가방정리", "/판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/포인트"],
   "pixel-monster-rpg": ["/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감", "/포인트"],
   "pet-raising": ["/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점", "/포인트"],
   "shop-inventory": ["/상점", "/구매", "/가방", "/가방정리", "/판매추천", "/정리추천", "/아이템상세", "/판매목록", "/판매미리보기", "/사용", "/가방선물", "/판매", "/일괄판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/구매내역", "/기능아이템목록"],
@@ -1870,9 +1871,9 @@ const GAME_PACK_HELP_TOPICS = Object.freeze({
     packIds: ["rpg-adventure"],
     aliases: ["rpg", "RPG", "모험", "던전"],
     intro: "던전, 자동던전 10회 요약, 자동탐험/자동낚시/자동뽑기, 장비 강화, 확장 제작식을 묶은 모험형 게임팩입니다.",
-    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/모험", "/자동던전 상급 10", "/제작가능", "/강화목록", "/자동장착 공격"],
+    firstSteps: ["/명령어설치 pk.006", "/기능켜기 게임", "/모험", "/자동던전 상급 10", "/제작가능", "/자동제작", "/강화목록", "/자동장착 공격"],
     adminSetup: ["명령어팩 장착: /명령어설치 pk.006", "게임 기능 켜기: /기능켜기 게임", "상점/가방 기능 확인: /기능목록"],
-    examples: ["/모험", "/던전 중급", "/자동던전 상급 10", "/자동탐험 2", "/자동낚시 2", "/자동뽑기 2", "/대장간", "/제작가능", "/강화 무기", "/강화상세", "/자동장착 공격", "/보상선택 포인트"],
+    examples: ["/모험", "/던전 중급", "/자동던전 상급 10", "/자동탐험 2", "/자동낚시 2", "/자동뽑기 2", "/대장간", "/제작가능", "/자동제작", "/강화 무기", "/강화상세", "/자동장착 공격", "/보상선택 포인트"],
     related: ["shop-inventory", "pet-raising"]
   },
   monster: {
@@ -8896,6 +8897,7 @@ const DUNGEON_CONFIGS = Object.freeze([
   { key: "volcanic", names: ["용암", "용암 성채", "성채"], title: "용암 성채", purpose: "용암 세트/화염석", blankChance: 0.38, itemStart: 160, itemEnd: 340, treasureChance: 0.16, preciousChance: 0.05, craftMaterialChance: 0.36, craftMaterialIds: DUNGEON_CRAFT_MATERIAL_IDS.volcanic },
   { key: "sky", names: ["천공", "천공 유적", "하늘"], title: "천공 유적", purpose: "천공 세트/바람 재료", blankChance: 0.34, itemStart: 180, itemEnd: 420, treasureChance: 0.15, preciousChance: 0.045, craftMaterialChance: 0.35, craftMaterialIds: DUNGEON_CRAFT_MATERIAL_IDS.sky }
 ]);
+const DUNGEON_RUNTIME_CACHE = new WeakMap();
 
 function dungeonConfigFromText(text = "") {
   const body = compactSpaces(text.replace(/^\/던전\s*/i, ""));
@@ -8916,31 +8918,60 @@ function dungeonListCommand() {
   ].join("\n");
 }
 
+function dungeonRuntimeConfig(config) {
+  let runtime = DUNGEON_RUNTIME_CACHE.get(config);
+  if (runtime) return runtime;
+  const craftMaterialIds = Array.isArray(config.craftMaterialIds) ? config.craftMaterialIds.filter(Boolean) : [];
+  const craftMaterialProducts = craftMaterialIds.map((id) => systemProductById(id)).filter(Boolean);
+  const itemProducts = [];
+  for (let offset = config.itemStart; offset <= config.itemEnd; offset += 1) {
+    const product = systemProductById(RPG_ITEM_ID_START + offset);
+    if (product) itemProducts.push(product);
+  }
+  const preciousProducts = RPG_PRECIOUS_DROPS
+    .map((item) => ({ ...item, product: systemProductById(item.id) }))
+    .filter((item) => item.product);
+  const rewardProducts = [...itemProducts, ...craftMaterialProducts, ...preciousProducts.map((item) => item.product)];
+  const uniqueRewardProducts = [...new Map(rewardProducts.map((product) => [product.id, product])).values()];
+  runtime = {
+    blankChance: Number(config.blankChance || 0),
+    craftMaterialChance: Number(config.craftMaterialChance || 0),
+    preciousChance: Number(config.preciousChance || 0),
+    craftMaterialProducts,
+    itemProducts,
+    fallbackItem: systemProductById(RPG_ITEM_ID_START),
+    preciousProducts,
+    preciousWeight: preciousProducts.reduce((sum, item) => sum + Number(item.weight || 0), 0),
+    sellPriceById: new Map(uniqueRewardProducts.map((product) => [product.id, productSellPrice(product)])),
+    rareIds: new Set(uniqueRewardProducts.filter(rpgRareReward).map((product) => product.id))
+  };
+  DUNGEON_RUNTIME_CACHE.set(config, runtime);
+  return runtime;
+}
+
 function randomDungeonItem(config) {
-  if (Math.random() < config.blankChance) return null;
+  const runtime = dungeonRuntimeConfig(config);
+  if (Math.random() < runtime.blankChance) return null;
   const precious = randomDungeonPreciousDrop(config);
   if (precious) return precious;
   const craftMaterial = randomDungeonCraftMaterial(config);
-  if (craftMaterial && Math.random() < Number(config.craftMaterialChance || 0)) return craftMaterial;
-  const span = Math.max(1, config.itemEnd - config.itemStart + 1);
-  const offset = config.itemStart + Math.floor(Math.random() * span);
-  return systemProductById(RPG_ITEM_ID_START + offset) || systemProductById(RPG_ITEM_ID_START);
+  if (craftMaterial && Math.random() < runtime.craftMaterialChance) return craftMaterial;
+  const candidates = runtime.itemProducts;
+  return candidates[Math.floor(Math.random() * candidates.length)] || runtime.fallbackItem;
 }
 
 function randomDungeonCraftMaterial(config) {
-  const ids = Array.isArray(config.craftMaterialIds) ? config.craftMaterialIds.filter(Boolean) : [];
-  if (!ids.length) return null;
-  const id = ids[Math.floor(Math.random() * ids.length)];
-  return systemProductById(id);
+  const candidates = dungeonRuntimeConfig(config).craftMaterialProducts;
+  return candidates[Math.floor(Math.random() * candidates.length)] || null;
 }
 
 function randomDungeonPreciousDrop(config) {
-  if (Math.random() >= Number(config.preciousChance || 0)) return null;
-  const totalWeight = RPG_PRECIOUS_DROPS.reduce((sum, item) => sum + item.weight, 0);
-  let roll = Math.random() * totalWeight;
-  for (const item of RPG_PRECIOUS_DROPS) {
-    roll -= item.weight;
-    if (roll <= 0) return systemProductById(item.id);
+  const runtime = dungeonRuntimeConfig(config);
+  if (Math.random() >= runtime.preciousChance || runtime.preciousWeight <= 0) return null;
+  let roll = Math.random() * runtime.preciousWeight;
+  for (const item of runtime.preciousProducts) {
+    roll -= Number(item.weight || 0);
+    if (roll <= 0) return item.product;
   }
   return systemProductById(COPPER_TREASURE_ITEM_ID);
 }
@@ -9006,21 +9037,23 @@ function createPendingRpgReward(person, config) {
 }
 
 function grantAutoDungeonCraftingSupport(roomState, person, config, runs) {
-  const materialIds = Array.isArray(config.craftMaterialIds) ? config.craftMaterialIds.filter(Boolean) : [];
-  const materialCount = materialIds.length ? Math.floor(Math.max(0, runs) / 50) : 0;
+  const materialProducts = dungeonRuntimeConfig(config).craftMaterialProducts;
+  const materialCount = materialProducts.length ? Math.floor(Math.max(0, runs) / 50) : 0;
   const pointBonus = Math.floor(Math.max(0, runs) / 100) * 100;
   const materialCounts = new Map();
   let totalSell = 0;
-  for (let index = 0; index < materialCount; index += 1) {
-    const product = systemProductById(materialIds[index % materialIds.length]);
-    if (!product) continue;
-    addInventory(person, product.id, 1);
-    totalSell += productSellPrice(product);
+  const fullCycles = materialProducts.length ? Math.floor(materialCount / materialProducts.length) : 0;
+  const remainder = materialProducts.length ? materialCount % materialProducts.length : 0;
+  materialProducts.forEach((product, index) => {
+    const quantity = fullCycles + (index < remainder ? 1 : 0);
+    if (!quantity) return;
+    addInventory(person, product.id, quantity);
+    totalSell += productSellPrice(product) * quantity;
     materialCounts.set(product.id, {
       product,
-      quantity: (materialCounts.get(product.id)?.quantity || 0) + 1
+      quantity
     });
-  }
+  });
   if (pointBonus > 0) person.points += pointBonus;
   const materials = [...materialCounts.values()];
   if (materials.length || pointBonus > 0) {
@@ -9377,9 +9410,32 @@ function blacksmithCommand(roomState = null, sender = "") {
     "",
     "제작 확인: /제작가능",
     "제작 실행: /제작 1",
+    "자동 제작: /자동제작",
     "강화 추천: /강화목록",
     "세트 보너스: /세트아이템"
   ].join("\n");
+}
+
+function craftRpgRecipe(roomState, person, recipe) {
+  for (const material of rpgRecipeMaterials(recipe)) {
+    removeInventory(person, material.id, material.qty);
+  }
+  person.points -= recipe.pointCost;
+  person.spentPoints += recipe.pointCost;
+  const quantity = addInventory(person, recipe.itemId, 1);
+  const product = systemProductById(recipe.itemId);
+  const autoEquipped = autoEquipIfBetter(person, product);
+  recordShopTransaction(roomState, {
+    type: "equipment_crafted",
+    productId: recipe.itemId,
+    productName: recipe.name,
+    quantity: 1,
+    unitPrice: recipe.pointCost,
+    totalPrice: recipe.pointCost,
+    to: person.currentName,
+    by: person.currentName
+  });
+  return { quantity, product, autoEquipped };
 }
 
 function craftWeaponCommand(roomState, sender, text) {
@@ -9407,24 +9463,7 @@ function craftWeaponCommand(roomState, sender, text) {
       `• 보유 포인트 : ${formatPoint(person.points)}`
     ].join("\n");
   }
-  for (const material of rpgRecipeMaterials(recipe)) {
-    removeInventory(person, material.id, material.qty);
-  }
-  person.points -= recipe.pointCost;
-  person.spentPoints += recipe.pointCost;
-  const quantity = addInventory(person, recipe.itemId, 1);
-  const product = systemProductById(recipe.itemId);
-  const autoEquipped = autoEquipIfBetter(person, product);
-  recordShopTransaction(roomState, {
-    type: "equipment_crafted",
-    productId: recipe.itemId,
-    productName: recipe.name,
-    quantity: 1,
-    unitPrice: recipe.pointCost,
-    totalPrice: recipe.pointCost,
-    to: person.currentName,
-    by: person.currentName
-  });
+  const { quantity, autoEquipped } = craftRpgRecipe(roomState, person, recipe);
   return [
     "제작 완료",
     "",
@@ -9433,6 +9472,55 @@ function craftWeaponCommand(roomState, sender, text) {
     `• 보유 수량 : ${quantity}개`,
     `• 사용 포인트 : ${formatPoint(recipe.pointCost)}`,
     autoEquipped ? `• 자동 장착 : ${recipe.name}` : "• 자동 장착 : 현재 장비가 더 강해 가방에 보관"
+  ].join("\n");
+}
+
+function autoCraftCandidateRecipes(person) {
+  normalizePersonState(person);
+  const equipped = rpgEquippedProductsBySlot(person);
+  return RPG_WEAPON_RECIPES
+    .filter((recipe) => rpgRecipeCanCraft(person, recipe))
+    .map((recipe) => {
+      const product = systemProductById(recipe.itemId);
+      const slot = rpgEquipmentSlot(product);
+      const current = equipped[slot];
+      const currentScore = current ? rpgScoreProductForPerson(person, current, "balance") : 0;
+      const nextScore = rpgScoreProductForPerson(person, product, "balance");
+      return { recipe, product, slot, improvement: nextScore - currentScore };
+    })
+    .filter((item) => item.slot && item.improvement > 0)
+    .sort((left, right) => right.improvement - left.improvement || Number(right.recipe.power || 0) - Number(left.recipe.power || 0));
+}
+
+function autoCraftEquipmentCommand(roomState, sender) {
+  const person = ensurePerson(roomState, sender);
+  const crafted = [];
+  const craftedSlots = new Set();
+  while (craftedSlots.size < 3) {
+    const next = autoCraftCandidateRecipes(person).find((item) => !craftedSlots.has(item.slot));
+    if (!next) break;
+    const result = craftRpgRecipe(roomState, person, next.recipe);
+    crafted.push({ ...next, ...result });
+    craftedSlots.add(next.slot);
+  }
+  if (!crafted.length) {
+    return [
+      "자동제작할 장비가 없습니다.",
+      "현재 장비보다 강한 제작 가능 장비가 없습니다.",
+      "",
+      "확인: /제작가능",
+      "재료 획득: /던전 또는 /자동던전"
+    ].join("\n");
+  }
+  const autoEquippedCount = crafted.filter((item) => item.autoEquipped).length;
+  return [
+    "자동제작 완료",
+    "",
+    `제작 ${crafted.length}개 / 자동 장착 ${autoEquippedCount}개`,
+    ...crafted.map((item) => `• ${RPG_EQUIPMENT_SLOT_LABELS[item.slot] || "장비"}: ${item.recipe.name}`),
+    "",
+    `보유 포인트 : ${formatPoint(person.points)}`,
+    "장비 확인: /장비"
   ].join("\n");
 }
 
@@ -11007,7 +11095,7 @@ function bridgeJsServerText() {
 const ACTIVE_GAME_ROOM_COMMANDS = new Set([
   "/게임", "/게임명령어", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/확률뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝",
   "/미끼상점", "/미끼구매", "/어항", "/수족관",
-  "/모험", "/던전", "/던전목록", "/자동던전", "/자동사냥", "/대장간", "/제작가능", "/제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템",
+  "/모험", "/던전", "/던전목록", "/자동던전", "/자동사냥", "/대장간", "/제작가능", "/제작", "/자동제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템",
   "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감",
   "/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점"
 ]);
@@ -11060,7 +11148,7 @@ function commandFeatureKey(command) {
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
   if (/^\/(?:프로필|프로칠|내별명|별명목록|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
-  if (/^\/(?:게임|오늘할일|주사위|낚시|자동낚시|탐험|자동탐험|자동모험|확률뽑기|뽑기|자동뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|모험|던전|던전목록|자동던전|자동사냥|대장간|제작가능|제작|강화|강화목록|강화상세|보상선택|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:게임|오늘할일|주사위|낚시|자동낚시|탐험|자동탐험|자동모험|확률뽑기|뽑기|자동뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|모험|던전|던전목록|자동던전|자동사냥|대장간|제작가능|제작|자동제작|강화|강화목록|강화상세|보상선택|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
   if (/^\/(?:상점|구매|구매내역|가방|가방정리|정리추천|판매추천|아이템|보유아이템|아이템상세|판매목록|판매미리보기|일괄판매|아이템잠금|아이템잠금해제|잠금목록|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점정리|상점초기화|상점내역|아이템지급|아이템회수|기능아이템목록)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
@@ -11146,7 +11234,7 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/탐험", "게임", "탐험 보상 게임", { aliases: ["/자동탐험", "/자동모험"], requiresFeature: "games", searchableKeywords: ["탐험", "자동탐험", "자동모험"] }),
   registryEntry("/모험", "RPG", "RPG 오늘 할 일과 추천 행동 확인", { aliases: ["/RPG", "/알피지"], examples: ["/모험"], requiresFeature: "games", searchableKeywords: ["RPG", "허브", "모험", "자동던전", "강화"] }),
   registryEntry("/던전", "RPG", "던전 탐험과 재료 획득", { aliases: ["/던전목록", "/자동던전", "/자동사냥", "/보상선택"], examples: ["/던전", "/던전 중급", "/자동던전 중급", "/자동던전 상급 10"], requiresFeature: "games", searchableKeywords: ["RPG", "모험", "재료", "자동던전", "자동사냥", "보상"] }),
-  registryEntry("/대장간", "RPG", "장비 제작과 강화 흐름 확인", { aliases: ["/제작", "/제작가능", "/강화", "/강화목록", "/강화상세", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템"], examples: ["/대장간", "/제작가능", "/제작 1", "/강화 무기", "/자동장착 공격"], requiresFeature: "games", searchableKeywords: ["무기", "방어구", "장신구", "제작", "장비", "세트", "강화"] }),
+  registryEntry("/대장간", "RPG", "장비 제작과 강화 흐름 확인", { aliases: ["/제작", "/자동제작", "/제작가능", "/강화", "/강화목록", "/강화상세", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템"], examples: ["/대장간", "/제작가능", "/자동제작", "/제작 1", "/강화 무기", "/자동장착 공격"], requiresFeature: "games", searchableKeywords: ["무기", "방어구", "장신구", "제작", "자동제작", "장비", "세트", "강화"] }),
   registryEntry("/점메추", "생활", "점심 메뉴 추천", { examples: ["/점메추", "/점메추 한식", "/점메추 매운거"], searchableKeywords: ["점심", "메뉴", "추천", "음식"] }),
   registryEntry("/몬스터탐험", "픽셀몬스터", "오리지널 몬스터 발견과 수집 성장", { aliases: ["/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감"], requiresFeature: "games", searchableKeywords: ["몬스터", "수집", "도감", "퀘스트", "보스", "진화"] }),
   registryEntry("/펫입양", "펫키우기", "개인 펫 입양과 성장", { aliases: ["/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점"], requiresFeature: "games", searchableKeywords: ["펫", "키우기", "훈련"] }),
@@ -11550,7 +11638,7 @@ const COMMAND_DISCOVERY_TOPICS = Object.freeze([
     key: "게임",
     aliases: ["게임", "미니게임", "낚시", "던전", "rpg"],
     title: "게임/RPG",
-    commands: ["/게임", "/오늘할일", "/모험", "/자동던전 상급 10", "/낚시", "/던전", "/가방정리", "/강화목록", "/자동탐험", "/자동낚시", "/자동뽑기", "/대장간"]
+    commands: ["/게임", "/오늘할일", "/모험", "/자동던전 상급 10", "/낚시", "/던전", "/가방정리", "/강화목록", "/자동탐험", "/자동낚시", "/자동뽑기", "/대장간", "/자동제작"]
   },
   {
     key: "가방",
@@ -11745,11 +11833,12 @@ const COMMAND_RECOMMENDATION_PRESETS = Object.freeze({
       { command: "/던전", reason: "재료와 장비 성장", feature: "games" },
       { command: "/강화목록", reason: "강화할 장비와 비용 확인", feature: "games" },
       { command: "/제작가능", reason: "지금 만들 수 있는 장비 확인", feature: "games" },
+      { command: "/자동제작", reason: "강한 제작 가능 장비 자동 제작", feature: "games" },
       { command: "/자동장착", reason: "보유 장비 자동 추천", feature: "games" },
       { command: "/장비", reason: "현재 장비 요약", feature: "games" },
       { command: "/스탯", reason: "전투 능력치 확인", feature: "games" }
     ],
-    topCommands: ["/모험", "/자동던전", "/자동탐험", "/자동낚시", "/자동뽑기", "/던전", "/강화목록", "/강화", "/제작가능", "/제작", "/자동장착", "/장비", "/스탯", "/세트아이템"]
+    topCommands: ["/모험", "/자동던전", "/자동탐험", "/자동낚시", "/자동뽑기", "/던전", "/강화목록", "/강화", "/제작가능", "/자동제작", "/제작", "/자동장착", "/장비", "/스탯", "/세트아이템"]
   },
   pet: {
     label: "펫",
@@ -12125,18 +12214,23 @@ function analyticsWindowMs(windowText = "") {
   return amount * unitMs;
 }
 
-function adminRoomLogsPayload(state = {}, query = {}) {
+function analyticsLimit(value) {
+  return Math.min(
+    Math.max(1, Number(value || ROOM_ANALYTICS_EXPORT_LIMIT) || ROOM_ANALYTICS_EXPORT_LIMIT),
+    ROOM_ANALYTICS_EXPORT_LIMIT
+  );
+}
+
+function adminRoomLogsPayload(state = {}, query = {}, options = {}) {
   const requestedRoom = normalizeText(query.room || query.roomName || "");
   const requestedType = normalizeText(query.type || query.eventType || "");
   const requestedCommand = normalizeText(query.command || "");
   const keyword = normalizeText(query.q || query.query || "");
   const requestedWindow = normalizeText(query.window || "");
+  const includeAllLogs = options.includeAllLogs === true;
   const windowMs = analyticsWindowMs(requestedWindow);
   const now = Date.now();
-  const limit = Math.min(
-    Math.max(1, Number(query.limit || ROOM_ANALYTICS_EXPORT_LIMIT) || ROOM_ANALYTICS_EXPORT_LIMIT),
-    ROOM_ANALYTICS_EXPORT_LIMIT
-  );
+  const limit = analyticsLimit(query.limit);
   const rooms = Object.values(state.rooms || {}).filter((roomState) => {
     if (!requestedRoom) return true;
     return roomKey(roomState.name) === roomKey(requestedRoom);
@@ -12251,13 +12345,14 @@ function adminRoomLogsPayload(state = {}, query = {}) {
       slowCommands
     },
     rooms: roomSummaries,
-    logs: filtered.slice(0, limit)
+    logs: includeAllLogs ? filtered : filtered.slice(0, limit)
   };
 }
 
 function adminLiveEventsPayload(state = {}, query = {}) {
   const status = normalizeText(query.status || "");
-  const payload = adminRoomLogsPayload(state, query);
+  const limit = analyticsLimit(query.limit);
+  const payload = adminRoomLogsPayload(state, { ...query, limit: ROOM_ANALYTICS_EXPORT_LIMIT }, { includeAllLogs: true });
   const events = payload.logs
     .filter((log) => {
       const totalMs = Number(log.totalMs || 0);
@@ -12267,6 +12362,7 @@ function adminLiveEventsPayload(state = {}, query = {}) {
         || (status === "duplicate" && (log.duplicate || log.status === "duplicate"))
         || (status === "slow" && totalMs >= 1000);
     })
+    .slice(0, limit)
     .map((log) => ({
       eventId: log.eventId || "",
       room: log.room || "",
@@ -12548,6 +12644,50 @@ function roomViewExpiringSoon(room, warningDays = 7) {
   return room.subscription?.status === "active" && Number.isFinite(remaining) && remaining >= 0 && remaining <= warningDays;
 }
 
+function adminRoomGroupRoomRole(room = {}, application = {}) {
+  const savedRole = normalizeRoomRole(room.roomRole || "");
+  if (savedRole !== "standard") return savedRole;
+  const purpose = normalizeApplicationRoomPurpose(application.roomPurpose);
+  if (purpose === "game_room") return "game";
+  if (application.id) return "general";
+  return savedRole;
+}
+
+function adminRoomGroupRoomPreview(room = null, application = {}) {
+  if (!room) return null;
+  const roomRole = adminRoomGroupRoomRole(room, application);
+  return {
+    applicationId: application.id || room.applicationId || "",
+    name: room.name || "",
+    roomName: application.roomName || room.roomName || room.name || "",
+    roomId: application.roomId || room.roomId || room.roomIds?.[0] || "",
+    roomLink: application.roomLink || room.roomLink || room.roomLinks?.[0] || "",
+    roomPurpose: application.roomPurpose || room.roomPurpose || "",
+    registered: Boolean(room.registered),
+    enabled: room.enabled !== false,
+    roomRole,
+    canonicalRoomKey: room.canonicalRoomKey || "",
+    canonicalRoomName: room.canonicalRoomName || "",
+    linkedGameRoomKeys: room.linkedGameRoomKeys || [],
+    bridgeStatus: room.bridgeStatus || "",
+    diagnostics: room.diagnostics || {},
+    subscription: room.subscription || {},
+    roomStatusSnapshot: room.roomStatusSnapshot || null
+  };
+}
+
+function adminBridgeRoomPreview(room = {}) {
+  return {
+    applicationId: room.applicationId || "",
+    roomName: room.roomName || room.name || "",
+    roomPurpose: room.roomPurpose || "",
+    roomRole: room.roomRole || "",
+    bridgeStatus: room.bridgeStatus || "",
+    roomId: room.roomId || "",
+    roomLink: room.roomLink || ""
+  };
+}
+
 function adminRoomGroupsPayload(state, rooms = []) {
   const roomByKey = new Map(rooms.map((room) => [roomKey(room.name), room]));
   const applications = Object.values(state.applications || {}).filter((application) => applicationApprovedAndPaid(state, application));
@@ -12557,14 +12697,15 @@ function adminRoomGroupsPayload(state, rooms = []) {
     const linkedGameApplications = gameRoomApplicationsForBase(state, account, application)
       .filter((item) => applicationApprovedAndPaid(state, item));
     const roomPayload = applicationRoomPayload(state, account, application);
+    const bridgeRooms = bridgeConnectRoomsPayload(state, account, application);
     return {
       baseApplication: publicApplicationView(application, state),
-      baseRoom: roomByKey.get(roomKey(application.roomName)) || roomAdminView(ensureRoom(state, application.roomName), state, { application }),
+      baseRoom: adminRoomGroupRoomPreview(roomByKey.get(roomKey(application.roomName)) || roomAdminView(ensureRoom(state, application.roomName), state, { application }), application),
       gameApplications: linkedGameApplications.map((item) => publicApplicationView(item, state)),
-      gameRooms: linkedGameApplications.map((item) => roomByKey.get(roomKey(item.roomName)) || roomAdminView(ensureRoom(state, item.roomName), state, { application: item })),
+      gameRooms: linkedGameApplications.map((item) => adminRoomGroupRoomPreview(roomByKey.get(roomKey(item.roomName)) || roomAdminView(ensureRoom(state, item.roomName), state, { application: item }), item)),
       roomModeSettings: roomModeSettingsPayload(state, application, linkedGameApplications),
-      bridgeDiagnostics: bridgeConnectDiagnosticsPayload(state, account, application, bridgeConnectRoomsPayload(state, account, application)),
-      bridgeRoomsPreview: bridgeConnectRoomsPayload(state, account, application),
+      bridgeDiagnostics: bridgeConnectDiagnosticsPayload(state, account, application, bridgeRooms),
+      bridgeRoomsPreview: bridgeRooms.map(adminBridgeRoomPreview),
       connectCode: roomPayload.bridgeConnectCode || ""
     };
   });
@@ -12579,17 +12720,26 @@ function adminRoomGroupsPayload(state, rooms = []) {
       baseApplication: null,
       baseRoom: null,
       gameApplications: [publicApplicationView(gameApplication, state)],
-      gameRooms: [roomByKey.get(roomKey(gameApplication.roomName)) || roomAdminView(ensureRoom(state, gameApplication.roomName), state, { application: gameApplication })],
+      gameRooms: [adminRoomGroupRoomPreview(roomByKey.get(roomKey(gameApplication.roomName)) || roomAdminView(ensureRoom(state, gameApplication.roomName), state, { application: gameApplication }), gameApplication)],
       roomModeSettings: roomModeSettingsPayload(state, {}, [gameApplication]),
       bridgeDiagnostics: bridgeConnectDiagnosticsPayload(state, account, gameApplication, bridgeConnectRoomsPayload(state, account, gameApplication)),
-      bridgeRoomsPreview: bridgeConnectRoomsPayload(state, account, gameApplication),
+      bridgeRoomsPreview: bridgeConnectRoomsPayload(state, account, gameApplication).map(adminBridgeRoomPreview),
       connectCode: applicationRoomPayload(state, account, gameApplication).bridgeConnectCode || ""
     });
   }
   return groups.sort((left, right) => keyFor(left.baseRoom?.name || left.gameRooms?.[0]?.name).localeCompare(keyFor(right.baseRoom?.name || right.gameRooms?.[0]?.name)));
 }
 
+function ensureAdminApplicationRooms(state = {}) {
+  Object.values(state.applications || {})
+    .filter((application) => applicationApprovedAndPaid(state, application))
+    .forEach((application) => {
+      if (normalizeText(application.roomName)) ensureRoom(state, application.roomName);
+    });
+}
+
 function adminRoomsPayload(state) {
+  ensureAdminApplicationRooms(state);
   const rooms = Object.values(state.rooms || {})
     .map((roomState) => roomAdminView(roomState, state))
     .sort((left, right) => keyFor(left.name).localeCompare(keyFor(right.name)));
@@ -16660,6 +16810,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/대장간") return blacksmithCommand(roomState, sender);
   if (command === "/제작가능") return craftableEquipmentCommand(roomState, sender);
   if (command === "/제작") return craftWeaponCommand(roomState, sender, text);
+  if (command === "/자동제작") return autoCraftEquipmentCommand(roomState, sender);
   if (command === "/강화") return rpgEnhanceCommand(roomState, sender, text);
   if (command === "/강화목록") return rpgEnhancementListCommand(roomState, sender);
   if (command === "/강화상세") return rpgEnhancementDetailCommand(roomState, sender);
@@ -16845,6 +16996,30 @@ export async function handleChatEvent(payload) {
       saveRequired
     })
   });
+  const applyRecordTiming = (record) => {
+    const timing = chatTimingPayload(timingStartedAt, {
+      receivedAt: serverReceivedAt,
+      eventId,
+      loadStateMs,
+      guardMs,
+      commandMs,
+      logMs,
+      saveStateMs,
+      cacheHit,
+      duplicate,
+      saveRequired
+    });
+    if (record?.analyticsLog) {
+      record.analyticsLog.totalMs = timing.totalMs;
+      record.analyticsLog.loadStateMs = timing.loadStateMs;
+      record.analyticsLog.guardMs = timing.guardMs;
+      record.analyticsLog.commandMs = timing.commandMs;
+      record.analyticsLog.logMs = timing.logMs;
+      record.analyticsLog.saveStateMs = timing.saveStateMs;
+    }
+    if (record?.event) record.event.timing = timing;
+    return timing;
+  };
   const room = normalizeText(payload?.room);
   const message = normalizeText(payload?.msg || payload?.message);
   const sender = normalizeText(payload?.sender) || "익명";
@@ -16882,12 +17057,11 @@ export async function handleChatEvent(payload) {
     });
     logMs = elapsedMs(logStartedAt);
     record.analyticsLog.logMs = logMs;
-    record.event.timing = { ...record.event.timing, logMs };
+    applyRecordTiming(record);
     const saveStartedAt = performance.now();
     await saveState(state);
     saveStateMs = elapsedMs(saveStartedAt);
-    record.analyticsLog.saveStateMs = saveStateMs;
-    record.analyticsLog.totalMs = elapsedMs(timingStartedAt);
+    applyRecordTiming(record);
     return withTiming({ ok: true, reply: null, ignored: true, duplicate: true, reason: "duplicate_event" });
   }
   const registeredRoom = isRegisteredRoomPayload(payload, state, room);
@@ -16947,11 +17121,11 @@ export async function handleChatEvent(payload) {
     record.analyticsLog.ignoreReason = !message ? "empty_message" : "bot_sender";
     record.event.status = "ignored";
     record.event.ignoreReason = record.analyticsLog.ignoreReason;
+    applyRecordTiming(record);
     const saveStartedAt = performance.now();
     await saveState(state);
     saveStateMs = elapsedMs(saveStartedAt);
-    record.analyticsLog.saveStateMs = saveStateMs;
-    record.analyticsLog.totalMs = elapsedMs(timingStartedAt);
+    applyRecordTiming(record);
     return withTiming({ ok: true, reply: null, ignored: true });
   }
 
@@ -16969,27 +17143,13 @@ export async function handleChatEvent(payload) {
   record.analyticsLog.saveRequired = saveRequired;
   record.analyticsLog.commandMs = commandMs;
   record.event.status = record.analyticsLog.status;
-  record.event.timing = { ...record.event.timing, commandMs };
+  applyRecordTiming(record);
   if (saveRequired) {
     const saveStartedAt = performance.now();
     await saveState(state);
     saveStateMs = elapsedMs(saveStartedAt);
   }
-  record.analyticsLog.saveStateMs = saveStateMs;
-  record.analyticsLog.totalMs = elapsedMs(timingStartedAt);
-  record.event.timing = {
-    receivedAt: serverReceivedAt,
-    eventId,
-    loadStateMs,
-    guardMs,
-    commandMs,
-    logMs,
-    saveStateMs,
-    totalMs: record.analyticsLog.totalMs,
-    cacheHit,
-    duplicate,
-    saveRequired
-  };
+  applyRecordTiming(record);
   return withTiming({
     ok: true,
     reply,

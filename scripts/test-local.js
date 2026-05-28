@@ -4,6 +4,8 @@ import { createHmac } from "node:crypto";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as consoleDomain from "../src/console-app/domain.js";
+import { preferredAdminRow } from "../src/console-app/domain.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -380,6 +382,55 @@ try {
   assert.equal(health.json.additionalRoomPriceKrw, 2200);
   assert.equal(health.json.adminConsoleEnabled, true);
 
+  const inactiveAdminRow = {
+    id: "inactive",
+    name: "활동없는방",
+    raw: {
+      baseRoom: {
+        name: "활동없는방",
+        diagnostics: {}
+      }
+    }
+  };
+  const activeAdminRow = {
+    id: "active",
+    name: "최근활동방",
+    raw: {
+      baseRoom: {
+        name: "최근활동방",
+        diagnostics: { lastAnalyticsLogAt: "2026-05-28T10:00:00.000Z" }
+      }
+    }
+  };
+  assert.equal(preferredAdminRow([inactiveAdminRow, activeAdminRow])?.id, "active");
+  assert.equal(preferredAdminRow([inactiveAdminRow, activeAdminRow], "inactive")?.id, "inactive");
+  assert.equal(typeof consoleDomain.combinedGameOpsOverview, "function");
+  const combinedGameOverview = consoleDomain.combinedGameOpsOverview([
+    {
+      gameOpsOverview: {
+        statusLabel: "게임 사용 가능",
+        installedGamePacks: [{ id: "rpg-adventure", title: "RPG 모험팩" }],
+        cooldowns: [{ command: "/던전", seconds: 30 }],
+        rewards: { diceReward: 7, fishingReward: "물고기 아이템" },
+        shopItemCount: 1,
+        recentTopCommands: []
+      }
+    },
+    {
+      gameOpsOverview: {
+        statusLabel: "게임 사용 가능",
+        installedGamePacks: [{ id: "rpg-adventure", title: "RPG 모험팩" }],
+        cooldowns: [{ command: "/던전", seconds: 30 }],
+        rewards: { diceReward: 7, fishingReward: "물고기 아이템" },
+        shopItemCount: 2,
+        recentTopCommands: [{ command: "/낚시", count: 73 }, { command: "/던전", count: 52 }]
+      }
+    }
+  ]);
+  assert.equal(combinedGameOverview.recentTopCommands[0].command, "/낚시");
+  assert.equal(combinedGameOverview.recentTopCommands[0].count, 73);
+  assert.equal(combinedGameOverview.shopItemCount, 3);
+
   const outdatedHealth = await request("/health?versionCode=17");
   assert.equal(outdatedHealth.response.status, 200);
   assert.equal(outdatedHealth.json.appUpdateRequired, true);
@@ -622,10 +673,12 @@ try {
   assert.match(homeText, /0\.5\.28/);
   assert.match(homeText, /자동탐험권|자동낚시권|자동뽑기권/);
 
-  for (const pagePath of ["/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup", "/forgot-password", "/reset-password", "/apply", "/account", "/console", "/my-rooms", "/setup", "/license", "/status", "/command-store", "/help/pet", "/help/rpg", "/help/monster", "/help/attendance", "/help/ranking", "/help/games", "/help/shop"]) {
+  for (const pagePath of ["/", "/privacy", "/terms", "/updates", "/notice", "/store", "/guide", "/buyer-guide", "/login", "/signup", "/forgot-password", "/reset-password", "/apply", "/account", "/console", "/my-rooms", "/setup", "/license", "/status", "/command-store", "/help/pet", "/help/rpg", "/help/monster", "/help/attendance", "/help/ranking", "/help/games", "/help/shop", "/admin"]) {
     const page = await fetch(`${baseUrl}${pagePath}`);
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-type") || "", /text\/html/);
+    const pageText = await page.text();
+    assert.match(pageText, /<meta\s+name="description"\s+content="[^"]{20,}"/);
   }
 
   const noticePageText = await (await fetch(`${baseUrl}/notice`)).text();
@@ -639,6 +692,11 @@ try {
   assert.match(updatesPageText, /동\/은\/금\/다이아/);
   assert.match(updatesPageText, /픽셀곰 0\.5\.28/);
   assert.match(updatesPageText, /자동탐험권|자동낚시권|자동뽑기권/);
+  assert.match(updatesPageText, /어드민 속도 진단/);
+  assert.match(updatesPageText, /느린 응답 로그 누락/);
+  assert.match(updatesPageText, /초기 로딩 payload/);
+  assert.match(updatesPageText, /SEO 메타/);
+  assert.match(updatesPageText, /자동던전 대량 실행/);
   assert.match(updatesPageText, /구매자 콘솔 단계 안내/);
   assert.match(updatesPageText, /승인 전\/승인 후\/앱 연결 완료/);
   assert.match(updatesPageText, /픽셀곰 0\.5\.00/);
@@ -3122,10 +3180,39 @@ try {
   assert.equal(adminGameRoomLink.json.application.linkedApplicationId, adminBaseApply.json.application.id);
   assert.equal(adminGameRoomLink.json.roomGroups.some((group) => group.baseApplication?.id === adminBaseApply.json.application.id && group.gameApplications.some((item) => item.id === adminGameApply.json.application.id)), true);
 
+  const stateBeforeAdminRoomsPayload = await readTestState();
+  const removedAdminBaseRoom = stateBeforeAdminRoomsPayload.rooms["관리자기준방"];
+  const removedAdminGameRoom = stateBeforeAdminRoomsPayload.rooms["관리자게임방"];
+  delete stateBeforeAdminRoomsPayload.rooms["관리자기준방"];
+  delete stateBeforeAdminRoomsPayload.rooms["관리자게임방"];
+  await writeFile(testDbPath, `${JSON.stringify(stateBeforeAdminRoomsPayload, null, 2)}\n`, "utf8");
   const adminRoomsAfterGameLink = await request("/api/admin/rooms?token=test-admin-token");
   const adminLinkedGroup = adminRoomsAfterGameLink.json.roomGroups.find((group) => group.baseApplication?.id === adminBaseApply.json.application.id);
+  assert.equal(adminRoomsAfterGameLink.json.rooms.some((room) => room.name === "관리자기준방"), true);
+  assert.equal(adminRoomsAfterGameLink.json.rooms.some((room) => room.name === "관리자게임방"), true);
+  const adminHydrationBaseRoom = adminRoomsAfterGameLink.json.rooms.find((room) => room.name === "관리자기준방");
+  const adminHydrationGameRoom = adminRoomsAfterGameLink.json.rooms.find((room) => room.name === "관리자게임방");
+  assert.equal(adminHydrationBaseRoom.roomStatusSnapshot.role, "general");
+  assert.equal(adminHydrationGameRoom.roomStatusSnapshot.role, "game");
   assert.equal(adminLinkedGroup.bridgeDiagnostics.responseRoomCount, 2);
   assert.equal(adminLinkedGroup.gameRooms.some((room) => room.name === "관리자게임방"), true);
+  assert.equal(adminLinkedGroup.baseRoom.applicationId, adminBaseApply.json.application.id);
+  assert.equal(adminLinkedGroup.baseRoom.roomName, "관리자기준방");
+  assert.equal(adminLinkedGroup.baseRoom.roomId, "adminBase1");
+  assert.equal(adminLinkedGroup.baseRoom.roomLink, "https://open.kakao.com/o/adminBase1");
+  assert.equal(adminLinkedGroup.baseRoom.roomRole, "general");
+  const adminLinkedGameRoom = adminLinkedGroup.gameRooms.find((room) => room.name === "관리자게임방");
+  assert.equal(adminLinkedGameRoom.applicationId, adminGameApply.json.application.id);
+  assert.equal(adminLinkedGameRoom.roomName, "관리자게임방");
+  assert.equal(adminLinkedGameRoom.roomId, "adminGame1");
+  assert.equal(adminLinkedGameRoom.roomLink, "https://open.kakao.com/o/adminGame1");
+  assert.equal(adminLinkedGameRoom.roomRole, "game");
+  assert.equal(adminLinkedGroup.baseRoom.commandPacks, undefined);
+  assert.equal(adminLinkedGroup.gameRooms.some((room) => room.commandPacks), false);
+  const stateAfterMissingRoomPayloadCheck = await readTestState();
+  stateAfterMissingRoomPayloadCheck.rooms["관리자기준방"] = removedAdminBaseRoom;
+  stateAfterMissingRoomPayloadCheck.rooms["관리자게임방"] = removedAdminGameRoom;
+  await writeFile(testDbPath, `${JSON.stringify(stateAfterMissingRoomPayloadCheck, null, 2)}\n`, "utf8");
 
   const adminRenameRoom = await request("/api/admin/rooms", {
     method: "POST",
@@ -4404,6 +4491,7 @@ try {
     });
     assert.match(recommended.json.reply, new RegExp(`추천 명령어: ${title}`));
     assert.match(recommended.json.reply, expected);
+    if (topic === "RPG") assert.match(recommended.json.reply, /\/자동제작/);
     assert.match(recommended.json.reply, /많이 쓰는 명령어 TOP/);
   }
 
@@ -5487,6 +5575,28 @@ try {
   assert.doesNotMatch(autoHuntCraftableList.json.reply, /현재 제작 가능한 장비가 없습니다/);
   assert.match(autoHuntCraftableList.json.reply, /(용암|천공|왕릉|심연)/);
 
+  const autoHuntTimingState = await readTestState();
+  const autoHuntTimingPerson = autoHuntTimingState.rooms["테스트방"].people["자동던전타이밍러 여"] || {};
+  autoHuntTimingState.rooms["테스트방"].people["자동던전타이밍러 여"] = {
+    currentName: "자동던전타이밍러 여",
+    names: ["자동던전타이밍러 여"],
+    points: 0,
+    ...autoHuntTimingPerson,
+    inventory: {
+      ...(autoHuntTimingPerson.inventory || {}),
+      "9303": 5000
+    }
+  };
+  await writeFile(testDbPath, `${JSON.stringify(autoHuntTimingState, null, 2)}\n`, "utf8");
+  const autoHuntTimingRun = await chatPayload({
+    room: "테스트방",
+    msg: "/자동던전 상급 5000",
+    sender: "자동던전타이밍러 여",
+    eventId: `auto-hunt-timing-${process.pid}`
+  });
+  assert.match(autoHuntTimingRun.json.reply, /상급 심연 50000회 요약/);
+  assert.ok(autoHuntTimingRun.json.timing.commandMs < 250, `auto hunt commandMs ${autoHuntTimingRun.json.timing.commandMs}`);
+
   await chat("/아이템지급 자동호환러 여 9303 1", "관리자");
   const legacyAutoHuntRun = await chat("/자동사냥 중급", "자동호환러 여");
   assert.match(legacyAutoHuntRun.json.reply, /자동던전 결과/);
@@ -5513,6 +5623,41 @@ try {
   assert.match(autoExploreUnlimitedRun.json.reply, /자동탐험 결과/);
   assert.match(autoExploreUnlimitedRun.json.reply, /120회/);
   assert.match(autoExploreUnlimitedRun.json.reply, /남은 자동탐험권: 0장/);
+
+  const autoExploreTimingState = await readTestState();
+  const autoExploreTimingPerson = autoExploreTimingState.rooms["테스트방"].people["자동탐험타이밍러 여"] || {};
+  autoExploreTimingState.rooms["테스트방"].people["자동탐험타이밍러 여"] = {
+    currentName: "자동탐험타이밍러 여",
+    names: ["자동탐험타이밍러 여"],
+    points: 0,
+    ...autoExploreTimingPerson,
+    inventory: {
+      ...(autoExploreTimingPerson.inventory || {}),
+      "9305": 50000
+    }
+  };
+  await writeFile(testDbPath, `${JSON.stringify(autoExploreTimingState, null, 2)}\n`, "utf8");
+  const autoExploreTimingEventId = `auto-explore-timing-${process.pid}`;
+  const autoExploreTimingRun = await chatPayload({
+    room: "테스트방",
+    msg: "/자동탐험 50000",
+    sender: "자동탐험타이밍러 여",
+    eventId: autoExploreTimingEventId
+  });
+  assert.match(autoExploreTimingRun.json.reply, /자동탐험 결과/);
+  assert.match(autoExploreTimingRun.json.reply, /500000회/);
+  assert.ok(autoExploreTimingRun.json.timing.totalMs >= autoExploreTimingRun.json.timing.commandMs);
+  const autoExploreTimingStateAfterRun = await readTestState();
+  const autoExploreTimingInventory = autoExploreTimingStateAfterRun.rooms["테스트방"].people["자동탐험타이밍러 여"].inventory || {};
+  const autoExploreRewardKinds = ["9101", "9102", "9103", "9104", "9105"].filter((itemId) => Number(autoExploreTimingInventory[itemId] || 0) > 0);
+  assert.ok(autoExploreRewardKinds.length > 1);
+  const autoExploreTimingLogs = await request(`/api/admin/room-logs?room=${encodeURIComponent("테스트방")}&limit=20`, {
+    headers: { "x-admin-session": "test-admin-token" }
+  });
+  assert.equal(autoExploreTimingLogs.response.status, 200);
+  const persistedAutoExploreTimingLog = autoExploreTimingLogs.json.logs.find((log) => log.eventId === autoExploreTimingEventId);
+  assert.ok(persistedAutoExploreTimingLog);
+  assert.ok(persistedAutoExploreTimingLog.totalMs >= persistedAutoExploreTimingLog.commandMs);
 
   await chat("/아이템지급 자동모험러 여 9305 1", "관리자");
   const autoAdventureRun = await chat("/자동모험 1", "자동모험러 여");
@@ -5578,6 +5723,7 @@ try {
   assert.match(smith.json.reply, /확장 제작식/);
   assert.match(smith.json.reply, /\/제작가능/);
   assert.match(smith.json.reply, /\/강화목록/);
+  assert.match(smith.json.reply, /\/자동제작/);
 
   const craftableList = await chat("/제작가능", "모험가 여");
   assert.match(craftableList.json.reply, /제작 가능 목록/);
@@ -5592,6 +5738,27 @@ try {
   assert.match(equipment.json.reply, /모험가 여님의 장비/);
   assert.match(equipment.json.reply, /수습 모험검/);
   assert.match(equipment.json.reply, /총 전투력/);
+
+  await chat("/아이템지급 자동제작러 여 11000 2", "관리자");
+  await chat("/아이템지급 자동제작러 여 11009 2", "관리자");
+  await chat("/아이템지급 자동제작러 여 11014 2", "관리자");
+  await chat("/포인트지급 자동제작러 여 500", "관리자");
+  const autoCraft = await chat("/자동제작", "자동제작러 여");
+  assert.match(autoCraft.json.reply, /자동제작 완료/);
+  assert.match(autoCraft.json.reply, /제작 3개/);
+  assert.match(autoCraft.json.reply, /수습 모험검/);
+  assert.match(autoCraft.json.reply, /수습 가죽갑옷/);
+  assert.match(autoCraft.json.reply, /광부 부적/);
+  assert.match(autoCraft.json.reply, /자동 장착 3개/);
+  assert.doesNotMatch(autoCraft.json.reply, /#\d+|12001|12005|12009/);
+  const autoCraftEquipment = await chat("/장비", "자동제작러 여");
+  assert.match(autoCraftEquipment.json.reply, /수습 모험검/);
+  assert.match(autoCraftEquipment.json.reply, /수습 가죽갑옷/);
+  assert.match(autoCraftEquipment.json.reply, /광부 부적/);
+  await chat("/아이템지급 자동제작러 여 11000 2", "관리자");
+  await chat("/포인트지급 자동제작러 여 100", "관리자");
+  const autoCraftNoUpgrade = await chat("/자동제작", "자동제작러 여");
+  assert.match(autoCraftNoUpgrade.json.reply, /현재 장비보다 강한 제작 가능 장비가 없습니다/);
 
   await chat("/아이템지급 모험가 여 11000 5", "관리자");
   await chat("/포인트지급 모험가 여 500", "관리자");
@@ -6114,9 +6281,24 @@ try {
   assert.equal(sensitiveChat.json.reply, null);
 
   const slowEventId = `slow-event-${process.pid}`;
+  const slowEventAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const newerFastLogs = Array.from({ length: 525 }, (_, index) => ({
+    at: new Date(Date.now() - 60 * 60 * 1000 - index * 5 * 1000).toISOString(),
+    eventId: `${slowEventId}-fast-${index}`,
+    room: "테스트방",
+    sender: `빠른사용자${index}`,
+    status: "handled",
+    isCommand: true,
+    command: "/빠른명령",
+    messagePreview: "/빠른명령",
+    totalMs: 50,
+    commandMs: 20,
+    saveStateMs: 5,
+    replyLength: 10
+  }));
   const slowState = await readTestState();
   slowState.rooms["테스트방"].analyticsLogs.push({
-    at: new Date().toISOString(),
+    at: slowEventAt,
     eventId: slowEventId,
     room: "테스트방",
     sender: "느린사용자",
@@ -6141,7 +6323,7 @@ try {
     commandMs: 9000,
     saveStateMs: 900,
     replyLength: 50
-  });
+  }, ...newerFastLogs);
   await writeFile(testDbPath, `${JSON.stringify(slowState, null, 2)}\n`, "utf8");
 
   const roomLogsUnauthorized = await request(`/api/admin/room-logs?room=${encodeURIComponent("테스트방")}`);
@@ -6208,6 +6390,7 @@ try {
     headers: { "x-admin-session": "test-admin-token" }
   });
   assert.equal(slowEvents.response.status, 200);
+  assert.ok(slowEvents.json.events.length <= 20);
   assert.ok(slowEvents.json.events.some((event) => event.eventId === slowEventId && event.command === "/자동던전"));
   const recentSlowEvents = await request(`/api/admin/live-events?roomName=${encodeURIComponent("테스트방")}&status=slow&window=24h&limit=20`, {
     headers: { "x-admin-session": "test-admin-token" }
