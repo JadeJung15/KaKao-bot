@@ -92,6 +92,7 @@ export const FEATURES = [
   "admin-diagnostics-api",
   "admin-backup-restore",
   "chat-mini-games",
+  "point-chance-game-pack",
   "fixed-command-catalog",
   "custom-room-commands",
   "public-service-pages",
@@ -353,6 +354,8 @@ const LIKE_POINT_COST = 4;
 const CHEER_POINT_COST = 50;
 const MAX_CHEER_MESSAGE_LENGTH = 80;
 const LUCKY_DRAW_POINT_COST = 100;
+const CHANCE_GAME_MIN_BET = 10;
+const CHANCE_GAME_MAX_BET = 100000;
 const TRANSFER_FEE_RATE = 0.1;
 const DICE_REWARD = 30;
 const FISHING_REWARD = 40;
@@ -371,7 +374,14 @@ const GAME_COOLDOWNS_MS = Object.freeze({
   petSleep: 10 * 1000,
   petTrain: 30 * 1000,
   luckyDraw: 10 * 1000,
-  oddEven: 5 * 1000
+  oddEven: 5 * 1000,
+  coinFlip: 5 * 1000,
+  roulette: 5 * 1000,
+  slotMachine: 5 * 1000,
+  lottery: 5 * 1000,
+  highLow: 5 * 1000,
+  bombAvoid: 5 * 1000,
+  treasureBox: 5 * 1000
 });
 const GAME_COOLDOWN_LABELS = Object.freeze({
   dice: "주사위는",
@@ -387,7 +397,14 @@ const GAME_COOLDOWN_LABELS = Object.freeze({
   petSleep: "펫재우기는",
   petTrain: "펫훈련은",
   luckyDraw: "뽑기는",
-  oddEven: "홀짝은"
+  oddEven: "홀짝은",
+  coinFlip: "코인은",
+  roulette: "룰렛은",
+  slotMachine: "슬롯은",
+  lottery: "복권은",
+  highLow: "하이로우는",
+  bombAvoid: "폭탄피하기는",
+  treasureBox: "보물상자는"
 });
 const GAME_REWARD_MAX = 1000000;
 const GAME_SEASON_NAME_LIMIT = 40;
@@ -538,7 +555,7 @@ const FIXED_COMMAND_GROUPS = Object.freeze([
   {
     title: "게임/연동 예약",
     commands: [
-      "/게임", "/주사위", "/낚시", "/탐험", "/자동탐험", "/자동모험", "/자동낚시", "/뽑기", "/자동뽑기", "/뽑기목록", "/홀", "/짝", "/미끼상점", "/미끼구매", "/어항", "/수족관",
+      "/게임", "/확률게임", "/주사위", "/낚시", "/탐험", "/자동탐험", "/자동모험", "/자동낚시", "/뽑기", "/자동뽑기", "/뽑기목록", "/홀", "/짝", "/코인", "/동전", "/룰렛", "/슬롯", "/복권", "/하이로우", "/폭탄피하기", "/보물상자", "/미끼상점", "/미끼구매", "/어항", "/수족관",
       "/모험", "/던전", "/던전목록", "/자동던전", "/대장간", "/제작", "/자동제작", "/제작가능", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장착",
       "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터훈련", "/몬스터전투", "/몬스터도감",
       "/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점",
@@ -1537,7 +1554,7 @@ const COMMAND_PACK_COMMANDS = Object.freeze({
   "ops-core": ["/상태", "/도움말", "/브릿지", "/js상태", "/메시지", "/날씨", "/운세", "/신고"],
   "attendance-growth": ["/출석", "/미출석", "/출석순위", "/포인트", "/내정보", "/포인트순위"],
   "point-economy": ["/포인트", "/내정보", "/좋아요", "/응원", "/이체", "/포인트순위", "/좋아요순위", "/레벨순위"],
-  "game-chance": ["/게임", "/오늘할일", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/포인트"],
+  "game-chance": ["/게임", "/확률게임", "/오늘할일", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝", "/코인", "/룰렛", "/슬롯", "/복권", "/하이로우", "/폭탄피하기", "/보물상자", "/미끼상점", "/미끼구매", "/어항", "/수족관", "/포인트"],
   "rpg-adventure": ["/모험", "/던전", "/던전목록", "/자동던전", "/자동탐험", "/자동모험", "/자동낚시", "/자동뽑기", "/대장간", "/제작가능", "/제작", "/자동제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템", "/아이템", "/보유아이템", "/아이템상세", "/판매목록", "/판매미리보기", "/판매추천", "/정리추천", "/일괄판매", "/가방", "/가방정리", "/판매", "/아이템잠금", "/아이템잠금해제", "/잠금목록", "/포인트"],
   "pixel-monster-rpg": ["/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감", "/포인트"],
   "pet-raising": ["/펫입양", "/펫", "/펫먹이", "/펫놀기", "/펫씻기", "/펫재우기", "/펫훈련", "/펫상점", "/포인트"],
@@ -1626,11 +1643,11 @@ const COMMAND_PACKS = Object.freeze([
     title: "게임 확률팩",
     tier: "Game",
     categoryTitle: "명령어 팩",
-    description: "채팅방 내부 가상 포인트만 사용하는 뽑기와 홀짝 게임 팩입니다.",
+    description: "채팅방 내부 가상 포인트만 사용하는 주사위, 뽑기, 홀짝, 코인, 룰렛, 슬롯, 복권, 하이로우, 폭탄피하기, 보물상자 10종 게임 팩입니다.",
     features: { games: true, points: true },
     fixedCommands: COMMAND_PACK_COMMANDS["game-chance"],
     customCommands: [],
-    tags: ["게임", "뽑기", "홀짝", "확률", "가상포인트"]
+    tags: ["게임", "뽑기", "홀짝", "확률", "가상포인트", "코인", "룰렛", "슬롯"]
   },
   {
     id: "shop-inventory",
@@ -1910,14 +1927,14 @@ const GAME_PACK_HELP_TOPICS = Object.freeze({
     related: ["attendance-growth", "point-economy"]
   },
   games: {
-    title: "미니게임 확률팩",
+    title: "포인트 확률 게임팩 10종",
     path: "/help/games",
     packIds: ["game-chance"],
-    aliases: ["games", "game", "게임", "미니게임"],
-    intro: "주사위, 낚시, 탐험, 뽑기, 홀짝을 제공하는 채팅방 미니게임 팩입니다.",
-    firstSteps: ["/명령어설치 pk.004", "/기능켜기 게임", "/게임", "/주사위"],
+    aliases: ["games", "game", "게임", "미니게임", "확률게임"],
+    intro: "주사위, 뽑기, 홀짝, 코인, 룰렛, 슬롯, 복권, 하이로우, 폭탄피하기, 보물상자를 제공하는 가상 포인트 전용 확률 게임팩입니다.",
+    firstSteps: ["/명령어설치 pk.004", "/기능켜기 게임", "/확률게임", "/코인 앞 100"],
     adminSetup: ["게임 확률팩: /명령어설치 pk.004", "게임 기능 켜기: /기능켜기 게임"],
-    examples: ["/게임", "/주사위", "/미끼구매 3", "/낚시", "/홀 100"],
+    examples: ["/확률게임", "/코인 앞 100", "/룰렛 빨강 100", "/슬롯 100", "/보물상자 2 100"],
     related: ["rpg-adventure", "pet-raising"]
   },
   shop: {
@@ -2036,7 +2053,7 @@ function parseBotCommand(message) {
 const READ_ONLY_SAVE_SKIP_COMMANDS = new Set([
   "/상태", "/status", "/브릿지", "/bridge", "/js상태", "/jsstatus", "/로컬상태",
   "/도움말", "/help", "/?", "/메뉴", "/처음", "/찾기", "/명령어",
-  "/게임", "/게임명령어", "/점메추", "/명령어팩", "/게임팩도움말",
+  "/게임", "/게임명령어", "/확률게임", "/점메추", "/명령어팩", "/게임팩도움말",
   "/포인트", "/내포인트", "/고정명령어", "/추천", "/추천명령어", "/오늘할일", "/할일",
   "/판매추천", "/정리추천", "/명령어목록", "/커스텀명령어", "/명령어검색", "/명령어설치목록",
   "/명령어팩목록", "/장착팩", "/팩목록", "/방정보", "/방목록", "/구독상태", "/기능", "/기능목록",
@@ -4635,12 +4652,20 @@ function gameCommandCatalogText() {
     "",
     "현재 사용",
     "/게임 - 미니게임 안내",
+    "/확률게임 - 포인트 확률 게임팩 10종 안내",
     "/주사위 - 1~6 결과에 따라 포인트 획득",
     "/낚시 - 랜덤 보상 획득",
     "/탐험 - 랜덤 보상 획득",
     "/뽑기 - 가상 포인트 뽑기",
     "/뽑기목록 - 뽑기 확률과 보상 확인",
     "/홀 금액 또는 /짝 금액 - 홀짝 베팅",
+    "/코인 앞 100 - 앞/뒤 맞히기",
+    "/룰렛 빨강 100 - 빨강/검정/초록 룰렛",
+    "/슬롯 100 - 3릴 슬롯",
+    "/복권 100 - 즉석 복권",
+    "/하이로우 하이 100 - 숫자 높낮이 맞히기",
+    "/폭탄피하기 3 100 - 1~5 중 폭탄 피하기",
+    "/보물상자 2 100 - 1~4 상자 선택",
     "",
     "예약",
     "/픽셀곰게임 - 별도 픽셀곰 게임 연동 예정",
@@ -8753,6 +8778,323 @@ function oddEvenCommand(roomState, sender, text) {
   ].join("\n");
 }
 
+function chanceGameGuideText() {
+  return [
+    "포인트 확률 게임팩 10종",
+    "",
+    "가상 포인트 전용입니다. 현금, 환전, 외부 거래와 연결하지 않습니다.",
+    `베팅 범위: ${formatPoint(CHANCE_GAME_MIN_BET)} ~ ${formatPoint(CHANCE_GAME_MAX_BET)}`,
+    "",
+    "1. /주사위 - 결과만큼 포인트 보상",
+    "2. /뽑기 - 고정 비용 랜덤 보상",
+    "3. /홀 100 - 홀짝 맞히기",
+    "4. /코인 앞 100 - 앞/뒤 맞히기",
+    "5. /룰렛 빨강 100 - 빨강/검정/초록 룰렛",
+    "6. /슬롯 100 - 같은 그림을 맞히는 3릴 슬롯",
+    "7. /복권 100 - 즉석 등급 뽑기",
+    "8. /하이로우 하이 100 - 숫자 높낮이 맞히기",
+    "9. /폭탄피하기 3 100 - 1~5 중 폭탄 피하기",
+    "10. /보물상자 2 100 - 1~4 상자 선택",
+    "",
+    "예시: /코인 앞 100, /룰렛 초록 100, /보물상자 2 100"
+  ].join("\n");
+}
+
+function chanceGameUsageText(usage) {
+  return [
+    `형식: ${usage}`,
+    "",
+    `베팅 범위: ${formatPoint(CHANCE_GAME_MIN_BET)} ~ ${formatPoint(CHANCE_GAME_MAX_BET)}`,
+    "가상 포인트 전용 게임입니다."
+  ].join("\n");
+}
+
+function chanceGameBetErrorText(amount, usage) {
+  if (!amount) return chanceGameUsageText(usage);
+  if (amount < CHANCE_GAME_MIN_BET) return `최소 베팅은 ${formatPoint(CHANCE_GAME_MIN_BET)}입니다.`;
+  if (amount > CHANCE_GAME_MAX_BET) return `최대 베팅은 ${formatPoint(CHANCE_GAME_MAX_BET)}입니다.`;
+  return "";
+}
+
+function normalizeChanceChoice(value, aliases) {
+  const key = normalizeText(value).toLowerCase();
+  return aliases[key] || "";
+}
+
+function parseChoiceChanceBet(text, commandPattern, aliases) {
+  const body = compactSpaces(text.replace(commandPattern, "")).trim();
+  const parts = body ? body.split(/\s+/) : [];
+  const amountIndex = parts.findIndex((part) => parseAmount(part));
+  const amount = amountIndex >= 0 ? parseAmount(parts[amountIndex]) : null;
+  const rawChoice = parts.filter((_, index) => index !== amountIndex).join(" ");
+  return {
+    choice: normalizeChanceChoice(rawChoice, aliases),
+    amount,
+    rawChoice
+  };
+}
+
+function parseAmountChanceBet(text, commandPattern) {
+  const body = compactSpaces(text.replace(commandPattern, "")).trim();
+  const amount = (body ? body.split(/\s+/) : [])
+    .map((part) => parseAmount(part))
+    .find((value) => value);
+  return { amount: amount || null };
+}
+
+function parseNumberChoiceChanceBet(text, commandPattern, maxChoice) {
+  const body = compactSpaces(text.replace(commandPattern, "")).trim();
+  const parts = body ? body.split(/\s+/) : [];
+  const choice = Number(parts[0] || 0);
+  const amount = parseAmount(parts[1]);
+  return {
+    choice: Number.isInteger(choice) && choice >= 1 && choice <= maxChoice ? choice : 0,
+    amount
+  };
+}
+
+function runPointChanceGame(roomState, sender, config) {
+  const betError = chanceGameBetErrorText(config.amount, config.usage);
+  if (betError) return betError;
+
+  const person = ensurePerson(roomState, sender);
+  if (person.points < config.amount) {
+    return [
+      "포인트가 부족합니다.",
+      "",
+      `• 필요 포인트 : ${formatPoint(config.amount)}`,
+      `• 보유 포인트 : ${formatPoint(person.points)}`
+    ].join("\n");
+  }
+  const cooldown = gameCooldownText(person, config.cooldownKey);
+  if (cooldown) return cooldown;
+
+  const outcome = config.play(config.amount);
+  const reward = Math.max(0, Math.trunc(Number(outcome.reward || 0)));
+  person.points -= config.amount;
+  person.spentPoints += config.amount;
+  if (reward > 0) person.points += reward;
+  markGameCooldown(person, config.cooldownKey);
+  recordRoomEvent(roomState, {
+    type: config.eventType,
+    name: person.currentName,
+    cost: config.amount,
+    reward,
+    ...(outcome.event || {})
+  });
+
+  return [
+    config.title,
+    "",
+    `참여자 : ${displayNameForPerson(roomState, person, sender)}`,
+    ...(outcome.lines || []),
+    `베팅 : ${formatPoint(config.amount)}`,
+    `배당 : ${outcome.payoutLabel || "x0"}`,
+    `지급 포인트 : ${formatPoint(reward)}`,
+    `보유 포인트 : ${formatPoint(person.points)}`
+  ].join("\n");
+}
+
+function coinFlipCommand(roomState, sender, text) {
+  const bet = parseChoiceChanceBet(text, /^\/(?:코인|동전)\s*/i, {
+    앞: "앞",
+    앞면: "앞",
+    head: "앞",
+    heads: "앞",
+    뒤: "뒤",
+    뒷면: "뒤",
+    tail: "뒤",
+    tails: "뒤"
+  });
+  if (!bet.choice) return chanceGameUsageText("/코인 앞 100 또는 /코인 뒤 100");
+  return runPointChanceGame(roomState, sender, {
+    title: "코인 결과",
+    cooldownKey: "coinFlip",
+    eventType: "chance_coin_flip",
+    amount: bet.amount,
+    usage: "/코인 앞 100 또는 /코인 뒤 100",
+    play: (amount) => {
+      const result = Math.random() < 0.5 ? "앞" : "뒤";
+      const win = bet.choice === result;
+      return {
+        reward: win ? amount * 2 : 0,
+        payoutLabel: "x2",
+        lines: [`선택 : ${bet.choice}`, `결과 : ${result}`, `당첨 : ${win ? "성공" : "실패"}`],
+        event: { choice: bet.choice, result, win }
+      };
+    }
+  });
+}
+
+function rouletteCommand(roomState, sender, text) {
+  const bet = parseChoiceChanceBet(text, /^\/룰렛\s*/i, {
+    빨강: "빨강",
+    빨간: "빨강",
+    레드: "빨강",
+    red: "빨강",
+    검정: "검정",
+    검은: "검정",
+    블랙: "검정",
+    black: "검정",
+    초록: "초록",
+    녹색: "초록",
+    그린: "초록",
+    green: "초록"
+  });
+  if (!bet.choice) return chanceGameUsageText("/룰렛 빨강 100 또는 /룰렛 초록 100");
+  return runPointChanceGame(roomState, sender, {
+    title: "룰렛 결과",
+    cooldownKey: "roulette",
+    eventType: "chance_roulette",
+    amount: bet.amount,
+    usage: "/룰렛 빨강 100 또는 /룰렛 초록 100",
+    play: (amount) => {
+      const roll = Math.random();
+      const result = roll < 0.475 ? "빨강" : roll < 0.95 ? "검정" : "초록";
+      const multiplier = bet.choice === result ? (result === "초록" ? 14 : 2) : 0;
+      return {
+        reward: amount * multiplier,
+        payoutLabel: bet.choice === "초록" ? "x14" : "x2",
+        lines: [`선택 : ${bet.choice}`, `결과 : ${result}`, `당첨 : ${multiplier > 0 ? "성공" : "실패"}`],
+        event: { choice: bet.choice, result, multiplier }
+      };
+    }
+  });
+}
+
+function slotMachineCommand(roomState, sender, text) {
+  const bet = parseAmountChanceBet(text, /^\/슬롯\s*/i);
+  const symbols = ["곰", "별", "벨", "체리", "보석"];
+  return runPointChanceGame(roomState, sender, {
+    title: "슬롯 결과",
+    cooldownKey: "slotMachine",
+    eventType: "chance_slot",
+    amount: bet.amount,
+    usage: "/슬롯 100",
+    play: (amount) => {
+      const reels = Array.from({ length: 3 }, () => symbols[Math.floor(Math.random() * symbols.length)]);
+      const counts = new Map(reels.map((symbol) => [symbol, reels.filter((item) => item === symbol).length]));
+      const maxCount = Math.max(...counts.values());
+      const multiplier = maxCount === 3 ? (reels[0] === "보석" ? 20 : 8) : maxCount === 2 ? 2 : 0;
+      return {
+        reward: amount * multiplier,
+        payoutLabel: multiplier ? `x${multiplier}` : "x0",
+        lines: [`릴 : ${reels.join(" / ")}`, `등급 : ${maxCount === 3 ? "트리플" : maxCount === 2 ? "페어" : "꽝"}`],
+        event: { reels, multiplier }
+      };
+    }
+  });
+}
+
+function lotteryCommand(roomState, sender, text) {
+  const bet = parseAmountChanceBet(text, /^\/복권\s*/i);
+  return runPointChanceGame(roomState, sender, {
+    title: "복권 결과",
+    cooldownKey: "lottery",
+    eventType: "chance_lottery",
+    amount: bet.amount,
+    usage: "/복권 100",
+    play: (amount) => {
+      const roll = Math.random();
+      const prize = roll < 0.02
+        ? { grade: "잭팟", multiplier: 20 }
+        : roll < 0.10
+          ? { grade: "1등", multiplier: 5 }
+          : roll < 0.35
+            ? { grade: "2등", multiplier: 2 }
+            : roll < 0.55
+              ? { grade: "본전", multiplier: 1 }
+              : { grade: "꽝", multiplier: 0 };
+      return {
+        reward: amount * prize.multiplier,
+        payoutLabel: `x${prize.multiplier}`,
+        lines: [`등급 : ${prize.grade}`],
+        event: { grade: prize.grade, multiplier: prize.multiplier }
+      };
+    }
+  });
+}
+
+function highLowCommand(roomState, sender, text) {
+  const bet = parseChoiceChanceBet(text, /^\/하이로우\s*/i, {
+    하이: "하이",
+    high: "하이",
+    높음: "하이",
+    로우: "로우",
+    low: "로우",
+    낮음: "로우"
+  });
+  if (!bet.choice) return chanceGameUsageText("/하이로우 하이 100 또는 /하이로우 로우 100");
+  return runPointChanceGame(roomState, sender, {
+    title: "하이로우 결과",
+    cooldownKey: "highLow",
+    eventType: "chance_high_low",
+    amount: bet.amount,
+    usage: "/하이로우 하이 100 또는 /하이로우 로우 100",
+    play: (amount) => {
+      const number = Math.floor(Math.random() * 13) + 1;
+      const result = number >= 8 ? "하이" : number <= 6 ? "로우" : "세븐";
+      const draw = result === "세븐";
+      const win = bet.choice === result;
+      const multiplier = draw ? 1 : win ? 2 : 0;
+      return {
+        reward: amount * multiplier,
+        payoutLabel: draw ? "x1" : "x2",
+        lines: [`선택 : ${bet.choice}`, `숫자 : ${number}`, `결과 : ${result}`, `당첨 : ${draw ? "무승부" : win ? "성공" : "실패"}`],
+        event: { choice: bet.choice, number, result, multiplier }
+      };
+    }
+  });
+}
+
+function bombAvoidCommand(roomState, sender, text) {
+  const bet = parseNumberChoiceChanceBet(text, /^\/폭탄피하기\s*/i, 5);
+  if (!bet.choice) return chanceGameUsageText("/폭탄피하기 3 100");
+  return runPointChanceGame(roomState, sender, {
+    title: "폭탄피하기 결과",
+    cooldownKey: "bombAvoid",
+    eventType: "chance_bomb_avoid",
+    amount: bet.amount,
+    usage: "/폭탄피하기 3 100",
+    play: (amount) => {
+      const bomb = Math.floor(Math.random() * 5) + 1;
+      const safe = bet.choice !== bomb;
+      return {
+        reward: safe ? Math.trunc(amount * 1.5) : 0,
+        payoutLabel: "x1.5",
+        lines: [`선택 : ${bet.choice}번`, `폭탄 : ${bomb}번`, `결과 : ${safe ? "생존" : "폭발"}`],
+        event: { choice: bet.choice, bomb, safe }
+      };
+    }
+  });
+}
+
+function treasureBoxCommand(roomState, sender, text) {
+  const bet = parseNumberChoiceChanceBet(text, /^\/보물상자\s*/i, 4);
+  if (!bet.choice) return chanceGameUsageText("/보물상자 2 100");
+  return runPointChanceGame(roomState, sender, {
+    title: "보물상자 결과",
+    cooldownKey: "treasureBox",
+    eventType: "chance_treasure_box",
+    amount: bet.amount,
+    usage: "/보물상자 2 100",
+    play: (amount) => {
+      const multipliers = [0, 0.5, 2, 5];
+      for (let i = multipliers.length - 1; i > 0; i -= 1) {
+        const swapIndex = Math.floor(Math.random() * (i + 1));
+        [multipliers[i], multipliers[swapIndex]] = [multipliers[swapIndex], multipliers[i]];
+      }
+      const multiplier = multipliers[bet.choice - 1] || 0;
+      return {
+        reward: Math.trunc(amount * multiplier),
+        payoutLabel: `x${multiplier}`,
+        lines: [`선택 : ${bet.choice}번`, `결과 : ${multiplier === 0 ? "빈 상자" : `${multiplier}배 상자`}`],
+        event: { choice: bet.choice, multiplier }
+      };
+    }
+  });
+}
+
 function transferCommand(roomState, sender, text) {
   const parsed = parseTargetAndAmount(text, /^\/이체\s*/i);
   if (!parsed?.target || !parsed.amount) return "형식: /이체 닉네임 포인트";
@@ -10532,7 +10874,7 @@ function gameHelpText(roomState) {
     "2. 낚시 수집: /미끼상점, /낚시, /자동낚시",
     "3. 펫 돌보기: /펫입양, /펫, /펫먹이",
     `4. 픽셀몬스터: /몬스터, /몬스터퀘스트, /몬스터보스 (${PIXEL_MONSTER_SPECIES_COUNT}종)`,
-    "5. 가벼운 게임: /주사위, /뽑기, /자동뽑기",
+    "5. 포인트 확률게임: /확률게임, /코인 앞 100, /룰렛 빨강 100",
     "6. 점메추: /점메추 한식, /점메추 매운거",
     "",
     "오늘 루틴: /오늘할일",
@@ -11094,7 +11436,8 @@ function bridgeJsServerText() {
 }
 
 const ACTIVE_GAME_ROOM_COMMANDS = new Set([
-  "/게임", "/게임명령어", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/확률뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝",
+  "/게임", "/게임명령어", "/확률게임", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/확률뽑기", "/뽑기목록", "/홀", "/짝", "/홀짝",
+  "/코인", "/동전", "/룰렛", "/슬롯", "/복권", "/하이로우", "/폭탄피하기", "/보물상자",
   "/미끼상점", "/미끼구매", "/어항", "/수족관",
   "/모험", "/던전", "/던전목록", "/자동던전", "/자동사냥", "/대장간", "/제작가능", "/제작", "/자동제작", "/강화", "/강화목록", "/강화상세", "/보상선택", "/장비", "/장비상세", "/스탯", "/장착", "/자동장착", "/세트아이템",
   "/몬스터탐험", "/포획", "/몬스터", "/몬스터목록", "/몬스터상세", "/몬스터팀", "/몬스터퀘스트", "/몬스터훈련", "/몬스터전투", "/몬스터진화", "/몬스터보스", "/몬스터도감",
@@ -11149,7 +11492,7 @@ function commandFeatureKey(command) {
   if (command === "/채팅오늘" || command === "/채팅금주") return "rankings";
   if (/^\/(?:최근이벤트|이벤트로그|원본로그|원본이벤트|입퇴장현황|닉이력|입퇴장상세)(?:\s|$)/.test(command)) return "history";
   if (/^\/(?:프로필|프로칠|내별명|별명목록|프로필등록|프로필삭제|별명등록|별명삭제|닉병합|닉네임병합|별명병합)(?:\s|$)/.test(command)) return "profiles";
-  if (/^\/(?:게임|오늘할일|주사위|낚시|자동낚시|탐험|자동탐험|자동모험|확률뽑기|뽑기|자동뽑기|뽑기목록|홀짝|홀|짝|미끼상점|미끼구매|어항|수족관|모험|던전|던전목록|자동던전|자동사냥|대장간|제작가능|제작|자동제작|강화|강화목록|강화상세|보상선택|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
+  if (/^\/(?:게임|확률게임|오늘할일|주사위|낚시|자동낚시|탐험|자동탐험|자동모험|확률뽑기|뽑기|자동뽑기|뽑기목록|홀짝|홀|짝|코인|동전|룰렛|슬롯|복권|하이로우|폭탄피하기|보물상자|미끼상점|미끼구매|어항|수족관|모험|던전|던전목록|자동던전|자동사냥|대장간|제작가능|제작|자동제작|강화|강화목록|강화상세|보상선택|장비|장비상세|스탯|장착|자동장착|세트아이템|몬스터탐험|포획|몬스터|몬스터목록|몬스터상세|몬스터팀|몬스터퀘스트|몬스터훈련|몬스터전투|몬스터진화|몬스터보스|몬스터도감|펫입양|펫|펫먹이|펫놀기|펫씻기|펫재우기|펫훈련|펫상점)(?:\s|$)/.test(command)) return "games";
   if (/^\/(?:포인트|내포인트|좋아요|응원|응원카드|이체|포인트지급|포인트차감|포인트설정|내정보|레벨|정보)(?:\s|$)/.test(command)) return "points";
   if (/^\/(?:상점|구매|구매내역|가방|가방정리|정리추천|판매추천|아이템|보유아이템|아이템상세|판매목록|판매미리보기|일괄판매|아이템잠금|아이템잠금해제|잠금목록|사용|가방선물|판매|상점추가|상점수정|상점삭제|상점정리|상점초기화|상점내역|아이템지급|아이템회수|기능아이템목록)(?:\s|$)/.test(command)) return "shop";
   if (/^\/(?:명령어목록|커스텀명령어)(?:\s|$)/.test(command)) return "customCommands";
@@ -11206,9 +11549,17 @@ const COMMAND_REGISTRY = Object.freeze([
   registryEntry("/내정보", "포인트", "레벨, 포인트, 채팅 정보 확인", { aliases: ["/레벨", "/정보"], requiresFeature: "points" }),
   registryEntry("/좋아요", "포인트", "포인트로 하트 보내기", { examples: ["/좋아요 닉네임 10"], requiresFeature: "points", searchableKeywords: ["하트"] }),
   registryEntry("/응원", "포인트", "포인트 응원 카드 보내기", { examples: ["/응원 닉네임 메시지"], requiresFeature: "points" }),
+  registryEntry("/확률게임", "게임", "포인트 확률 게임팩 10종 안내", { examples: ["/확률게임"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "게임", "코인", "룰렛", "슬롯"] }),
   registryEntry("/뽑기", "게임", "공개 확률 포인트 뽑기", { aliases: ["/확률뽑기", "/자동뽑기"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "랜덤", "자동뽑기"] }),
   registryEntry("/뽑기목록", "게임", "뽑기 확률과 보상 확인", { requiresFeature: "games", searchableKeywords: ["포인트", "확률", "보상"] }),
   registryEntry("/홀", "게임", "홀짝 포인트 베팅", { aliases: ["/짝", "/홀짝"], examples: ["/홀 100", "/짝 100"], requiresFeature: "games", searchableKeywords: ["포인트", "베팅"] }),
+  registryEntry("/코인", "게임", "앞뒤 맞히기 포인트 게임", { aliases: ["/동전"], examples: ["/코인 앞 100", "/코인 뒤 100"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "앞", "뒤"] }),
+  registryEntry("/룰렛", "게임", "빨강 검정 초록 룰렛 포인트 게임", { examples: ["/룰렛 빨강 100", "/룰렛 초록 100"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "룰렛", "빨강", "검정", "초록"] }),
+  registryEntry("/슬롯", "게임", "3릴 슬롯 포인트 게임", { examples: ["/슬롯 100"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "슬롯"] }),
+  registryEntry("/복권", "게임", "즉석 복권 포인트 게임", { examples: ["/복권 100"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "복권"] }),
+  registryEntry("/하이로우", "게임", "숫자 높낮이 맞히기 포인트 게임", { examples: ["/하이로우 하이 100", "/하이로우 로우 100"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "하이", "로우"] }),
+  registryEntry("/폭탄피하기", "게임", "1~5 중 폭탄을 피하는 포인트 게임", { examples: ["/폭탄피하기 3 100"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "폭탄"] }),
+  registryEntry("/보물상자", "게임", "1~4 상자 선택 포인트 게임", { examples: ["/보물상자 2 100"], requiresFeature: "games", searchableKeywords: ["포인트", "확률", "보물", "상자"] }),
   registryEntry("/이체", "포인트", "포인트 이체", { examples: ["/이체 닉네임 100"], requiresFeature: "points" }),
   registryEntry("/포인트순위", "랭킹", "방별 랭킹 확인", { aliases: ["/좋아요순위", "/레벨순위", "/채팅오늘", "/채팅금주"], requiresFeature: "rankings" }),
   registryEntry("/미끼상점", "게임", "낚시용 미끼 가격 확인", { requiresFeature: "games", searchableKeywords: ["낚시", "미끼", "상점"] }),
@@ -11637,9 +11988,9 @@ function applicationForRoomState(state = {}, roomState = {}) {
 const COMMAND_DISCOVERY_TOPICS = Object.freeze([
   {
     key: "게임",
-    aliases: ["게임", "미니게임", "낚시", "던전", "rpg"],
+    aliases: ["게임", "미니게임", "확률게임", "낚시", "던전", "rpg"],
     title: "게임/RPG",
-    commands: ["/게임", "/오늘할일", "/모험", "/자동던전 상급 10", "/낚시", "/던전", "/가방정리", "/강화목록", "/자동탐험", "/자동낚시", "/자동뽑기", "/대장간", "/자동제작"]
+    commands: ["/게임", "/확률게임", "/낚시", "/던전", "/가방정리", "/코인 앞 100", "/룰렛 빨강 100", "/자동던전 상급 10", "/슬롯 100", "/오늘할일", "/모험", "/강화목록", "/자동탐험", "/자동낚시", "/자동뽑기", "/대장간", "/자동제작"]
   },
   {
     key: "가방",
@@ -11777,14 +12128,16 @@ const COMMAND_RECOMMENDATION_PRESETS = Object.freeze({
     label: "게임",
     findHint: "/찾기 게임, /게임팩도움말",
     commands: [
+      { command: "/확률게임", reason: "포인트 확률 게임 10종 보기", feature: "games" },
       { command: "/주사위", reason: "가볍게 포인트 게임 시작", feature: "games" },
+      { command: "/코인", reason: "앞뒤 맞히기", feature: "games" },
       { command: "/낚시", reason: "미끼로 물고기 수집", feature: "games" },
       { command: "/던전", reason: "RPG 재료와 장비 보상", feature: "games" },
       { command: "/몬스터탐험", reason: "픽셀몬스터 수집 시작", feature: "games" },
       { command: "/펫", reason: "펫 상태 확인", feature: "games" },
       { command: "/점메추", reason: "채팅 참여형 유틸" }
     ],
-    topCommands: ["/주사위", "/낚시", "/던전", "/탐험", "/몬스터탐험", "/포획", "/펫", "/점메추"]
+    topCommands: ["/확률게임", "/주사위", "/코인", "/룰렛", "/슬롯", "/낚시", "/던전", "/탐험", "/몬스터탐험", "/포획", "/펫", "/점메추"]
   },
   ops: {
     label: "운영",
@@ -12020,7 +12373,7 @@ function roomStatusSnapshot(state = {}, roomState = {}, options = {}) {
 
 function gameCommandTopObjects(roomState = {}, limit = 5) {
   const gameCommands = new Set([
-    "/게임", "/오늘할일", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/모험", "/자동던전", "/자동사냥", "/던전", "/강화", "/강화목록", "/몬스터탐험", "/포획", "/펫", "/펫먹이", "/점메추",
+    "/게임", "/확률게임", "/오늘할일", "/주사위", "/낚시", "/자동낚시", "/탐험", "/자동탐험", "/자동모험", "/뽑기", "/자동뽑기", "/홀짝", "/홀", "/짝", "/코인", "/동전", "/룰렛", "/슬롯", "/복권", "/하이로우", "/폭탄피하기", "/보물상자", "/모험", "/자동던전", "/자동사냥", "/던전", "/강화", "/강화목록", "/몬스터탐험", "/포획", "/펫", "/펫먹이", "/점메추",
     "/판매추천", "/정리추천", "/가방정리", "/판매미리보기", "/자동장착"
   ]);
   const counts = new Map();
@@ -12050,7 +12403,9 @@ function gameOpsOverviewPayload(roomState = {}) {
       { command: "/낚시", seconds: GAME_COOLDOWNS_MS.fishing / 1000 },
       { command: "/던전", seconds: GAME_COOLDOWNS_MS.dungeon / 1000 },
       { command: "/뽑기", seconds: GAME_COOLDOWNS_MS.luckyDraw / 1000 },
-      { command: "/홀짝", seconds: GAME_COOLDOWNS_MS.oddEven / 1000 }
+      { command: "/홀짝", seconds: GAME_COOLDOWNS_MS.oddEven / 1000 },
+      { command: "/코인", seconds: GAME_COOLDOWNS_MS.coinFlip / 1000 },
+      { command: "/룰렛", seconds: GAME_COOLDOWNS_MS.roulette / 1000 }
     ],
     rewards: {
       seasonName: settings.seasonName,
@@ -14370,7 +14725,7 @@ function commandInstallRecommendations(roomState, plan) {
     ...(plan.packs || []).flatMap((entry) => [entry.pack.id, entry.pack.title])
   ].join(" ");
   const candidates = [];
-  if (/주사위|낚시|탐험|뽑기|홀짝|게임/u.test(commandText)) candidates.push("game-chance");
+  if (/주사위|낚시|탐험|뽑기|홀짝|코인|룰렛|슬롯|복권|하이로우|폭탄피하기|보물상자|확률게임|게임/u.test(commandText)) candidates.push("game-chance");
   if (/상점|구매|가방|아이템|선물/u.test(commandText)) candidates.push("shop-inventory", "point-economy");
   if (/공지|규칙|문의|프로필양식/u.test(commandText)) candidates.push("ops-core");
   if (/출석|순위|랭킹|레벨/u.test(commandText)) candidates.push("attendance-growth");
@@ -16796,6 +17151,7 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   }
   if (command === "/점메추") return lunchRecommendationCommand(text);
   if (command === "/게임") return gameHelpText(roomState);
+  if (command === "/확률게임") return chanceGameGuideText();
   if (command === "/주사위") return diceGameCommand(roomState, sender);
   if (command === "/미끼상점") return baitShopCommand(roomState, sender);
   if (command === "/미끼구매") return baitPurchaseCommand(roomState, sender, text);
@@ -16869,6 +17225,13 @@ async function handleCommand(state, room, sender, message, identity = {}) {
   if (command === "/자동뽑기") return autoLuckyDrawCommand(roomState, sender, text);
   if (command === "/확률뽑기" || command === "/뽑기") return luckyDrawCommand(roomState, sender);
   if (command === "/홀짝" || /^\/(?:홀|짝)(?:\s|$)/.test(command)) return oddEvenCommand(roomState, sender, text);
+  if (command === "/코인" || command === "/동전") return coinFlipCommand(roomState, sender, text);
+  if (command === "/룰렛") return rouletteCommand(roomState, sender, text);
+  if (command === "/슬롯") return slotMachineCommand(roomState, sender, text);
+  if (command === "/복권") return lotteryCommand(roomState, sender, text);
+  if (command === "/하이로우") return highLowCommand(roomState, sender, text);
+  if (command === "/폭탄피하기") return bombAvoidCommand(roomState, sender, text);
+  if (command === "/보물상자") return treasureBoxCommand(roomState, sender, text);
   if (command === "/이체") return transferCommand(roomState, sender, text);
   if (command === "/상점") return shopListCommand(roomState, sender);
   if (command === "/구매") return purchaseItemCommand(roomState, sender, text);

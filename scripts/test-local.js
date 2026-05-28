@@ -697,6 +697,7 @@ try {
   assert.match(updatesPageText, /초기 로딩 payload/);
   assert.match(updatesPageText, /SEO 메타/);
   assert.match(updatesPageText, /자동던전 대량 실행/);
+  assert.match(updatesPageText, /가상 포인트 전용 확률 게임 10종/);
   assert.match(updatesPageText, /구매자 콘솔 단계 안내/);
   assert.match(updatesPageText, /승인 전\/승인 후\/앱 연결 완료/);
   assert.match(updatesPageText, /픽셀곰 0\.5\.00/);
@@ -719,6 +720,11 @@ try {
   assert.match(rpgHelpPageText, /100,000/);
   assert.match(rpgHelpPageText, /자동탐험|자동낚시|자동뽑기/);
   assert.match(rpgHelpPageText, /용암|천공|왕릉/);
+  const gamesHelpPageText = await (await fetch(`${baseUrl}/help/games`)).text();
+  assert.match(gamesHelpPageText, /포인트 확률 게임팩 10종/);
+  for (const command of ["/확률게임", "/코인", "/룰렛", "/슬롯", "/복권", "/하이로우", "/폭탄피하기", "/보물상자"]) {
+    assert.match(gamesHelpPageText, new RegExp(command.replace("/", "\\/")));
+  }
 
   const signupPageText = await (await fetch(`${baseUrl}/signup`)).text();
   assert.match(signupPageText, /처음 시작 5단계/);
@@ -865,6 +871,12 @@ try {
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.fixedCommands.includes("/상태") && pack.fixedCommands.includes("/운세") && pack.fixedCommands.includes("/신고")), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "ops-core" && pack.installCode === "pk.001" && pack.installCodeType === "pack"), true);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "game-chance" && pack.fixedCommands.includes("/뽑기") && pack.fixedCommands.includes("/홀짝")), true);
+  const gameChancePack = commandPacks.json.packs.find((pack) => pack.id === "game-chance");
+  assert.ok(gameChancePack);
+  const chanceGameCommands = ["/주사위", "/뽑기", "/홀짝", "/코인", "/룰렛", "/슬롯", "/복권", "/하이로우", "/폭탄피하기", "/보물상자"];
+  assert.ok(chanceGameCommands.every((command) => gameChancePack.fixedCommands.includes(command)));
+  assert.match(gameChancePack.description, /가상 포인트/);
+  assert.match(gameChancePack.description, /10종/);
   assert.equal(commandPacks.json.packs.some((pack) => pack.id === "game-chance"
     && pack.fixedCommands.includes("/자동탐험")
     && pack.fixedCommands.includes("/자동낚시")
@@ -4893,6 +4905,9 @@ try {
   assert.match(gameCommands.json.reply, /픽셀곰 게임 명령어/);
   assert.match(gameCommands.json.reply, /뽑기/);
   assert.match(gameCommands.json.reply, /\/홀 금액/);
+  assert.match(gameCommands.json.reply, /\/확률게임/);
+  assert.match(gameCommands.json.reply, /\/코인/);
+  assert.match(gameCommands.json.reply, /\/보물상자/);
   assert.match(gameCommands.json.reply, /픽셀곰게임/);
 
   const reservedCustomCommand = await chat("/명령어등록 /상태 상태 덮어쓰기", "관리자");
@@ -6163,6 +6178,31 @@ try {
   const oddEvenCooldown = await chat("/짝 100", "포순이 여");
   assert.match(oddEvenCooldown.json.reply, /쿨타임/);
   assert.match(oddEvenCooldown.json.reply, /홀짝은/);
+
+  const chanceGameGuide = await chat("/확률게임", "확률안내러 여");
+  assert.match(chanceGameGuide.json.reply, /포인트 확률 게임팩 10종/);
+  assert.match(chanceGameGuide.json.reply, /가상 포인트 전용/);
+  assert.match(chanceGameGuide.json.reply, /\/코인 앞 100/);
+  assert.match(chanceGameGuide.json.reply, /\/보물상자 2 100/);
+
+  const chanceGameCases = [
+    { sender: "코인러 여", command: "/코인 앞 100", title: /코인 결과/, extra: /선택 : 앞/ },
+    { sender: "룰렛러 여", command: "/룰렛 빨강 100", title: /룰렛 결과/, extra: /선택 : 빨강/ },
+    { sender: "슬롯러 여", command: "/슬롯 100", title: /슬롯 결과/, extra: /릴 : / },
+    { sender: "복권러 여", command: "/복권 100", title: /복권 결과/, extra: /등급 : / },
+    { sender: "하이로우러 여", command: "/하이로우 하이 100", title: /하이로우 결과/, extra: /선택 : 하이/ },
+    { sender: "폭탄러 여", command: "/폭탄피하기 3 100", title: /폭탄피하기 결과/, extra: /선택 : 3번/ },
+    { sender: "보물러 여", command: "/보물상자 2 100", title: /보물상자 결과/, extra: /선택 : 2번/ }
+  ];
+  for (const item of chanceGameCases) {
+    await chat(`/포인트지급 ${item.sender} 5000`, "관리자");
+    const reply = await chat(item.command, item.sender);
+    assert.match(reply.json.reply, item.title);
+    assert.match(reply.json.reply, item.extra);
+    assert.match(reply.json.reply, /베팅 : 🅟100/);
+    assert.match(reply.json.reply, /지급 포인트 : 🅟[0-9,]+/);
+    assert.match(reply.json.reply, /보유 포인트 : 🅟[0-9,]+/);
+  }
 
   const memberInfo = await chat("/내정보", "포순이 여");
   assert.match(memberInfo.json.reply, /레벨/);
