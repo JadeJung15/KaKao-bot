@@ -8,8 +8,10 @@ import android.text.TextUtils;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class PixelgomNotificationListener extends NotificationListenerService {
     private static final Object RECENT_LOCK = new Object();
@@ -18,13 +20,26 @@ public class PixelgomNotificationListener extends NotificationListenerService {
     private static final long RECENT_TTL_MS = 30000;
     private static final int MAX_RECENT_EVENTS = 80;
 
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final AtomicLong taskSequence = new AtomicLong();
+    private final ThreadPoolExecutor executor = new ThreadPoolExecutor(
+            1,
+            1,
+            0L,
+            TimeUnit.MILLISECONDS,
+            new PriorityBlockingQueue<>()
+    );
 
     @Override
     public void onListenerConnected() {
         BridgeConfig.applyMigrations(this);
         BridgeConfig.appendLog(this, "알림 브릿지 연결됨");
-        executor.execute(this::flushPendingQueue);
+        executeTask(false, this::flushPendingQueue);
+    }
+
+    @Override
+    public void onDestroy() {
+        executor.shutdownNow();
+        super.onDestroy();
     }
 
     @Override
@@ -72,15 +87,25 @@ public class PixelgomNotificationListener extends NotificationListenerService {
 
         Notification notification = sbn.getNotification();
         BridgeConfig.appendLog(this, "수신: " + event.rawRoom + " / " + event.sender + " / " + preview(event.message));
-        executor.execute(() -> {
+        boolean interactive = isLikelyInteractiveMessage(event);
+        executeTask(interactive, () -> handlePostedNotification(notification, event, interactive));
+    }
+
+    private void handlePostedNotification(Notification notification, BridgeEvent event, boolean interactive) {
+        long startedAt = System.nanoTime();
+        double replyMs = 0;
+        EventSender.SendResult result = null;
+        String source = "server";
+        try {
             String localReply = BridgeLocalCommands.reply(this, event);
             if (!TextUtils.isEmpty(localReply)) {
+                source = "local";
                 BridgeConfig.appendSuccessLog(this, "로컬 명령 응답 생성: " + preview(localReply));
-                sendReply(notification, localReply);
+                replyMs = sendReply(notification, localReply);
                 return;
             }
 
-            EventSender.SendResult result = EventSender.send(this, event);
+            result = EventSender.send(this, event);
             String reply = "";
             if (!result.ok()) {
                 BridgeConfig.appendFailureLog(this, event.eventId + " / 전송 실패: " + result.error);
@@ -93,10 +118,9 @@ public class PixelgomNotificationListener extends NotificationListenerService {
                 BridgeConfig.appendSuccessLog(this, "서버 전송 성공: " + event.sender + " / " + preview(event.message));
                 BridgeConfig.setLastSendSuccess(this, event.eventId + " / " + result.timingSummary);
                 reply = result.reply;
-                flushPendingQueue();
             }
 
-            if (TextUtils.isEmpty(reply) || isServerUnknownCommand(reply)) {
+            if (shouldTryScriptFallback(reply, interactive)) {
                 ScriptBotEngine.Result scriptResult = ScriptBotEngine.handle(this, event);
                 if (!scriptResult.ok()) {
                     BridgeConfig.appendFailureLog(this, "JS 오류: " + scriptResult.error);
@@ -107,9 +131,16 @@ public class PixelgomNotificationListener extends NotificationListenerService {
             }
 
             if (!TextUtils.isEmpty(reply)) {
-                sendReply(notification, reply);
+                replyMs = sendReply(notification, reply);
+                if (BridgeConfig.pendingEventCount(this) > 0) executeTask(false, this::flushPendingQueue);
             }
-        });
+        } finally {
+            appendProcessingTiming(source, startedAt, replyMs, result == null ? 0 : result.clientRoundTripMs, interactive);
+        }
+    }
+
+    private void executeTask(boolean interactive, Runnable runnable) {
+        executor.execute(new PrioritizedTask(interactive ? 0 : 1, taskSequence.incrementAndGet(), runnable));
     }
 
     private void flushPendingQueue() {
@@ -118,12 +149,63 @@ public class PixelgomNotificationListener extends NotificationListenerService {
         BridgeConfig.appendLog(this, "전송 대기 재시도: 성공 " + retry.success + " / 실패 " + retry.failed + " / 남음 " + retry.remaining);
     }
 
-    private void sendReply(Notification notification, String reply) {
+    private double sendReply(Notification notification, String reply) {
+        long startedAt = System.nanoTime();
         NotificationReplier.Result replyResult = NotificationReplier.reply(this, notification, reply);
         if (replyResult.sent) {
             BridgeConfig.appendSuccessLog(this, "카카오 답장 전송 성공");
         } else {
             BridgeConfig.appendFailureLog(this, "카카오 답장 실패: " + replyResult.reason + " actions=" + replyResult.actionCount + " remoteInputs=" + replyResult.remoteInputCount);
+        }
+        return elapsedMs(startedAt);
+    }
+
+    private boolean shouldTryScriptFallback(String reply, boolean interactive) {
+        return interactive && (TextUtils.isEmpty(reply) || isServerUnknownCommand(reply));
+    }
+
+    private boolean isLikelyInteractiveMessage(BridgeEvent event) {
+        String message = normalize(event == null ? "" : event.message);
+        if (message.startsWith("/") || message.startsWith("／")) return true;
+        String firstToken = message.split("\\s+")[0];
+        return "ㅊㅊ".equals(firstToken);
+    }
+
+    private void appendProcessingTiming(String source, long startedAt, double replyMs, double serverRoundTripMs, boolean interactive) {
+        double totalMs = elapsedMs(startedAt);
+        if (!interactive && replyMs <= 0 && totalMs < 1000) return;
+        BridgeConfig.appendLog(this, "처리 시간: type=" + (interactive ? "interactive" : "passive")
+                + " source=" + source
+                + " total=" + totalMs + "ms"
+                + " serverRoundTrip=" + serverRoundTripMs + "ms"
+                + " kakaoReply=" + replyMs + "ms");
+    }
+
+    private double elapsedMs(long startedAt) {
+        return Math.max(0, Math.round((System.nanoTime() - startedAt) / 100000.0) / 10.0);
+    }
+
+    private static final class PrioritizedTask implements Runnable, Comparable<PrioritizedTask> {
+        private final int priority;
+        private final long sequence;
+        private final Runnable delegate;
+
+        private PrioritizedTask(int priority, long sequence, Runnable delegate) {
+            this.priority = priority;
+            this.sequence = sequence;
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void run() {
+            if (delegate != null) delegate.run();
+        }
+
+        @Override
+        public int compareTo(PrioritizedTask other) {
+            if (other == null) return -1;
+            if (priority != other.priority) return priority - other.priority;
+            return Long.compare(sequence, other.sequence);
         }
     }
 

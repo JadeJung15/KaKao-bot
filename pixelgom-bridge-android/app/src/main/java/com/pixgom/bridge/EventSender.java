@@ -25,6 +25,7 @@ final class EventSender {
 
     static SendResult sendPayload(Context context, JSONObject payload) {
         HttpURLConnection connection = null;
+        long startedAt = System.nanoTime();
         try {
             URL url = new URL(BridgeConfig.serverUrl(context));
             connection = (HttpURLConnection) url.openConnection();
@@ -38,11 +39,12 @@ final class EventSender {
             int status = connection.getResponseCode();
             JSONObject response = new JSONObject(readBody(connection, status));
             JSONObject timing = response.optJSONObject("timing");
-            String timingSummary = timingSummary(timing);
+            double clientRoundTripMs = elapsedMs(startedAt);
+            String timingSummary = timingSummary(timing, clientRoundTripMs);
             if (!timingSummary.isEmpty()) BridgeConfig.setLastServerTimingSummary(context, timingSummary);
-            return new SendResult(status, cleanReply(response), response.optBoolean("ignored", false), null, response.optString("eventId", timing == null ? payload.optString("eventId", "") : timing.optString("eventId", payload.optString("eventId", ""))), timingSummary);
+            return new SendResult(status, cleanReply(response), response.optBoolean("ignored", false), null, response.optString("eventId", timing == null ? payload.optString("eventId", "") : timing.optString("eventId", payload.optString("eventId", ""))), timingSummary, clientRoundTripMs);
         } catch (Exception error) {
-            return new SendResult(0, "", false, error.getClass().getSimpleName() + ": " + error.getMessage(), payload == null ? "" : payload.optString("eventId", ""), "");
+            return new SendResult(0, "", false, error.getClass().getSimpleName() + ": " + error.getMessage(), payload == null ? "" : payload.optString("eventId", ""), "", elapsedMs(startedAt));
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -314,13 +316,18 @@ final class EventSender {
         return value;
     }
 
-    private static String timingSummary(JSONObject timing) {
+    private static String timingSummary(JSONObject timing, double clientRoundTripMs) {
         if (timing == null) return "";
         return "eventId=" + timing.optString("eventId", "")
                 + " total=" + timing.optDouble("totalMs", 0) + "ms"
                 + " command=" + timing.optDouble("commandMs", 0) + "ms"
                 + " save=" + timing.optDouble("saveStateMs", 0) + "ms"
+                + " appRoundTrip=" + clientRoundTripMs + "ms"
                 + " duplicate=" + timing.optBoolean("duplicate", false);
+    }
+
+    private static double elapsedMs(long startedAt) {
+        return Math.max(0, Math.round((System.nanoTime() - startedAt) / 100000.0) / 10.0);
     }
 
     static final class SendResult {
@@ -330,14 +337,16 @@ final class EventSender {
         final String error;
         final String eventId;
         final String timingSummary;
+        final double clientRoundTripMs;
 
-        SendResult(int status, String reply, boolean ignored, String error, String eventId, String timingSummary) {
+        SendResult(int status, String reply, boolean ignored, String error, String eventId, String timingSummary, double clientRoundTripMs) {
             this.status = status;
             this.reply = reply == null ? "" : reply;
             this.ignored = ignored;
             this.error = error;
             this.eventId = eventId == null ? "" : eventId;
             this.timingSummary = timingSummary == null ? "" : timingSummary;
+            this.clientRoundTripMs = Math.max(0, clientRoundTripMs);
         }
 
         boolean ok() {
