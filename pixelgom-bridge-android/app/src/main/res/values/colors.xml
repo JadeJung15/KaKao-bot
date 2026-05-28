@@ -3,4 +3,8 @@
     <color name="pixelgom_primary_dark">#1F3A4A</color>
     <color name="pixelgom_accent">#E85D4F</color>
     <color name="pixelgom_background">#F6F8FB</color>
+    <color name="pixelgom_surface">#FFFFFF</color>
+    <color name="pixelgom_line">#DCE3EC</color>
+    <color name="pixelgom_text">#1F2A37</color>
+    <color name="pixelgom_soft">#EEF6F3</color>
 </resources>

@@ -5,5 +5,7 @@
         <item name="android:navigationBarColor">@color/pixelgom_background</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:statusBarColor">@color/pixelgom_background</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowNoTitle">true</item>
     </style>
 </resources>
