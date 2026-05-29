@@ -11,6 +11,7 @@ import java.io.InputStreamReader;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -238,6 +239,38 @@ final class EventSender {
         return postApi(context, "/api/buyer/command-templates/install", payload);
     }
 
+    static ApiResult deleteCustomCommand(Context context, String buyerToken, String applicationId, String trigger) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            payload.put("applicationId", applicationId == null ? "" : applicationId);
+            payload.put("trigger", trigger == null ? "" : trigger);
+        } catch (Exception ignored) {
+            // Keep command delete payload best-effort.
+        }
+        return postApi(context, "/api/buyer/custom-commands/delete", payload);
+    }
+
+    static ApiResult saveRoomModeSettings(Context context, String buyerToken, String applicationId, boolean blockGamesInGeneralRoom, boolean blockOpsInGameRoom, boolean sharePointsAndInventory) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            JSONObject modeSplit = new JSONObject();
+            modeSplit.put("blockGamesInGeneralRoom", blockGamesInGeneralRoom);
+            modeSplit.put("blockOpsInGameRoom", blockOpsInGameRoom);
+            modeSplit.put("sharePointsAndInventory", sharePointsAndInventory);
+            payload.put("applicationId", applicationId == null ? "" : applicationId);
+            payload.put("modeSplit", modeSplit);
+        } catch (Exception ignored) {
+            // Keep settings payload best-effort.
+        }
+        return postApi(context, "/api/buyer/room-mode-settings", payload);
+    }
+
+    static ApiResult gamePackHelp(Context context, String topic) {
+        String safeTopic = topic == null ? "" : topic.trim();
+        if (safeTopic.isEmpty()) return getApi(context, "/api/game-pack-help");
+        return getApi(context, "/api/game-pack-help/" + URLEncoder.encode(safeTopic, StandardCharsets.UTF_8));
+    }
+
     private static JSONObject tokenPayload(String buyerToken) {
         JSONObject payload = new JSONObject();
         try {
@@ -259,6 +292,28 @@ final class EventSender {
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             writeJson(connection, payload == null ? new JSONObject() : payload);
+
+            int status = connection.getResponseCode();
+            JSONObject response = new JSONObject(readBody(connection, status));
+            if (status < 200 || status >= 300 || !response.optBoolean("ok", false)) {
+                return new ApiResult(status, response, response.optString("message", response.optString("error", "request_failed")));
+            }
+            return new ApiResult(status, response, null);
+        } catch (Exception error) {
+            return new ApiResult(0, new JSONObject(), error.getClass().getSimpleName() + ": " + error.getMessage());
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private static ApiResult getApi(Context context, String path) {
+        HttpURLConnection connection = null;
+        try {
+            URL url = apiUrl(context, path);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
 
             int status = connection.getResponseCode();
             JSONObject response = new JSONObject(readBody(connection, status));

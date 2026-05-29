@@ -84,12 +84,18 @@ public class MainActivity extends Activity {
     private EditText loginEmailInput;
     private EditText loginPasswordInput;
     private LinearLayout selectableRoomsContainer;
+    private LinearLayout roomDetailContainer;
     private final List<CheckBox> roomSelectionChecks = new ArrayList<>();
     private JSONObject buyerConsoleJson;
     private String nativeConsoleMode = "";
+    private String selectedRoomApplicationId = "";
+    private String selectedRoomTab = "status";
     private Button gameRoomToggleButton;
     private boolean gameRoomListExpanded = false;
     private boolean kakaoInitialized = false;
+    private Switch blockGamesInGeneralRoomSwitch;
+    private Switch blockOpsInGameRoomSwitch;
+    private Switch sharePointsAndInventorySwitch;
     private Switch enabledSwitch;
     private Switch scriptEnabledSwitch;
     private Switch attendanceFeatureSwitch;
@@ -357,6 +363,44 @@ public class MainActivity extends Activity {
         Button syncButton = secondaryButton("계정 기준으로 다시 동기화");
         syncButton.setOnClickListener(v -> accountRoomSyncSelectedRooms());
         root.addView(syncButton);
+        return scrollView;
+    }
+
+    private void showRoomDetail(String applicationId, String tab) {
+        if (!BridgeConfig.isBuyerLoggedIn(this)) {
+            showHome();
+            Toast.makeText(this, "먼저 로그인해 주세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        clearMainRefs();
+        selectedRoomApplicationId = applicationId == null ? "" : applicationId;
+        selectedRoomTab = TextUtils.isEmpty(tab) ? "status" : tab;
+        setContentView(buildRoomDetailContent());
+        loadBuyerConsole();
+    }
+
+    private View buildRoomDetailContent() {
+        ScrollView scrollView = baseScrollView();
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        applyScreenPadding(root, 24);
+        scrollView.addView(root);
+
+        root.addView(topBar("방 관리", "상태·설정·명령어", true));
+        root.addView(compactHeroPanel(
+                R.drawable.pixgom_dashboard_monitor,
+                "방별 전체 관리",
+                "각 방의 상태, 설정, 명령어, 로그, 게임팩을 한 화면에서 관리합니다."));
+
+        nativeConsoleStatusView = text("방 데이터를 불러오는 중", 14, COLOR_MUTED, true);
+        nativeConsoleStatusView.setPadding(0, dp(8), 0, dp(8));
+        root.addView(nativeConsoleStatusView);
+
+        roomDetailContainer = panel();
+        roomDetailContainer.setPadding(dp(14), dp(14), dp(14), dp(14));
+        roomDetailContainer.addView(text("불러오는 중입니다.", 14, COLOR_MUTED, false));
+        nativeConsoleMode = "room_detail";
+        root.addView(roomDetailContainer);
         return scrollView;
     }
 
@@ -998,9 +1042,15 @@ public class MainActivity extends Activity {
         loginEmailInput = null;
         loginPasswordInput = null;
         selectableRoomsContainer = null;
+        roomDetailContainer = null;
         roomSelectionChecks.clear();
         nativeConsoleMode = "";
+        selectedRoomApplicationId = "";
+        selectedRoomTab = "status";
         gameRoomToggleButton = null;
+        blockGamesInGeneralRoomSwitch = null;
+        blockOpsInGameRoomSwitch = null;
+        sharePointsAndInventorySwitch = null;
         enabledSwitch = null;
         scriptEnabledSwitch = null;
         attendanceFeatureSwitch = null;
@@ -1402,6 +1452,7 @@ public class MainActivity extends Activity {
                 if (nativeConsoleStatusView != null) nativeConsoleStatusView.setText("연결 가능 방 " + roomCount + "개");
                 renderRoomChoices(result.json);
                 renderCommandStore(result.json);
+                renderRoomDetail(result.json);
             });
         });
     }
@@ -1418,6 +1469,7 @@ public class MainActivity extends Activity {
         for (int index = 0; index < rooms.length(); index++) {
             JSONObject room = rooms.optJSONObject(index);
             if (room == null) continue;
+            selectableRoomsContainer.addView(roomOpenCard(room));
             CheckBox check = new CheckBox(this);
             check.setText(room.optString("roomName", "방") + " · " + room.optString("subscriptionStatusLabel", "상태 확인"));
             check.setTextColor(COLOR_TEXT);
@@ -1427,6 +1479,22 @@ public class MainActivity extends Activity {
             selectableRoomsContainer.addView(check);
             roomSelectionChecks.add(check);
         }
+    }
+
+    private LinearLayout roomOpenCard(JSONObject room) {
+        String applicationId = room.optString("applicationId", "");
+        LinearLayout card = dashboardCard(
+                "game".equals(room.optString("roomRole", "")) ? R.drawable.ic_checklist : R.drawable.ic_home,
+                room.optString("roomName", "방"),
+                roomRoleLabel(room) + " · " + room.optString("bridgeStatus", "상태 확인") + " · " + room.optString("roomId", ""),
+                room.optString("subscriptionStatusLabel", "확인"),
+                !"expired".equals(room.optString("subscriptionStatus", "")),
+                v -> showRoomDetail(applicationId, "status")
+        );
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(8), 0, dp(4));
+        card.setLayoutParams(params);
+        return card;
     }
 
     private void renderCommandStore(JSONObject consoleJson) {
@@ -1464,6 +1532,175 @@ public class MainActivity extends Activity {
                     v -> installCommandTemplate(applicationId, template.optString("id", ""))
             ));
         }
+    }
+
+    private void renderRoomDetail(JSONObject consoleJson) {
+        if (roomDetailContainer == null || !"room_detail".equals(nativeConsoleMode)) return;
+        roomDetailContainer.removeAllViews();
+        JSONObject room = consoleRoomByApplicationId(consoleJson, selectedRoomApplicationId);
+        if (room == null) {
+            roomDetailContainer.addView(text("관리할 방을 찾지 못했습니다. 내 방에서 다시 선택해 주세요.", 14, COLOR_MUTED, false));
+            return;
+        }
+        selectedRoomApplicationId = room.optString("applicationId", selectedRoomApplicationId);
+        if (nativeConsoleStatusView != null) {
+            nativeConsoleStatusView.setText(room.optString("roomName", "방") + " · " + room.optString("subscriptionStatusLabel", "상태 확인"));
+        }
+
+        roomDetailContainer.addView(sectionHeader(
+                "game".equals(room.optString("roomRole", "")) ? R.drawable.ic_checklist : R.drawable.ic_home,
+                room.optString("roomName", "방"),
+                roomRoleLabel(room) + " · " + room.optString("bridgeStatus", "상태 확인")
+        ));
+        roomDetailContainer.addView(roomTabGrid(room.optString("applicationId", "")));
+
+        if ("settings".equals(selectedRoomTab)) {
+            renderRoomSettingsTab(roomDetailContainer, room);
+        } else if ("commands".equals(selectedRoomTab)) {
+            renderRoomCommandsTab(roomDetailContainer, room, consoleJson);
+        } else if ("logs".equals(selectedRoomTab)) {
+            renderRoomLogsTab(roomDetailContainer, room);
+        } else if ("games".equals(selectedRoomTab)) {
+            renderRoomGamePacksTab(roomDetailContainer, room, consoleJson);
+        } else {
+            renderRoomStatusTab(roomDetailContainer, room);
+        }
+    }
+
+    private LinearLayout roomTabGrid(String applicationId) {
+        return quickActionGrid(
+                roomTabButton(applicationId, "status", "상태"),
+                roomTabButton(applicationId, "settings", "설정"),
+                roomTabButton(applicationId, "commands", "명령어"),
+                roomTabButton(applicationId, "logs", "로그"),
+                roomTabButton(applicationId, "games", "게임팩")
+        );
+    }
+
+    private Button roomTabButton(String applicationId, String tab, String label) {
+        Button button = tab.equals(selectedRoomTab) ? primaryButton(label) : secondaryButton(label);
+        button.setOnClickListener(v -> showRoomDetail(applicationId, tab));
+        return button;
+    }
+
+    private void renderRoomStatusTab(LinearLayout parent, JSONObject room) {
+        parent.addView(sectionTitle("상태"));
+        parent.addView(statusTile("구독", room.optString("subscriptionStatusLabel", "확인 필요"), !"expired".equals(room.optString("subscriptionStatus", ""))));
+        parent.addView(statusTile("브릿지", room.optString("bridgeStatus", "상태 확인"), "ready".equals(room.optString("bridgeStatus", ""))));
+        parent.addView(statusTile("역할", roomRoleLabel(room), true));
+        parent.addView(labelValue("roomId", room.optString("roomId", "미등록")));
+        parent.addView(labelValue("입장확인 문구", room.optString("joinPhrase", BridgeConfig.DEFAULT_JOIN_PHRASE)));
+        parent.addView(labelValue("명령어 수", room.optInt("commandCount", 0) + "개"));
+        parent.addView(labelValue("연결된 게임방", linkedGameRoomSummary(room)));
+    }
+
+    private void renderRoomSettingsTab(LinearLayout parent, JSONObject room) {
+        parent.addView(sectionTitle("분리 설정"));
+        boolean isGameRoom = "game_room".equals(room.optString("roomPurpose", ""));
+        if (isGameRoom) {
+            parent.addView(text("게임방은 기준 일반방의 분리 설정을 따릅니다.", 14, COLOR_MUTED, false));
+            return;
+        }
+        JSONObject mode = roomModeSplit(room);
+        blockGamesInGeneralRoomSwitch = settingSwitch("일반방에서 게임 명령 차단", mode.optBoolean("blockGamesInGeneralRoom", true));
+        blockOpsInGameRoomSwitch = settingSwitch("게임방에서 운영 명령 차단", mode.optBoolean("blockOpsInGameRoom", true));
+        sharePointsAndInventorySwitch = settingSwitch("포인트/가방 데이터 공유", mode.optBoolean("sharePointsAndInventory", true));
+        parent.addView(blockGamesInGeneralRoomSwitch);
+        parent.addView(blockOpsInGameRoomSwitch);
+        parent.addView(sharePointsAndInventorySwitch);
+
+        Button saveButton = primaryButton("분리 설정 저장");
+        saveButton.setOnClickListener(v -> saveRoomModeSettings(room.optString("applicationId", "")));
+        parent.addView(saveButton);
+        parent.addView(text("방 사용/등록, 결제, 라이선스 같은 관리자 설정은 앱에서 변경하지 않습니다.", 12, COLOR_MUTED, false));
+    }
+
+    private void renderRoomCommandsTab(LinearLayout parent, JSONObject room, JSONObject consoleJson) {
+        String applicationId = room.optString("applicationId", "");
+        parent.addView(sectionTitle("장착된 명령어팩"));
+        JSONObject state = room.optJSONObject("commandPacks");
+        JSONArray installed = joinedPackDetails(state);
+        if (installed.length() == 0) {
+            parent.addView(text("장착된 명령어팩이 없습니다.", 14, COLOR_MUTED, false));
+        }
+        for (int index = 0; index < installed.length(); index++) {
+            JSONObject pack = installed.optJSONObject(index);
+            if (pack == null) continue;
+            String packId = pack.optString("id", "");
+            parent.addView(storeAction(
+                    pack.optString("title", packId),
+                    pack.optString("description", pack.optString("tier", "")),
+                    "제거",
+                    v -> changeCommandPack(applicationId, packId, "remove")
+            ));
+        }
+
+        parent.addView(sectionTitle("추가 가능한 팩"));
+        JSONArray packs = consoleJson.optJSONObject("commandPacks") == null ? null : consoleJson.optJSONObject("commandPacks").optJSONArray("packs");
+        int packLimit = packs == null ? 0 : Math.min(6, packs.length());
+        for (int index = 0; index < packLimit; index++) {
+            JSONObject pack = packs.optJSONObject(index);
+            if (pack == null) continue;
+            String packId = pack.optString("id", "");
+            parent.addView(storeAction(
+                    pack.optString("title", "명령어팩"),
+                    pack.optString("description", ""),
+                    "장착",
+                    v -> changeCommandPack(applicationId, packId, "apply")
+            ));
+        }
+
+        parent.addView(sectionTitle("커스텀 명령어"));
+        JSONArray commands = room.optJSONArray("customCommands");
+        int commandLimit = commands == null ? 0 : Math.min(8, commands.length());
+        if (commandLimit == 0) parent.addView(text("커스텀 명령어가 없습니다.", 14, COLOR_MUTED, false));
+        for (int index = 0; index < commandLimit; index++) {
+            JSONObject command = commands.optJSONObject(index);
+            if (command == null) continue;
+            String trigger = command.optString("trigger", "");
+            parent.addView(storeAction(
+                    trigger,
+                    command.optString("response", ""),
+                    "삭제",
+                    v -> deleteCustomCommand(applicationId, trigger)
+            ));
+        }
+    }
+
+    private void renderRoomLogsTab(LinearLayout parent, JSONObject room) {
+        String roomName = room.optString("roomName", "");
+        parent.addView(sectionTitle("방별 로컬 로그"));
+        parent.addView(quickActionGrid(
+                quickAction(R.drawable.ic_sync, "새로고침", "갱신", v -> showRoomDetail(room.optString("applicationId", ""), "logs")),
+                quickAction(R.drawable.ic_copy, "복사", "방 로그", v -> copyText(roomName + " 로그", logsForRoom(roomName))),
+                quickAction(R.drawable.ic_share, "공유", "방 로그", v -> shareText(roomName + " 로그", logsForRoom(roomName))),
+                quickAction(R.drawable.ic_delete, "전체 삭제", "로컬", v -> {
+                    BridgeConfig.clearLogs(this);
+                    showRoomDetail(room.optString("applicationId", ""), "logs");
+                })
+        ));
+        TextView logs = text(logsForRoom(roomName), 13, COLOR_TEXT, false);
+        logs.setBackgroundResource(getResources().getIdentifier("log_background", "drawable", getPackageName()));
+        logs.setPadding(dp(12), dp(12), dp(12), dp(12));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(10), 0, 0);
+        parent.addView(logs, params);
+    }
+
+    private void renderRoomGamePacksTab(LinearLayout parent, JSONObject room, JSONObject consoleJson) {
+        parent.addView(sectionTitle("게임팩"));
+        JSONObject gameSettings = room.optJSONObject("gameSettings");
+        parent.addView(labelValue("게임 기능", featureEnabledLabel(room.optJSONObject("features"), "games")));
+        parent.addView(labelValue("시즌", gameSettings == null ? "기본값" : gameSettings.optString("seasonName", "기본값")));
+        parent.addView(labelValue("주사위 보상", gameSettings == null ? "서버 기준" : gameSettings.optString("diceReward", "서버 기준")));
+        parent.addView(labelValue("장착 팩", installedPackSummary(room.optJSONObject("commandPacks"))));
+        parent.addView(dashboardCard(R.drawable.ic_checklist, "포인트 확률 게임팩", "10종 확률 게임 도움말을 확인합니다.", "도움말", true, v -> openUrl(WEBSITE_URL + "/help/games")));
+        parent.addView(dashboardCard(R.drawable.ic_checklist, "RPG 모험팩", "모험, 던전, 제작, 장비 도움말을 확인합니다.", "도움말", true, v -> openUrl(WEBSITE_URL + "/help/rpg")));
+        parent.addView(dashboardCard(R.drawable.ic_sync, "명령어 스토어", "현재 방에 게임팩을 장착합니다.", "장착", true, v -> showRoomDetail(room.optString("applicationId", ""), "commands")));
+
+        Button helpApiButton = secondaryButton("게임팩 도움말 새로고침");
+        helpApiButton.setOnClickListener(v -> loadGamePackHelp());
+        parent.addView(helpApiButton);
     }
 
     private LinearLayout storeAction(String title, String body, String buttonLabel, View.OnClickListener listener) {
@@ -1565,6 +1802,50 @@ public class MainActivity extends Activity {
                 Toast.makeText(this, result.ok() ? "명령어 템플릿을 설치했습니다." : "설치 실패: " + result.error, Toast.LENGTH_LONG).show();
                 loadBuyerConsole();
             });
+        });
+    }
+
+    private void changeCommandPack(String applicationId, String packId, String action) {
+        if (TextUtils.isEmpty(applicationId) || TextUtils.isEmpty(packId)) return;
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.applyCommandPack(this, BridgeConfig.buyerToken(this), applicationId, packId, action);
+            runOnUiThread(() -> {
+                String okMessage = "remove".equals(action) ? "명령어팩을 제거했습니다." : "명령어팩을 장착했습니다.";
+                Toast.makeText(this, result.ok() ? okMessage : "처리 실패: " + result.error, Toast.LENGTH_LONG).show();
+                showRoomDetail(applicationId, "commands");
+            });
+        });
+    }
+
+    private void deleteCustomCommand(String applicationId, String trigger) {
+        if (TextUtils.isEmpty(applicationId) || TextUtils.isEmpty(trigger)) return;
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.deleteCustomCommand(this, BridgeConfig.buyerToken(this), applicationId, trigger);
+            runOnUiThread(() -> {
+                Toast.makeText(this, result.ok() ? "커스텀 명령어를 삭제했습니다." : "삭제 실패: " + result.error, Toast.LENGTH_LONG).show();
+                showRoomDetail(applicationId, "commands");
+            });
+        });
+    }
+
+    private void saveRoomModeSettings(String applicationId) {
+        if (TextUtils.isEmpty(applicationId)) return;
+        boolean blockGames = blockGamesInGeneralRoomSwitch == null || blockGamesInGeneralRoomSwitch.isChecked();
+        boolean blockOps = blockOpsInGameRoomSwitch == null || blockOpsInGameRoomSwitch.isChecked();
+        boolean shareData = sharePointsAndInventorySwitch == null || sharePointsAndInventorySwitch.isChecked();
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.saveRoomModeSettings(this, BridgeConfig.buyerToken(this), applicationId, blockGames, blockOps, shareData);
+            runOnUiThread(() -> {
+                Toast.makeText(this, result.ok() ? "방별 분리 설정을 저장했습니다." : "저장 실패: " + result.error, Toast.LENGTH_LONG).show();
+                showRoomDetail(applicationId, "settings");
+            });
+        });
+    }
+
+    private void loadGamePackHelp() {
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.gamePackHelp(this, "");
+            runOnUiThread(() -> Toast.makeText(this, result.ok() ? "게임팩 도움말을 확인했습니다." : "도움말 확인 실패: " + result.error, Toast.LENGTH_LONG).show());
         });
     }
 
@@ -1992,6 +2273,13 @@ public class MainActivity extends Activity {
         startActivity(Intent.createChooser(intent, "픽셀곰 로그 공유"));
     }
 
+    private void shareText(String label, String value) {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TEXT, TextUtils.isEmpty(value) ? "공유할 내용이 없습니다." : value);
+        startActivity(Intent.createChooser(intent, label));
+    }
+
     private void copyText(String label, String value) {
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard != null) {
@@ -2040,6 +2328,90 @@ public class MainActivity extends Activity {
                 + "- 라이선스 오류: 구매자 콘솔과 앱의 라이선스 키 일치 확인\n"
                 + "- 입장 감지: 방장봇 환영 문구와 입장확인 문구 일치 확인\n"
                 + "- 화면 감지: 사용 안 함";
+    }
+
+    private JSONObject consoleRoomByApplicationId(JSONObject consoleJson, String applicationId) {
+        JSONArray rooms = consoleJson == null ? null : consoleJson.optJSONArray("rooms");
+        if (rooms == null || rooms.length() == 0) return null;
+        for (int index = 0; index < rooms.length(); index++) {
+            JSONObject room = rooms.optJSONObject(index);
+            if (room != null && room.optString("applicationId", "").equals(applicationId)) return room;
+        }
+        return rooms.optJSONObject(0);
+    }
+
+    private String roomRoleLabel(JSONObject room) {
+        String purpose = room == null ? "" : room.optString("roomPurpose", "");
+        String role = room == null ? "" : room.optString("roomRole", "");
+        if ("game_room".equals(purpose) || "game".equals(role)) return "게임방";
+        if ("general".equals(role)) return "일반방";
+        return "단일방";
+    }
+
+    private String linkedGameRoomSummary(JSONObject room) {
+        JSONArray rooms = room == null ? null : room.optJSONArray("linkedGameRooms");
+        if (rooms == null || rooms.length() == 0) return "없음";
+        List<String> names = new ArrayList<>();
+        for (int index = 0; index < rooms.length(); index++) {
+            JSONObject item = rooms.optJSONObject(index);
+            if (item != null) names.add(item.optString("roomName", "게임방"));
+        }
+        return TextUtils.join(", ", names);
+    }
+
+    private JSONObject roomModeSplit(JSONObject room) {
+        JSONObject snapshot = room == null ? null : room.optJSONObject("roomStatusSnapshot");
+        JSONObject settings = snapshot == null ? null : snapshot.optJSONObject("settings");
+        JSONObject mode = settings == null ? null : settings.optJSONObject("modeSplit");
+        return mode == null ? new JSONObject() : mode;
+    }
+
+    private JSONArray joinedPackDetails(JSONObject state) {
+        JSONArray result = new JSONArray();
+        if (state == null) return result;
+        JSONObject base = state.optJSONObject("basePackDetail");
+        if (base != null) result.put(base);
+        addPackDetails(result, state.optJSONArray("installedPackDetails"));
+        addPackDetails(result, state.optJSONArray("addonPackDetails"));
+        return result;
+    }
+
+    private void addPackDetails(JSONArray target, JSONArray source) {
+        if (source == null) return;
+        for (int index = 0; index < source.length(); index++) {
+            JSONObject pack = source.optJSONObject(index);
+            if (pack != null) target.put(pack);
+        }
+    }
+
+    private String installedPackSummary(JSONObject state) {
+        JSONArray details = joinedPackDetails(state);
+        if (details.length() == 0) return "없음";
+        List<String> titles = new ArrayList<>();
+        for (int index = 0; index < details.length(); index++) {
+            JSONObject pack = details.optJSONObject(index);
+            if (pack != null) titles.add(pack.optString("title", pack.optString("id", "")));
+        }
+        return TextUtils.join(", ", titles);
+    }
+
+    private String featureEnabledLabel(JSONObject features, String key) {
+        if (features == null || !features.has(key)) return "서버 기본값";
+        return features.optBoolean(key, false) ? "켜짐" : "꺼짐";
+    }
+
+    private String logsForRoom(String roomName) {
+        String logs = BridgeConfig.logs(this);
+        if (TextUtils.isEmpty(logs)) return "아직 전송 로그가 없습니다.";
+        if (TextUtils.isEmpty(roomName)) return BridgeConfig.logsForDisplay(this);
+        String[] lines = logs.split("\\r?\\n");
+        List<String> matched = new ArrayList<>();
+        for (String line : lines) {
+            if (line.contains(roomName)) matched.add(line);
+        }
+        if (matched.isEmpty()) return roomName + " 관련 로컬 로그가 없습니다.";
+        int start = Math.max(0, matched.size() - 40);
+        return TextUtils.join("\n", matched.subList(start, matched.size()));
     }
 
     private String safeText(String value) {
