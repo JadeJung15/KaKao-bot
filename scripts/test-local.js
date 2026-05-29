@@ -156,10 +156,10 @@ try {
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(health.json.serverTimezone, "Asia/Seoul");
   assert.equal(health.json.minAndroidVersion, "1.0.17");
-  assert.equal(health.json.latestAndroidVersion, "1.0.30");
-  assert.equal(health.json.latestAndroidVersionCode, 31);
+  assert.equal(health.json.latestAndroidVersion, "1.0.35");
+  assert.equal(health.json.latestAndroidVersionCode, 36);
   assert.equal(health.json.minAndroidVersionCode, 18);
-  assert.equal(health.json.latestAndroidVersionCode, 31);
+  assert.equal(health.json.latestAndroidVersionCode, 36);
   assert.equal(health.json.appUpdateRequired, false);
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
