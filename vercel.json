@@ -1,9 +1,6 @@
 {
-  "rewrites": [
-    { "source": "/", "destination": "/index.html" },
-    { "source": "/health", "destination": "/api/health" },
-    { "source": "/chat-event", "destination": "/api/chat-event" },
-    { "source": "/skill", "destination": "/api/skill" }
+  "routes": [
+    { "src": "/(.*)", "dest": "/server.js" }
   ],
   "functions": {
     "server.js": {
