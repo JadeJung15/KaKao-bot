@@ -265,6 +265,17 @@ final class EventSender {
         return postApi(context, "/api/buyer/room-mode-settings", payload);
     }
 
+    static ApiResult saveRoomFeatureSettings(Context context, String buyerToken, String applicationId, JSONObject features) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            payload.put("applicationId", applicationId == null ? "" : applicationId);
+            payload.put("features", features == null ? new JSONObject() : features);
+        } catch (Exception ignored) {
+            // Keep room feature payload best-effort.
+        }
+        return postApi(context, "/api/buyer/room-feature-settings", payload);
+    }
+
     static ApiResult gamePackHelp(Context context, String topic) {
         String safeTopic = topic == null ? "" : topic.trim();
         if (safeTopic.isEmpty()) return getApi(context, "/api/game-pack-help");

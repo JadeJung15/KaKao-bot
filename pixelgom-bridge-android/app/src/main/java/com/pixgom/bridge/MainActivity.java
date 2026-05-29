@@ -18,6 +18,7 @@ import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -103,7 +104,10 @@ public class MainActivity extends Activity {
     private Switch rankingsFeatureSwitch;
     private Switch historyFeatureSwitch;
     private Switch profilesFeatureSwitch;
+    private Switch localJsFeatureSwitch;
     private Switch gamesFeatureSwitch;
+    private Switch shopFeatureSwitch;
+    private Switch customCommandsFeatureSwitch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -126,8 +130,8 @@ public class MainActivity extends Activity {
         View intro = buildIntroContent();
         intro.setAlpha(0f);
         setContentView(intro);
-        intro.animate().alpha(1f).setDuration(220).start();
-        uiHandler.postDelayed(this::finishIntro, 850);
+        intro.animate().alpha(1f).setDuration(180).start();
+        uiHandler.postDelayed(this::finishIntro, 760);
     }
 
     private void finishIntro() {
@@ -205,16 +209,15 @@ public class MainActivity extends Activity {
 
         BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
         boolean loggedIn = BridgeConfig.isBuyerLoggedIn(this);
-        root.addView(loggedIn
-                ? compactHeroPanel(
-                        R.drawable.pixgom_bridge_captain,
-                        "운영 상태 홈",
-                        "브릿지, 방, 구독, 응답 상태를 바로 확인합니다.")
-                : heroPanel(
-                        R.drawable.pixgom_bridge_captain,
-                        "PIXGOM BRIDGE",
-                        "로그인하고 방 자동 연결",
-                        "결제 완료된 방은 연결코드 없이 이 폰에 등록합니다."));
+        if (loggedIn) {
+            root.addView(compactSummaryPanel("운영 상태", "방 " + BridgeConfig.roomProfileCount(this) + "개 · " + subscriptionStatusLabel()));
+        } else {
+            root.addView(heroPanel(
+                    R.drawable.pixgom_bridge_captain,
+                    "PIXGOM BRIDGE",
+                    "로그인하고 방 자동 연결",
+                    "결제 완료된 방은 연결코드 없이 이 폰에 등록합니다."));
+        }
 
         TextView version = text("버전 " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")", 13, COLOR_BLUE, true);
         version.setGravity(Gravity.CENTER);
@@ -241,19 +244,21 @@ public class MainActivity extends Activity {
         }
 
         LinearLayout statusPanel = panel();
-        statusPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        statusPanel.setPadding(dp(12), dp(12), dp(12), dp(12));
         root.addView(statusPanel);
         statusPanel.addView(sectionTitle("지금 상태"));
-        statusPanel.addView(statusTile("알림 권한", notificationPermissionEnabled() ? "허용됨" : "필요", notificationPermissionEnabled()));
-        statusPanel.addView(statusTile("브릿지", BridgeConfig.isEnabled(this) ? "켜짐" : "꺼짐", BridgeConfig.isEnabled(this)));
-        statusPanel.addView(statusTile("등록 방", BridgeConfig.roomProfileCount(this) + "개", BridgeConfig.roomProfileCount(this) > 0));
-        statusPanel.addView(statusTile("구독 상태", subscriptionStatusLabel(), "확인됨".equals(subscriptionStatusLabel())));
-        statusPanel.addView(statusTile("대기 큐", BridgeConfig.pendingEventCount(this) + "개", BridgeConfig.pendingEventCount(this) == 0));
-        statusPanel.addView(statusTile("최근 응답", shortTimingStatus(), !shortTimingStatus().contains("실패")));
-        statusPanel.addView(statusTile("대표방", TextUtils.isEmpty(profile.name) ? "등록 필요" : profile.name, !TextUtils.isEmpty(profile.name)));
-        statusPanel.addView(statusTile("계정", accountLabel(), true));
+        statusPanel.addView(statusTileGrid(
+                statusTile("권한", notificationPermissionEnabled() ? "허용" : "필요", notificationPermissionEnabled()),
+                statusTile("브릿지", BridgeConfig.isEnabled(this) ? "ON" : "OFF", BridgeConfig.isEnabled(this)),
+                statusTile("등록 방", BridgeConfig.roomProfileCount(this) + "개", BridgeConfig.roomProfileCount(this) > 0),
+                statusTile("구독", subscriptionStatusLabel(), "확인됨".equals(subscriptionStatusLabel())),
+                statusTile("대기 큐", BridgeConfig.pendingEventCount(this) + "개", BridgeConfig.pendingEventCount(this) == 0),
+                statusTile("응답", shortTimingStatus(), !shortTimingStatus().contains("실패"))
+        ));
+        statusPanel.addView(labelValue("대표방", TextUtils.isEmpty(profile.name) ? "등록 필요" : profile.name));
+        statusPanel.addView(labelValue("계정", accountLabel()));
         homeDiagnosticsStatus = text("서버 진단: 확인 중", 14, COLOR_MUTED, true);
-        homeDiagnosticsStatus.setPadding(0, dp(12), 0, 0);
+        homeDiagnosticsStatus.setPadding(0, dp(4), 0, 0);
         statusPanel.addView(homeDiagnosticsStatus);
 
         Button bridgeButton = primaryButton(BridgeConfig.isEnabled(this) ? "브릿지 정지" : "브릿지 시작");
@@ -272,24 +277,6 @@ public class MainActivity extends Activity {
                 quickAction(R.drawable.ic_settings, "설정", "고급", v -> showAdvanced()),
                 quickAction(R.drawable.ic_home, "계정", "로그인", v -> showAccount())
         ));
-
-        root.addView(featurePanel(
-                R.drawable.pixgom_chat_portal,
-                "앱 콘솔",
-                shortStatus(BridgeConfig.lastConsoleSummary(this))));
-        root.addView(featurePanel(
-                R.drawable.pixgom_dashboard_monitor,
-                "최근 진단",
-                "서버 timing: " + shortStatus(BridgeConfig.lastServerTimingSummary(this))
-                        + "\n동기화: " + shortStatus(BridgeConfig.lastProfileSyncSummary(this))));
-
-        LinearLayout stepsPanel = panel();
-        stepsPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
-        root.addView(stepsPanel);
-        stepsPanel.addView(sectionTitle("오늘 확인"));
-        stepsPanel.addView(stepText("1", "알림 권한과 브릿지 ON 상태 확인"));
-        stepsPanel.addView(stepText("2", "내 방 자동 불러오기 후 카카오방에서 /브릿지 테스트"));
-        stepsPanel.addView(stepText("3", "응답 지연 시 로그의 timing만 확인"));
 
         return scrollView;
     }
@@ -341,10 +328,7 @@ public class MainActivity extends Activity {
         scrollView.addView(root);
 
         root.addView(topBar("내 방", "자동 연결", true));
-        root.addView(compactHeroPanel(
-                R.drawable.pixgom_dashboard_monitor,
-                "연결 가능한 방",
-                "승인/결제 완료된 방만 이 폰에 등록합니다."));
+        root.addView(compactSummaryPanel("연결 가능한 방", "승인/결제 완료된 방만 표시됩니다."));
 
         nativeConsoleStatusView = text("내 방을 불러오는 중", 14, COLOR_MUTED, true);
         nativeConsoleStatusView.setPadding(0, dp(8), 0, dp(8));
@@ -352,8 +336,8 @@ public class MainActivity extends Activity {
 
         selectableRoomsContainer = panel();
         nativeConsoleMode = "rooms";
-        selectableRoomsContainer.setPadding(dp(16), dp(16), dp(16), dp(16));
-        selectableRoomsContainer.addView(sectionHeader(R.drawable.pixgom_chat_portal, "연결 가능한 방", "기본값은 전체 선택입니다."));
+        selectableRoomsContainer.setPadding(dp(12), dp(12), dp(12), dp(12));
+        selectableRoomsContainer.addView(sectionHeader(R.drawable.pixgom_chat_portal, "방 선택", "체크 후 연결하거나 방별 관리로 이동합니다."));
         root.addView(selectableRoomsContainer);
 
         Button connectButton = primaryButton("선택한 방 이 폰에 연결");
@@ -387,17 +371,14 @@ public class MainActivity extends Activity {
         scrollView.addView(root);
 
         root.addView(topBar("방 관리", "상태·설정·명령어", true));
-        root.addView(compactHeroPanel(
-                R.drawable.pixgom_dashboard_monitor,
-                "방별 전체 관리",
-                "각 방의 상태, 설정, 명령어, 로그, 게임팩을 한 화면에서 관리합니다."));
+        root.addView(compactSummaryPanel("방별 관리", "상태, 설정, 명령어, 로그, 게임팩을 탭으로 관리합니다."));
 
         nativeConsoleStatusView = text("방 데이터를 불러오는 중", 14, COLOR_MUTED, true);
         nativeConsoleStatusView.setPadding(0, dp(8), 0, dp(8));
         root.addView(nativeConsoleStatusView);
 
         roomDetailContainer = panel();
-        roomDetailContainer.setPadding(dp(14), dp(14), dp(14), dp(14));
+        roomDetailContainer.setPadding(dp(12), dp(12), dp(12), dp(12));
         roomDetailContainer.addView(text("불러오는 중입니다.", 14, COLOR_MUTED, false));
         nativeConsoleMode = "room_detail";
         root.addView(roomDetailContainer);
@@ -941,10 +922,10 @@ public class MainActivity extends Activity {
         screen.setPadding(dp(24), topSafePadding(), dp(24), bottomSafePadding(24));
         screen.setOnClickListener(v -> finishIntro());
 
-        ImageView logo = assetImage(R.drawable.pixgom_bridge_captain, 148);
+        ImageView logo = assetImage(R.drawable.pixgom_bridge_captain, 128);
         screen.addView(logo);
 
-        TextView title = text("픽셀곰", 30, COLOR_TITLE, true);
+        TextView title = text("픽셀곰", 28, COLOR_TITLE, true);
         title.setGravity(Gravity.CENTER);
         title.setPadding(0, dp(14), 0, dp(4));
         screen.addView(title);
@@ -975,15 +956,31 @@ public class MainActivity extends Activity {
     }
 
     private void applyScreenPadding(LinearLayout root, int bottomDp) {
-        root.setPadding(dp(16), topSafePadding(), dp(16), bottomSafePadding(bottomDp));
+        root.setPadding(dp(14), topSafePadding(), dp(14), bottomSafePadding(bottomDp));
     }
 
     private int topSafePadding() {
-        return dp(10) + systemInset("status_bar_height", dp(20));
+        return dp(12) + topSystemInset();
     }
 
     private int bottomSafePadding(int bottomDp) {
-        return dp(bottomDp) + Math.min(systemInset("navigation_bar_height", 0), dp(24));
+        return dp(bottomDp) + Math.min(bottomSystemInset(), dp(24));
+    }
+
+    private int topSystemInset() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            WindowInsets insets = getWindow().getDecorView().getRootWindowInsets();
+            if (insets != null && insets.getStableInsetTop() > 0) return insets.getStableInsetTop();
+        }
+        return systemInset("status_bar_height", dp(24));
+    }
+
+    private int bottomSystemInset() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            WindowInsets insets = getWindow().getDecorView().getRootWindowInsets();
+            if (insets != null && insets.getStableInsetBottom() > 0) return insets.getStableInsetBottom();
+        }
+        return systemInset("navigation_bar_height", 0);
     }
 
     private int systemInset(String name, int fallback) {
@@ -1058,7 +1055,10 @@ public class MainActivity extends Activity {
         rankingsFeatureSwitch = null;
         historyFeatureSwitch = null;
         profilesFeatureSwitch = null;
+        localJsFeatureSwitch = null;
         gamesFeatureSwitch = null;
+        shopFeatureSwitch = null;
+        customCommandsFeatureSwitch = null;
     }
 
     private LinearLayout topBar(String title, String subtitle, boolean showHomeButton) {
@@ -1113,7 +1113,7 @@ public class MainActivity extends Activity {
         LinearLayout action = new LinearLayout(this);
         action.setOrientation(LinearLayout.VERTICAL);
         action.setGravity(Gravity.CENTER);
-        action.setPadding(dp(10), dp(12), dp(10), dp(12));
+        action.setPadding(dp(8), dp(9), dp(8), dp(9));
         action.setBackgroundResource(getResources().getIdentifier("icon_button_background", "drawable", getPackageName()));
         action.setOnClickListener(listener);
         action.setClickable(true);
@@ -1122,14 +1122,14 @@ public class MainActivity extends Activity {
         icon.setImageResource(iconRes);
         icon.setColorFilter(COLOR_BLUE);
         icon.setAdjustViewBounds(true);
-        action.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
+        action.addView(icon, new LinearLayout.LayoutParams(dp(22), dp(22)));
 
-        TextView labelView = text(label, 14, COLOR_TITLE, true);
+        TextView labelView = text(label, 13, COLOR_TITLE, true);
         labelView.setGravity(Gravity.CENTER);
-        labelView.setPadding(0, dp(7), 0, 0);
+        labelView.setPadding(0, dp(5), 0, 0);
         action.addView(labelView);
 
-        TextView hintView = text(hint, 11, COLOR_MUTED, false);
+        TextView hintView = text(hint, 10, COLOR_MUTED, false);
         hintView.setGravity(Gravity.CENTER);
         action.addView(hintView);
         return action;
@@ -1139,21 +1139,43 @@ public class MainActivity extends Activity {
         LinearLayout grid = new LinearLayout(this);
         grid.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        gridParams.setMargins(0, dp(12), 0, 0);
+        gridParams.setMargins(0, dp(8), 0, 0);
         grid.setLayoutParams(gridParams);
 
-        for (int i = 0; i < actions.length; i += 2) {
+        int columns = actions.length == 4 ? 2 : actions.length >= 3 ? 3 : 2;
+        for (int i = 0; i < actions.length; i += columns) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            rowParams.setMargins(0, dp(8), 0, 0);
+            rowParams.setMargins(0, dp(6), 0, 0);
             row.setLayoutParams(rowParams);
-            for (int offset = 0; offset < 2 && i + offset < actions.length; offset++) {
+            for (int offset = 0; offset < columns && i + offset < actions.length; offset++) {
                 View action = actions[i + offset];
                 LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
-                params.setMargins(offset == 0 ? 0 : dp(6), 0, offset == 0 ? dp(6) : 0, 0);
+                params.setMargins(offset == 0 ? 0 : dp(4), 0, offset == columns - 1 ? 0 : dp(4), 0);
                 action.setLayoutParams(params);
                 row.addView(action);
+            }
+            grid.addView(row);
+        }
+        return grid;
+    }
+
+    private LinearLayout statusTileGrid(View... tiles) {
+        LinearLayout grid = new LinearLayout(this);
+        grid.setOrientation(LinearLayout.VERTICAL);
+        for (int i = 0; i < tiles.length; i += 2) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            rowParams.setMargins(0, 0, 0, dp(6));
+            row.setLayoutParams(rowParams);
+            for (int offset = 0; offset < 2 && i + offset < tiles.length; offset++) {
+                View tile = tiles[i + offset];
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+                params.setMargins(offset == 0 ? 0 : dp(3), 0, offset == 0 ? dp(3) : 0, 0);
+                tile.setLayoutParams(params);
+                row.addView(tile);
             }
             grid.addView(row);
         }
@@ -1188,15 +1210,15 @@ public class MainActivity extends Activity {
         LinearLayout layout = panel();
         layout.setOrientation(LinearLayout.HORIZONTAL);
         layout.setGravity(Gravity.CENTER_VERTICAL);
-        layout.setPadding(dp(12), dp(12), dp(12), dp(12));
+        layout.setPadding(dp(10), dp(10), dp(10), dp(10));
 
-        ImageView image = assetImage(imageRes, 64);
+        ImageView image = assetImage(imageRes, 54);
         layout.addView(image);
 
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(12), 0, 0, 0);
-        copy.addView(text(title, 19, COLOR_TITLE, true));
+        copy.setPadding(dp(10), 0, 0, 0);
+        copy.addView(text(title, 17, COLOR_TITLE, true));
         TextView bodyView = text(body, 13, COLOR_MUTED, false);
         bodyView.setPadding(0, dp(3), 0, 0);
         copy.addView(bodyView);
@@ -1204,13 +1226,24 @@ public class MainActivity extends Activity {
         return layout;
     }
 
+    private LinearLayout compactSummaryPanel(String title, String body) {
+        LinearLayout layout = panel();
+        layout.setPadding(dp(12), dp(10), dp(12), dp(10));
+        TextView titleView = text(title, 17, COLOR_TITLE, true);
+        TextView bodyView = text(body, 13, COLOR_MUTED, false);
+        bodyView.setPadding(0, dp(3), 0, 0);
+        layout.addView(titleView);
+        layout.addView(bodyView);
+        return layout;
+    }
+
     private LinearLayout featurePanel(int imageRes, String title, String body) {
         LinearLayout layout = panel();
         layout.setOrientation(LinearLayout.HORIZONTAL);
         layout.setGravity(Gravity.CENTER_VERTICAL);
-        layout.setPadding(dp(14), dp(14), dp(14), dp(14));
+        layout.setPadding(dp(10), dp(10), dp(10), dp(10));
 
-        ImageView image = assetImage(imageRes, 72);
+        ImageView image = assetImage(imageRes, 52);
         layout.addView(image);
 
         LinearLayout copy = new LinearLayout(this);
@@ -1469,16 +1502,39 @@ public class MainActivity extends Activity {
         for (int index = 0; index < rooms.length(); index++) {
             JSONObject room = rooms.optJSONObject(index);
             if (room == null) continue;
-            selectableRoomsContainer.addView(roomOpenCard(room));
-            CheckBox check = new CheckBox(this);
-            check.setText(room.optString("roomName", "방") + " · " + room.optString("subscriptionStatusLabel", "상태 확인"));
-            check.setTextColor(COLOR_TEXT);
-            check.setTextSize(15);
-            check.setChecked(true);
-            check.setTag(room.optString("applicationId", ""));
-            selectableRoomsContainer.addView(check);
-            roomSelectionChecks.add(check);
+            selectableRoomsContainer.addView(selectableRoomCard(room));
         }
+    }
+
+    private LinearLayout selectableRoomCard(JSONObject room) {
+        String applicationId = room.optString("applicationId", "");
+        LinearLayout card = panel();
+        card.setPadding(dp(10), dp(10), dp(10), dp(10));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(8), 0, 0);
+        card.setLayoutParams(params);
+
+        CheckBox check = new CheckBox(this);
+        check.setText(room.optString("roomName", "방"));
+        check.setTextColor(COLOR_TITLE);
+        check.setTextSize(16);
+        check.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        check.setChecked(true);
+        check.setTag(applicationId);
+        card.addView(check);
+        roomSelectionChecks.add(check);
+
+        String packs = commandPackCountLabel(room);
+        String setup = roomSetupLabel(room);
+        card.addView(text(roomRoleLabel(room) + " · " + room.optString("subscriptionStatusLabel", "상태 확인") + " · " + setup, 12, COLOR_MUTED, false));
+        card.addView(text(room.optString("bridgeStatus", "상태 확인") + " · " + packs + " · " + room.optString("roomId", "roomId 미등록"), 12, COLOR_MUTED, false));
+
+        Button detailButton = secondaryButton("방별 관리");
+        detailButton.setTextSize(13);
+        detailButton.setOnClickListener(v -> showRoomDetail(applicationId, "status"));
+        card.addView(detailButton);
+        card.setOnClickListener(v -> check.setChecked(!check.isChecked()));
+        return card;
     }
 
     private LinearLayout roomOpenCard(JSONObject room) {
@@ -1595,22 +1651,46 @@ public class MainActivity extends Activity {
     }
 
     private void renderRoomSettingsTab(LinearLayout parent, JSONObject room) {
+        String applicationId = room.optString("applicationId", "");
+        JSONObject features = room.optJSONObject("features");
+        parent.addView(sectionTitle("방 기능"));
+        attendanceFeatureSwitch = settingSwitch("출석", roomFeatureChecked(features, "attendance", true));
+        pointsFeatureSwitch = settingSwitch("포인트", roomFeatureChecked(features, "points", true));
+        rankingsFeatureSwitch = settingSwitch("랭킹", roomFeatureChecked(features, "rankings", true));
+        historyFeatureSwitch = settingSwitch("히스토리", roomFeatureChecked(features, "history", true));
+        profilesFeatureSwitch = settingSwitch("프로필", roomFeatureChecked(features, "profiles", true));
+        localJsFeatureSwitch = settingSwitch("JS 자동응답", roomFeatureChecked(features, "localJs", true));
+        gamesFeatureSwitch = settingSwitch("게임", roomFeatureChecked(features, "games", false));
+        shopFeatureSwitch = settingSwitch("상점/가방", roomFeatureChecked(features, "shop", true));
+        customCommandsFeatureSwitch = settingSwitch("커스텀 명령어", roomFeatureChecked(features, "customCommands", true));
+        parent.addView(statusTileGrid(
+                attendanceFeatureSwitch,
+                pointsFeatureSwitch,
+                rankingsFeatureSwitch,
+                historyFeatureSwitch,
+                profilesFeatureSwitch,
+                localJsFeatureSwitch,
+                gamesFeatureSwitch,
+                shopFeatureSwitch,
+                customCommandsFeatureSwitch
+        ));
+
         parent.addView(sectionTitle("분리 설정"));
         boolean isGameRoom = "game_room".equals(room.optString("roomPurpose", ""));
         if (isGameRoom) {
             parent.addView(text("게임방은 기준 일반방의 분리 설정을 따릅니다.", 14, COLOR_MUTED, false));
-            return;
+        } else {
+            JSONObject mode = roomModeSplit(room);
+            blockGamesInGeneralRoomSwitch = settingSwitch("일반방에서 게임 명령 차단", mode.optBoolean("blockGamesInGeneralRoom", true));
+            blockOpsInGameRoomSwitch = settingSwitch("게임방에서 운영 명령 차단", mode.optBoolean("blockOpsInGameRoom", true));
+            sharePointsAndInventorySwitch = settingSwitch("포인트/가방 데이터 공유", mode.optBoolean("sharePointsAndInventory", true));
+            parent.addView(blockGamesInGeneralRoomSwitch);
+            parent.addView(blockOpsInGameRoomSwitch);
+            parent.addView(sharePointsAndInventorySwitch);
         }
-        JSONObject mode = roomModeSplit(room);
-        blockGamesInGeneralRoomSwitch = settingSwitch("일반방에서 게임 명령 차단", mode.optBoolean("blockGamesInGeneralRoom", true));
-        blockOpsInGameRoomSwitch = settingSwitch("게임방에서 운영 명령 차단", mode.optBoolean("blockOpsInGameRoom", true));
-        sharePointsAndInventorySwitch = settingSwitch("포인트/가방 데이터 공유", mode.optBoolean("sharePointsAndInventory", true));
-        parent.addView(blockGamesInGeneralRoomSwitch);
-        parent.addView(blockOpsInGameRoomSwitch);
-        parent.addView(sharePointsAndInventorySwitch);
 
-        Button saveButton = primaryButton("분리 설정 저장");
-        saveButton.setOnClickListener(v -> saveRoomModeSettings(room.optString("applicationId", "")));
+        Button saveButton = primaryButton("설정 저장");
+        saveButton.setOnClickListener(v -> saveRoomSettings(applicationId, !isGameRoom));
         parent.addView(saveButton);
         parent.addView(text("방 사용/등록, 결제, 라이선스 같은 관리자 설정은 앱에서 변경하지 않습니다.", 12, COLOR_MUTED, false));
     }
@@ -1840,6 +1920,53 @@ public class MainActivity extends Activity {
                 showRoomDetail(applicationId, "settings");
             });
         });
+    }
+
+    private void saveRoomSettings(String applicationId, boolean includeModeSettings) {
+        if (TextUtils.isEmpty(applicationId)) return;
+        JSONObject features = selectedRoomFeaturePayload();
+        boolean blockGames = blockGamesInGeneralRoomSwitch == null || blockGamesInGeneralRoomSwitch.isChecked();
+        boolean blockOps = blockOpsInGameRoomSwitch == null || blockOpsInGameRoomSwitch.isChecked();
+        boolean shareData = sharePointsAndInventorySwitch == null || sharePointsAndInventorySwitch.isChecked();
+        executor.execute(() -> {
+            EventSender.ApiResult featureResult = EventSender.saveRoomFeatureSettings(this, BridgeConfig.buyerToken(this), applicationId, features);
+            EventSender.ApiResult modeResult = null;
+            if (featureResult.ok() && includeModeSettings) {
+                modeResult = EventSender.saveRoomModeSettings(this, BridgeConfig.buyerToken(this), applicationId, blockGames, blockOps, shareData);
+            }
+            EventSender.ApiResult finalModeResult = modeResult;
+            runOnUiThread(() -> {
+                if (!featureResult.ok()) {
+                    Toast.makeText(this, "기능 저장 실패: " + featureResult.error, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                saveBuyerSession(finalModeResult != null && finalModeResult.ok() ? finalModeResult.json : featureResult.json);
+                if (finalModeResult != null && !finalModeResult.ok()) {
+                    Toast.makeText(this, "분리 설정 저장 실패: " + finalModeResult.error, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                Toast.makeText(this, "방 설정을 저장했습니다.", Toast.LENGTH_SHORT).show();
+                showRoomDetail(applicationId, "settings");
+            });
+        });
+    }
+
+    private JSONObject selectedRoomFeaturePayload() {
+        JSONObject features = new JSONObject();
+        try {
+            features.put("attendance", attendanceFeatureSwitch == null || attendanceFeatureSwitch.isChecked());
+            features.put("points", pointsFeatureSwitch == null || pointsFeatureSwitch.isChecked());
+            features.put("rankings", rankingsFeatureSwitch == null || rankingsFeatureSwitch.isChecked());
+            features.put("history", historyFeatureSwitch == null || historyFeatureSwitch.isChecked());
+            features.put("profiles", profilesFeatureSwitch == null || profilesFeatureSwitch.isChecked());
+            features.put("localJs", localJsFeatureSwitch == null || localJsFeatureSwitch.isChecked());
+            features.put("games", gamesFeatureSwitch != null && gamesFeatureSwitch.isChecked());
+            features.put("shop", shopFeatureSwitch == null || shopFeatureSwitch.isChecked());
+            features.put("customCommands", customCommandsFeatureSwitch == null || customCommandsFeatureSwitch.isChecked());
+        } catch (Exception ignored) {
+            // Keep room feature save payload best-effort.
+        }
+        return features;
     }
 
     private void loadGamePackHelp() {
@@ -2359,6 +2486,30 @@ public class MainActivity extends Activity {
         return TextUtils.join(", ", names);
     }
 
+    private String commandPackCountLabel(JSONObject room) {
+        JSONArray packs = joinedPackDetails(room == null ? null : room.optJSONObject("commandPacks"));
+        return "명령어팩 " + packs.length() + "개";
+    }
+
+    private String roomSetupLabel(JSONObject room) {
+        if (room == null) return "상태 확인";
+        if ("expired".equals(room.optString("subscriptionStatus", ""))) return "구독 만료";
+        if ("needs_setup".equals(room.optString("bridgeStatus", ""))) return "설정 필요";
+        JSONObject features = room.optJSONObject("features");
+        if (features != null) {
+            JSONArray names = features.names();
+            boolean hasEnabled = false;
+            for (int index = 0; names != null && index < names.length(); index++) {
+                if (features.optBoolean(names.optString(index), false)) {
+                    hasEnabled = true;
+                    break;
+                }
+            }
+            if (!hasEnabled) return "기능 꺼짐";
+        }
+        return "정상";
+    }
+
     private JSONObject roomModeSplit(JSONObject room) {
         JSONObject snapshot = room == null ? null : room.optJSONObject("roomStatusSnapshot");
         JSONObject settings = snapshot == null ? null : snapshot.optJSONObject("settings");
@@ -2400,6 +2551,11 @@ public class MainActivity extends Activity {
         return features.optBoolean(key, false) ? "켜짐" : "꺼짐";
     }
 
+    private boolean roomFeatureChecked(JSONObject features, String key, boolean fallback) {
+        if (features == null || !features.has(key)) return fallback;
+        return features.optBoolean(key, fallback);
+    }
+
     private String logsForRoom(String roomName) {
         String logs = BridgeConfig.logs(this);
         if (TextUtils.isEmpty(logs)) return "아직 전송 로그가 없습니다.";
@@ -2434,7 +2590,7 @@ public class MainActivity extends Activity {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setBackgroundResource(getResources().getIdentifier("panel_background", "drawable", getPackageName()));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, dp(16), 0, 0);
+        params.setMargins(0, dp(10), 0, 0);
         layout.setLayoutParams(params);
         return layout;
     }
@@ -2476,8 +2632,8 @@ public class MainActivity extends Activity {
     }
 
     private TextView sectionTitle(String value) {
-        TextView title = text(value, 17, COLOR_TITLE, true);
-        title.setPadding(0, 0, 0, dp(8));
+        TextView title = text(value, 16, COLOR_TITLE, true);
+        title.setPadding(0, 0, 0, dp(6));
         return title;
     }
 
@@ -2514,10 +2670,10 @@ public class MainActivity extends Activity {
 
     private LinearLayout statusTile(String label, String value, boolean ok) {
         LinearLayout layout = labelValue(label, value);
-        layout.setPadding(dp(10), dp(8), dp(10), dp(8));
+        layout.setPadding(dp(9), dp(7), dp(9), dp(7));
         layout.setBackgroundResource(getResources().getIdentifier("status_tile_background", "drawable", getPackageName()));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, 0, 0, dp(8));
+        params.setMargins(0, 0, 0, 0);
         layout.setLayoutParams(params);
         TextView valueView = (TextView) layout.getChildAt(1);
         valueView.setTextColor(ok ? COLOR_GOOD : COLOR_BAD);
@@ -2555,11 +2711,13 @@ public class MainActivity extends Activity {
     private Switch settingSwitch(String label, boolean checked) {
         Switch sw = new Switch(this);
         sw.setText(label);
-        sw.setTextSize(15);
+        sw.setTextSize(14);
         sw.setTextColor(COLOR_TEXT);
         sw.setChecked(checked);
+        sw.setPadding(dp(8), dp(6), dp(8), dp(6));
+        sw.setBackgroundResource(getResources().getIdentifier("status_tile_background", "drawable", getPackageName()));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, dp(8), 0, 0);
+        params.setMargins(0, dp(6), 0, 0);
         sw.setLayoutParams(params);
         return sw;
     }
@@ -2612,19 +2770,21 @@ public class MainActivity extends Activity {
         LinearLayout grid = new LinearLayout(this);
         grid.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        gridParams.setMargins(0, dp(12), 0, 0);
+        gridParams.setMargins(0, dp(8), 0, 0);
         grid.setLayoutParams(gridParams);
 
-        for (int i = 0; i < buttons.length; i += 2) {
+        int columns = buttons.length >= 3 ? 3 : 2;
+        for (int i = 0; i < buttons.length; i += columns) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            rowParams.setMargins(0, dp(8), 0, 0);
+            rowParams.setMargins(0, dp(6), 0, 0);
             row.setLayoutParams(rowParams);
-            for (int offset = 0; offset < 2 && i + offset < buttons.length; offset++) {
+            for (int offset = 0; offset < columns && i + offset < buttons.length; offset++) {
                 Button button = buttons[i + offset];
-                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(46), 1);
-                params.setMargins(offset == 0 ? 0 : dp(6), 0, offset == 0 ? dp(6) : 0, 0);
+                button.setTextSize(13);
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1);
+                params.setMargins(offset == 0 ? 0 : dp(4), 0, offset == columns - 1 ? 0 : dp(4), 0);
                 button.setLayoutParams(params);
                 row.addView(button);
             }

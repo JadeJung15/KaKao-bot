@@ -215,6 +215,7 @@ export const FEATURES = [
   "application-payment-requested-at",
   "buyer-room-groups",
   "buyer-room-mode-settings",
+  "buyer-room-feature-settings",
   "bridge-connect-linked-room-batch",
   "buyer-game-room-link",
   "bridge-connect-diagnostics",
@@ -335,9 +336,9 @@ const INCIDENT_MESSAGES = Object.freeze({
   }
 });
 const MIN_ANDROID_VERSION = normalizeText(process.env.MIN_ANDROID_VERSION || "1.0.17");
-const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.39");
+const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.40");
 const MIN_ANDROID_VERSION_CODE = Math.max(1, Number(process.env.MIN_ANDROID_VERSION_CODE || 18));
-const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 40));
+const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 41));
 const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
 const SUPABASE_ANON_KEY = normalizeText(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 const SUPABASE_KAKAO_ENABLED = normalizeText(process.env.SUPABASE_KAKAO_ENABLED || "false") === "true";
@@ -12408,7 +12409,7 @@ function roomStatusSnapshot(state = {}, roomState = {}, options = {}) {
       history: (settings.settingsHistory || []).slice(-10).reverse()
     },
     permissions: {
-      buyerEditable: ["modeSplit", "commandPacks", "inquiries", "transfers", "restoreRequests"],
+      buyerEditable: ["features", "modeSplit", "commandPacks", "inquiries", "transfers", "restoreRequests"],
       adminOnly: ["roomName", "license", "payment", "subscription", "admins"]
     },
     diagnostics
@@ -15839,6 +15840,44 @@ async function buyerRoomModeSettingsFromRequest(state, req, body = {}) {
   };
 }
 
+async function buyerRoomFeatureSettingsFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const forbiddenFields = ["licenseKey", "licenseStatus", "subscriptionExpiresAt", "subscriptionStatus", "monthlyPriceKrw", "paymentStatus", "roomAdmins", "admins", "gameSettings", "customCommands", "roomRole", "modeSplit"];
+  const forbiddenField = forbiddenFields.find((key) => Object.hasOwn(body, key));
+  if (forbiddenField) return { ok: false, status: 403, error: "buyer_field_not_allowed", field: forbiddenField };
+  const application = approvedApplicationForInstall(state, auth.account, body);
+  if (!application) return { ok: false, status: 404, error: "approved_room_not_found" };
+
+  const roomState = ensureRoom(state, application.roomName);
+  roomState.settings ||= {};
+  applyFeatureSettingsFromPayload(roomState, body);
+  const features = roomFeatures(roomState);
+  const updatedBy = auth.account.email || auth.account.nickname || "buyer_console";
+  recordSettingsHistory(roomState, {
+    type: "buyer_feature_settings_saved",
+    by: updatedBy,
+    changedFields: ["features"],
+    summary: "구매자 앱 방 기능 설정 저장"
+  });
+  recordRoomEvent(roomState, {
+    type: "buyer_feature_settings_saved",
+    by: updatedBy,
+    enabledFeatures: Object.entries(features).filter(([, enabled]) => enabled).map(([key]) => key),
+    disabledFeatures: Object.entries(features).filter(([, enabled]) => !enabled).map(([key]) => key)
+  });
+
+  return {
+    ...buyerConsolePayload(state, auth.account),
+    savedSettings: {
+      applicationId: application.id,
+      features,
+      roomStatusSnapshot: roomStatusSnapshot(state, roomState, { application, account: auth.account })
+    },
+    guideToken: buyerTokenForAccount(auth.account)
+  };
+}
+
 function buyerApplicationForGameLink(state, account = {}, id = "") {
   const applicationId = normalizeText(id);
   if (!applicationId) return { ok: false, status: 400, error: "application_id_required" };
@@ -16181,6 +16220,15 @@ async function handlePublicAccountApi(req, url) {
     const body = await readBody(req);
     const state = await loadState();
     const result = await buyerRoomModeSettingsFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/room-feature-settings") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerRoomFeatureSettingsFromRequest(state, req, body);
     if (!result.ok) return { status: result.status || 400, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -17730,6 +17778,7 @@ export async function requestHandler(req, res) {
       || pathname === "/api/buyer/account/link-kakao"
       || pathname === "/api/application-inquiries"
       || pathname === "/api/buyer/room-mode-settings"
+      || pathname === "/api/buyer/room-feature-settings"
       || pathname === "/api/buyer/game-room-link"
       || pathname === "/api/buyer/restore-requests"
       || pathname === "/api/buyer/room-transfer/create"

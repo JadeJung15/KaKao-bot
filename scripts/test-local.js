@@ -202,10 +202,10 @@ try {
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(health.json.serverTimezone, "Asia/Seoul");
   assert.equal(health.json.minAndroidVersion, "1.0.17");
-  assert.equal(health.json.latestAndroidVersion, "1.0.39");
-  assert.equal(health.json.latestAndroidVersionCode, 40);
+  assert.equal(health.json.latestAndroidVersion, "1.0.40");
+  assert.equal(health.json.latestAndroidVersionCode, 41);
   assert.equal(health.json.minAndroidVersionCode, 18);
-  assert.equal(health.json.latestAndroidVersionCode, 40);
+  assert.equal(health.json.latestAndroidVersionCode, 41);
   assert.equal(health.json.appUpdateRequired, false);
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
@@ -385,6 +385,7 @@ try {
   assert.match(health.json.features.join(","), /application-inquiry-workflow/);
   assert.match(health.json.features.join(","), /buyer-room-groups/);
   assert.match(health.json.features.join(","), /buyer-room-mode-settings/);
+  assert.match(health.json.features.join(","), /buyer-room-feature-settings/);
   assert.match(health.json.features.join(","), /bridge-connect-linked-room-batch/);
   assert.match(health.json.features.join(","), /buyer-game-room-link/);
   assert.match(health.json.features.join(","), /bridge-connect-diagnostics/);
@@ -1269,8 +1270,8 @@ try {
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
   assert.equal(packageJson.scripts["android:release-report"], "node scripts/android-release-bundle.js --report-only");
   const androidGradle = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "build.gradle"), "utf8");
-  assert.match(androidGradle, /versionCode 40/);
-  assert.match(androidGradle, /versionName "1\.0\.39"/);
+  assert.match(androidGradle, /versionCode 41/);
+  assert.match(androidGradle, /versionName "1\.0\.40"/);
   assert.match(androidGradle, /com\.kakao\.sdk:v2-user:2\.23\.4/);
   const androidEventSender = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "EventSender.java"), "utf8");
   assert.match(androidEventSender, /optJSONArray\("rooms"\)/);
@@ -1282,6 +1283,7 @@ try {
   assert.match(androidEventSender, /\/api\/bridge\/auto-connect/);
   assert.match(androidEventSender, /\/api\/bridge\/account-room-sync/);
   assert.match(androidEventSender, /\/api\/buyer\/console/);
+  assert.match(androidEventSender, /\/api\/buyer\/room-feature-settings/);
   assert.match(androidEventSender, /\/api\/buyer\/command-packs\/apply/);
   assert.match(androidEventSender, /\/api\/buyer\/command-templates\/install/);
   assert.match(androidEventSender, /\/api\/login\/kakao/);
@@ -1292,7 +1294,8 @@ try {
   assert.match(androidEventSender, /timing/);
   const androidMainActivity = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "MainActivity.java"), "utf8");
   const androidColors = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "res", "values", "colors.xml"), "utf8");
-  assert.match(androidMainActivity, /sectionTitle\("오늘 확인"\)/);
+  assert.match(androidMainActivity, /compactSummaryPanel\("운영 상태"/);
+  assert.match(androidMainActivity, /statusTileGrid/);
   assert.match(androidMainActivity, /compactActionGrid/);
   assert.match(androidMainActivity, /statusTile/);
   assert.match(androidMainActivity, /로그인하고 방 자동 연결/);
@@ -1300,6 +1303,7 @@ try {
   assert.match(androidMainActivity, /showCommandStore/);
   assert.match(androidMainActivity, /EventSender\.autoConnect/);
   assert.match(androidMainActivity, /EventSender\.buyerConsole/);
+  assert.match(androidMainActivity, /EventSender\.saveRoomFeatureSettings/);
   assert.match(androidMainActivity, /EventSender\.applyCommandPack/);
   assert.match(androidMainActivity, /EventSender\.installCommandTemplate/);
   assert.match(androidMainActivity, /카카오 로그인 준비 필요/);
@@ -2446,6 +2450,49 @@ try {
   });
   assert.equal(buyerForbiddenModeSave.response.status, 403);
   assert.equal(buyerForbiddenModeSave.json.error, "buyer_field_not_allowed");
+
+  const buyerFeatureSave = await request("/api/buyer/room-feature-settings", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      features: { games: true, history: false }
+    })
+  });
+  assert.equal(buyerFeatureSave.response.status, 200);
+  assert.equal(buyerFeatureSave.json.savedSettings.features.games, true);
+  assert.equal(buyerFeatureSave.json.savedSettings.features.history, false);
+  assert.equal(buyerFeatureSave.json.rooms[0].features.history, false);
+  assert.equal(
+    buyerFeatureSave.json.savedSettings.roomStatusSnapshot.settings.history.some((item) => item.type === "buyer_feature_settings_saved"),
+    true
+  );
+
+  const buyerFeatureRestore = await request("/api/buyer/room-feature-settings", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      features: { history: true }
+    })
+  });
+  assert.equal(buyerFeatureRestore.response.status, 200);
+  assert.equal(buyerFeatureRestore.json.savedSettings.features.history, true);
+
+  const buyerForbiddenFeatureSave = await request("/api/buyer/room-feature-settings", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      features: { games: false },
+      licenseKey: "PXG-HACK-0000"
+    })
+  });
+  assert.equal(buyerForbiddenFeatureSave.response.status, 403);
+  assert.equal(buyerForbiddenFeatureSave.json.error, "buyer_field_not_allowed");
 
   const fixedTemplate = commandTemplates.json.templates.find((template) => template.trigger === "/출석");
   const fixedTemplateInstall = await request("/api/buyer/command-templates/install", {
