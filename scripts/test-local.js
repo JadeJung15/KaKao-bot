@@ -156,10 +156,10 @@ try {
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(health.json.serverTimezone, "Asia/Seoul");
   assert.equal(health.json.minAndroidVersion, "1.0.17");
-  assert.equal(health.json.latestAndroidVersion, "1.0.35");
-  assert.equal(health.json.latestAndroidVersionCode, 36);
+  assert.equal(health.json.latestAndroidVersion, "1.0.36");
+  assert.equal(health.json.latestAndroidVersionCode, 37);
   assert.equal(health.json.minAndroidVersionCode, 18);
-  assert.equal(health.json.latestAndroidVersionCode, 36);
+  assert.equal(health.json.latestAndroidVersionCode, 37);
   assert.equal(health.json.appUpdateRequired, false);
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
@@ -1222,8 +1222,9 @@ try {
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
   assert.equal(packageJson.scripts["android:release-report"], "node scripts/android-release-bundle.js --report-only");
   const androidGradle = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "build.gradle"), "utf8");
-  assert.match(androidGradle, /versionCode 36/);
-  assert.match(androidGradle, /versionName "1\.0\.35"/);
+  assert.match(androidGradle, /versionCode 37/);
+  assert.match(androidGradle, /versionName "1\.0\.36"/);
+  assert.match(androidGradle, /com\.kakao\.sdk:v2-user:2\.23\.4/);
   const androidEventSender = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "EventSender.java"), "utf8");
   assert.match(androidEventSender, /optJSONArray\("rooms"\)/);
   assert.match(androidEventSender, /roomResults/);
@@ -1231,6 +1232,12 @@ try {
   assert.match(androidEventSender, /canonicalRoomName/);
   assert.match(androidEventSender, /roomProfileSync/);
   assert.match(androidEventSender, /\/api\/bridge\/room-profile-sync/);
+  assert.match(androidEventSender, /\/api\/bridge\/auto-connect/);
+  assert.match(androidEventSender, /\/api\/bridge\/account-room-sync/);
+  assert.match(androidEventSender, /\/api\/buyer\/console/);
+  assert.match(androidEventSender, /\/api\/buyer\/command-packs\/apply/);
+  assert.match(androidEventSender, /\/api\/buyer\/command-templates\/install/);
+  assert.match(androidEventSender, /\/api\/login\/kakao/);
   assert.match(androidEventSender, /eventId/);
   assert.match(androidEventSender, /bridgeReceivedAt/);
   assert.match(androidEventSender, /bridgeSentAt/);
@@ -1241,6 +1248,15 @@ try {
   assert.match(androidMainActivity, /sectionTitle\("오늘 확인"\)/);
   assert.match(androidMainActivity, /compactActionGrid/);
   assert.match(androidMainActivity, /statusTile/);
+  assert.match(androidMainActivity, /로그인하고 방 자동 연결/);
+  assert.match(androidMainActivity, /showRooms/);
+  assert.match(androidMainActivity, /showCommandStore/);
+  assert.match(androidMainActivity, /EventSender\.autoConnect/);
+  assert.match(androidMainActivity, /EventSender\.buyerConsole/);
+  assert.match(androidMainActivity, /EventSender\.applyCommandPack/);
+  assert.match(androidMainActivity, /EventSender\.installCommandTemplate/);
+  assert.match(androidMainActivity, /카카오 로그인 준비 필요/);
+  assert.match(androidMainActivity, /연결코드 직접 등록/);
   assert.doesNotMatch(androidMainActivity, /오픈채팅 운영봇을 카카오 알림 기반으로 연결합니다\. 화면 감지는 사용하지 않습니다\./);
   assert.doesNotMatch(androidColors, /#FFF6E7|#7A4A2A|#3A2518/i);
   assert.match(androidMainActivity, /for \(EventSender\.RoomConnectResult room/);
@@ -2150,6 +2166,49 @@ try {
   assert.equal(typeof buyerConsoleApproved.json.rooms[0].aliasSummary.totalProfiles, "number");
   assert.ok(buyerConsoleApproved.json.rooms[0].gameUsageSummary);
   assert.ok(Array.isArray(buyerConsoleApproved.json.rooms[0].gameUsageSummary.nextActions));
+
+  const bridgeAutoConnect = await request("/api/bridge/auto-connect", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationIds: [buyerConsoleApproved.json.rooms[0].applicationId]
+    })
+  });
+  assert.equal(bridgeAutoConnect.response.status, 200);
+  assert.equal(bridgeAutoConnect.json.ok, true);
+  assert.equal(bridgeAutoConnect.json.rooms.some((room) => room.roomName === "판매신청방"), true);
+  assert.equal(bridgeAutoConnect.json.rooms.every((room) => room.bridgeConnectCode), true);
+  assert.equal(bridgeAutoConnect.json.summary.requested, 1);
+  assert.equal(bridgeAutoConnect.json.summary.connected >= 1, true);
+
+  const bridgeAccountRoomSync = await request("/api/bridge/account-room-sync", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationIds: [buyerConsoleApproved.json.rooms[0].applicationId, "app_not_paid"]
+    })
+  });
+  assert.equal(bridgeAccountRoomSync.response.status, 200);
+  assert.equal(bridgeAccountRoomSync.json.ok, true);
+  assert.equal(bridgeAccountRoomSync.json.inactiveRooms.some((room) => room.applicationId === "app_not_paid" && room.reason === "not_approved_or_paid"), true);
+
+  const kakaoLoginMissingToken = await request("/api/login/kakao", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({})
+  });
+  assert.equal(kakaoLoginMissingToken.response.status, 401);
+  assert.equal(kakaoLoginMissingToken.json.error, "missing_kakao_access_token");
+
+  const kakaoLinkMissingToken = await request("/api/buyer/account/link-kakao", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: approvedLogin.json.guideToken })
+  });
+  assert.equal(kakaoLinkMissingToken.response.status, 401);
+  assert.equal(kakaoLinkMissingToken.json.error, "missing_kakao_access_token");
 
   const buyerSearch = await request(`/api/buyer/search?q=${encodeURIComponent("판매신청방")}&token=${encodeURIComponent(approvedLogin.json.guideToken)}`);
   assert.equal(buyerSearch.response.status, 200);

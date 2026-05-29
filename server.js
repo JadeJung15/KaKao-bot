@@ -276,6 +276,8 @@ export const FEATURES = [
   "read-only-command-save-skip",
   "android-1030-play-latest",
   "android-1031-release-prep",
+  "android-account-auto-connect",
+  "android-native-buyer-console",
   "app-diagnostic-log-clarity",
   "admin-live-log-status-badges",
   "buyer-app-connection-check-card",
@@ -333,9 +335,9 @@ const INCIDENT_MESSAGES = Object.freeze({
   }
 });
 const MIN_ANDROID_VERSION = normalizeText(process.env.MIN_ANDROID_VERSION || "1.0.17");
-const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.35");
+const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.36");
 const MIN_ANDROID_VERSION_CODE = Math.max(1, Number(process.env.MIN_ANDROID_VERSION_CODE || 18));
-const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 36));
+const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 37));
 const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
 const SUPABASE_ANON_KEY = normalizeText(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 const SUPABASE_KAKAO_ENABLED = normalizeText(process.env.SUPABASE_KAKAO_ENABLED || "false") === "true";
@@ -3054,10 +3056,16 @@ function findAccountByExternalUser(state, provider, externalId) {
   const normalizedProvider = normalizeText(provider);
   const normalizedExternalId = normalizeText(externalId);
   if (!normalizedProvider || !normalizedExternalId) return null;
-  return Object.values(state.accounts || {}).find((account) => (
-    account.auth?.provider === normalizedProvider
-    && account.auth?.externalId === normalizedExternalId
-  ));
+  return Object.values(state.accounts || {}).find((account) => {
+    const primary = account.auth?.provider === normalizedProvider
+      && account.auth?.externalId === normalizedExternalId;
+    const linked = Array.isArray(account.externalAccounts)
+      && account.externalAccounts.some((external) => (
+        external.provider === normalizedProvider
+        && external.externalId === normalizedExternalId
+      ));
+    return primary || linked;
+  });
 }
 
 function supabaseEnabled() {
@@ -3328,6 +3336,33 @@ async function supabaseUserFromAccessToken(accessToken) {
   };
 }
 
+async function kakaoUserFromAccessToken(accessToken) {
+  const token = normalizeText(accessToken);
+  if (!token) return { ok: false, status: 401, error: "missing_kakao_access_token" };
+  const response = await fetch("https://kapi.kakao.com/v2/user/me", {
+    headers: { authorization: `Bearer ${token}` }
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.id) return { ok: false, status: 401, error: "invalid_kakao_access_token" };
+  const kakaoAccount = payload.kakao_account || {};
+  const properties = payload.properties || {};
+  const profile = kakaoAccount.profile || {};
+  const email = normalizeEmail(kakaoAccount.email || "");
+  return {
+    ok: true,
+    user: {
+      id: normalizeText(payload.id),
+      email: validEmail(email) ? email : "",
+      provider: "kakao",
+      providers: ["kakao"],
+      name: normalizeAccountNickname({
+        nickname: profile.nickname || properties.nickname || kakaoAccount.name || ""
+      }),
+      avatarUrl: normalizeText(profile.profile_image_url || properties.profile_image || "")
+    }
+  };
+}
+
 function isOwnerEmail(email) {
   return OWNER_ADMIN_EMAILS.includes(normalizeEmail(email));
 }
@@ -3360,6 +3395,33 @@ function ensureExternalAccount(state, externalUser = {}, payload = {}) {
   account.applicationIds ||= [];
   account.lastLoginAt = nowIso();
   applyConsentToAccount(account, payload);
+  account.updatedAt = nowIso();
+  return account;
+}
+
+function linkExternalAccount(account = {}, externalUser = {}) {
+  const provider = normalizeText(externalUser.provider || "kakao");
+  const externalId = normalizeText(externalUser.id);
+  if (!provider || !externalId) return account;
+  account.externalAccounts = Array.isArray(account.externalAccounts) ? account.externalAccounts : [];
+  const existing = account.externalAccounts.find((item) => item.provider === provider && item.externalId === externalId);
+  const linked = {
+    provider,
+    externalId,
+    providers: externalUser.providers || [provider],
+    name: externalUser.name || "",
+    avatarUrl: externalUser.avatarUrl || "",
+    linkedAt: existing?.linkedAt || nowIso(),
+    updatedAt: nowIso()
+  };
+  if (existing) Object.assign(existing, linked);
+  else account.externalAccounts.push(linked);
+  account.auth ||= {};
+  if (!account.auth.provider || account.auth.provider === "password") {
+    account.auth = { ...linked };
+  }
+  if (!account.email && externalUser.email) account.email = externalUser.email;
+  if (!account.nickname && externalUser.name) account.nickname = externalUser.name;
   account.updatedAt = nowIso();
   return account;
 }
@@ -13989,13 +14051,7 @@ function createSignupApplication(state, payload = {}) {
   return createApplicationForAccount(state, targetAccount, value);
 }
 
-function loginAccount(state, payload = {}) {
-  const email = normalizeEmail(payload.email);
-  const password = String(payload.password || "");
-  const account = findAccountByEmail(state, email);
-  if (!account || !verifyPassword(password, account.passwordHash)) {
-    return { ok: false, status: 401, error: "invalid_login" };
-  }
+function loginPayloadForAccount(state, account = {}) {
   account.lastLoginAt = nowIso();
   account.updatedAt = nowIso();
   const applicationIds = account.applicationIds || [];
@@ -14015,6 +14071,16 @@ function loginAccount(state, payload = {}) {
       .filter(Boolean)
       .map((application) => publicApplicationView(application, state))
   };
+}
+
+function loginAccount(state, payload = {}) {
+  const email = normalizeEmail(payload.email);
+  const password = String(payload.password || "");
+  const account = findAccountByEmail(state, email);
+  if (!account || !verifyPassword(password, account.passwordHash)) {
+    return { ok: false, status: 401, error: "invalid_login" };
+  }
+  return loginPayloadForAccount(state, account);
 }
 
 async function createSignupAccountFromRequest(state, body = {}) {
@@ -14052,24 +14118,7 @@ async function loginAccountFromRequest(state, body = {}) {
   const external = await externalAccountFromRequest(state, body, { requireConsentsForNew: false });
   if (external) {
     if (!external.ok) return external;
-    const account = external.account;
-    const applicationIds = account.applicationIds || [];
-    const approvedApplications = approvedBuyerApplications(state, account);
-    const buyerAccess = approvedApplications.length > 0;
-    const ownerAccess = isOwnerEmail(account.email);
-    return {
-      ok: true,
-      account: publicAccountView(account),
-      buyerAccess,
-      ownerAccess,
-      ...(ownerAccess ? { ownerToken: ownerTokenForAccount(account), ownerNext: "/admin" } : {}),
-      guideToken: buyerTokenForAccount(account),
-      ...(buyerAccess ? { buyerRooms: approvedApplications.map((application) => applicationRoomPayload(state, account, application)) } : {}),
-      applications: applicationIds
-        .map((id) => state.applications?.[id])
-        .filter(Boolean)
-        .map((application) => publicApplicationView(application, state))
-    };
+    return loginPayloadForAccount(state, external.account);
   }
   return loginAccount(state, body);
 }
@@ -15154,6 +15203,113 @@ async function buyerConsoleFromRequest(state, req, body = {}) {
   return { ...buyerConsolePayload(state, auth.account), guideToken: buyerTokenForAccount(auth.account) };
 }
 
+function requestedApprovedApplications(state, account = {}, applicationIds = []) {
+  const approved = approvedBuyerApplications(state, account);
+  const requestedIds = new Set((Array.isArray(applicationIds) ? applicationIds : [])
+    .map((id) => normalizeText(id))
+    .filter(Boolean));
+  if (!requestedIds.size) return approved;
+  return approved.filter((application) => requestedIds.has(application.id));
+}
+
+function bridgeAccountRoomsPayload(state, account = {}, applicationIds = []) {
+  const applications = requestedApprovedApplications(state, account, applicationIds);
+  const requestedIds = new Set((Array.isArray(applicationIds) ? applicationIds : [])
+    .map((id) => normalizeText(id))
+    .filter(Boolean));
+  const roomsByApplication = new Map();
+  const inactiveRooms = [];
+  for (const application of applications) {
+    const roomState = ensureRoom(state, application.roomName);
+    const subscription = updateSubscriptionStatus(roomState);
+    if (subscription.status === "expired") {
+      inactiveRooms.push({
+        applicationId: application.id || "",
+        roomName: application.roomName || "",
+        reason: "subscription_expired",
+        statusLabel: subscription.statusLabel || "구독 만료",
+        expiresAt: subscription.expiresAt || ""
+      });
+      continue;
+    }
+    for (const room of bridgeConnectRoomsPayload(state, account, application)) {
+      if (!room.applicationId || roomsByApplication.has(room.applicationId)) continue;
+      roomsByApplication.set(room.applicationId, room);
+    }
+  }
+  const approvedIds = new Set(approvedBuyerApplications(state, account).map((application) => application.id));
+  for (const requestedId of requestedIds) {
+    if (!approvedIds.has(requestedId)) {
+      inactiveRooms.push({
+        applicationId: requestedId,
+        roomName: "",
+        reason: "not_approved_or_paid",
+        statusLabel: "승인/결제 완료 필요",
+        expiresAt: ""
+      });
+    }
+  }
+  const rooms = [...roomsByApplication.values()];
+  return {
+    ok: true,
+    version: APP_VERSION,
+    rooms,
+    inactiveRooms,
+    summary: {
+      requested: requestedIds.size || applications.length,
+      approved: applications.length,
+      connected: rooms.length,
+      inactive: inactiveRooms.length
+    },
+    guideToken: buyerTokenForAccount(account)
+  };
+}
+
+async function bridgeAutoConnectFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  return bridgeAccountRoomsPayload(state, auth.account, body.applicationIds);
+}
+
+async function bridgeAccountRoomSyncFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  return bridgeAccountRoomsPayload(state, auth.account, body.applicationIds);
+}
+
+async function loginKakaoFromRequest(state, body = {}) {
+  const kakao = await kakaoUserFromAccessToken(body.kakaoAccessToken || body.accessToken);
+  if (!kakao.ok) return kakao;
+  const account = findAccountByExternalUser(state, "kakao", kakao.user.id)
+    || (kakao.user.email ? findAccountByEmail(state, kakao.user.email) : null);
+  if (!account) {
+    return {
+      ok: false,
+      status: 404,
+      error: "kakao_account_not_linked",
+      message: "이메일 로그인 후 계정 화면에서 카카오 계정을 연결해 주세요."
+    };
+  }
+  linkExternalAccount(account, kakao.user);
+  return loginPayloadForAccount(state, account);
+}
+
+async function linkKakaoAccountFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const kakao = await kakaoUserFromAccessToken(body.kakaoAccessToken || body.accessToken);
+  if (!kakao.ok) return kakao;
+  const alreadyLinked = findAccountByExternalUser(state, "kakao", kakao.user.id);
+  if (alreadyLinked && alreadyLinked.id !== auth.account.id) {
+    return { ok: false, status: 409, error: "kakao_account_already_linked" };
+  }
+  linkExternalAccount(auth.account, kakao.user);
+  return {
+    ...loginPayloadForAccount(state, auth.account),
+    linkedProvider: "kakao"
+  };
+}
+
 function validateProfileNickname(payload = {}) {
   const nickname = compactSpaces(payload.nickname || payload.displayName || payload.name || "");
   if (nickname.length < 2 || nickname.length > 30 || /[\u0000-\u001f\u007f]/.test(nickname)) {
@@ -15914,6 +16070,15 @@ async function handlePublicAccountApi(req, url) {
     return { status: 200, body: result };
   }
 
+  if (req.method === "POST" && url.pathname === "/api/login/kakao") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await loginKakaoFromRequest(state, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
   if (req.method === "POST" && url.pathname === "/api/buyer/guide") {
     const body = await readBody(req);
     const state = await loadState();
@@ -15943,6 +16108,15 @@ async function handlePublicAccountApi(req, url) {
     const body = await readBody(req);
     const state = await loadState();
     const result = await buyerAccountProfileFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/account/link-kakao") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await linkKakaoAccountFromRequest(state, req, body);
     if (!result.ok) return { status: result.status || 401, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -16066,6 +16240,20 @@ async function handlePublicAccountApi(req, url) {
     const body = await readBody(req);
     const state = await loadState();
     const result = bridgeConnectFromRequest(state, body);
+    return { status: result.status || 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/bridge/auto-connect") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await bridgeAutoConnectFromRequest(state, req, body);
+    return { status: result.status || 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/bridge/account-room-sync") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await bridgeAccountRoomSyncFromRequest(state, req, body);
     return { status: result.status || 200, body: result };
   }
 
@@ -17497,10 +17685,12 @@ export async function requestHandler(req, res) {
       || pathname === "/api/signup"
       || pathname === "/api/apply"
       || pathname === "/api/login"
+      || pathname === "/api/login/kakao"
       || pathname === "/api/buyer/guide"
       || pathname === "/api/buyer/console"
       || pathname === "/api/buyer/search"
       || pathname === "/api/buyer/account/profile"
+      || pathname === "/api/buyer/account/link-kakao"
       || pathname === "/api/application-inquiries"
       || pathname === "/api/buyer/room-mode-settings"
       || pathname === "/api/buyer/game-room-link"
@@ -17515,6 +17705,8 @@ export async function requestHandler(req, res) {
       || pathname === "/api/buyer/room-commands"
       || pathname === "/api/buyer/custom-commands/delete"
       || pathname === "/api/bridge/connect"
+      || pathname === "/api/bridge/auto-connect"
+      || pathname === "/api/bridge/account-room-sync"
       || pathname === "/api/bridge/room-profile-sync";
 
     if (adminApi) {

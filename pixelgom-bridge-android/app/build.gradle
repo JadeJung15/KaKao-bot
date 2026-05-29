@@ -7,10 +7,12 @@ def keystoreProperties = new Properties()
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
 }
+def kakaoNativeAppKey = (project.findProperty("KAKAO_NATIVE_APP_KEY") ?: System.getenv("KAKAO_NATIVE_APP_KEY") ?: "").toString()
+def escapedKakaoNativeAppKey = kakaoNativeAppKey.replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace "com.pixgom.bridge"
-    compileSdk 35
+    compileSdk 36
 
     buildFeatures {
         buildConfig true
@@ -20,8 +22,10 @@ android {
         applicationId "com.pixgom.bridge"
         minSdk 26
         targetSdk 35
-        versionCode 36
-        versionName "1.0.35"
+        versionCode 37
+        versionName "1.0.36"
+        buildConfigField "String", "KAKAO_NATIVE_APP_KEY", "\"${escapedKakaoNativeAppKey}\""
+        manifestPlaceholders = [kakaoNativeAppKey: kakaoNativeAppKey]
     }
 
     signingConfigs {
@@ -50,5 +54,6 @@ android {
 }
 
 dependencies {
+    implementation "com.kakao.sdk:v2-user:2.23.4"
     implementation "org.mozilla:rhino:1.9.1"
 }

@@ -16,6 +16,7 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -25,8 +26,19 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.kakao.sdk.auth.model.OAuthToken;
+import com.kakao.sdk.common.KakaoSdk;
+import com.kakao.sdk.user.UserApiClient;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import kotlin.Unit;
 
 public class MainActivity extends Activity {
     private static final String WEBSITE_URL = "https://pixgom.com";
@@ -62,8 +74,17 @@ public class MainActivity extends Activity {
     private EditText scriptSourceInput;
     private TextView roomProfilesSummaryView;
     private TextView gameRoomProfilesView;
+    private TextView accountStatusView;
+    private TextView nativeConsoleStatusView;
+    private EditText loginEmailInput;
+    private EditText loginPasswordInput;
+    private LinearLayout selectableRoomsContainer;
+    private final List<CheckBox> roomSelectionChecks = new ArrayList<>();
+    private JSONObject buyerConsoleJson;
+    private String nativeConsoleMode = "";
     private Button gameRoomToggleButton;
     private boolean gameRoomListExpanded = false;
+    private boolean kakaoInitialized = false;
     private Switch enabledSwitch;
     private Switch scriptEnabledSwitch;
     private Switch attendanceFeatureSwitch;
@@ -77,6 +98,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         BridgeConfig.applyMigrations(this);
+        initializeKakaoIfReady();
         showHome();
     }
 
@@ -138,16 +160,29 @@ public class MainActivity extends Activity {
         root.addView(topBar("픽셀곰 브릿지", "카카오 응답 상태", false));
 
         BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
+        boolean loggedIn = BridgeConfig.isBuyerLoggedIn(this);
         root.addView(heroPanel(
                 R.drawable.pixgom_bridge_captain,
                 "PIXGOM BRIDGE",
-                "카카오 응답 상태를 한눈에",
-                "연결, 권한, 로그를 빠르게 점검하는 브릿지 앱입니다."));
+                loggedIn ? "현재 연결된 방 " + BridgeConfig.roomProfileCount(this) + "개" : "로그인하고 방 자동 연결",
+                loggedIn ? "내 방, 명령어 스토어, 로그를 앱에서 바로 관리합니다." : "결제 완료된 방은 연결코드 없이 이 폰에 등록합니다."));
 
         TextView version = text("버전 " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")", 13, COLOR_BLUE, true);
         version.setGravity(Gravity.CENTER);
         version.setPadding(0, dp(10), 0, 0);
         root.addView(version);
+
+        if (!loggedIn) {
+            root.addView(buildLoginPanel());
+            Button manualConnectButton = secondaryButton("연결코드로 직접 등록");
+            manualConnectButton.setOnClickListener(v -> showAdvanced());
+            root.addView(manualConnectButton);
+            root.addView(featurePanel(
+                    R.drawable.pixgom_chat_portal,
+                    "연결코드는 보조 수단",
+                    "로그인 문제가 있거나 운영자가 안내할 때만 사용합니다."));
+            return scrollView;
+        }
 
         LinearLayout statusPanel = panel();
         statusPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
@@ -158,37 +193,26 @@ public class MainActivity extends Activity {
         statusPanel.addView(statusTile("등록 방", BridgeConfig.roomProfileCount(this) + "개", BridgeConfig.roomProfileCount(this) > 0));
         statusPanel.addView(statusTile("대기 큐", BridgeConfig.pendingEventCount(this) + "개", BridgeConfig.pendingEventCount(this) == 0));
         statusPanel.addView(statusTile("대표방", TextUtils.isEmpty(profile.name) ? "등록 필요" : profile.name, !TextUtils.isEmpty(profile.name)));
+        statusPanel.addView(statusTile("계정", accountLabel(), true));
         homeDiagnosticsStatus = text("서버 진단: 확인 중", 14, COLOR_MUTED, true);
         homeDiagnosticsStatus.setPadding(0, dp(12), 0, 0);
         statusPanel.addView(homeDiagnosticsStatus);
 
-        Button startButton = primaryButton("연결 상태 점검");
-        startButton.setOnClickListener(v -> showMain());
+        Button startButton = primaryButton("내 방 자동 불러오기");
+        startButton.setOnClickListener(v -> showRooms());
         root.addView(startButton);
 
-        Button syncButton = secondaryButton("서버와 동기화");
-        syncButton.setOnClickListener(v -> syncRoomProfiles());
-
-        Button setupButton = secondaryButton("연결코드 입력");
-        setupButton.setOnClickListener(v -> showMain());
-
-        Button logButton = secondaryButton("로그 보기");
-        logButton.setOnClickListener(v -> showMainLogs());
-
-        Button checklistButton = secondaryButton("체크리스트");
-        checklistButton.setOnClickListener(v -> showChecklist());
-
         root.addView(quickActionGrid(
-                quickAction(R.drawable.ic_sync, "동기화", "서버", v -> syncRoomProfiles()),
-                quickAction(R.drawable.ic_link, "연결코드", "방 추가", v -> showMain()),
+                quickAction(R.drawable.ic_link, "내 방", "자동 연결", v -> showRooms()),
+                quickAction(R.drawable.ic_checklist, "스토어", "설치/장착", v -> showCommandStore()),
                 quickAction(R.drawable.ic_log, "로그", "확인", v -> showLogs()),
-                quickAction(R.drawable.ic_checklist, "체크", "테스트", v -> showChecklist())
+                quickAction(R.drawable.ic_settings, "계정", "로그인", v -> showAccount())
         ));
 
         root.addView(featurePanel(
                 R.drawable.pixgom_chat_portal,
-                "앱 연결",
-                "연결코드로 방과 라이선스를 동기화합니다."));
+                "앱 콘솔",
+                shortStatus(BridgeConfig.lastConsoleSummary(this))));
         root.addView(featurePanel(
                 R.drawable.pixgom_dashboard_monitor,
                 "최근 진단",
@@ -200,9 +224,160 @@ public class MainActivity extends Activity {
         root.addView(stepsPanel);
         stepsPanel.addView(sectionTitle("오늘 확인"));
         stepsPanel.addView(stepText("1", "알림 권한과 브릿지 ON 상태 확인"));
-        stepsPanel.addView(stepText("2", "서버와 동기화 후 카카오방에서 /브릿지 테스트"));
+        stepsPanel.addView(stepText("2", "내 방 자동 불러오기 후 카카오방에서 /브릿지 테스트"));
         stepsPanel.addView(stepText("3", "응답 지연 시 로그의 timing만 확인"));
 
+        return scrollView;
+    }
+
+    private LinearLayout buildLoginPanel() {
+        LinearLayout loginPanel = panel();
+        loginPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        loginPanel.addView(sectionHeader(R.drawable.pixgom_chat_portal, "로그인", "결제 완료 방을 자동으로 불러옵니다."));
+
+        loginEmailInput = input("이메일", BridgeConfig.buyerEmail(this));
+        loginEmailInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        loginPanel.addView(loginEmailInput);
+
+        loginPasswordInput = input("비밀번호", "");
+        loginPasswordInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        loginPanel.addView(loginPasswordInput);
+
+        Button loginButton = primaryButton("로그인하고 방 자동 연결");
+        loginButton.setOnClickListener(v -> loginWithEmail());
+        loginPanel.addView(loginButton);
+
+        Button kakaoButton = secondaryButton(kakaoReady() ? "카카오로 로그인" : "카카오 로그인 준비 필요");
+        kakaoButton.setEnabled(kakaoReady());
+        kakaoButton.setOnClickListener(v -> loginWithKakao());
+        loginPanel.addView(kakaoButton);
+
+        accountStatusView = text(kakaoReady() ? "카카오 로그인 사용 가능" : "카카오 Native app key와 key hash 등록 후 사용할 수 있습니다.", 13, COLOR_MUTED, false);
+        accountStatusView.setPadding(0, dp(8), 0, 0);
+        loginPanel.addView(accountStatusView);
+        return loginPanel;
+    }
+
+    private void showRooms() {
+        if (!BridgeConfig.isBuyerLoggedIn(this)) {
+            showHome();
+            Toast.makeText(this, "먼저 로그인해 주세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        clearMainRefs();
+        setContentView(buildRoomsContent());
+        loadBuyerConsole();
+    }
+
+    private View buildRoomsContent() {
+        ScrollView scrollView = baseScrollView();
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        scrollView.addView(root);
+
+        root.addView(topBar("내 방", "자동 연결", true));
+        root.addView(heroPanel(
+                R.drawable.pixgom_dashboard_monitor,
+                "MY ROOMS",
+                "연결 가능한 방",
+                "승인/결제 완료된 방만 이 폰에 등록합니다."));
+
+        nativeConsoleStatusView = text("내 방을 불러오는 중", 14, COLOR_MUTED, true);
+        nativeConsoleStatusView.setPadding(0, dp(8), 0, dp(8));
+        root.addView(nativeConsoleStatusView);
+
+        selectableRoomsContainer = panel();
+        nativeConsoleMode = "rooms";
+        selectableRoomsContainer.setPadding(dp(16), dp(16), dp(16), dp(16));
+        selectableRoomsContainer.addView(sectionHeader(R.drawable.pixgom_chat_portal, "연결 가능한 방", "기본값은 전체 선택입니다."));
+        root.addView(selectableRoomsContainer);
+
+        Button connectButton = primaryButton("선택한 방 이 폰에 연결");
+        connectButton.setOnClickListener(v -> autoConnectSelectedRooms());
+        root.addView(connectButton);
+
+        Button syncButton = secondaryButton("계정 기준으로 다시 동기화");
+        syncButton.setOnClickListener(v -> accountRoomSyncSelectedRooms());
+        root.addView(syncButton);
+        return scrollView;
+    }
+
+    private void showCommandStore() {
+        if (!BridgeConfig.isBuyerLoggedIn(this)) {
+            showHome();
+            Toast.makeText(this, "먼저 로그인해 주세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        clearMainRefs();
+        setContentView(buildCommandStoreContent());
+        loadBuyerConsole();
+    }
+
+    private View buildCommandStoreContent() {
+        ScrollView scrollView = baseScrollView();
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        scrollView.addView(root);
+
+        root.addView(topBar("명령어 스토어", "설치/장착", true));
+        root.addView(heroPanel(
+                R.drawable.pixgom_speech_bubble,
+                "COMMAND STORE",
+                "앱에서 바로 장착",
+                "현재 구독 방에 명령어팩과 템플릿을 설치합니다."));
+
+        nativeConsoleStatusView = text("스토어를 불러오는 중", 14, COLOR_MUTED, true);
+        nativeConsoleStatusView.setPadding(0, dp(8), 0, dp(8));
+        root.addView(nativeConsoleStatusView);
+
+        LinearLayout storePanel = panel();
+        storePanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        storePanel.addView(sectionHeader(R.drawable.pixgom_checklist_calendar, "추천 팩", "첫 번째 연결 방에 적용합니다."));
+        root.addView(storePanel);
+        selectableRoomsContainer = storePanel;
+        nativeConsoleMode = "store";
+        return scrollView;
+    }
+
+    private void showAccount() {
+        clearMainRefs();
+        setContentView(buildAccountContent());
+    }
+
+    private View buildAccountContent() {
+        ScrollView scrollView = baseScrollView();
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        scrollView.addView(root);
+
+        root.addView(topBar("계정", "로그인과 연결", true));
+        LinearLayout accountPanel = panel();
+        accountPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.addView(accountPanel);
+        accountPanel.addView(sectionHeader(R.drawable.pixgom_support_bear, "구매자 계정", accountLabel()));
+
+        if (BridgeConfig.isBuyerLoggedIn(this)) {
+            Button reloadButton = primaryButton("내 콘솔 새로고침");
+            reloadButton.setOnClickListener(v -> loadBuyerConsole());
+            accountPanel.addView(reloadButton);
+
+            Button kakaoLinkButton = secondaryButton(kakaoReady() ? "카카오 계정 연결" : "카카오 연결 준비 필요");
+            kakaoLinkButton.setEnabled(kakaoReady());
+            kakaoLinkButton.setOnClickListener(v -> linkKakaoAccount());
+            accountPanel.addView(kakaoLinkButton);
+
+            Button logoutButton = secondaryButton("로그아웃");
+            logoutButton.setOnClickListener(v -> {
+                BridgeConfig.clearBuyerSession(this);
+                showHome();
+            });
+            accountPanel.addView(logoutButton);
+        } else {
+            accountPanel.addView(buildLoginPanel());
+        }
         return scrollView;
     }
 
@@ -307,7 +482,7 @@ public class MainActivity extends Activity {
         LinearLayout connectPanel = panel();
         connectPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
         root.addView(connectPanel);
-        connectPanel.addView(sectionHeader(R.drawable.pixgom_chat_portal, "연결", "브릿지, 서버 URL, 연결코드"));
+        connectPanel.addView(sectionHeader(R.drawable.pixgom_chat_portal, "연결", "브릿지와 서버 URL"));
 
         enabledSwitch = new Switch(this);
         enabledSwitch.setText("브릿지 사용");
@@ -320,16 +495,9 @@ public class MainActivity extends Activity {
         serverUrlInput = input("서버 URL", BridgeConfig.serverUrl(this));
         connectPanel.addView(serverUrlInput);
 
-        connectionCodeInput = input("앱 연결코드", "");
-        connectPanel.addView(connectionCodeInput);
-
-        Button findConnectCodeButton = secondaryButton("연결코드 찾기/복사");
-        findConnectCodeButton.setOnClickListener(v -> openUrl(BUYER_CONNECT_CODE_URL));
-        connectPanel.addView(findConnectCodeButton);
-
-        Button connectButton = primaryButton("연결코드로 방 추가/갱신");
-        connectButton.setOnClickListener(v -> connectWithCode());
-        connectPanel.addView(connectButton);
+        Button accountSyncButton = primaryButton("계정 기준 내 방 자동 연결");
+        accountSyncButton.setOnClickListener(v -> showRooms());
+        connectPanel.addView(accountSyncButton);
 
         LinearLayout diagPanel = panel();
         diagPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
@@ -476,6 +644,25 @@ public class MainActivity extends Activity {
 
         root.addView(topBar("고급 설정", "자주 쓰지 않는 기능", true));
 
+        LinearLayout manualConnectPanel = panel();
+        manualConnectPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.addView(manualConnectPanel);
+        manualConnectPanel.addView(sectionHeader(R.drawable.pixgom_chat_portal, "연결코드 직접 등록", "로그인 문제나 운영자 지원 시 사용합니다."));
+
+        serverUrlInput = input("서버 URL", BridgeConfig.serverUrl(this));
+        manualConnectPanel.addView(serverUrlInput);
+
+        connectionCodeInput = input("앱 연결코드", "");
+        manualConnectPanel.addView(connectionCodeInput);
+
+        Button findConnectCodeButton = secondaryButton("연결코드 찾기/복사");
+        findConnectCodeButton.setOnClickListener(v -> openUrl(BUYER_CONNECT_CODE_URL));
+        manualConnectPanel.addView(findConnectCodeButton);
+
+        Button connectButton = primaryButton("연결코드로 방 추가/갱신");
+        connectButton.setOnClickListener(v -> connectWithCode());
+        manualConnectPanel.addView(connectButton);
+
         LinearLayout supportPanel = panel();
         supportPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
         root.addView(supportPanel);
@@ -564,6 +751,13 @@ public class MainActivity extends Activity {
         scriptSourceInput = null;
         roomProfilesSummaryView = null;
         gameRoomProfilesView = null;
+        accountStatusView = null;
+        nativeConsoleStatusView = null;
+        loginEmailInput = null;
+        loginPasswordInput = null;
+        selectableRoomsContainer = null;
+        roomSelectionChecks.clear();
+        nativeConsoleMode = "";
         gameRoomToggleButton = null;
         enabledSwitch = null;
         scriptEnabledSwitch = null;
@@ -751,9 +945,317 @@ public class MainActivity extends Activity {
         return image;
     }
 
+    private void initializeKakaoIfReady() {
+        if (!kakaoReady() || kakaoInitialized) return;
+        KakaoSdk.init(this, BuildConfig.KAKAO_NATIVE_APP_KEY);
+        kakaoInitialized = true;
+    }
+
+    private boolean kakaoReady() {
+        return !TextUtils.isEmpty(BuildConfig.KAKAO_NATIVE_APP_KEY);
+    }
+
+    private String accountLabel() {
+        String nickname = BridgeConfig.buyerNickname(this);
+        String email = BridgeConfig.buyerEmail(this);
+        if (!TextUtils.isEmpty(nickname) && !TextUtils.isEmpty(email)) return nickname + " / " + email;
+        if (!TextUtils.isEmpty(email)) return email;
+        if (!TextUtils.isEmpty(nickname)) return nickname;
+        return BridgeConfig.isBuyerLoggedIn(this) ? "로그인됨" : "로그인 필요";
+    }
+
+    private void loginWithEmail() {
+        String email = loginEmailInput == null ? "" : loginEmailInput.getText().toString().trim();
+        String password = loginPasswordInput == null ? "" : loginPasswordInput.getText().toString();
+        if (TextUtils.isEmpty(email) || TextUtils.isEmpty(password)) {
+            Toast.makeText(this, "이메일과 비밀번호를 입력하세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (accountStatusView != null) accountStatusView.setText("로그인 중입니다.");
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.login(this, email, password);
+            runOnUiThread(() -> handleLoginResult(result, "이메일 로그인"));
+        });
+    }
+
+    private void loginWithKakao() {
+        if (!kakaoReady()) {
+            Toast.makeText(this, "카카오 Native app key 등록 후 사용할 수 있습니다.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        initializeKakaoIfReady();
+        UserApiClient.getInstance().loginWithKakaoTalk(this, (OAuthToken token, Throwable error) -> {
+            if (error != null || token == null) {
+                UserApiClient.getInstance().loginWithKakaoAccount(this, (OAuthToken accountToken, Throwable accountError) -> {
+                    if (accountError != null || accountToken == null) {
+                        Toast.makeText(this, "카카오 로그인 실패: " + (accountError == null ? "token_missing" : accountError.getMessage()), Toast.LENGTH_LONG).show();
+                    } else {
+                        loginWithKakaoToken(accountToken.getAccessToken());
+                    }
+                    return Unit.INSTANCE;
+                });
+            } else {
+                loginWithKakaoToken(token.getAccessToken());
+            }
+            return Unit.INSTANCE;
+        });
+    }
+
+    private void loginWithKakaoToken(String accessToken) {
+        if (accountStatusView != null) accountStatusView.setText("카카오 계정 확인 중입니다.");
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.loginKakao(this, accessToken);
+            runOnUiThread(() -> handleLoginResult(result, "카카오 로그인"));
+        });
+    }
+
+    private void linkKakaoAccount() {
+        if (!BridgeConfig.isBuyerLoggedIn(this) || !kakaoReady()) return;
+        initializeKakaoIfReady();
+        UserApiClient.getInstance().loginWithKakaoTalk(this, (OAuthToken token, Throwable error) -> {
+            if (error != null || token == null) {
+                UserApiClient.getInstance().loginWithKakaoAccount(this, (OAuthToken accountToken, Throwable accountError) -> {
+                    if (accountError != null || accountToken == null) {
+                        Toast.makeText(this, "카카오 연결 실패: " + (accountError == null ? "token_missing" : accountError.getMessage()), Toast.LENGTH_LONG).show();
+                    } else {
+                        linkKakaoToken(accountToken.getAccessToken());
+                    }
+                    return Unit.INSTANCE;
+                });
+            } else {
+                linkKakaoToken(token.getAccessToken());
+            }
+            return Unit.INSTANCE;
+        });
+    }
+
+    private void linkKakaoToken(String accessToken) {
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.linkKakao(this, BridgeConfig.buyerToken(this), accessToken);
+            runOnUiThread(() -> {
+                if (result.ok()) {
+                    saveBuyerSession(result.json);
+                    Toast.makeText(this, "카카오 계정을 연결했습니다.", Toast.LENGTH_SHORT).show();
+                    showAccount();
+                } else {
+                    Toast.makeText(this, "카카오 연결 실패: " + result.error, Toast.LENGTH_LONG).show();
+                }
+            });
+        });
+    }
+
+    private void handleLoginResult(EventSender.ApiResult result, String label) {
+        if (!result.ok()) {
+            String message = result.error == null ? "로그인 실패" : result.error;
+            if ("kakao_account_not_linked".equals(result.json.optString("error"))) {
+                message = "이메일 로그인 후 계정 화면에서 카카오 계정을 연결해 주세요.";
+            }
+            if (accountStatusView != null) accountStatusView.setText(message);
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+            return;
+        }
+        saveBuyerSession(result.json);
+        BridgeConfig.appendLog(this, label + " 완료 / 앱 콘솔 세션 저장");
+        showRooms();
+    }
+
+    private void saveBuyerSession(JSONObject json) {
+        JSONObject account = json == null ? null : json.optJSONObject("account");
+        BridgeConfig.setBuyerSession(
+                this,
+                json == null ? "" : json.optString("guideToken", BridgeConfig.buyerToken(this)),
+                account == null ? BridgeConfig.buyerEmail(this) : account.optString("email", BridgeConfig.buyerEmail(this)),
+                account == null ? BridgeConfig.buyerNickname(this) : account.optString("nickname", BridgeConfig.buyerNickname(this))
+        );
+    }
+
+    private void loadBuyerConsole() {
+        if (!BridgeConfig.isBuyerLoggedIn(this)) return;
+        if (nativeConsoleStatusView != null) nativeConsoleStatusView.setText("콘솔 데이터를 불러오는 중입니다.");
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.buyerConsole(this, BridgeConfig.buyerToken(this));
+            runOnUiThread(() -> {
+                if (!result.ok()) {
+                    if (nativeConsoleStatusView != null) nativeConsoleStatusView.setText("콘솔 로딩 실패: " + result.error);
+                    return;
+                }
+                buyerConsoleJson = result.json;
+                saveBuyerSession(result.json);
+                JSONArray rooms = result.json.optJSONArray("rooms");
+                int roomCount = rooms == null ? 0 : rooms.length();
+                BridgeConfig.setLastConsoleSummary(this, "연결 가능 방 " + roomCount + "개 / " + accountLabel());
+                if (nativeConsoleStatusView != null) nativeConsoleStatusView.setText("연결 가능 방 " + roomCount + "개");
+                renderRoomChoices(result.json);
+                renderCommandStore(result.json);
+            });
+        });
+    }
+
+    private void renderRoomChoices(JSONObject consoleJson) {
+        if (selectableRoomsContainer == null || !"rooms".equals(nativeConsoleMode)) return;
+        while (selectableRoomsContainer.getChildCount() > 1) selectableRoomsContainer.removeViewAt(1);
+        roomSelectionChecks.clear();
+        JSONArray rooms = consoleJson.optJSONArray("rooms");
+        if (rooms == null || rooms.length() == 0) {
+            selectableRoomsContainer.addView(text("승인/결제 완료된 방이 없습니다.", 14, COLOR_MUTED, false));
+            return;
+        }
+        for (int index = 0; index < rooms.length(); index++) {
+            JSONObject room = rooms.optJSONObject(index);
+            if (room == null) continue;
+            CheckBox check = new CheckBox(this);
+            check.setText(room.optString("roomName", "방") + " · " + room.optString("subscriptionStatusLabel", "상태 확인"));
+            check.setTextColor(COLOR_TEXT);
+            check.setTextSize(15);
+            check.setChecked(true);
+            check.setTag(room.optString("applicationId", ""));
+            selectableRoomsContainer.addView(check);
+            roomSelectionChecks.add(check);
+        }
+    }
+
+    private void renderCommandStore(JSONObject consoleJson) {
+        if (selectableRoomsContainer == null || !"store".equals(nativeConsoleMode)) return;
+        while (selectableRoomsContainer.getChildCount() > 1) selectableRoomsContainer.removeViewAt(1);
+        String applicationId = firstConsoleApplicationId(consoleJson);
+        if (TextUtils.isEmpty(applicationId)) {
+            selectableRoomsContainer.addView(text("명령어를 설치할 승인 방이 없습니다.", 14, COLOR_MUTED, false));
+            return;
+        }
+        JSONObject commandPacks = consoleJson.optJSONObject("commandPacks");
+        JSONArray packs = commandPacks == null ? null : commandPacks.optJSONArray("packs");
+        int packLimit = packs == null ? 0 : Math.min(8, packs.length());
+        for (int index = 0; index < packLimit; index++) {
+            JSONObject pack = packs.optJSONObject(index);
+            if (pack == null) continue;
+            selectableRoomsContainer.addView(storeAction(
+                    pack.optString("title", "명령어팩"),
+                    pack.optString("description", ""),
+                    "장착",
+                    v -> applyCommandPack(applicationId, pack.optString("id", ""))
+            ));
+        }
+        JSONObject commandStore = consoleJson.optJSONObject("commandStore");
+        JSONArray templates = commandStore == null ? null : commandStore.optJSONArray("templates");
+        int templateLimit = templates == null ? 0 : Math.min(6, templates.length());
+        if (templateLimit > 0) selectableRoomsContainer.addView(sectionTitle("개별 템플릿"));
+        for (int index = 0; index < templateLimit; index++) {
+            JSONObject template = templates.optJSONObject(index);
+            if (template == null || !template.optBoolean("installable", false)) continue;
+            selectableRoomsContainer.addView(storeAction(
+                    template.optString("title", template.optString("trigger", "템플릿")),
+                    template.optString("response", ""),
+                    "설치",
+                    v -> installCommandTemplate(applicationId, template.optString("id", ""))
+            ));
+        }
+    }
+
+    private LinearLayout storeAction(String title, String body, String buttonLabel, View.OnClickListener listener) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding(0, dp(10), 0, dp(10));
+        row.addView(text(title, 16, COLOR_TITLE, true));
+        if (!TextUtils.isEmpty(body)) row.addView(text(body.length() > 70 ? body.substring(0, 70) + "..." : body, 12, COLOR_MUTED, false));
+        Button button = secondaryButton(buttonLabel);
+        button.setOnClickListener(listener);
+        row.addView(button);
+        return row;
+    }
+
+    private JSONArray selectedApplicationIds() {
+        JSONArray ids = new JSONArray();
+        for (CheckBox check : roomSelectionChecks) {
+            if (check.isChecked() && check.getTag() != null) ids.put(String.valueOf(check.getTag()));
+        }
+        return ids;
+    }
+
+    private void autoConnectSelectedRooms() {
+        JSONArray ids = selectedApplicationIds();
+        if (ids.length() == 0) {
+            Toast.makeText(this, "연결할 방을 선택하세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        executor.execute(() -> {
+            EventSender.ConnectResult result = EventSender.autoConnect(this, BridgeConfig.buyerToken(this), ids);
+            runOnUiThread(() -> applyConnectResult(result, "계정 자동 연결"));
+        });
+    }
+
+    private void accountRoomSyncSelectedRooms() {
+        JSONArray ids = selectedApplicationIds();
+        executor.execute(() -> {
+            EventSender.ConnectResult result = EventSender.accountRoomSync(this, BridgeConfig.buyerToken(this), ids);
+            runOnUiThread(() -> applyConnectResult(result, "계정 동기화"));
+        });
+    }
+
+    private void applyConnectResult(EventSender.ConnectResult result, String label) {
+        if (!result.ok()) {
+            BridgeConfig.appendFailureLog(this, label + " 실패: " + result.error);
+            Toast.makeText(this, result.error, Toast.LENGTH_LONG).show();
+            return;
+        }
+        applyRoomResults(result);
+        BridgeConfig.setLastProfileSyncSummary(this, label + " " + result.roomResults.size() + "개 / 앱 저장 " + BridgeConfig.roomProfileCount(this) + "개");
+        BridgeConfig.appendLog(this, label + " 완료 / 등록방 " + BridgeConfig.roomProfileCount(this) + "개");
+        Toast.makeText(this, "선택한 방을 이 폰에 연결했습니다.", Toast.LENGTH_SHORT).show();
+        refreshHomeDiagnostics();
+        loadBuyerConsole();
+    }
+
+    private void applyRoomResults(EventSender.ConnectResult result) {
+        int generalRooms = 0;
+        int gameRooms = 0;
+        for (EventSender.RoomConnectResult room : result.roomResults) {
+            BridgeConfig.addOrUpdateRoomProfile(this, room.roomName, room.roomId, room.roomLink, room.joinPhrase, TextUtils.join(",", room.admins), room.licenseKey, room.roomRole, room.canonicalRoomName);
+            if ("game".equals(room.roomRole)) gameRooms++;
+            else generalRooms++;
+        }
+        BridgeConfig.setLastConnectSummary(this, "서버 응답 " + result.roomResults.size() + "개 / 저장 " + BridgeConfig.roomProfileCount(this) + "개 / 일반방 " + generalRooms + "개 / 게임방 " + gameRooms + "개");
+        BridgeConfig.setEnabled(this, true);
+        BridgeConfig.setServerUrl(this, TextUtils.isEmpty(result.serverUrl) ? BridgeConfig.DEFAULT_SERVER_URL : result.serverUrl);
+        BridgeConfig.setAttendanceEnabled(this, result.attendance);
+        BridgeConfig.setPointsEnabled(this, result.points);
+        BridgeConfig.setRankingsEnabled(this, result.rankings);
+        BridgeConfig.setHistoryEnabled(this, result.history);
+        BridgeConfig.setProfilesEnabled(this, result.profiles);
+        BridgeConfig.setScriptEnabled(this, result.localJs);
+        BridgeConfig.setGamesEnabled(this, result.games);
+    }
+
+    private String firstConsoleApplicationId(JSONObject consoleJson) {
+        JSONArray rooms = consoleJson == null ? null : consoleJson.optJSONArray("rooms");
+        JSONObject room = rooms == null || rooms.length() == 0 ? null : rooms.optJSONObject(0);
+        return room == null ? "" : room.optString("applicationId", "");
+    }
+
+    private void applyCommandPack(String applicationId, String packId) {
+        if (TextUtils.isEmpty(applicationId) || TextUtils.isEmpty(packId)) return;
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.applyCommandPack(this, BridgeConfig.buyerToken(this), applicationId, packId, "apply");
+            runOnUiThread(() -> {
+                Toast.makeText(this, result.ok() ? "명령어팩을 장착했습니다." : "장착 실패: " + result.error, Toast.LENGTH_LONG).show();
+                loadBuyerConsole();
+            });
+        });
+    }
+
+    private void installCommandTemplate(String applicationId, String templateId) {
+        if (TextUtils.isEmpty(applicationId) || TextUtils.isEmpty(templateId)) return;
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.installCommandTemplate(this, BridgeConfig.buyerToken(this), applicationId, templateId);
+            runOnUiThread(() -> {
+                Toast.makeText(this, result.ok() ? "명령어 템플릿을 설치했습니다." : "설치 실패: " + result.error, Toast.LENGTH_LONG).show();
+                loadBuyerConsole();
+            });
+        });
+    }
+
     private void saveSettings() {
         BridgeConfig.setEnabled(this, enabledSwitch.isChecked());
-        BridgeConfig.setServerUrl(this, serverUrlInput.getText().toString());
+        if (serverUrlInput != null) BridgeConfig.setServerUrl(this, serverUrlInput.getText().toString());
         String roomName = roomNameInput.getText().toString().trim();
         String roomId = roomIdInput.getText().toString().trim();
         String roomLink = roomLinkInput.getText().toString().trim();
@@ -841,7 +1343,7 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "앱 연결코드를 입력하세요.", Toast.LENGTH_SHORT).show();
             return;
         }
-        BridgeConfig.setServerUrl(this, serverUrlInput.getText().toString());
+        if (serverUrlInput != null) BridgeConfig.setServerUrl(this, serverUrlInput.getText().toString());
         BridgeConfig.appendLog(this, "앱 연결코드 확인 시작");
         refreshLogs();
         executor.execute(() -> {

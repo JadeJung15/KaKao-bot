@@ -51,6 +51,10 @@ final class BridgeConfig {
     private static final String KEY_LAST_SEND_FAILURE = "last_send_failure";
     private static final String KEY_LAST_SERVER_TIMING = "last_server_timing";
     private static final String KEY_LAST_COMMAND_SUCCESS = "last_command_success";
+    private static final String KEY_BUYER_TOKEN = "buyer_token";
+    private static final String KEY_BUYER_EMAIL = "buyer_email";
+    private static final String KEY_BUYER_NICKNAME = "buyer_nickname";
+    private static final String KEY_LAST_CONSOLE_SUMMARY = "last_console_summary";
     private static final String EMPTY_ROOM_PROFILES = "__PIXGOM_EMPTY_ROOM_PROFILES__";
     private static final int MAX_LOG_LINES = 80;
     private static final int MAX_PENDING_EVENTS = 80;
@@ -92,6 +96,48 @@ final class BridgeConfig {
 
     static void setServerUrl(Context context, String value) {
         prefs(context).edit().putString(KEY_SERVER_URL, textOrDefault(value, DEFAULT_SERVER_URL)).apply();
+    }
+
+    static boolean isBuyerLoggedIn(Context context) {
+        return !TextUtils.isEmpty(buyerToken(context));
+    }
+
+    static String buyerToken(Context context) {
+        return prefs(context).getString(KEY_BUYER_TOKEN, "");
+    }
+
+    static String buyerEmail(Context context) {
+        return prefs(context).getString(KEY_BUYER_EMAIL, "");
+    }
+
+    static String buyerNickname(Context context) {
+        return prefs(context).getString(KEY_BUYER_NICKNAME, "");
+    }
+
+    static void setBuyerSession(Context context, String token, String email, String nickname) {
+        prefs(context).edit()
+                .putString(KEY_BUYER_TOKEN, textOrDefault(token, ""))
+                .putString(KEY_BUYER_EMAIL, textOrDefault(email, ""))
+                .putString(KEY_BUYER_NICKNAME, textOrDefault(nickname, ""))
+                .apply();
+    }
+
+    static void clearBuyerSession(Context context) {
+        prefs(context).edit()
+                .remove(KEY_BUYER_TOKEN)
+                .remove(KEY_BUYER_EMAIL)
+                .remove(KEY_BUYER_NICKNAME)
+                .remove(KEY_LAST_CONSOLE_SUMMARY)
+                .apply();
+        appendLog(context, "구매자 계정 로그아웃");
+    }
+
+    static String lastConsoleSummary(Context context) {
+        return prefs(context).getString(KEY_LAST_CONSOLE_SUMMARY, "");
+    }
+
+    static void setLastConsoleSummary(Context context, String value) {
+        prefs(context).edit().putString(KEY_LAST_CONSOLE_SUMMARY, textOrDefault(value, "")).apply();
     }
 
     static String roomName(Context context) {

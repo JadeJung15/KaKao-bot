@@ -156,6 +156,139 @@ final class EventSender {
         }
     }
 
+    static ApiResult login(Context context, String email, String password) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("email", email == null ? "" : email.trim());
+            payload.put("password", password == null ? "" : password);
+        } catch (Exception ignored) {
+            // Keep login payload best-effort.
+        }
+        return postApi(context, "/api/login", payload);
+    }
+
+    static ApiResult loginKakao(Context context, String kakaoAccessToken) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("kakaoAccessToken", kakaoAccessToken == null ? "" : kakaoAccessToken);
+        } catch (Exception ignored) {
+            // Keep Kakao payload best-effort.
+        }
+        return postApi(context, "/api/login/kakao", payload);
+    }
+
+    static ApiResult linkKakao(Context context, String buyerToken, String kakaoAccessToken) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            payload.put("kakaoAccessToken", kakaoAccessToken == null ? "" : kakaoAccessToken);
+        } catch (Exception ignored) {
+            // Keep Kakao link payload best-effort.
+        }
+        return postApi(context, "/api/buyer/account/link-kakao", payload);
+    }
+
+    static ApiResult buyerConsole(Context context, String buyerToken) {
+        return postApi(context, "/api/buyer/console", tokenPayload(buyerToken));
+    }
+
+    static ConnectResult autoConnect(Context context, String buyerToken, JSONArray applicationIds) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            if (applicationIds != null) payload.put("applicationIds", applicationIds);
+        } catch (Exception ignored) {
+            // Keep auto-connect payload best-effort.
+        }
+        ApiResult result = postApi(context, "/api/bridge/auto-connect", payload);
+        if (!result.ok()) return new ConnectResult(result.status, result.error);
+        return connectResultFromResponse(result.status, result.json);
+    }
+
+    static ConnectResult accountRoomSync(Context context, String buyerToken, JSONArray applicationIds) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            if (applicationIds != null) payload.put("applicationIds", applicationIds);
+        } catch (Exception ignored) {
+            // Keep room-sync payload best-effort.
+        }
+        ApiResult result = postApi(context, "/api/bridge/account-room-sync", payload);
+        if (!result.ok()) return new ConnectResult(result.status, result.error);
+        return connectResultFromResponse(result.status, result.json);
+    }
+
+    static ApiResult applyCommandPack(Context context, String buyerToken, String applicationId, String packId, String action) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            payload.put("applicationId", applicationId == null ? "" : applicationId);
+            payload.put("packId", packId == null ? "" : packId);
+            payload.put("action", action == null ? "apply" : action);
+        } catch (Exception ignored) {
+            // Keep command pack payload best-effort.
+        }
+        return postApi(context, "/api/buyer/command-packs/apply", payload);
+    }
+
+    static ApiResult installCommandTemplate(Context context, String buyerToken, String applicationId, String templateId) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            payload.put("applicationId", applicationId == null ? "" : applicationId);
+            payload.put("templateId", templateId == null ? "" : templateId);
+        } catch (Exception ignored) {
+            // Keep template install payload best-effort.
+        }
+        return postApi(context, "/api/buyer/command-templates/install", payload);
+    }
+
+    private static JSONObject tokenPayload(String buyerToken) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("token", buyerToken == null ? "" : buyerToken);
+        } catch (Exception ignored) {
+            // Keep token payload best-effort.
+        }
+        return payload;
+    }
+
+    private static ApiResult postApi(Context context, String path, JSONObject payload) {
+        HttpURLConnection connection = null;
+        try {
+            URL url = apiUrl(context, path);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            writeJson(connection, payload == null ? new JSONObject() : payload);
+
+            int status = connection.getResponseCode();
+            JSONObject response = new JSONObject(readBody(connection, status));
+            if (status < 200 || status >= 300 || !response.optBoolean("ok", false)) {
+                return new ApiResult(status, response, response.optString("message", response.optString("error", "request_failed")));
+            }
+            return new ApiResult(status, response, null);
+        } catch (Exception error) {
+            return new ApiResult(0, new JSONObject(), error.getClass().getSimpleName() + ": " + error.getMessage());
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private static ConnectResult connectResultFromResponse(int status, JSONObject response) {
+        JSONArray roomsArray = response == null ? null : response.optJSONArray("rooms");
+        List<RoomConnectResult> roomResults = new ArrayList<>();
+        if (roomsArray != null) {
+            for (int index = 0; index < roomsArray.length(); index++) {
+                JSONObject item = roomsArray.optJSONObject(index);
+                if (item != null) roomResults.add(roomConnectResult(item));
+            }
+        }
+        if (roomResults.isEmpty()) {
+            JSONObject room = response == null ? null : response.optJSONObject("room");
+            if (room != null) roomResults.add(roomConnectResult(room));
+        }
+        return new ConnectResult(status, roomResults);
+    }
+
     static HealthResult health(Context context) {
         HttpURLConnection connection = null;
         try {
@@ -273,6 +406,14 @@ final class EventSender {
         return new URL(serverUrl.getProtocol() + "://" + serverUrl.getHost() + port + "/api/bridge/room-profile-sync");
     }
 
+    private static URL apiUrl(Context context, String path) throws Exception {
+        URL serverUrl = new URL(BridgeConfig.serverUrl(context));
+        String port = serverUrl.getPort() > 0 ? ":" + serverUrl.getPort() : "";
+        String normalizedPath = path == null || path.isEmpty() ? "/" : path;
+        if (!normalizedPath.startsWith("/")) normalizedPath = "/" + normalizedPath;
+        return new URL(serverUrl.getProtocol() + "://" + serverUrl.getHost() + port + normalizedPath);
+    }
+
     private static String[] stringArray(JSONArray array) {
         if (array == null || array.length() == 0) return new String[]{ BridgeConfig.DEFAULT_ROOM_NAME };
         String[] values = new String[array.length()];
@@ -363,6 +504,22 @@ final class EventSender {
             this.success = success;
             this.failed = failed;
             this.remaining = remaining;
+        }
+    }
+
+    static final class ApiResult {
+        final int status;
+        final JSONObject json;
+        final String error;
+
+        ApiResult(int status, JSONObject json, String error) {
+            this.status = status;
+            this.json = json == null ? new JSONObject() : json;
+            this.error = error;
+        }
+
+        boolean ok() {
+            return error == null && status >= 200 && status < 300 && json.optBoolean("ok", false);
         }
     }
 
