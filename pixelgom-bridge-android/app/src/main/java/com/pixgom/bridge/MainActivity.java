@@ -149,6 +149,16 @@ public class MainActivity extends Activity {
         setContentView(buildChecklistContent());
     }
 
+    private void showFeatureDashboard() {
+        clearMainRefs();
+        setContentView(buildFeatureDashboardContent());
+    }
+
+    private void showGamePackSettings(String packName) {
+        clearMainRefs();
+        setContentView(buildGamePackSettingsContent(packName));
+    }
+
     private View buildHomeContent() {
         ScrollView scrollView = baseScrollView();
 
@@ -164,8 +174,8 @@ public class MainActivity extends Activity {
         root.addView(heroPanel(
                 R.drawable.pixgom_bridge_captain,
                 "PIXGOM BRIDGE",
-                loggedIn ? "현재 연결된 방 " + BridgeConfig.roomProfileCount(this) + "개" : "로그인하고 방 자동 연결",
-                loggedIn ? "내 방, 명령어 스토어, 로그를 앱에서 바로 관리합니다." : "결제 완료된 방은 연결코드 없이 이 폰에 등록합니다."));
+                loggedIn ? "운영 상태 홈" : "로그인하고 방 자동 연결",
+                loggedIn ? "브릿지, 방, 구독, 응답 상태를 첫 화면에서 확인합니다." : "결제 완료된 방은 연결코드 없이 이 폰에 등록합니다."));
 
         TextView version = text("버전 " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")", 13, COLOR_BLUE, true);
         version.setGravity(Gravity.CENTER);
@@ -173,6 +183,13 @@ public class MainActivity extends Activity {
         root.addView(version);
 
         if (!loggedIn) {
+            LinearLayout preStatusPanel = panel();
+            preStatusPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+            root.addView(preStatusPanel);
+            preStatusPanel.addView(sectionTitle("기기 상태"));
+            preStatusPanel.addView(statusTile("알림 권한", notificationPermissionEnabled() ? "허용됨" : "필요", notificationPermissionEnabled()));
+            preStatusPanel.addView(statusTile("브릿지", BridgeConfig.isEnabled(this) ? "켜짐" : "꺼짐", BridgeConfig.isEnabled(this)));
+            preStatusPanel.addView(statusTile("등록 방", BridgeConfig.roomProfileCount(this) + "개", BridgeConfig.roomProfileCount(this) > 0));
             root.addView(buildLoginPanel());
             Button manualConnectButton = secondaryButton("연결코드로 직접 등록");
             manualConnectButton.setOnClickListener(v -> showAdvanced());
@@ -191,22 +208,30 @@ public class MainActivity extends Activity {
         statusPanel.addView(statusTile("알림 권한", notificationPermissionEnabled() ? "허용됨" : "필요", notificationPermissionEnabled()));
         statusPanel.addView(statusTile("브릿지", BridgeConfig.isEnabled(this) ? "켜짐" : "꺼짐", BridgeConfig.isEnabled(this)));
         statusPanel.addView(statusTile("등록 방", BridgeConfig.roomProfileCount(this) + "개", BridgeConfig.roomProfileCount(this) > 0));
+        statusPanel.addView(statusTile("구독 상태", subscriptionStatusLabel(), "확인됨".equals(subscriptionStatusLabel())));
         statusPanel.addView(statusTile("대기 큐", BridgeConfig.pendingEventCount(this) + "개", BridgeConfig.pendingEventCount(this) == 0));
+        statusPanel.addView(statusTile("최근 응답", shortTimingStatus(), !shortTimingStatus().contains("실패")));
         statusPanel.addView(statusTile("대표방", TextUtils.isEmpty(profile.name) ? "등록 필요" : profile.name, !TextUtils.isEmpty(profile.name)));
         statusPanel.addView(statusTile("계정", accountLabel(), true));
         homeDiagnosticsStatus = text("서버 진단: 확인 중", 14, COLOR_MUTED, true);
         homeDiagnosticsStatus.setPadding(0, dp(12), 0, 0);
         statusPanel.addView(homeDiagnosticsStatus);
 
-        Button startButton = primaryButton("내 방 자동 불러오기");
-        startButton.setOnClickListener(v -> showRooms());
-        root.addView(startButton);
+        Button bridgeButton = primaryButton(BridgeConfig.isEnabled(this) ? "브릿지 정지" : "브릿지 시작");
+        bridgeButton.setOnClickListener(v -> toggleBridgeEnabled());
+        Button autoConnectButton = secondaryButton("로그인하고 방 자동 연결");
+        autoConnectButton.setOnClickListener(v -> showRooms());
+        Button syncButton = secondaryButton("서버 동기화");
+        syncButton.setOnClickListener(v -> syncFromHome());
+        root.addView(compactActionGrid(bridgeButton, autoConnectButton, syncButton));
 
         root.addView(quickActionGrid(
                 quickAction(R.drawable.ic_link, "내 방", "자동 연결", v -> showRooms()),
-                quickAction(R.drawable.ic_checklist, "스토어", "설치/장착", v -> showCommandStore()),
+                quickAction(R.drawable.ic_checklist, "기능", "대시보드", v -> showFeatureDashboard()),
+                quickAction(R.drawable.ic_sync, "스토어", "설치/장착", v -> showCommandStore()),
                 quickAction(R.drawable.ic_log, "로그", "확인", v -> showLogs()),
-                quickAction(R.drawable.ic_settings, "계정", "로그인", v -> showAccount())
+                quickAction(R.drawable.ic_settings, "설정", "고급", v -> showAdvanced()),
+                quickAction(R.drawable.ic_home, "계정", "로그인", v -> showAccount())
         ));
 
         root.addView(featurePanel(
@@ -379,6 +404,105 @@ public class MainActivity extends Activity {
             accountPanel.addView(buildLoginPanel());
         }
         return scrollView;
+    }
+
+    private View buildFeatureDashboardContent() {
+        ScrollView scrollView = baseScrollView();
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        scrollView.addView(root);
+
+        root.addView(topBar("기능 대시보드", "운영 기능과 게임팩", true));
+        root.addView(heroPanel(
+                R.drawable.pixgom_dashboard_monitor,
+                "FEATURES",
+                "2번 안에 설정 진입",
+                "자주 보는 기능은 카드에서 바로 열고, 세부 게임 설정은 읽기 전용으로 확인합니다."));
+
+        LinearLayout statusPanel = panel();
+        statusPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.addView(statusPanel);
+        statusPanel.addView(sectionTitle("운영 요약"));
+        statusPanel.addView(statusTile("일반 기능", BridgeConfig.featureSummary(this), true));
+        statusPanel.addView(statusTile("게임방", BridgeConfig.gameRoomProfileCount(this) + "개", BridgeConfig.gameRoomProfileCount(this) > 0));
+        statusPanel.addView(statusTile("명령어 스토어", safeText(BridgeConfig.lastConsoleSummary(this)), BridgeConfig.isBuyerLoggedIn(this)));
+
+        LinearLayout generalPanel = panel();
+        generalPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.addView(generalPanel);
+        generalPanel.addView(sectionHeader(R.drawable.pixgom_bridge_captain, "일반 기능", "운영 기본값"));
+        generalPanel.addView(dashboardCard(R.drawable.ic_sync, "브릿지 자동응답", BridgeConfig.isEnabled(this) ? "알림을 받아 서버로 전송합니다." : "현재 꺼져 있습니다.", BridgeConfig.isEnabled(this) ? "활성" : "비활성", BridgeConfig.isEnabled(this), v -> toggleBridgeEnabled()));
+        generalPanel.addView(dashboardCard(R.drawable.ic_link, "방 자동 연결", "승인/결제 완료 방을 계정 기준으로 불러옵니다.", BridgeConfig.roomProfileCount(this) + "개", BridgeConfig.roomProfileCount(this) > 0, v -> showRooms()));
+        generalPanel.addView(dashboardCard(R.drawable.ic_log, "전송 로그", "성공, 실패, 무시, 진단 원문을 확인합니다.", BridgeConfig.pendingEventCount(this) == 0 ? "정상" : "대기 " + BridgeConfig.pendingEventCount(this), BridgeConfig.pendingEventCount(this) == 0, v -> showLogs()));
+
+        LinearLayout gamePanel = panel();
+        gamePanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.addView(gamePanel);
+        gamePanel.addView(sectionHeader(R.drawable.pixgom_speech_bubble, "게임팩", "라꼬봇식 접근성만 반영"));
+        gamePanel.addView(dashboardCard(R.drawable.ic_checklist, "채팅 미니게임", "주사위, 뽑기, 홀짝 등 포인트 게임 설정을 확인합니다.", BridgeConfig.gamesEnabled(this) ? "활성" : "비활성", BridgeConfig.gamesEnabled(this), v -> showGamePackSettings("채팅 미니게임")));
+        gamePanel.addView(dashboardCard(R.drawable.ic_checklist, "RPG 모험팩", "모험, 던전, 장비, 제작 흐름을 확인합니다.", BridgeConfig.gamesEnabled(this) ? "활성" : "설정 필요", BridgeConfig.gamesEnabled(this), v -> showGamePackSettings("RPG 모험팩")));
+        gamePanel.addView(dashboardCard(R.drawable.ic_checklist, "낚시/자동게임", "자동 실행권, 쿨타임, 보상 요약은 서버 기준입니다.", BridgeConfig.gamesEnabled(this) ? "활성" : "설정 필요", BridgeConfig.gamesEnabled(this), v -> showGamePackSettings("낚시/자동게임")));
+
+        LinearLayout premiumPanel = panel();
+        premiumPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.addView(premiumPanel);
+        premiumPanel.addView(sectionHeader(R.drawable.pixgom_chat_portal, "프리미엄", "계정과 구독"));
+        premiumPanel.addView(dashboardCard(R.drawable.ic_home, "구독/승인 상태", "앱은 결제 완료 방만 자동 연결합니다.", subscriptionStatusLabel(), "확인됨".equals(subscriptionStatusLabel()), v -> showRooms()));
+        premiumPanel.addView(dashboardCard(R.drawable.ic_settings, "계정", accountLabel(), BridgeConfig.isBuyerLoggedIn(this) ? "로그인됨" : "로그인 필요", BridgeConfig.isBuyerLoggedIn(this), v -> showAccount()));
+
+        LinearLayout commandPanel = panel();
+        commandPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.addView(commandPanel);
+        commandPanel.addView(sectionHeader(R.drawable.pixgom_checklist_calendar, "명령어/템플릿", "구매자 콘솔 API로 설치"));
+        commandPanel.addView(dashboardCard(R.drawable.ic_sync, "명령어 스토어", "명령어팩과 템플릿을 현재 구독 방에 장착합니다.", BridgeConfig.isBuyerLoggedIn(this) ? "사용 가능" : "로그인 필요", BridgeConfig.isBuyerLoggedIn(this), v -> showCommandStore()));
+        commandPanel.addView(dashboardCard(R.drawable.ic_settings, "상세 설정", "연결코드, 서버 URL, 로컬 JS는 고급 설정에 있습니다.", "고급", true, v -> showAdvanced()));
+        return scrollView;
+    }
+
+    private View buildGamePackSettingsContent(String packName) {
+        ScrollView scrollView = baseScrollView();
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(20), dp(18), dp(20), dp(96));
+        scrollView.addView(root);
+
+        root.addView(topBar(packName, "게임팩 설정", true));
+        root.addView(heroPanel(
+                R.drawable.pixgom_speech_bubble,
+                "GAME PACK",
+                packName,
+                "저장 가능한 공통 항목은 앱에 저장하고, 세부 확률/보상은 서버 설정 기준으로 읽습니다."));
+
+        LinearLayout editPanel = panel();
+        editPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.addView(editPanel);
+        editPanel.addView(sectionHeader(R.drawable.pixgom_dashboard_monitor, "공통 설정", "현재 앱에서 직접 저장 가능한 항목"));
+        Switch packEnabledSwitch = settingSwitch("게임 기능 사용", BridgeConfig.gamesEnabled(this));
+        editPanel.addView(packEnabledSwitch);
+        editPanel.addView(labelValue("일일 제한", "서버/방 설정 기준 - 앱 1차에서는 읽기 전용"));
+        editPanel.addView(labelValue("쿨타임", "명령어별 서버 기준 - 앱 1차에서는 읽기 전용"));
+        editPanel.addView(labelValue("응답 메시지", "채팅 답장 문구는 명령어팩/템플릿 기준"));
+        editPanel.addView(labelValue("보상 요약", "포인트, 아이템, RPG 보상은 서버 로직 기준"));
+
+        LinearLayout routePanel = panel();
+        routePanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.addView(routePanel);
+        routePanel.addView(sectionHeader(R.drawable.pixgom_checklist_calendar, "빠른 이동", "2탭 안에 필요한 화면으로 이동"));
+        routePanel.addView(dashboardCard(R.drawable.ic_sync, "명령어 스토어", "게임팩 장착/템플릿 설치", "이동", true, v -> showCommandStore()));
+        routePanel.addView(dashboardCard(R.drawable.ic_link, "내 방", "자동 연결과 구독 방 확인", "이동", true, v -> showRooms()));
+        routePanel.addView(dashboardCard(R.drawable.ic_log, "로그", "게임 명령 응답/실패 확인", "이동", true, v -> showLogs()));
+
+        Button saveButton = primaryButton("저장");
+        saveButton.setOnClickListener(v -> saveGamePackSettings(packName, packEnabledSwitch));
+        Button cancelButton = secondaryButton("취소");
+        cancelButton.setOnClickListener(v -> showFeatureDashboard());
+        Button resetButton = secondaryButton("초기화");
+        resetButton.setOnClickListener(v -> {
+            packEnabledSwitch.setChecked(BridgeConfig.gamesEnabled(this));
+            Toast.makeText(this, "서버 상세 설정은 변경하지 않았습니다.", Toast.LENGTH_SHORT).show();
+        });
+        return withBottomActionBar(scrollView, saveButton, cancelButton, resetButton);
     }
 
     private View buildChecklistContent() {
@@ -579,23 +703,34 @@ public class MainActivity extends Activity {
         gamesFeatureSwitch = settingSwitch("게임 기능", BridgeConfig.gamesEnabled(this));
         roomPanel.addView(gamesFeatureSwitch);
 
-        Button saveButton = primaryButton("설정 저장");
-        saveButton.setOnClickListener(v -> saveSettings());
-        roomPanel.addView(saveButton);
-
+        LinearLayout toolPanel = panel();
+        toolPanel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.addView(toolPanel);
+        toolPanel.addView(sectionHeader(R.drawable.pixgom_checklist_calendar, "점검 도구", "저장은 하단 고정 버튼을 사용합니다."));
         Button testButton = secondaryButton("서버 테스트 전송");
         testButton.setOnClickListener(v -> sendTestEvent());
-        roomPanel.addView(testButton);
+        toolPanel.addView(testButton);
 
         Button checklistButton = secondaryButton("테스트 체크리스트");
         checklistButton.setOnClickListener(v -> showChecklist());
-        roomPanel.addView(checklistButton);
+        toolPanel.addView(checklistButton);
 
         Button diagnosisButton = secondaryButton("진단 내용 복사");
         diagnosisButton.setOnClickListener(v -> copyDiagnosis());
-        roomPanel.addView(diagnosisButton);
+        toolPanel.addView(diagnosisButton);
 
-        return scrollView;
+        Button featureButton = secondaryButton("기능 대시보드");
+        featureButton.setOnClickListener(v -> showFeatureDashboard());
+        toolPanel.addView(featureButton);
+
+        Button saveButton = primaryButton("저장");
+        saveButton.setOnClickListener(v -> saveSettings());
+        Button cancelButton = secondaryButton("취소");
+        cancelButton.setOnClickListener(v -> showHome());
+        Button resetButton = secondaryButton("초기화");
+        resetButton.setContentDescription("서버 설정 초기화 / 등록 취소");
+        resetButton.setOnClickListener(v -> confirmResetServerSettings());
+        return withBottomActionBar(scrollView, saveButton, cancelButton, resetButton);
     }
 
     private View buildLogsContent() {
@@ -700,10 +835,6 @@ public class MainActivity extends Activity {
         scriptSourceInput = scriptInput(BridgeConfig.scriptSource(this));
         scriptPanel.addView(scriptSourceInput);
 
-        Button scriptSaveButton = primaryButton("JS 저장");
-        scriptSaveButton.setOnClickListener(v -> saveScriptSettings());
-        scriptPanel.addView(scriptSaveButton);
-
         Button scriptTestButton = secondaryButton("JS 테스트");
         scriptTestButton.setOnClickListener(v -> testScript());
         scriptPanel.addView(scriptTestButton);
@@ -719,10 +850,14 @@ public class MainActivity extends Activity {
         TextView resetHelp = text("구매자 계정과 서버 결제/신청 데이터는 삭제되지 않습니다.", 13, COLOR_MUTED, false);
         resetPanel.addView(resetHelp);
 
-        Button resetButton = secondaryButton("서버 설정 초기화 / 등록 취소");
+        Button saveButton = primaryButton("저장");
+        saveButton.setOnClickListener(v -> saveScriptSettings());
+        Button cancelButton = secondaryButton("취소");
+        cancelButton.setOnClickListener(v -> showHome());
+        Button resetButton = secondaryButton("초기화");
+        resetButton.setContentDescription("서버 설정 초기화 / 등록 취소");
         resetButton.setOnClickListener(v -> confirmResetServerSettings());
-        resetPanel.addView(resetButton);
-        return scrollView;
+        return withBottomActionBar(scrollView, saveButton, cancelButton, resetButton);
     }
 
     private ScrollView baseScrollView() {
@@ -730,6 +865,32 @@ public class MainActivity extends Activity {
         scrollView.setFillViewport(true);
         scrollView.setBackgroundColor(COLOR_BG);
         return scrollView;
+    }
+
+    private View withBottomActionBar(ScrollView scrollView, Button primary, Button secondary, Button reset) {
+        LinearLayout screen = new LinearLayout(this);
+        screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setBackgroundColor(COLOR_BG);
+        screen.addView(scrollView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
+
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(20), dp(10), dp(20), dp(16));
+        bar.setBackgroundColor(COLOR_BG);
+        addBottomActionButton(bar, secondary, 1);
+        addBottomActionButton(bar, reset, 1);
+        addBottomActionButton(bar, primary, 2);
+        screen.addView(bar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        return screen;
+    }
+
+    private void addBottomActionButton(LinearLayout bar, Button button, int weight) {
+        button.setTextSize(14);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(46), weight);
+        params.setMargins(dp(4), 0, dp(4), 0);
+        button.setLayoutParams(params);
+        bar.addView(button);
     }
 
     private void clearMainRefs() {
@@ -913,6 +1074,44 @@ public class MainActivity extends Activity {
         return layout;
     }
 
+    private LinearLayout dashboardCard(int iconRes, String title, String body, String status, boolean ok, View.OnClickListener listener) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(12), dp(12), dp(12), dp(12));
+        card.setBackgroundResource(getResources().getIdentifier("status_tile_background", "drawable", getPackageName()));
+        card.setClickable(true);
+        card.setOnClickListener(listener);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(8), 0, 0);
+        card.setLayoutParams(params);
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(iconRes);
+        icon.setColorFilter(ok ? COLOR_BLUE : COLOR_WARN);
+        card.addView(icon, new LinearLayout.LayoutParams(dp(28), dp(28)));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(12), 0, dp(8), 0);
+        copy.addView(text(title, 16, COLOR_TITLE, true));
+        TextView bodyView = text(body, 12, COLOR_MUTED, false);
+        bodyView.setPadding(0, dp(3), 0, 0);
+        copy.addView(bodyView);
+        card.addView(copy, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        card.addView(statusBadge(status, ok));
+        return card;
+    }
+
+    private TextView statusBadge(String value, boolean ok) {
+        TextView badge = text(value, 12, ok ? COLOR_GOOD : COLOR_WARN, true);
+        badge.setGravity(Gravity.CENTER);
+        badge.setPadding(dp(8), dp(5), dp(8), dp(5));
+        badge.setBackgroundResource(getResources().getIdentifier("icon_button_background", "drawable", getPackageName()));
+        return badge;
+    }
+
     private LinearLayout sectionHeader(int imageRes, String title, String body) {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.HORIZONTAL);
@@ -962,6 +1161,21 @@ public class MainActivity extends Activity {
         if (!TextUtils.isEmpty(email)) return email;
         if (!TextUtils.isEmpty(nickname)) return nickname;
         return BridgeConfig.isBuyerLoggedIn(this) ? "로그인됨" : "로그인 필요";
+    }
+
+    private String subscriptionStatusLabel() {
+        if (!BridgeConfig.isBuyerLoggedIn(this)) return "로그인 필요";
+        String summary = BridgeConfig.lastConsoleSummary(this);
+        if (TextUtils.isEmpty(summary)) return "확인 필요";
+        if (summary.contains("0개")) return "승인 방 없음";
+        return "확인됨";
+    }
+
+    private String shortTimingStatus() {
+        String failure = BridgeConfig.lastSendFailure(this);
+        if (!TextUtils.isEmpty(failure)) return "실패 확인";
+        String timing = BridgeConfig.lastServerTimingSummary(this);
+        return TextUtils.isEmpty(timing) ? "기록 없음" : shortStatus(timing);
     }
 
     private void loginWithEmail() {
@@ -1251,6 +1465,31 @@ public class MainActivity extends Activity {
                 loadBuyerConsole();
             });
         });
+    }
+
+    private void toggleBridgeEnabled() {
+        boolean next = !BridgeConfig.isEnabled(this);
+        BridgeConfig.setEnabled(this, next);
+        BridgeConfig.appendLog(this, next ? "브릿지 시작" : "브릿지 정지");
+        Toast.makeText(this, next ? "브릿지를 켰습니다." : "브릿지를 껐습니다.", Toast.LENGTH_SHORT).show();
+        showHome();
+    }
+
+    private void syncFromHome() {
+        if (BridgeConfig.isBuyerLoggedIn(this) && BridgeConfig.roomProfileCount(this) == 0) {
+            showRooms();
+            Toast.makeText(this, "연결 가능한 방을 먼저 선택하세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        syncRoomProfiles();
+    }
+
+    private void saveGamePackSettings(String packName, Switch packEnabledSwitch) {
+        boolean enabled = packEnabledSwitch != null && packEnabledSwitch.isChecked();
+        BridgeConfig.setGamesEnabled(this, enabled);
+        BridgeConfig.appendLog(this, "게임팩 공통 설정 저장: " + packName + " / 게임 기능 " + (enabled ? "켜짐" : "꺼짐"));
+        Toast.makeText(this, "게임 기능 상태를 저장했습니다. 세부 확률/보상은 서버 설정 기준입니다.", Toast.LENGTH_LONG).show();
+        showFeatureDashboard();
     }
 
     private void saveSettings() {
