@@ -9,7 +9,10 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.text.InputType;
 import android.text.TextUtils;
@@ -56,6 +59,8 @@ public class MainActivity extends Activity {
     private static final int COLOR_BAD = Color.rgb(220, 38, 38);
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private boolean introFinished = false;
     private TextView homeDiagnosticsStatus;
     private TextView profileSyncStatus;
     private TextView pendingQueueStatus;
@@ -97,8 +102,31 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        configureSystemBars();
         BridgeConfig.applyMigrations(this);
         initializeKakaoIfReady();
+        showIntroThenHome();
+    }
+
+    @Override
+    protected void onDestroy() {
+        uiHandler.removeCallbacksAndMessages(null);
+        executor.shutdownNow();
+        super.onDestroy();
+    }
+
+    private void showIntroThenHome() {
+        introFinished = false;
+        View intro = buildIntroContent();
+        intro.setAlpha(0f);
+        setContentView(intro);
+        intro.animate().alpha(1f).setDuration(220).start();
+        uiHandler.postDelayed(this::finishIntro, 850);
+    }
+
+    private void finishIntro() {
+        if (introFinished) return;
+        introFinished = true;
         showHome();
     }
 
@@ -164,18 +192,23 @@ public class MainActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        applyScreenPadding(root, 24);
         scrollView.addView(root);
 
         root.addView(topBar("픽셀곰 브릿지", "카카오 응답 상태", false));
 
         BridgeConfig.RoomProfile profile = BridgeConfig.firstRoomProfile(this);
         boolean loggedIn = BridgeConfig.isBuyerLoggedIn(this);
-        root.addView(heroPanel(
-                R.drawable.pixgom_bridge_captain,
-                "PIXGOM BRIDGE",
-                loggedIn ? "운영 상태 홈" : "로그인하고 방 자동 연결",
-                loggedIn ? "브릿지, 방, 구독, 응답 상태를 첫 화면에서 확인합니다." : "결제 완료된 방은 연결코드 없이 이 폰에 등록합니다."));
+        root.addView(loggedIn
+                ? compactHeroPanel(
+                        R.drawable.pixgom_bridge_captain,
+                        "운영 상태 홈",
+                        "브릿지, 방, 구독, 응답 상태를 바로 확인합니다.")
+                : heroPanel(
+                        R.drawable.pixgom_bridge_captain,
+                        "PIXGOM BRIDGE",
+                        "로그인하고 방 자동 연결",
+                        "결제 완료된 방은 연결코드 없이 이 폰에 등록합니다."));
 
         TextView version = text("버전 " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")", 13, COLOR_BLUE, true);
         version.setGravity(Gravity.CENTER);
@@ -298,13 +331,12 @@ public class MainActivity extends Activity {
         ScrollView scrollView = baseScrollView();
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        applyScreenPadding(root, 24);
         scrollView.addView(root);
 
         root.addView(topBar("내 방", "자동 연결", true));
-        root.addView(heroPanel(
+        root.addView(compactHeroPanel(
                 R.drawable.pixgom_dashboard_monitor,
-                "MY ROOMS",
                 "연결 가능한 방",
                 "승인/결제 완료된 방만 이 폰에 등록합니다."));
 
@@ -343,13 +375,12 @@ public class MainActivity extends Activity {
         ScrollView scrollView = baseScrollView();
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        applyScreenPadding(root, 24);
         scrollView.addView(root);
 
         root.addView(topBar("명령어 스토어", "설치/장착", true));
-        root.addView(heroPanel(
+        root.addView(compactHeroPanel(
                 R.drawable.pixgom_speech_bubble,
-                "COMMAND STORE",
                 "앱에서 바로 장착",
                 "현재 구독 방에 명령어팩과 템플릿을 설치합니다."));
 
@@ -375,7 +406,7 @@ public class MainActivity extends Activity {
         ScrollView scrollView = baseScrollView();
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        applyScreenPadding(root, 24);
         scrollView.addView(root);
 
         root.addView(topBar("계정", "로그인과 연결", true));
@@ -410,13 +441,12 @@ public class MainActivity extends Activity {
         ScrollView scrollView = baseScrollView();
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        applyScreenPadding(root, 24);
         scrollView.addView(root);
 
         root.addView(topBar("기능 대시보드", "운영 기능과 게임팩", true));
-        root.addView(heroPanel(
+        root.addView(compactHeroPanel(
                 R.drawable.pixgom_dashboard_monitor,
-                "FEATURES",
                 "2번 안에 설정 진입",
                 "자주 보는 기능은 카드에서 바로 열고, 세부 게임 설정은 읽기 전용으로 확인합니다."));
 
@@ -464,13 +494,12 @@ public class MainActivity extends Activity {
         ScrollView scrollView = baseScrollView();
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(18), dp(20), dp(96));
+        applyScreenPadding(root, 96);
         scrollView.addView(root);
 
         root.addView(topBar(packName, "게임팩 설정", true));
-        root.addView(heroPanel(
+        root.addView(compactHeroPanel(
                 R.drawable.pixgom_speech_bubble,
-                "GAME PACK",
                 packName,
                 "저장 가능한 공통 항목은 앱에 저장하고, 세부 확률/보상은 서버 설정 기준으로 읽습니다."));
 
@@ -510,7 +539,7 @@ public class MainActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        applyScreenPadding(root, 24);
         scrollView.addView(root);
 
         root.addView(topBar("체크리스트", "테스트 순서", true));
@@ -584,7 +613,7 @@ public class MainActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        applyScreenPadding(root, 24);
         scrollView.addView(root);
 
         root.addView(topBar("연결/방 설정", "방 연결과 기능 토글", true));
@@ -739,7 +768,7 @@ public class MainActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        applyScreenPadding(root, 24);
         scrollView.addView(root);
 
         root.addView(topBar("전송 로그", "성공/실패/무시 기록", true));
@@ -774,7 +803,7 @@ public class MainActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(18), dp(20), dp(28));
+        applyScreenPadding(root, 24);
         scrollView.addView(root);
 
         root.addView(topBar("고급 설정", "자주 쓰지 않는 기능", true));
@@ -860,11 +889,63 @@ public class MainActivity extends Activity {
         return withBottomActionBar(scrollView, saveButton, cancelButton, resetButton);
     }
 
+    private View buildIntroContent() {
+        LinearLayout screen = new LinearLayout(this);
+        screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setGravity(Gravity.CENTER);
+        screen.setBackgroundColor(COLOR_BG);
+        screen.setPadding(dp(24), topSafePadding(), dp(24), bottomSafePadding(24));
+        screen.setOnClickListener(v -> finishIntro());
+
+        ImageView logo = assetImage(R.drawable.pixgom_bridge_captain, 148);
+        screen.addView(logo);
+
+        TextView title = text("픽셀곰", 30, COLOR_TITLE, true);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, dp(14), 0, dp(4));
+        screen.addView(title);
+
+        TextView subtitle = text("카카오 오픈채팅 운영을 가볍게 연결합니다.", 14, COLOR_MUTED, false);
+        subtitle.setGravity(Gravity.CENTER);
+        screen.addView(subtitle);
+        return screen;
+    }
+
     private ScrollView baseScrollView() {
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
         scrollView.setBackgroundColor(COLOR_BG);
         return scrollView;
+    }
+
+    private void configureSystemBars() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            getWindow().setStatusBarColor(COLOR_BG);
+            getWindow().setNavigationBarColor(COLOR_BG);
+        }
+        int flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        }
+        getWindow().getDecorView().setSystemUiVisibility(flags);
+    }
+
+    private void applyScreenPadding(LinearLayout root, int bottomDp) {
+        root.setPadding(dp(16), topSafePadding(), dp(16), bottomSafePadding(bottomDp));
+    }
+
+    private int topSafePadding() {
+        return dp(10) + systemInset("status_bar_height", dp(20));
+    }
+
+    private int bottomSafePadding(int bottomDp) {
+        return dp(bottomDp) + Math.min(systemInset("navigation_bar_height", 0), dp(24));
+    }
+
+    private int systemInset(String name, int fallback) {
+        int resourceId = getResources().getIdentifier(name, "dimen", "android");
+        if (resourceId <= 0) return fallback;
+        return getResources().getDimensionPixelSize(resourceId);
     }
 
     private View withBottomActionBar(ScrollView scrollView, Button primary, Button secondary, Button reset) {
@@ -1032,9 +1113,9 @@ public class MainActivity extends Activity {
     private LinearLayout heroPanel(int imageRes, String eyebrow, String title, String body) {
         LinearLayout layout = panel();
         layout.setGravity(Gravity.CENTER);
-        layout.setPadding(dp(18), dp(18), dp(18), dp(20));
+        layout.setPadding(dp(16), dp(16), dp(16), dp(18));
 
-        ImageView image = assetImage(imageRes, 136);
+        ImageView image = assetImage(imageRes, 124);
         layout.addView(image);
 
         TextView eyebrowView = text(eyebrow, 13, COLOR_BLUE, true);
@@ -1050,6 +1131,26 @@ public class MainActivity extends Activity {
         TextView bodyView = text(body, 14, COLOR_MUTED, false);
         bodyView.setGravity(Gravity.CENTER);
         layout.addView(bodyView);
+        return layout;
+    }
+
+    private LinearLayout compactHeroPanel(int imageRes, String title, String body) {
+        LinearLayout layout = panel();
+        layout.setOrientation(LinearLayout.HORIZONTAL);
+        layout.setGravity(Gravity.CENTER_VERTICAL);
+        layout.setPadding(dp(12), dp(12), dp(12), dp(12));
+
+        ImageView image = assetImage(imageRes, 64);
+        layout.addView(image);
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(12), 0, 0, 0);
+        copy.addView(text(title, 19, COLOR_TITLE, true));
+        TextView bodyView = text(body, 13, COLOR_MUTED, false);
+        bodyView.setPadding(0, dp(3), 0, 0);
+        copy.addView(bodyView);
+        layout.addView(copy, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         return layout;
     }
 
