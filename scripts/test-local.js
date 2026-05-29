@@ -12,6 +12,7 @@ const repoRoot = path.resolve(__dirname, "..");
 
 let server;
 let weatherServer;
+let supabaseAuthServer;
 let testDbPath;
 let baseUrl = process.env.TEST_BASE_URL || "";
 const registeredRoomId = "gu25P5vi";
@@ -53,6 +54,50 @@ if (!baseUrl) {
   await new Promise((resolve) => weatherServer.listen(0, "127.0.0.1", resolve));
   process.env.OPEN_METEO_BASE_URL = `http://127.0.0.1:${weatherServer.address().port}/v1/forecast`;
 
+  const supabaseTestEmail = `supabase-${process.pid}@pixgom.test`;
+  const supabaseTestToken = `supabase-token-${process.pid}`;
+  supabaseAuthServer = http.createServer((req, res) => {
+    const url = new URL(req.url || "/", "http://127.0.0.1");
+    const sendJson = (status, body) => {
+      res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify(body));
+    };
+    if (req.method === "POST" && url.pathname === "/auth/v1/token") {
+      let raw = "";
+      req.on("data", (chunk) => { raw += chunk; });
+      req.on("end", () => {
+        const body = JSON.parse(raw || "{}");
+        if (body.email === supabaseTestEmail && body.password === "password123") {
+          sendJson(200, {
+            access_token: supabaseTestToken,
+            token_type: "bearer",
+            expires_in: 3600
+          });
+        } else {
+          sendJson(400, { error: "invalid_grant", error_description: "Invalid login credentials" });
+        }
+      });
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/auth/v1/user") {
+      if (req.headers.authorization === `Bearer ${supabaseTestToken}`) {
+        sendJson(200, {
+          id: `supabase-user-${process.pid}`,
+          email: supabaseTestEmail,
+          app_metadata: { provider: "email", providers: ["email"] },
+          user_metadata: { nickname: "슈파로그인" }
+        });
+      } else {
+        sendJson(401, { error: "invalid_token" });
+      }
+      return;
+    }
+    sendJson(404, { error: "not_found" });
+  });
+  await new Promise((resolve) => supabaseAuthServer.listen(0, "127.0.0.1", resolve));
+  process.env.SUPABASE_URL = `http://127.0.0.1:${supabaseAuthServer.address().port}`;
+  process.env.SUPABASE_ANON_KEY = "test-supabase-anon-key";
+
   const { requestHandler } = await import("../server.js");
   server = http.createServer(requestHandler);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -62,6 +107,7 @@ if (!baseUrl) {
 async function cleanup() {
   if (server) await new Promise((resolve) => server.close(resolve));
   if (weatherServer) await new Promise((resolve) => weatherServer.close(resolve));
+  if (supabaseAuthServer) await new Promise((resolve) => supabaseAuthServer.close(resolve));
   if (testDbPath) await unlink(testDbPath).catch(() => {});
 }
 
@@ -573,7 +619,8 @@ try {
 
   const authConfig = await request("/api/auth/config");
   assert.equal(authConfig.response.status, 200);
-  assert.equal(authConfig.json.auth.mode, "local");
+  assert.equal(authConfig.json.auth.mode, "supabase");
+  assert.equal(authConfig.json.auth.supabaseEnabled, true);
   assert.equal(authConfig.json.routes.ownerAdmin, "/admin");
   assert.equal(authConfig.json.routes.buyerConsole, "/console");
 
@@ -1908,6 +1955,31 @@ try {
   assert.equal(login.json.applications[0].payment.status, "awaiting_manual_deposit");
   assert.equal(login.json.buyerAccess, false);
   assert.match(login.json.guideToken, /\./);
+
+  const supabasePasswordLogin = await request("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `supabase-${process.pid}@pixgom.test`,
+      password: "password123"
+    })
+  });
+  assert.equal(supabasePasswordLogin.response.status, 200);
+  assert.equal(supabasePasswordLogin.json.account.email, `supabase-${process.pid}@pixgom.test`);
+  assert.equal(supabasePasswordLogin.json.account.authProvider, "email");
+  assert.equal(supabasePasswordLogin.json.account.nickname, "슈파로그인");
+  assert.match(supabasePasswordLogin.json.guideToken, /\./);
+
+  const supabasePasswordLoginInvalid = await request("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `supabase-${process.pid}@pixgom.test`,
+      password: "wrongpass123"
+    })
+  });
+  assert.equal(supabasePasswordLoginInvalid.response.status, 401);
+  assert.equal(supabasePasswordLoginInvalid.json.error, "invalid_login");
 
   const profileUpdate = await request("/api/buyer/account/profile", {
     method: "POST",

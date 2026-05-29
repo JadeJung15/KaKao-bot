@@ -3336,6 +3336,36 @@ async function supabaseUserFromAccessToken(accessToken) {
   };
 }
 
+async function supabaseUserFromPassword(email, password) {
+  const normalizedEmail = normalizeEmail(email);
+  const rawPassword = String(password || "");
+  if (!validEmail(normalizedEmail) || !rawPassword) {
+    return { ok: false, status: 401, error: "invalid_login" };
+  }
+  if (!supabaseEnabled()) return { ok: false, status: 503, error: "supabase_not_configured" };
+  let response;
+  try {
+    response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        email: normalizedEmail,
+        password: rawPassword
+      })
+    });
+  } catch {
+    return { ok: false, status: 502, error: "supabase_login_unavailable" };
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.access_token) {
+    return { ok: false, status: 401, error: "invalid_login" };
+  }
+  return supabaseUserFromAccessToken(payload.access_token);
+}
+
 async function kakaoUserFromAccessToken(accessToken) {
   const token = normalizeText(accessToken);
   if (!token) return { ok: false, status: 401, error: "missing_kakao_access_token" };
@@ -14120,7 +14150,14 @@ async function loginAccountFromRequest(state, body = {}) {
     if (!external.ok) return external;
     return loginPayloadForAccount(state, external.account);
   }
-  return loginAccount(state, body);
+  const localLogin = loginAccount(state, body);
+  if (localLogin.ok) return localLogin;
+  const supabaseLogin = await supabaseUserFromPassword(body.email, body.password);
+  if (supabaseLogin.ok) {
+    return loginPayloadForAccount(state, ensureExternalAccount(state, supabaseLogin.user, body));
+  }
+  if (supabaseLogin.error === "supabase_login_unavailable") return supabaseLogin;
+  return localLogin;
 }
 
 function buyerConsolePayload(state, account = {}) {
