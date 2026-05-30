@@ -255,6 +255,23 @@ final class EventSender {
         return postApi(context, "/api/buyer/account/profile", payload);
     }
 
+    static ApiResult applyService(Context context, String buyerToken, String email, String roomName, String roomLink, String adminName, String contact, String memo, String roomPurpose, String linkedApplicationId) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            payload.put("email", email == null ? "" : email.trim());
+            payload.put("roomName", roomName == null ? "" : roomName.trim());
+            payload.put("roomLink", roomLink == null ? "" : roomLink.trim());
+            payload.put("adminName", adminName == null ? "" : adminName.trim());
+            payload.put("contact", contact == null ? "" : contact.trim());
+            payload.put("memo", memo == null ? "" : memo.trim());
+            payload.put("roomPurpose", roomPurpose == null ? "general_room" : roomPurpose);
+            payload.put("linkedApplicationId", linkedApplicationId == null ? "" : linkedApplicationId);
+        } catch (Exception ignored) {
+            // Keep application payload best-effort.
+        }
+        return postApi(context, "/api/apply", payload);
+    }
+
     static ApiResult buyerConsole(Context context, String buyerToken) {
         return postApi(context, "/api/buyer/console", tokenPayload(buyerToken));
     }

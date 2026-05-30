@@ -92,6 +92,12 @@ public class MainActivity extends Activity {
     private EditText signupPasswordInput;
     private EditText signupPasswordConfirmInput;
     private EditText signupNicknameInput;
+    private EditText applyRoomNameInput;
+    private EditText applyRoomLinkInput;
+    private EditText applyAdminNameInput;
+    private EditText applyContactInput;
+    private EditText applyMemoInput;
+    private TextView applyPurposeStatusView;
     private EditText otpCodeInput;
     private String otpChallengeToken = "";
     private String otpEmail = "";
@@ -108,6 +114,8 @@ public class MainActivity extends Activity {
     private String roomSettingsCategory = "overview";
     private String commandSearchQuery = "";
     private String commandStoreTargetApplicationId = "";
+    private String applyRoomPurpose = "general_room";
+    private String applyLinkedApplicationId = "";
     private String logFilterMode = "all";
     private Button gameRoomToggleButton;
     private boolean gameRoomListExpanded = false;
@@ -274,11 +282,15 @@ public class MainActivity extends Activity {
         applyScreenPadding(root, 18);
         scrollView.addView(root);
 
-        TextView brand = text("PIXELGOM", 30, COLOR_TITLE, true);
-        brand.setGravity(Gravity.CENTER);
-        brand.setLetterSpacing(0f);
-        brand.setPadding(0, dp(32), 0, dp(4));
-        root.addView(brand);
+        LinearLayout brandRow = new LinearLayout(this);
+        brandRow.setGravity(Gravity.CENTER);
+        brandRow.setPadding(0, dp(32), 0, dp(4));
+        brandRow.setContentDescription("PIXELGOM");
+        TextView brandPixel = text("PIXEL", 30, COLOR_TITLE, true);
+        TextView brandGom = text("GOM", 30, COLOR_GOOD, true);
+        brandRow.addView(brandPixel);
+        brandRow.addView(brandGom);
+        root.addView(brandRow);
 
         TextView sub = text("카카오톡 오픈채팅방 브릿지 플랫폼", 14, COLOR_MUTED, false);
         sub.setGravity(Gravity.CENTER);
@@ -690,6 +702,13 @@ public class MainActivity extends Activity {
                     "열기",
                     v -> showSupport()));
 
+            accountPanel.addView(settingCategoryRow(
+                    R.drawable.ic_plus,
+                    "서비스 신청",
+                    "새 운영방과 게임방을 앱에서 신청합니다.",
+                    "신청",
+                    v -> showApplyService()));
+
             Button resetPasswordButton = secondaryButton("비밀번호 재설정 메일 보내기");
             resetPasswordButton.setOnClickListener(v -> showPasswordResetDialog());
             accountPanel.addView(resetPasswordButton);
@@ -744,6 +763,69 @@ public class MainActivity extends Activity {
         supportContainer.addView(text("불러오는 중입니다.", 14, COLOR_MUTED, false));
         nativeConsoleMode = "support";
         root.addView(supportContainer);
+        return withBottomNav(scrollView, "settings");
+    }
+
+    private void showApplyService() {
+        if (!BridgeConfig.isBuyerLoggedIn(this)) {
+            showEmailLogin();
+            Toast.makeText(this, "먼저 로그인해 주세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        clearMainRefs();
+        setContentView(buildApplyServiceContent());
+        loadBuyerConsole();
+    }
+
+    private View buildApplyServiceContent() {
+        ScrollView scrollView = baseScrollView();
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        applyScreenPadding(root, 18);
+        scrollView.addView(root);
+
+        root.addView(topBar("서비스 신청", "앱에서 접수", true));
+        root.addView(compactSummaryPanel("웹사이트 없이 신청", "새 방 정보 입력 후 결제 확인 요청까지 앱에서 처리합니다."));
+
+        LinearLayout form = panel();
+        form.setPadding(dp(14), dp(14), dp(14), dp(14));
+        root.addView(form);
+        form.addView(sectionTitle("신청 종류"));
+        applyPurposeStatusView = singleLineText(applyPurposeLabel(), 13, COLOR_GOOD, true);
+        form.addView(applyPurposeStatusView);
+        form.addView(settingCategoryRow(
+                R.drawable.ic_home,
+                "일반 운영방",
+                "대표 오픈채팅방을 새로 신청합니다.",
+                "기본",
+                v -> setApplyPurpose("general_room", "")));
+        form.addView(settingCategoryRow(
+                R.drawable.ic_checklist,
+                "게임방 추가",
+                "승인된 대표방에 연결된 게임방을 신청합니다.",
+                "추가",
+                v -> setApplyPurpose("game_room", firstApprovedApplicationId())));
+
+        form.addView(sectionTitle("방 정보"));
+        applyRoomNameInput = authInput("방 이름", "");
+        form.addView(applyRoomNameInput);
+        applyRoomLinkInput = authInput("오픈채팅 링크", "");
+        applyRoomLinkInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        form.addView(applyRoomLinkInput);
+        applyAdminNameInput = authInput("방 관리자 닉네임", "");
+        form.addView(applyAdminNameInput);
+        applyContactInput = authInput("연락처 또는 카카오 ID (선택)", "");
+        form.addView(applyContactInput);
+        applyMemoInput = multiLineInput("", 3);
+        applyMemoInput.setHint("요청 메모 또는 입금자명을 적어 주세요. (선택)");
+        form.addView(applyMemoInput);
+
+        Button submitButton = primaryButton("신청 접수");
+        submitButton.setOnClickListener(v -> submitServiceApplication());
+        form.addView(submitButton);
+        Button supportButton = secondaryButton("결제 확인 요청 보기");
+        supportButton.setOnClickListener(v -> showSupport());
+        form.addView(supportButton);
         return withBottomNav(scrollView, "settings");
     }
 
@@ -935,6 +1017,7 @@ public class MainActivity extends Activity {
         hub.addView(settingCategoryRow(R.drawable.ic_checklist, "게임", "게임팩 상태와 도움말", BridgeConfig.gamesEnabled(this) ? "ON" : "OFF", v -> showFeatureDashboard()));
         hub.addView(settingCategoryRow(R.drawable.ic_sync, "명령어", "팩/템플릿 설치", "스토어", v -> showCommandStore()));
         hub.addView(settingCategoryRow(R.drawable.ic_log, "로그", "전송 기록 확인", "열기", v -> showLogs()));
+        hub.addView(settingCategoryRow(R.drawable.ic_plus, "서비스 신청", "새 방 신청과 결제 확인", "신청", v -> showApplyService()));
         hub.addView(settingCategoryRow(R.drawable.ic_log, "문의/복구", "입금, 설치 오류, 삭제 방 복구", "접수", v -> showSupport()));
         hub.addView(settingCategoryRow(R.drawable.ic_settings, "고급", "연결코드, 초기화, JS", "지원", v -> showAdvanced()));
         return withBottomNav(scrollView, "settings");
@@ -1236,7 +1319,7 @@ public class MainActivity extends Activity {
     private ScrollView baseScrollView() {
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
-        scrollView.setBackgroundColor(COLOR_BG);
+        scrollView.setBackgroundResource(getResources().getIdentifier("app_background", "drawable", getPackageName()));
         return scrollView;
     }
 
@@ -1370,6 +1453,12 @@ public class MainActivity extends Activity {
         nativeConsoleStatusView = null;
         loginEmailInput = null;
         loginPasswordInput = null;
+        applyRoomNameInput = null;
+        applyRoomLinkInput = null;
+        applyAdminNameInput = null;
+        applyContactInput = null;
+        applyMemoInput = null;
+        applyPurposeStatusView = null;
         selectableRoomsContainer = null;
         roomDetailContainer = null;
         supportContainer = null;
@@ -1377,6 +1466,8 @@ public class MainActivity extends Activity {
         nativeConsoleMode = "";
         selectedRoomApplicationId = "";
         selectedRoomTab = "status";
+        applyRoomPurpose = "general_room";
+        applyLinkedApplicationId = "";
         gameRoomToggleButton = null;
         blockGamesInGeneralRoomSwitch = null;
         blockOpsInGameRoomSwitch = null;
@@ -1495,9 +1586,10 @@ public class MainActivity extends Activity {
 
     private LinearLayout metricTile(String label, String value, boolean ok) {
         LinearLayout tile = glassPanel();
-        tile.setPadding(dp(10), dp(8), dp(10), dp(8));
+        tile.setPadding(dp(8), dp(7), dp(8), dp(7));
+        tile.setMinimumHeight(dp(66));
         tile.addView(singleLineText(label, 12, COLOR_MUTED, false));
-        TextView valueView = singleLineText(value, 18, ok ? COLOR_TITLE : COLOR_BAD, true);
+        TextView valueView = singleLineText(value, 17, ok ? COLOR_TITLE : COLOR_BAD, true);
         valueView.setPadding(0, dp(2), 0, 0);
         tile.addView(valueView);
         return tile;
@@ -1567,7 +1659,7 @@ public class MainActivity extends Activity {
         LinearLayout bar = simpleTitleBar("방 관리", false, false);
         bar.addView(iconButton(R.drawable.ic_search, "검색", v -> showRoomSearchDialog()));
         bar.addView(iconButton(R.drawable.ic_filter, "필터", v -> showRoomFilterDialog()));
-        bar.addView(iconButton(R.drawable.ic_plus, "방 추가", v -> showAdvanced()));
+        bar.addView(iconButton(R.drawable.ic_plus, "방 추가", v -> showApplyService()));
         return bar;
     }
 
@@ -1780,13 +1872,17 @@ public class MainActivity extends Activity {
         action.setOrientation(LinearLayout.VERTICAL);
         action.setGravity(Gravity.CENTER);
         action.setPadding(dp(6), dp(8), dp(6), dp(8));
-        action.setBackgroundResource(getResources().getIdentifier("icon_button_background", "drawable", getPackageName()));
+        int cardColor = COLOR_CARD_SOFT;
+        if (label.contains("연결 확인")) cardColor = COLOR_BLUE;
+        if (label.contains("자동 연결")) cardColor = Color.rgb(124, 58, 237);
+        action.setBackground(roundedBackground(cardColor, Color.rgb(48, 69, 88), 10));
         action.setOnClickListener(listener);
         action.setClickable(true);
+        action.setMinimumHeight(dp(78));
 
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconRes);
-        icon.setColorFilter(COLOR_BLUE);
+        icon.setColorFilter(Color.WHITE);
         icon.setAdjustViewBounds(true);
         action.addView(icon, new LinearLayout.LayoutParams(dp(22), dp(22)));
 
@@ -1832,16 +1928,17 @@ public class MainActivity extends Activity {
     private LinearLayout statusTileGrid(View... tiles) {
         LinearLayout grid = new LinearLayout(this);
         grid.setOrientation(LinearLayout.VERTICAL);
-        for (int i = 0; i < tiles.length; i += 2) {
+        int columns = tiles.length >= 6 ? 3 : 2;
+        for (int i = 0; i < tiles.length; i += columns) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             rowParams.setMargins(0, 0, 0, dp(6));
             row.setLayoutParams(rowParams);
-            for (int offset = 0; offset < 2 && i + offset < tiles.length; offset++) {
+            for (int offset = 0; offset < columns && i + offset < tiles.length; offset++) {
                 View tile = tiles[i + offset];
                 LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
-                params.setMargins(offset == 0 ? 0 : dp(3), 0, offset == 0 ? dp(3) : 0, 0);
+                params.setMargins(offset == 0 ? 0 : dp(3), 0, offset == columns - 1 ? 0 : dp(3), 0);
                 tile.setLayoutParams(params);
                 row.addView(tile);
             }
@@ -2327,6 +2424,16 @@ public class MainActivity extends Activity {
                 return "문의할 방을 선택해 주세요.";
             case "inquiry_message_required":
                 return "문의 내용을 입력해 주세요.";
+            case "room_name_required":
+                return "방 이름을 입력해 주세요.";
+            case "openchat_link_required":
+                return "오픈채팅 링크를 확인해 주세요.";
+            case "admin_name_required":
+                return "방 관리자 닉네임을 입력해 주세요.";
+            case "linked_room_approval_required":
+                return "게임방 추가는 승인된 대표방이 필요합니다.";
+            case "game_room_already_exists":
+                return "이미 연결된 게임방 신청이 있습니다.";
             case "archived_room_not_found":
                 return "복구할 보관 방을 찾지 못했습니다.";
             case "restore_request_forbidden":
@@ -2374,29 +2481,100 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void setApplyPurpose(String purpose, String linkedApplicationId) {
+        applyRoomPurpose = TextUtils.isEmpty(purpose) ? "general_room" : purpose;
+        applyLinkedApplicationId = linkedApplicationId == null ? "" : linkedApplicationId;
+        if ("game_room".equals(applyRoomPurpose) && TextUtils.isEmpty(applyLinkedApplicationId)) {
+            applyRoomPurpose = "general_room";
+            Toast.makeText(this, "게임방 추가는 승인된 대표방이 필요합니다.", Toast.LENGTH_LONG).show();
+        }
+        if (applyPurposeStatusView != null) applyPurposeStatusView.setText(applyPurposeLabel());
+    }
+
+    private String applyPurposeLabel() {
+        if ("game_room".equals(applyRoomPurpose)) return "게임방 추가 신청 · 대표방 연결";
+        return "일반 운영방 신청";
+    }
+
+    private String firstApprovedApplicationId() {
+        JSONArray rooms = buyerConsoleJson == null ? null : buyerConsoleJson.optJSONArray("rooms");
+        if (rooms == null) return "";
+        String fallback = "";
+        for (int index = 0; index < rooms.length(); index++) {
+            JSONObject room = rooms.optJSONObject(index);
+            if (room == null) continue;
+            String applicationId = room.optString("applicationId", "");
+            if (TextUtils.isEmpty(fallback)) fallback = applicationId;
+            if (!"game".equals(room.optString("roomRole", "")) && !TextUtils.isEmpty(applicationId)) return applicationId;
+        }
+        return fallback;
+    }
+
+    private void submitServiceApplication() {
+        String roomName = applyRoomNameInput == null ? "" : applyRoomNameInput.getText().toString().trim();
+        String roomLink = applyRoomLinkInput == null ? "" : applyRoomLinkInput.getText().toString().trim();
+        String adminName = applyAdminNameInput == null ? "" : applyAdminNameInput.getText().toString().trim();
+        String contact = applyContactInput == null ? "" : applyContactInput.getText().toString().trim();
+        String memo = applyMemoInput == null ? "" : applyMemoInput.getText().toString().trim();
+        if (TextUtils.isEmpty(roomName) || TextUtils.isEmpty(roomLink) || TextUtils.isEmpty(adminName)) {
+            Toast.makeText(this, "방 이름, 오픈채팅 링크, 관리자 닉네임을 입력해 주세요.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        if ("game_room".equals(applyRoomPurpose) && TextUtils.isEmpty(applyLinkedApplicationId)) {
+            Toast.makeText(this, "게임방 추가는 승인된 대표방이 필요합니다.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.applyService(
+                    this,
+                    BridgeConfig.buyerToken(this),
+                    BridgeConfig.buyerEmail(this),
+                    roomName,
+                    roomLink,
+                    adminName,
+                    contact,
+                    memo,
+                    applyRoomPurpose,
+                    applyLinkedApplicationId);
+            runOnUiThread(() -> {
+                if (result.ok()) {
+                    BridgeConfig.appendLog(this, "서비스 신청 접수: " + roomName);
+                    Toast.makeText(this, "서비스 신청이 접수되었습니다. 결제 확인 요청은 문의/복구에서 보낼 수 있습니다.", Toast.LENGTH_LONG).show();
+                    showSupport();
+                } else {
+                    Toast.makeText(this, "신청 실패: " + authErrorMessage(result, "입력값을 확인해 주세요."), Toast.LENGTH_LONG).show();
+                }
+            });
+        });
+    }
+
     private void showApplicationInquiryDialog(String applicationId, String roomName) {
+        showApplicationInquiryDialog(applicationId, roomName, "other", "");
+    }
+
+    private void showApplicationInquiryDialog(String applicationId, String roomName, String type, String presetMessage) {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(4), dp(4), dp(4), 0);
         form.addView(text(roomName, 14, COLOR_TEXT, true));
-        final EditText messageInput = multiLineInput("", 4);
+        final EditText messageInput = multiLineInput(presetMessage == null ? "" : presetMessage, 4);
         messageInput.setHint("입금 확인, 설치 오류, 연결 문제 등을 짧게 적어 주세요.");
         form.addView(messageInput);
         new AlertDialog.Builder(this)
                 .setTitle("문의 등록")
                 .setView(form)
-                .setPositiveButton("접수", (dialog, which) -> submitApplicationInquiry(applicationId, roomName, messageInput.getText().toString()))
+                .setPositiveButton("접수", (dialog, which) -> submitApplicationInquiry(applicationId, roomName, type, messageInput.getText().toString()))
                 .setNegativeButton("취소", null)
                 .show();
     }
 
-    private void submitApplicationInquiry(String applicationId, String roomName, String message) {
+    private void submitApplicationInquiry(String applicationId, String roomName, String type, String message) {
         if (TextUtils.isEmpty(applicationId) || TextUtils.isEmpty(message.trim())) {
             Toast.makeText(this, "문의할 방과 내용을 확인해 주세요.", Toast.LENGTH_SHORT).show();
             return;
         }
         executor.execute(() -> {
-            EventSender.ApiResult result = EventSender.createApplicationInquiry(this, BridgeConfig.buyerToken(this), applicationId, "other", message);
+            EventSender.ApiResult result = EventSender.createApplicationInquiry(this, BridgeConfig.buyerToken(this), applicationId, type, message);
             runOnUiThread(() -> {
                 if (result.ok()) {
                     BridgeConfig.appendLog(this, "문의 접수: " + roomName);
@@ -2520,6 +2698,35 @@ public class MainActivity extends Activity {
         if (consoleJson == null) {
             supportContainer.addView(text("콘솔 데이터를 불러오는 중입니다.", 14, COLOR_MUTED, false));
             return;
+        }
+
+        supportContainer.addView(sectionTitle("신청/결제 확인"));
+        JSONArray applications = consoleJson.optJSONArray("applications");
+        int applicationCount = applications == null ? 0 : applications.length();
+        if (applicationCount == 0) {
+            supportContainer.addView(settingCategoryRow(
+                    R.drawable.ic_plus,
+                    "새 서비스 신청",
+                    "앱에서 새 운영방 정보를 접수합니다.",
+                    "신청",
+                    v -> showApplyService()));
+        } else {
+            for (int index = 0; index < Math.min(applicationCount, 6); index++) {
+                JSONObject application = applications.optJSONObject(index);
+                if (application == null) continue;
+                JSONObject payment = application.optJSONObject("payment");
+                String applicationId = application.optString("id", "");
+                String roomName = application.optString("roomName", "신청 방");
+                String status = application.optString("statusLabel", "결제 대기");
+                String paymentStatus = payment == null ? "" : payment.optString("statusLabel", "");
+                String body = TextUtils.isEmpty(paymentStatus) ? status : status + " · " + paymentStatus;
+                supportContainer.addView(settingCategoryRow(
+                        R.drawable.ic_plus,
+                        roomName,
+                        body,
+                        "결제확인",
+                        v -> showApplicationInquiryDialog(applicationId, roomName, "payment_check", "입금 확인 요청합니다.")));
+            }
         }
 
         JSONArray rooms = consoleJson.optJSONArray("rooms");

@@ -3,9 +3,9 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">@color/pixelgom_accent</item>
         <item name="android:navigationBarColor">@color/pixelgom_background</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightStatusBar">false</item>
         <item name="android:statusBarColor">@color/pixelgom_background</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowNoTitle">true</item>
     </style>
 </resources>
