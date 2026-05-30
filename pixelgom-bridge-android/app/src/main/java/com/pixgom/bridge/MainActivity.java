@@ -47,9 +47,6 @@ import kotlin.Unit;
 
 public class MainActivity extends Activity {
     private static final String WEBSITE_URL = "https://pixgom.com";
-    private static final String BUYER_CONSOLE_URL = WEBSITE_URL + "/console";
-    private static final String BUYER_SETUP_URL = WEBSITE_URL + "/console?from=android&view=setup";
-    private static final String BUYER_CONNECT_CODE_URL = BUYER_SETUP_URL + "#app-connect-code";
     private static final int COLOR_BG = Color.rgb(5, 18, 29);
     private static final int COLOR_PANEL = Color.rgb(24, 41, 58);
     private static final int COLOR_TILE = Color.rgb(31, 50, 69);
@@ -841,8 +838,8 @@ public class MainActivity extends Activity {
         root.addView(troublePanel);
         troublePanel.addView(sectionHeader(R.drawable.pixgom_support_bear, "문제 해결", "응답이 없을 때 먼저 볼 항목입니다."));
         troublePanel.addView(stepText("1", "응답이 없으면 알림 접근 권한과 카카오톡 알림 표시를 먼저 확인합니다."));
-        troublePanel.addView(stepText("2", "방이 다르면 구매자 콘솔의 설치 안내에서 연결코드를 다시 확인하거나 서버와 다시 동기화합니다."));
-        troublePanel.addView(stepText("3", "라이선스 오류가 나오면 구매자 콘솔의 라이선스 키와 앱의 키가 같은지 확인합니다."));
+        troublePanel.addView(stepText("2", "방이 다르면 앱의 방 관리에서 다시 동기화하거나 고급 설정에서 연결코드를 복사합니다."));
+        troublePanel.addView(stepText("3", "라이선스 오류가 나오면 앱 방 상세의 연결코드와 저장된 방 정보를 확인합니다."));
         troublePanel.addView(stepText("4", "입장 확인은 방장봇 환영 문구가 입장확인 문구와 일치해야 합니다."));
         troublePanel.addView(stepText("5", "이 앱은 화면 감지/접근성 권한을 사용하지 않습니다. 화면을 켜두는 방식으로 운영하지 않습니다."));
 
@@ -850,12 +847,12 @@ public class MainActivity extends Activity {
         copyButton.setOnClickListener(v -> copyText("픽셀곰 테스트 체크리스트", checklistText()));
         root.addView(copyButton);
 
-        Button guideButton = secondaryButton("구매자 콘솔 열기");
-        guideButton.setOnClickListener(v -> openUrl(BUYER_CONSOLE_URL));
+        Button guideButton = secondaryButton("방 관리 열기");
+        guideButton.setOnClickListener(v -> showRooms());
         root.addView(guideButton);
 
-        Button setupButton = secondaryButton("설치 안내 열기");
-        setupButton.setOnClickListener(v -> openUrl(BUYER_SETUP_URL));
+        Button setupButton = secondaryButton("연결코드 직접 등록");
+        setupButton.setOnClickListener(v -> showAdvanced());
         root.addView(setupButton);
 
         Button syncButton = secondaryButton("서버와 다시 동기화");
@@ -1092,8 +1089,8 @@ public class MainActivity extends Activity {
         connectionCodeInput = input("앱 연결코드", "");
         manualConnectPanel.addView(connectionCodeInput);
 
-        Button findConnectCodeButton = secondaryButton("연결코드 찾기/복사");
-        findConnectCodeButton.setOnClickListener(v -> openUrl(BUYER_CONNECT_CODE_URL));
+        Button findConnectCodeButton = secondaryButton("앱에서 연결코드 찾기");
+        findConnectCodeButton.setOnClickListener(v -> showConnectCodePicker());
         manualConnectPanel.addView(findConnectCodeButton);
 
         Button connectButton = primaryButton("연결코드로 방 추가/갱신");
@@ -1109,12 +1106,12 @@ public class MainActivity extends Activity {
         privacyButton.setOnClickListener(v -> openUrl(WEBSITE_URL + "/privacy"));
         supportPanel.addView(privacyButton);
 
-        Button guideButton = secondaryButton("구매자 콘솔 열기");
-        guideButton.setOnClickListener(v -> openUrl(BUYER_CONSOLE_URL));
+        Button guideButton = secondaryButton("내 방 관리");
+        guideButton.setOnClickListener(v -> showRooms());
         supportPanel.addView(guideButton);
 
-        Button setupButton = secondaryButton("설치 안내 열기");
-        setupButton.setOnClickListener(v -> openUrl(BUYER_SETUP_URL));
+        Button setupButton = secondaryButton("테스트 체크리스트");
+        setupButton.setOnClickListener(v -> showChecklist());
         supportPanel.addView(setupButton);
 
         Button diagnosisShareButton = secondaryButton("진단 공유");
@@ -3506,8 +3503,8 @@ public class MainActivity extends Activity {
                 + "5. /게임, /주사위\n\n"
                 + "문제 해결\n"
                 + "- 응답 없음: 알림 접근 권한, 카카오톡 알림 표시, 서버 URL 확인\n"
-                + "- 방 불일치: 구매자 콘솔 설치 안내의 연결코드 재적용 또는 서버와 다시 동기화\n"
-                + "- 라이선스 오류: 구매자 콘솔과 앱의 라이선스 키 일치 확인\n"
+                + "- 방 불일치: 앱 방 관리에서 다시 동기화하거나 고급 설정에서 연결코드 확인\n"
+                + "- 라이선스 오류: 앱 방 상세의 연결코드와 저장된 방 정보 확인\n"
                 + "- 입장 감지: 방장봇 환영 문구와 입장확인 문구 일치 확인\n"
                 + "- 화면 감지: 사용 안 함";
     }
@@ -3650,6 +3647,53 @@ public class MainActivity extends Activity {
             return;
         }
         copyText("연결코드", code);
+    }
+
+    private void showConnectCodePicker() {
+        if (!BridgeConfig.isBuyerLoggedIn(this)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("연결코드 찾기")
+                    .setMessage("로그인하면 승인된 방의 연결코드를 앱 안에서 바로 복사할 수 있습니다.")
+                    .setPositiveButton("로그인", (dialog, which) -> showEmailLogin())
+                    .setNegativeButton("닫기", null)
+                    .show();
+            return;
+        }
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.buyerConsole(this, BridgeConfig.buyerToken(this));
+            runOnUiThread(() -> {
+                if (!result.ok()) {
+                    Toast.makeText(this, "연결코드 목록을 불러오지 못했습니다: " + result.error, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                showConnectCodeDialog(result.json);
+            });
+        });
+    }
+
+    private void showConnectCodeDialog(JSONObject consoleJson) {
+        JSONArray source = consoleJson == null ? null : consoleJson.optJSONArray("appConnectCodes");
+        if (source == null || source.length() == 0) source = consoleJson == null ? null : consoleJson.optJSONArray("rooms");
+        List<String> labels = new ArrayList<>();
+        List<String> codes = new ArrayList<>();
+        for (int index = 0; source != null && index < source.length(); index++) {
+            JSONObject room = source.optJSONObject(index);
+            String code = roomConnectCode(room);
+            if (room == null || TextUtils.isEmpty(code)) continue;
+            labels.add(room.optString("roomName", "승인 방") + " · " + maskLicense(code));
+            codes.add(code);
+        }
+        if (codes.isEmpty()) {
+            Toast.makeText(this, "복사 가능한 연결코드가 아직 없습니다.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        CharSequence[] items = labels.toArray(new CharSequence[0]);
+        new AlertDialog.Builder(this)
+                .setTitle("연결코드 목록")
+                .setItems(items, (dialog, which) -> copyText("연결코드", codes.get(which)))
+                .setNeutralButton("전체 복사", (dialog, which) -> copyText("연결코드 전체", TextUtils.join("\n", codes)))
+                .setNegativeButton("닫기", null)
+                .show();
     }
 
     private boolean roomMatchesFilter(JSONObject room) {
