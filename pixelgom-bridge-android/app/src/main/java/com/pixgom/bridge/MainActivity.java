@@ -48,20 +48,20 @@ import kotlin.Unit;
 
 public class MainActivity extends Activity {
     private static final String WEBSITE_URL = "https://pixgom.com";
-    private static final int COLOR_BG = Color.rgb(5, 18, 29);
-    private static final int COLOR_PANEL = Color.rgb(24, 41, 58);
-    private static final int COLOR_TILE = Color.rgb(31, 50, 69);
+    private static final int COLOR_BG = Color.rgb(4, 17, 29);
+    private static final int COLOR_PANEL = Color.rgb(16, 31, 46);
+    private static final int COLOR_TILE = Color.rgb(22, 39, 56);
     private static final int COLOR_TITLE = Color.rgb(248, 252, 255);
     private static final int COLOR_TEXT = Color.rgb(221, 231, 238);
-    private static final int COLOR_MUTED = Color.rgb(145, 164, 179);
-    private static final int COLOR_BLUE = Color.rgb(59, 130, 246);
+    private static final int COLOR_MUTED = Color.rgb(148, 166, 181);
+    private static final int COLOR_BLUE = Color.rgb(45, 125, 235);
     private static final int COLOR_GOLD = Color.rgb(250, 204, 21);
     private static final int COLOR_GOOD = Color.rgb(74, 222, 128);
     private static final int COLOR_WARN = Color.rgb(251, 191, 36);
     private static final int COLOR_BAD = Color.rgb(248, 113, 113);
-    private static final int COLOR_CARD_ALPHA = Color.argb(232, 20, 35, 51);
-    private static final int COLOR_CARD_SOFT = Color.rgb(17, 31, 45);
-    private static final int COLOR_GREEN_PANEL = Color.rgb(6, 82, 50);
+    private static final int COLOR_CARD_ALPHA = Color.argb(238, 20, 35, 52);
+    private static final int COLOR_CARD_SOFT = Color.rgb(19, 34, 49);
+    private static final int COLOR_GREEN_PANEL = Color.rgb(7, 72, 49);
     private static final int COLOR_RED_PANEL = Color.rgb(88, 31, 36);
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -284,20 +284,20 @@ public class MainActivity extends Activity {
         scrollView.addView(root);
 
         LinearLayout brandRow = brandWordmark(30);
-        brandRow.setPadding(0, dp(50), 0, dp(4));
+        brandRow.setPadding(0, dp(52), 0, dp(4));
         root.addView(brandRow);
 
         TextView sub = text("카카오톡 오픈채팅방 브릿지 플랫폼", 14, COLOR_MUTED, false);
         sub.setGravity(Gravity.CENTER);
         root.addView(sub);
 
-        ImageView bear = assetImage(R.drawable.pixgom_bridge_captain, 128);
-        LinearLayout.LayoutParams bearParams = new LinearLayout.LayoutParams(dp(128), dp(128));
+        ImageView bear = assetImage(R.drawable.pixgom_bridge_captain, 118);
+        LinearLayout.LayoutParams bearParams = new LinearLayout.LayoutParams(dp(118), dp(118));
         bearParams.gravity = Gravity.CENTER_HORIZONTAL;
-        bearParams.setMargins(0, dp(22), 0, dp(20));
+        bearParams.setMargins(0, dp(18), 0, dp(16));
         root.addView(bear, bearParams);
 
-        TextView headline = text("운영을 더 쉽고\n빠르게, 픽셀곰과 함께", 24, COLOR_TITLE, true);
+        TextView headline = text("운영을 더 쉽고\n빠르게, 픽셀곰과 함께", 23, COLOR_TITLE, true);
         headline.setGravity(Gravity.CENTER);
         headline.setLineSpacing(dp(4), 1f);
         root.addView(headline);
@@ -1321,11 +1321,11 @@ public class MainActivity extends Activity {
     }
 
     private void applyScreenPadding(LinearLayout root, int bottomDp) {
-        root.setPadding(dp(16), topSafePadding(), dp(16), bottomSafePadding(bottomDp));
+        root.setPadding(dp(18), topSafePadding(), dp(18), bottomSafePadding(bottomDp));
     }
 
     private int topSafePadding() {
-        return dp(8) + topSystemInset();
+        return dp(10) + topSystemInset();
     }
 
     private int bottomSafePadding(int bottomDp) {
@@ -1381,8 +1381,9 @@ public class MainActivity extends Activity {
         LinearLayout nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
         nav.setGravity(Gravity.CENTER);
-        nav.setPadding(dp(8), dp(4), dp(8), bottomSafePadding(4));
-        nav.setBackgroundColor(COLOR_PANEL);
+        nav.setMinimumHeight(dp(68));
+        nav.setPadding(dp(10), dp(7), dp(10), bottomSafePadding(7));
+        nav.setBackgroundColor(Color.rgb(13, 28, 43));
         nav.addView(navButton(R.drawable.ic_home, "홈", "home".equals(activeTab), v -> showHome()));
         nav.addView(navButton(R.drawable.ic_grid, "방 관리", "rooms".equals(activeTab), v -> showRooms()));
         nav.addView(navButton(R.drawable.ic_log, "로그", "logs".equals(activeTab), v -> showLogs()));
@@ -1395,13 +1396,13 @@ public class MainActivity extends Activity {
         LinearLayout item = new LinearLayout(this);
         item.setOrientation(LinearLayout.VERTICAL);
         item.setGravity(Gravity.CENTER);
-        item.setPadding(0, dp(3), 0, dp(1));
+        item.setPadding(0, dp(2), 0, 0);
         item.setOnClickListener(listener);
         item.setClickable(true);
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconRes);
         icon.setColorFilter(active ? COLOR_BLUE : COLOR_MUTED);
-        item.addView(icon, new LinearLayout.LayoutParams(dp(20), dp(20)));
+        item.addView(icon, new LinearLayout.LayoutParams(dp(22), dp(22)));
         TextView text = singleLineText(label, 10, active ? COLOR_BLUE : COLOR_MUTED, true);
         text.setGravity(Gravity.CENTER);
         text.setPadding(0, dp(2), 0, 0);
@@ -1550,21 +1551,22 @@ public class MainActivity extends Activity {
         LinearLayout card = glassPanel();
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding(dp(18), dp(14), dp(14), dp(14));
-        card.setMinimumHeight(dp(92));
-        card.setBackground(roundedBackground(BridgeConfig.isEnabled(this) ? COLOR_GREEN_PANEL : COLOR_RED_PANEL, BridgeConfig.isEnabled(this) ? COLOR_GOOD : COLOR_BAD, 12));
+        card.setPadding(dp(18), dp(15), dp(14), dp(15));
+        card.setMinimumHeight(dp(96));
+        card.setBackground(roundedBackground(BridgeConfig.isEnabled(this) ? COLOR_GREEN_PANEL : COLOR_RED_PANEL, BridgeConfig.isEnabled(this) ? COLOR_GOOD : COLOR_BAD, 8));
 
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
-        TextView title = singleLineText(BridgeConfig.isEnabled(this) ? "● 브릿지 실행 중" : "● 브릿지 정지", 18, BridgeConfig.isEnabled(this) ? COLOR_GOOD : COLOR_BAD, true);
+        TextView title = singleLineText(BridgeConfig.isEnabled(this) ? "● 브릿지 실행 중" : "● 브릿지 정지", 19, BridgeConfig.isEnabled(this) ? COLOR_GOOD : COLOR_BAD, true);
         copy.addView(title);
         copy.addView(singleLineText(BridgeConfig.roomProfileCount(this) + "개 방에 연결되어 있습니다.", 12, COLOR_TEXT, false));
         if (!TextUtils.isEmpty(profile.name)) copy.addView(singleLineText("대표방 " + profile.name, 11, COLOR_MUTED, false));
         card.addView(copy, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         ImageButton power = iconButton(R.drawable.ic_power, BridgeConfig.isEnabled(this) ? "브릿지 정지" : "브릿지 시작", v -> toggleBridgeEnabled());
-        power.setBackground(roundedBackground(Color.rgb(16, 185, 129), Color.rgb(16, 185, 129), 999));
-        LinearLayout.LayoutParams powerParams = new LinearLayout.LayoutParams(dp(52), dp(52));
+        power.setBackground(roundedBackground(Color.rgb(22, 163, 74), Color.rgb(34, 197, 94), 999));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) power.setElevation(dp(4));
+        LinearLayout.LayoutParams powerParams = new LinearLayout.LayoutParams(dp(58), dp(58));
         powerParams.setMargins(dp(12), 0, 0, 0);
         card.addView(power, powerParams);
         return card;
@@ -1704,10 +1706,10 @@ public class MainActivity extends Activity {
 
     private LinearLayout roomFilterRow() {
         LinearLayout row = horizontalScrollRow();
-        row.addView(filterChip("전체 " + BridgeConfig.roomProfileCount(this), "all", true));
-        row.addView(filterChip("실행 중", "on", true));
-        row.addView(filterChip("정지", "off", true));
-        row.addView(filterChip("문제 있음", "issue", true));
+        row.addView(filterChip("전체 " + roomFilterCount("all"), "all", true));
+        row.addView(filterChip("실행 중 " + roomFilterCount("on"), "on", true));
+        row.addView(filterChip("정지 " + roomFilterCount("off"), "off", true));
+        row.addView(filterChip("문제 있음 " + roomFilterCount("issue"), "issue", true));
         return row;
     }
 
@@ -1731,17 +1733,13 @@ public class MainActivity extends Activity {
         return row;
     }
 
-    private Button filterChip(String label, String mode, boolean rooms) {
+    private TextView filterChip(String label, String mode, boolean rooms) {
         boolean active = rooms ? mode.equals(roomFilterMode) : mode.equals(logFilterMode);
-        Button button = baseButton(label);
-        button.setTextSize(11);
-        button.setTextColor(active ? Color.WHITE : COLOR_MUTED);
-        button.setBackground(roundedBackground(active ? COLOR_BLUE : COLOR_CARD_SOFT, active ? COLOR_BLUE : Color.rgb(46, 68, 87), 999));
-        button.setMinWidth(0);
-        button.setMinimumWidth(0);
-        button.setMinHeight(0);
-        button.setPadding(dp(10), 0, dp(10), 0);
-        button.setOnClickListener(v -> {
+        TextView chip = singleLineText(label, 11, active ? Color.WHITE : COLOR_MUTED, true);
+        chip.setGravity(Gravity.CENTER);
+        chip.setPadding(dp(11), 0, dp(11), 0);
+        chip.setBackground(roundedBackground(active ? COLOR_BLUE : COLOR_CARD_SOFT, active ? COLOR_BLUE : Color.rgb(46, 66, 84), 999));
+        chip.setOnClickListener(v -> {
             if (rooms) {
                 roomFilterMode = mode;
                 if (buyerConsoleJson != null) renderRoomChoices(buyerConsoleJson);
@@ -1757,8 +1755,28 @@ public class MainActivity extends Activity {
         });
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(30));
         params.setMargins(0, 0, dp(6), 0);
-        button.setLayoutParams(params);
-        return button;
+        chip.setLayoutParams(params);
+        return chip;
+    }
+
+    private int roomFilterCount(String mode) {
+        JSONArray rooms = buyerConsoleJson == null ? null : buyerConsoleJson.optJSONArray("rooms");
+        if (rooms == null) return "all".equals(mode) ? BridgeConfig.roomProfileCount(this) : 0;
+        int count = 0;
+        for (int index = 0; index < rooms.length(); index++) {
+            JSONObject room = rooms.optJSONObject(index);
+            if (room == null) continue;
+            boolean ok = !"expired".equals(room.optString("subscriptionStatus", ""))
+                    && !"off".equalsIgnoreCase(room.optString("bridgeStatus", ""));
+            boolean issue = roomSetupLabel(room).contains("필요") || "expired".equals(room.optString("subscriptionStatus", ""));
+            if ("all".equals(mode)
+                    || ("on".equals(mode) && ok && !issue)
+                    || ("off".equals(mode) && !ok)
+                    || ("issue".equals(mode) && issue)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private void showRoomSearchDialog() {
@@ -1818,17 +1836,23 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    private TextView roomTabText(String applicationId, String tab, String label) {
+    private View roomTabText(String applicationId, String tab, String label) {
         boolean active = tab.equals(selectedRoomTab);
-        TextView view = singleLineText(label, 12, active ? COLOR_BLUE : COLOR_MUTED, true);
-        view.setGravity(Gravity.CENTER);
-        view.setBackgroundColor(Color.TRANSPARENT);
-        if (active) view.setPaintFlags(view.getPaintFlags() | android.graphics.Paint.UNDERLINE_TEXT_FLAG);
-        view.setOnClickListener(v -> showRoomDetail(applicationId, tab));
-        view.setClickable(true);
-        view.setPadding(0, 0, 0, active ? dp(2) : 0);
-        view.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
-        return view;
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.VERTICAL);
+        item.setGravity(Gravity.CENTER);
+        item.setClickable(true);
+        item.setOnClickListener(v -> showRoomDetail(applicationId, tab));
+
+        TextView text = singleLineText(label, 12, active ? COLOR_BLUE : COLOR_MUTED, true);
+        text.setGravity(Gravity.CENTER);
+        item.addView(text, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
+
+        View line = new View(this);
+        line.setBackgroundColor(active ? COLOR_BLUE : Color.TRANSPARENT);
+        item.addView(line, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(2)));
+        item.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
+        return item;
     }
 
     private String selectedRoomNameLabel() {
@@ -1842,8 +1866,9 @@ public class MainActivity extends Activity {
         LinearLayout card = glassPanel();
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding(dp(12), dp(12), dp(10), dp(12));
-        card.setBackground(roundedBackground(ok ? COLOR_GREEN_PANEL : COLOR_RED_PANEL, ok ? COLOR_GOOD : COLOR_BAD, 10));
+        card.setPadding(dp(16), dp(14), dp(12), dp(14));
+        card.setMinimumHeight(dp(92));
+        card.setBackground(roundedBackground(ok ? COLOR_GREEN_PANEL : COLOR_RED_PANEL, ok ? COLOR_GOOD : COLOR_BAD, 8));
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.addView(singleLineText(ok ? "● 브릿지 실행 중" : "● 확인 필요", 19, ok ? COLOR_GOOD : COLOR_BAD, true));
@@ -1898,6 +1923,10 @@ public class MainActivity extends Activity {
         button.setBackgroundResource(getResources().getIdentifier("icon_button_background", "drawable", getPackageName()));
         button.setContentDescription(description);
         button.setPadding(dp(10), dp(10), dp(10), dp(10));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            button.setStateListAnimator(null);
+            button.setElevation(0);
+        }
         button.setOnClickListener(listener);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(42), dp(42));
         button.setLayoutParams(params);
@@ -1921,20 +1950,20 @@ public class MainActivity extends Activity {
         LinearLayout action = new LinearLayout(this);
         action.setOrientation(LinearLayout.VERTICAL);
         action.setGravity(Gravity.CENTER);
-        action.setPadding(dp(6), dp(7), dp(6), dp(7));
+        action.setPadding(dp(6), dp(9), dp(6), dp(9));
         int cardColor = COLOR_CARD_SOFT;
         if (label.contains("연결 확인")) cardColor = COLOR_BLUE;
         if (label.contains("자동 연결")) cardColor = Color.rgb(124, 58, 237);
-        action.setBackground(roundedBackground(cardColor, Color.rgb(48, 69, 88), 10));
+        action.setBackground(roundedBackground(cardColor, Color.rgb(48, 69, 88), 8));
         action.setOnClickListener(listener);
         action.setClickable(true);
-        action.setMinimumHeight(dp(70));
+        action.setMinimumHeight(dp(78));
 
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconRes);
         icon.setColorFilter(Color.WHITE);
         icon.setAdjustViewBounds(true);
-        action.addView(icon, new LinearLayout.LayoutParams(dp(20), dp(20)));
+        action.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
         TextView labelView = singleLineText(label, 11, COLOR_TITLE, true);
         labelView.setGravity(Gravity.CENTER);
@@ -2121,9 +2150,9 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(10), dp(8), dp(10), dp(8));
-        row.setBackgroundResource(getResources().getIdentifier("status_tile_background", "drawable", getPackageName()));
-        row.setMinimumHeight(dp(72));
+        row.setPadding(dp(12), dp(12), dp(12), dp(12));
+        row.setBackground(roundedBackground(COLOR_TILE, Color.rgb(43, 63, 82), 8));
+        row.setMinimumHeight(dp(76));
         row.setClickable(true);
         row.setOnClickListener(listener);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -2139,7 +2168,7 @@ public class MainActivity extends Activity {
         copy.addView(singleLineText(body, 12, COLOR_MUTED, false));
         row.addView(copy, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-        row.addView(statusBadge(status, true));
+        row.addView(chevronText());
         return row;
     }
 
@@ -2887,8 +2916,8 @@ public class MainActivity extends Activity {
         boolean ok = !"expired".equals(room.optString("subscriptionStatus", "")) && !"off".equalsIgnoreCase(room.optString("bridgeStatus", ""));
         boolean issue = roomSetupLabel(room).contains("필요") || "expired".equals(room.optString("subscriptionStatus", ""));
         LinearLayout card = glassPanel();
-        card.setPadding(dp(10), dp(9), dp(9), dp(9));
-        card.setMinimumHeight(dp(72));
+        card.setPadding(dp(12), dp(12), dp(10), dp(12));
+        card.setMinimumHeight(dp(86));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(8), 0, 0);
         card.setLayoutParams(params);
@@ -2901,14 +2930,14 @@ public class MainActivity extends Activity {
         card.addView(row);
 
         row.addView(iconSquare("game".equals(room.optString("roomRole", "")) ? R.drawable.ic_checklist : R.drawable.ic_users,
-                roomColorForIndex(Math.abs(applicationId.hashCode()) % 5), dp(46)));
+                roomColorForIndex(Math.abs(applicationId.hashCode()) % 5), dp(52)));
 
         String packs = commandPackCountLabel(room);
         String setup = roomSetupLabel(room);
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.setPadding(dp(10), 0, dp(6), 0);
-        copy.addView(singleLineText(room.optString("roomName", "방"), 14, COLOR_TITLE, true));
+        copy.addView(singleLineText(room.optString("roomName", "방"), 15, COLOR_TITLE, true));
         copy.addView(singleLineText((ok ? "브릿지 ON" : "브릿지 OFF") + " · 최근 응답 " + roomLastResponseLabel(room), 11, ok ? COLOR_GOOD : COLOR_BAD, true));
         copy.addView(singleLineText(packs + " · " + setup, 11, COLOR_MUTED, false));
         row.addView(copy, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
@@ -4431,7 +4460,7 @@ public class MainActivity extends Activity {
     private LinearLayout glassPanel() {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setBackground(roundedBackground(COLOR_CARD_ALPHA, Color.rgb(42, 62, 82), 10));
+        layout.setBackground(roundedBackground(COLOR_CARD_ALPHA, Color.rgb(40, 60, 78), 8));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(8), 0, 0);
         layout.setLayoutParams(params);
@@ -4451,7 +4480,7 @@ public class MainActivity extends Activity {
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconRes);
         icon.setColorFilter(Color.WHITE);
-        icon.setBackground(roundedBackground(color, Color.TRANSPARENT, 10));
+        icon.setBackground(roundedBackground(color, Color.TRANSPARENT, 8));
         icon.setPadding(dp(8), dp(8), dp(8), dp(8));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(sizePx, sizePx);
         icon.setLayoutParams(params);
@@ -4510,10 +4539,12 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        CheckBox box = new CheckBox(this);
-        box.setChecked(checked);
-        row.addView(box, new LinearLayout.LayoutParams(dp(34), dp(34)));
+        TextView box = singleLineText(checked ? "✓" : "", 14, checked ? COLOR_GOOD : COLOR_MUTED, true);
+        box.setGravity(Gravity.CENTER);
+        box.setBackground(roundedBackground(Color.TRANSPARENT, checked ? COLOR_GOOD : Color.rgb(58, 77, 94), 4));
+        row.addView(box, new LinearLayout.LayoutParams(dp(20), dp(20)));
         TextView text = singleLineText(label, 12, checked ? COLOR_GOOD : COLOR_MUTED, false);
+        text.setPadding(dp(10), 0, 0, 0);
         row.addView(text, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         return row;
     }
@@ -4715,12 +4746,23 @@ public class MainActivity extends Activity {
         sw.setTextSize(14);
         sw.setTextColor(COLOR_TEXT);
         sw.setChecked(checked);
+        sw.setShowText(false);
         sw.setSingleLine(true);
         sw.setEllipsize(TextUtils.TruncateAt.END);
         sw.setGravity(Gravity.CENTER_VERTICAL);
         sw.setMinHeight(dp(44));
         sw.setPadding(dp(10), 0, dp(10), 0);
         sw.setBackgroundResource(getResources().getIdentifier("status_tile_background", "drawable", getPackageName()));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            sw.setThumbTintList(new ColorStateList(
+                    new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}},
+                    new int[]{COLOR_GOOD, Color.rgb(160, 174, 188)}
+            ));
+            sw.setTrackTintList(new ColorStateList(
+                    new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}},
+                    new int[]{Color.rgb(23, 89, 58), Color.rgb(64, 79, 94)}
+            ));
+        }
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(6), 0, 0);
         sw.setLayoutParams(params);
@@ -4776,14 +4818,14 @@ public class MainActivity extends Activity {
     private Button primaryButton(String label) {
         Button button = baseButton(label);
         button.setTextColor(Color.WHITE);
-        button.setBackgroundResource(getResources().getIdentifier("button_primary", "drawable", getPackageName()));
+        button.setBackground(roundedBackground(COLOR_GOOD, Color.rgb(56, 215, 112), 8));
         return button;
     }
 
     private Button secondaryButton(String label) {
         Button button = baseButton(label);
         button.setTextColor(COLOR_TITLE);
-        button.setBackgroundResource(getResources().getIdentifier("button_secondary", "drawable", getPackageName()));
+        button.setBackground(roundedBackground(COLOR_TILE, Color.rgb(54, 73, 91), 8));
         return button;
     }
 
@@ -4858,9 +4900,17 @@ public class MainActivity extends Activity {
         button.setGravity(Gravity.CENTER);
         button.setSingleLine(true);
         button.setEllipsize(TextUtils.TruncateAt.END);
+        button.setIncludeFontPadding(true);
+        button.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         button.setMinWidth(0);
-        button.setMinHeight(dp(48));
+        button.setMinHeight(dp(50));
         button.setPadding(dp(8), 0, dp(8), 0);
+        button.setBackgroundTintList(null);
+        button.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            button.setStateListAnimator(null);
+            button.setElevation(0);
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             button.setAutoSizeTextTypeUniformWithConfiguration(10, 14, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
         }

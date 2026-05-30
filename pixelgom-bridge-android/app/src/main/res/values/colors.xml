@@ -1,11 +1,11 @@
 <resources>
-    <color name="pixelgom_primary">#22C55E</color>
-    <color name="pixelgom_primary_dark">#14532D</color>
-    <color name="pixelgom_accent">#3B82F6</color>
-    <color name="pixelgom_background">#05121D</color>
-    <color name="pixelgom_surface">#18293A</color>
-    <color name="pixelgom_line">#2E4457</color>
+    <color name="pixelgom_primary">#4ADE80</color>
+    <color name="pixelgom_primary_dark">#074831</color>
+    <color name="pixelgom_accent">#2D7DEB</color>
+    <color name="pixelgom_background">#04111D</color>
+    <color name="pixelgom_surface">#101F2E</color>
+    <color name="pixelgom_line">#283C4E</color>
     <color name="pixelgom_text">#F8FCFF</color>
-    <color name="pixelgom_soft">#1F3245</color>
-    <color name="pixelgom_input">#132232</color>
+    <color name="pixelgom_soft">#132231</color>
+    <color name="pixelgom_input">#142537</color>
 </resources>
