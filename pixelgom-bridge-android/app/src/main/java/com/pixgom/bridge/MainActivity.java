@@ -2693,18 +2693,15 @@ public class MainActivity extends Activity {
             if (command == null) continue;
             String trigger = command.optString("trigger", "");
             if (!matchesCommandQuery(trigger, command.optString("response", ""), command.optString("description", ""))) continue;
-            parent.addView(storeAction(
-                    trigger,
-                    command.optString("response", ""),
-                    "삭제",
-                    v -> deleteCustomCommand(applicationId, trigger)
-            ));
+            parent.addView(customCommandAction(applicationId, trigger, command.optString("response", "")));
         }
+        Button addCommandButton = iconTextButton(R.drawable.ic_plus, "명령어 직접 추가", true);
+        addCommandButton.setOnClickListener(v -> showCustomCommandEditor(applicationId, "", ""));
         Button addPackButton = iconTextButton(R.drawable.ic_plus, "명령어팩 추가", false);
         addPackButton.setOnClickListener(v -> showCommandStore(applicationId));
         Button storeButton = iconTextButton(R.drawable.ic_sync, "스토어에서 찾기", true);
         storeButton.setOnClickListener(v -> showCommandStore(applicationId));
-        parent.addView(compactActionGrid(addPackButton, storeButton));
+        parent.addView(compactActionGrid(addCommandButton, addPackButton, storeButton));
     }
 
     private LinearLayout commandSearchRow(String applicationId) {
@@ -2752,6 +2749,23 @@ public class MainActivity extends Activity {
         Button remove = secondaryButton("해제");
         remove.setOnClickListener(removeListener);
         card.addView(compactActionGrid(detail, remove));
+        return card;
+    }
+
+    private LinearLayout customCommandAction(String applicationId, String trigger, String response) {
+        LinearLayout card = glassPanel();
+        card.setPadding(dp(10), dp(9), dp(10), dp(10));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.addView(singleLineText(trigger, 15, COLOR_TITLE, true));
+        if (!TextUtils.isEmpty(response)) copy.addView(singleLineText(response.length() > 70 ? response.substring(0, 70) + "..." : response, 12, COLOR_MUTED, false));
+        card.addView(copy);
+
+        Button edit = secondaryButton("수정");
+        edit.setOnClickListener(v -> showCustomCommandEditor(applicationId, trigger, response));
+        Button delete = secondaryButton("삭제");
+        delete.setOnClickListener(v -> deleteCustomCommand(applicationId, trigger));
+        card.addView(compactActionGrid(edit, delete));
         return card;
     }
 
@@ -2965,6 +2979,51 @@ public class MainActivity extends Activity {
             EventSender.ApiResult result = EventSender.deleteCustomCommand(this, BridgeConfig.buyerToken(this), applicationId, trigger);
             runOnUiThread(() -> {
                 Toast.makeText(this, result.ok() ? "커스텀 명령어를 삭제했습니다." : "삭제 실패: " + result.error, Toast.LENGTH_LONG).show();
+                showRoomDetail(applicationId, "commands");
+            });
+        });
+    }
+
+    private void showCustomCommandEditor(String applicationId, String trigger, String response) {
+        if (TextUtils.isEmpty(applicationId)) return;
+        boolean editing = !TextUtils.isEmpty(trigger);
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(4), dp(4), dp(4), 0);
+
+        EditText triggerInput = input("명령어 예: /공지 또는 공지", trigger);
+        triggerInput.setEnabled(!editing);
+        form.addView(triggerInput);
+
+        EditText responseInput = multiLineInput(response, 4);
+        responseInput.setHint("답장 내용을 입력하세요.");
+        form.addView(responseInput);
+
+        TextView note = text(editing ? "명령어 이름은 유지하고 답장만 수정합니다." : "고정 명령어와 같은 이름은 저장되지 않습니다.", 12, COLOR_MUTED, false);
+        form.addView(note);
+
+        new AlertDialog.Builder(this)
+                .setTitle(editing ? "명령어 수정" : "명령어 추가")
+                .setView(form)
+                .setNegativeButton("취소", null)
+                .setPositiveButton("저장", (dialog, which) -> saveCustomCommand(
+                        applicationId,
+                        triggerInput.getText().toString().trim(),
+                        responseInput.getText().toString().trim()
+                ))
+                .show();
+    }
+
+    private void saveCustomCommand(String applicationId, String trigger, String response) {
+        if (TextUtils.isEmpty(applicationId)) return;
+        if (TextUtils.isEmpty(trigger) || TextUtils.isEmpty(response)) {
+            Toast.makeText(this, "명령어와 답장을 모두 입력해 주세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.saveCustomCommand(this, BridgeConfig.buyerToken(this), applicationId, trigger, response);
+            runOnUiThread(() -> {
+                Toast.makeText(this, result.ok() ? "커스텀 명령어를 저장했습니다." : "저장 실패: " + result.error, Toast.LENGTH_LONG).show();
                 showRoomDetail(applicationId, "commands");
             });
         });

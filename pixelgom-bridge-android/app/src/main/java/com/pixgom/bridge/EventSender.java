@@ -307,6 +307,18 @@ final class EventSender {
         return postApi(context, "/api/buyer/custom-commands/delete", payload);
     }
 
+    static ApiResult saveCustomCommand(Context context, String buyerToken, String applicationId, String trigger, String response) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            payload.put("applicationId", applicationId == null ? "" : applicationId);
+            payload.put("trigger", trigger == null ? "" : trigger);
+            payload.put("response", response == null ? "" : response);
+        } catch (Exception ignored) {
+            // Keep command save payload best-effort.
+        }
+        return postApi(context, "/api/buyer/custom-commands/save", payload);
+    }
+
     static ApiResult saveRoomModeSettings(Context context, String buyerToken, String applicationId, boolean blockGamesInGeneralRoom, boolean blockOpsInGameRoom, boolean sharePointsAndInventory) {
         JSONObject payload = tokenPayload(buyerToken);
         try {

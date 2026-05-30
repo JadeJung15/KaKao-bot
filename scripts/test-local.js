@@ -240,10 +240,10 @@ try {
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(health.json.serverTimezone, "Asia/Seoul");
   assert.equal(health.json.minAndroidVersion, "1.0.17");
-  assert.equal(health.json.latestAndroidVersion, "1.0.47");
-  assert.equal(health.json.latestAndroidVersionCode, 48);
+  assert.equal(health.json.latestAndroidVersion, "1.0.48");
+  assert.equal(health.json.latestAndroidVersionCode, 49);
   assert.equal(health.json.minAndroidVersionCode, 18);
-  assert.equal(health.json.latestAndroidVersionCode, 48);
+  assert.equal(health.json.latestAndroidVersionCode, 49);
   assert.equal(health.json.appUpdateRequired, false);
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
@@ -1318,8 +1318,8 @@ try {
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
   assert.equal(packageJson.scripts["android:release-report"], "node scripts/android-release-bundle.js --report-only");
   const androidGradle = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "build.gradle"), "utf8");
-  assert.match(androidGradle, /versionCode 48/);
-  assert.match(androidGradle, /versionName "1\.0\.47"/);
+  assert.match(androidGradle, /versionCode 49/);
+  assert.match(androidGradle, /versionName "1\.0\.48"/);
   assert.match(androidGradle, /com\.kakao\.sdk:v2-user:2\.23\.4/);
   const androidEventSender = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "EventSender.java"), "utf8");
   assert.match(androidEventSender, /optJSONArray\("rooms"\)/);
@@ -1334,6 +1334,7 @@ try {
   assert.match(androidEventSender, /\/api\/buyer\/room-feature-settings/);
   assert.match(androidEventSender, /\/api\/buyer\/command-packs\/apply/);
   assert.match(androidEventSender, /\/api\/buyer\/command-templates\/install/);
+  assert.match(androidEventSender, /\/api\/buyer\/custom-commands\/save/);
   assert.match(androidEventSender, /\/api\/login\/kakao/);
   assert.match(androidEventSender, /\/api\/auth\/config/);
   assert.match(androidEventSender, /\/api\/auth\/login\/start/);
@@ -1384,6 +1385,9 @@ try {
   assert.match(androidMainActivity, /EventSender\.saveRoomFeatureSettings/);
   assert.match(androidMainActivity, /EventSender\.applyCommandPack/);
   assert.match(androidMainActivity, /EventSender\.installCommandTemplate/);
+  assert.match(androidMainActivity, /showCustomCommandEditor/);
+  assert.match(androidMainActivity, /EventSender\.saveCustomCommand/);
+  assert.match(androidMainActivity, /명령어 직접 추가/);
   assert.match(androidMainActivity, /카카오 준비 중/);
   assert.match(androidMainActivity, /연결코드 직접 등록/);
   assert.doesNotMatch(androidMainActivity, /오픈채팅 운영봇을 카카오 알림 기반으로 연결합니다\. 화면 감지는 사용하지 않습니다\./);
@@ -3750,6 +3754,57 @@ try {
   });
   assert.equal(enableCustomCommands.response.status, 200);
   assert.equal(enableCustomCommands.json.room.features.customCommands, true);
+
+  const nativeCustomSave = await request("/api/buyer/custom-commands/save", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      trigger: "/앱공지",
+      response: "앱에서 저장한 공지입니다."
+    })
+  });
+  assert.equal(nativeCustomSave.response.status, 200);
+  assert.equal(nativeCustomSave.json.ok, true);
+  assert.equal(nativeCustomSave.json.command.trigger, "/앱공지");
+  assert.equal(nativeCustomSave.json.command.response, "앱에서 저장한 공지입니다.");
+  const nativeCustomReply = await chatPayload({
+    registeredRoom: false,
+    room: "판매신청방",
+    msg: "/앱공지",
+    sender: "구매자",
+    roomId: "salesRoom1",
+    roomLink: "https://open.kakao.com/o/salesRoom1",
+    licenseKey: approvedApplication.json.room.licenseKey
+  });
+  assert.match(nativeCustomReply.json.reply, /앱에서 저장한 공지입니다/);
+
+  const nativeCustomUpdate = await request("/api/buyer/custom-commands/save", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      trigger: "/앱공지",
+      response: "앱에서 수정한 공지입니다."
+    })
+  });
+  assert.equal(nativeCustomUpdate.response.status, 200);
+  assert.equal(nativeCustomUpdate.json.command.response, "앱에서 수정한 공지입니다.");
+
+  const reservedCustomSave = await request("/api/buyer/custom-commands/save", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: approvedLogin.json.guideToken,
+      applicationId: buyerConsoleApproved.json.rooms[0].applicationId,
+      trigger: "/게임",
+      response: "고정 명령어 덮어쓰기"
+    })
+  });
+  assert.equal(reservedCustomSave.response.status, 409);
+  assert.equal(reservedCustomSave.json.error, "reserved_command");
 
   const diceTemplate = commandTemplates.json.templates.find((template) => template.proxyCommand === "/주사위");
   const diceInstall = await request("/api/buyer/command-templates/install", {

@@ -339,9 +339,9 @@ const INCIDENT_MESSAGES = Object.freeze({
   }
 });
 const MIN_ANDROID_VERSION = normalizeText(process.env.MIN_ANDROID_VERSION || "1.0.17");
-const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.47");
+const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.48");
 const MIN_ANDROID_VERSION_CODE = Math.max(1, Number(process.env.MIN_ANDROID_VERSION_CODE || 18));
-const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 48));
+const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 49));
 const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
 const SUPABASE_ANON_KEY = normalizeText(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 const SUPABASE_KAKAO_ENABLED = normalizeText(process.env.SUPABASE_KAKAO_ENABLED || "false") === "true";
@@ -15363,6 +15363,45 @@ function buyerCustomCommandsForAccount(state, account = {}, body = {}) {
   };
 }
 
+function saveBuyerCustomCommand(state, account = {}, body = {}) {
+  const application = approvedApplicationForInstall(state, account, body);
+  if (!application) return { ok: false, status: 404, error: "approved_room_not_found" };
+  const trigger = normalizeCustomCommandTrigger(body.trigger || body.command || body.name);
+  const response = normalizeCustomCommandResponse(body.response || body.reply || body.message);
+  if (!trigger) return { ok: false, status: 400, error: "invalid_command_trigger" };
+  if (!response) return { ok: false, status: 400, error: "invalid_command_response" };
+  if (RESERVED_CUSTOM_COMMANDS.has(trigger)) return { ok: false, status: 409, error: "reserved_command" };
+
+  const roomState = ensureRoom(state, application.roomName);
+  const commands = customCommands(roomState);
+  const existingIndex = commands.findIndex((item) => item.trigger === trigger);
+  if (existingIndex < 0 && commands.length >= CUSTOM_COMMAND_LIMIT) {
+    return { ok: false, status: 400, error: "custom_command_limit" };
+  }
+
+  const item = {
+    trigger,
+    response,
+    updatedAt: nowIso(),
+    updatedBy: account.email || account.nickname || "buyer_console"
+  };
+  if (existingIndex >= 0) commands[existingIndex] = item;
+  else commands.push(item);
+  roomState.settings.customCommands = normalizeCustomCommands(commands);
+  recordRoomEvent(roomState, {
+    type: existingIndex >= 0 ? "buyer_custom_command_updated" : "buyer_custom_command_created",
+    trigger,
+    by: item.updatedBy
+  });
+  return {
+    ok: true,
+    version: APP_VERSION,
+    room: applicationRoomPayload(state, account, application),
+    command: item,
+    commands: customCommands(roomState)
+  };
+}
+
 function deleteBuyerCustomCommand(state, account = {}, body = {}) {
   const application = approvedApplicationForInstall(state, account, body);
   if (!application) return { ok: false, status: 404, error: "approved_room_not_found" };
@@ -15943,6 +15982,14 @@ async function buyerCustomCommandsFromRequest(state, req, body = {}) {
   return { ...result, guideToken: buyerTokenForAccount(auth.account) };
 }
 
+async function buyerCustomCommandSaveFromRequest(state, req, body = {}) {
+  const auth = await accountFromBuyerRequest(state, req, body);
+  if (!auth.ok) return auth;
+  const result = saveBuyerCustomCommand(state, auth.account, body);
+  if (!result.ok) return result;
+  return { ...result, guideToken: buyerTokenForAccount(auth.account) };
+}
+
 async function buyerCustomCommandDeleteFromRequest(state, req, body = {}) {
   const auth = await accountFromBuyerRequest(state, req, body);
   if (!auth.ok) return auth;
@@ -16503,6 +16550,15 @@ async function handlePublicAccountApi(req, url) {
     const state = await loadState();
     const result = await buyerCustomCommandsFromRequest(state, req, body);
     if (!result.ok) return { status: result.status || 401, body: result };
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/buyer/custom-commands/save") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await buyerCustomCommandSaveFromRequest(state, req, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    await saveState(state);
     return { status: 200, body: result };
   }
 
@@ -17994,6 +18050,7 @@ export async function requestHandler(req, res) {
       || pathname === "/api/buyer/command-packs/apply"
       || pathname === "/api/buyer/room-command-packs"
       || pathname === "/api/buyer/custom-commands"
+      || pathname === "/api/buyer/custom-commands/save"
       || pathname === "/api/buyer/room-commands"
       || pathname === "/api/buyer/custom-commands/delete"
       || pathname === "/api/bridge/connect"
