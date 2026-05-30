@@ -339,9 +339,9 @@ const INCIDENT_MESSAGES = Object.freeze({
   }
 });
 const MIN_ANDROID_VERSION = normalizeText(process.env.MIN_ANDROID_VERSION || "1.0.17");
-const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.44");
+const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.45");
 const MIN_ANDROID_VERSION_CODE = Math.max(1, Number(process.env.MIN_ANDROID_VERSION_CODE || 18));
-const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 45));
+const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 46));
 const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
 const SUPABASE_ANON_KEY = normalizeText(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 const SUPABASE_KAKAO_ENABLED = normalizeText(process.env.SUPABASE_KAKAO_ENABLED || "false") === "true";
@@ -3102,6 +3102,7 @@ function authConfigPayload() {
       kakaoOidcStartUrl: kakaoOidcEnabled ? "/api/auth/kakao/start" : "",
       googleStartUrl: supabaseEnabled() && SUPABASE_GOOGLE_ENABLED ? "/api/auth/social/start?provider=google" : "",
       appleStartUrl: supabaseEnabled() && SUPABASE_APPLE_ENABLED ? "/api/auth/social/start?provider=apple" : "",
+      passwordResetUrl: supabaseEnabled() ? "/api/auth/password-reset/request" : "",
       loginRedirectUrl: `${PUBLIC_SITE_URL}/login`,
       consoleRedirectUrl: `${PUBLIC_SITE_URL}/console`
     },
@@ -3425,6 +3426,31 @@ async function sendSupabaseEmailOtp(email) {
     return { ok: false, status: response.status || 502, error: payload.error || payload.msg || "supabase_otp_unavailable" };
   }
   return { ok: true, status: 200 };
+}
+
+async function requestSupabasePasswordRecovery(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!validEmail(normalizedEmail)) return { ok: false, status: 400, error: "email_required" };
+  if (!supabaseEnabled()) return { ok: false, status: 503, error: "supabase_not_configured" };
+  const redirectTo = `${PUBLIC_SITE_URL}/reset-password`;
+  let response;
+  try {
+    response = await fetch(`${SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ email: normalizedEmail })
+    });
+  } catch {
+    return { ok: false, status: 502, error: "password_reset_unavailable" };
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return { ok: false, status: response.status || 502, error: payload.error || payload.msg || "password_reset_unavailable" };
+  }
+  return { ok: true, status: 200, message: "password_reset_sent", email: normalizedEmail };
 }
 
 async function supabaseUserFromEmailOtp(email, token) {
@@ -16315,6 +16341,13 @@ async function handlePublicAccountApi(req, url) {
     return { status: 200, body: result };
   }
 
+  if (req.method === "POST" && url.pathname === "/api/auth/password-reset/request") {
+    const body = await readBody(req);
+    const result = await requestSupabasePasswordRecovery(body.email);
+    if (!result.ok) return { status: result.status || 400, body: result };
+    return { status: 200, body: result };
+  }
+
   if (req.method === "POST" && url.pathname === "/api/login/kakao") {
     const body = await readBody(req);
     const state = await loadState();
@@ -17942,6 +17975,7 @@ export async function requestHandler(req, res) {
       || pathname === "/api/login"
       || pathname === "/api/auth/login/start"
       || pathname === "/api/auth/login/verify"
+      || pathname === "/api/auth/password-reset/request"
       || pathname === "/api/login/kakao"
       || pathname === "/api/buyer/guide"
       || pathname === "/api/buyer/console"

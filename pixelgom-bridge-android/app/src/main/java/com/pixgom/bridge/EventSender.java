@@ -211,6 +211,16 @@ final class EventSender {
         return postApi(context, "/api/auth/login/verify", payload);
     }
 
+    static ApiResult requestPasswordReset(Context context, String email) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("email", email == null ? "" : email.trim());
+        } catch (Exception ignored) {
+            // Keep password reset payload best-effort.
+        }
+        return postApi(context, "/api/auth/password-reset/request", payload);
+    }
+
     static ApiResult socialStart(Context context, String provider) {
         return getApi(context, "/api/auth/social/start?provider=" + urlEncode(provider == null ? "" : provider));
     }

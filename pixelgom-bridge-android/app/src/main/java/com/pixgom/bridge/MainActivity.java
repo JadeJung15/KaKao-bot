@@ -109,6 +109,7 @@ public class MainActivity extends Activity {
     private String roomSearchQuery = "";
     private String roomSettingsCategory = "overview";
     private String commandSearchQuery = "";
+    private String commandStoreTargetApplicationId = "";
     private String logFilterMode = "all";
     private Button gameRoomToggleButton;
     private boolean gameRoomListExpanded = false;
@@ -614,12 +615,17 @@ public class MainActivity extends Activity {
     }
 
     private void showCommandStore() {
+        showCommandStore("");
+    }
+
+    private void showCommandStore(String applicationId) {
         if (!BridgeConfig.isBuyerLoggedIn(this)) {
             showHome();
             Toast.makeText(this, "먼저 로그인해 주세요.", Toast.LENGTH_SHORT).show();
             return;
         }
         clearMainRefs();
+        commandStoreTargetApplicationId = applicationId == null ? "" : applicationId;
         setContentView(buildCommandStoreContent());
         loadBuyerConsole();
     }
@@ -635,7 +641,7 @@ public class MainActivity extends Activity {
         root.addView(compactHeroPanel(
                 R.drawable.pixgom_speech_bubble,
                 "앱에서 바로 장착",
-                "현재 구독 방에 명령어팩과 템플릿을 설치합니다."));
+                TextUtils.isEmpty(commandStoreTargetApplicationId) ? "구독 방에 명령어팩과 템플릿을 설치합니다." : "선택한 방에 명령어팩과 템플릿을 설치합니다."));
 
         nativeConsoleStatusView = text("스토어를 불러오는 중", 14, COLOR_MUTED, true);
         nativeConsoleStatusView.setPadding(0, dp(8), 0, dp(8));
@@ -2125,6 +2131,21 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void requestPasswordReset(String email) {
+        if (TextUtils.isEmpty(email)) {
+            Toast.makeText(this, "이메일을 입력하세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.requestPasswordReset(this, email);
+            runOnUiThread(() -> Toast.makeText(
+                    this,
+                    result.ok() ? "재설정 메일을 보냈습니다. 이메일을 확인해 주세요." : "전송 실패: " + authErrorMessage(result, "다시 시도해 주세요."),
+                    Toast.LENGTH_LONG
+            ).show());
+        });
+    }
+
     private void loginGoogleAppleOAuth(String provider) {
         String label = "apple".equals(provider) ? "Apple" : "Google";
         if (accountStatusView != null) accountStatusView.setText(label + " 로그인 준비 상태 확인 중입니다.");
@@ -2378,11 +2399,13 @@ public class MainActivity extends Activity {
     private void renderCommandStore(JSONObject consoleJson) {
         if (selectableRoomsContainer == null || !"store".equals(nativeConsoleMode)) return;
         while (selectableRoomsContainer.getChildCount() > 1) selectableRoomsContainer.removeViewAt(1);
-        String applicationId = firstConsoleApplicationId(consoleJson);
+        String applicationId = consoleApplicationIdOrFirst(consoleJson, commandStoreTargetApplicationId);
         if (TextUtils.isEmpty(applicationId)) {
             selectableRoomsContainer.addView(text("명령어를 설치할 승인 방이 없습니다.", 14, COLOR_MUTED, false));
             return;
         }
+        JSONObject targetRoom = consoleRoomByApplicationId(consoleJson, applicationId);
+        selectableRoomsContainer.addView(infoCard(R.drawable.ic_users, "적용 대상: " + (targetRoom == null ? "첫 번째 승인 방" : targetRoom.optString("roomName", "승인 방"))));
         JSONObject commandPacks = consoleJson.optJSONObject("commandPacks");
         JSONArray packs = commandPacks == null ? null : commandPacks.optJSONArray("packs");
         int packLimit = packs == null ? 0 : Math.min(8, packs.length());
@@ -2674,9 +2697,9 @@ public class MainActivity extends Activity {
             ));
         }
         Button addPackButton = iconTextButton(R.drawable.ic_plus, "명령어팩 추가", false);
-        addPackButton.setOnClickListener(v -> showCommandStore());
+        addPackButton.setOnClickListener(v -> showCommandStore(applicationId));
         Button storeButton = iconTextButton(R.drawable.ic_sync, "스토어에서 찾기", true);
-        storeButton.setOnClickListener(v -> showCommandStore());
+        storeButton.setOnClickListener(v -> showCommandStore(applicationId));
         parent.addView(compactActionGrid(addPackButton, storeButton));
     }
 
@@ -2885,6 +2908,17 @@ public class MainActivity extends Activity {
         JSONArray rooms = consoleJson == null ? null : consoleJson.optJSONArray("rooms");
         JSONObject room = rooms == null || rooms.length() == 0 ? null : rooms.optJSONObject(0);
         return room == null ? "" : room.optString("applicationId", "");
+    }
+
+    private String consoleApplicationIdOrFirst(JSONObject consoleJson, String preferredApplicationId) {
+        if (!TextUtils.isEmpty(preferredApplicationId)) {
+            JSONArray rooms = consoleJson == null ? null : consoleJson.optJSONArray("rooms");
+            for (int index = 0; rooms != null && index < rooms.length(); index++) {
+                JSONObject room = rooms.optJSONObject(index);
+                if (room != null && preferredApplicationId.equals(room.optString("applicationId", ""))) return preferredApplicationId;
+            }
+        }
+        return firstConsoleApplicationId(consoleJson);
     }
 
     private void applyCommandPack(String applicationId, String packId) {
@@ -3744,8 +3778,22 @@ public class MainActivity extends Activity {
         row.addView(checkTextRow("로그인 상태 유지", false), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         TextView find = singleLineText("비밀번호 찾기", 12, COLOR_GOOD, true);
         find.setGravity(Gravity.END);
+        find.setOnClickListener(v -> showPasswordResetDialog());
         row.addView(find);
         return row;
+    }
+
+    private void showPasswordResetDialog() {
+        String currentEmail = loginEmailInput == null ? BridgeConfig.buyerEmail(this) : loginEmailInput.getText().toString().trim();
+        final EditText emailInput = authInput("이메일", currentEmail);
+        emailInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        new AlertDialog.Builder(this)
+                .setTitle("비밀번호 찾기")
+                .setMessage("가입한 이메일로 비밀번호 재설정 링크를 보냅니다.")
+                .setView(emailInput)
+                .setPositiveButton("전송", (dialog, which) -> requestPasswordReset(emailInput.getText().toString().trim()))
+                .setNegativeButton("취소", null)
+                .show();
     }
 
     private LinearLayout checkTextRow(String label, boolean checked) {

@@ -90,6 +90,16 @@ if (!baseUrl) {
       });
       return;
     }
+    if (req.method === "POST" && url.pathname === "/auth/v1/recover") {
+      let raw = "";
+      req.on("data", (chunk) => { raw += chunk; });
+      req.on("end", () => {
+        const body = JSON.parse(raw || "{}");
+        if (body.email === supabaseTestEmail && url.searchParams.get("redirect_to")) sendJson(200, {});
+        else sendJson(400, { error: "password_reset_unavailable" });
+      });
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/auth/v1/verify") {
       let raw = "";
       req.on("data", (chunk) => { raw += chunk; });
@@ -230,10 +240,10 @@ try {
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(health.json.serverTimezone, "Asia/Seoul");
   assert.equal(health.json.minAndroidVersion, "1.0.17");
-  assert.equal(health.json.latestAndroidVersion, "1.0.44");
-  assert.equal(health.json.latestAndroidVersionCode, 45);
+  assert.equal(health.json.latestAndroidVersion, "1.0.45");
+  assert.equal(health.json.latestAndroidVersionCode, 46);
   assert.equal(health.json.minAndroidVersionCode, 18);
-  assert.equal(health.json.latestAndroidVersionCode, 45);
+  assert.equal(health.json.latestAndroidVersionCode, 46);
   assert.equal(health.json.appUpdateRequired, false);
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
@@ -656,6 +666,7 @@ try {
   assert.equal(authConfig.json.auth.otpEnabled, true);
   assert.equal(authConfig.json.auth.googleEnabled, false);
   assert.equal(authConfig.json.auth.appleEnabled, false);
+  assert.equal(authConfig.json.auth.passwordResetUrl, "/api/auth/password-reset/request");
   assert.equal(authConfig.json.routes.ownerAdmin, "/admin");
   assert.equal(authConfig.json.routes.buyerConsole, "/console");
   const googleSocialStart = await request("/api/auth/social/start?provider=google");
@@ -1307,8 +1318,8 @@ try {
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
   assert.equal(packageJson.scripts["android:release-report"], "node scripts/android-release-bundle.js --report-only");
   const androidGradle = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "build.gradle"), "utf8");
-  assert.match(androidGradle, /versionCode 45/);
-  assert.match(androidGradle, /versionName "1\.0\.44"/);
+  assert.match(androidGradle, /versionCode 46/);
+  assert.match(androidGradle, /versionName "1\.0\.45"/);
   assert.match(androidGradle, /com\.kakao\.sdk:v2-user:2\.23\.4/);
   const androidEventSender = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "EventSender.java"), "utf8");
   assert.match(androidEventSender, /optJSONArray\("rooms"\)/);
@@ -1327,6 +1338,7 @@ try {
   assert.match(androidEventSender, /\/api\/auth\/config/);
   assert.match(androidEventSender, /\/api\/auth\/login\/start/);
   assert.match(androidEventSender, /\/api\/auth\/login\/verify/);
+  assert.match(androidEventSender, /\/api\/auth\/password-reset\/request/);
   assert.match(androidEventSender, /\/api\/auth\/social\/start/);
   assert.match(androidEventSender, /\/api\/signup/);
   assert.match(androidEventSender, /eventId/);
@@ -1356,6 +1368,8 @@ try {
   assert.match(androidMainActivity, /PIXELGOM/);
   assert.match(androidMainActivity, /homeBridgeHero/);
   assert.match(androidMainActivity, /roomFilterRow/);
+  assert.match(androidMainActivity, /showPasswordResetDialog/);
+  assert.match(androidMainActivity, /consoleApplicationIdOrFirst/);
   assert.match(androidMainActivity, /roomStatusHero/);
   assert.match(androidMainActivity, /formatLogsForList/);
   assert.match(androidMainActivity, /pixgom_login_night_bg/);
@@ -2072,6 +2086,16 @@ try {
   assert.equal(supabaseOtpVerify.response.status, 200);
   assert.equal(supabaseOtpVerify.json.account.email, `supabase-${process.pid}@pixgom.test`);
   assert.match(supabaseOtpVerify.json.guideToken, /\./);
+
+  const passwordReset = await request("/api/auth/password-reset/request", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `supabase-${process.pid}@pixgom.test`
+    })
+  });
+  assert.equal(passwordReset.response.status, 200);
+  assert.equal(passwordReset.json.message, "password_reset_sent");
 
   const supabasePasswordLoginInvalid = await request("/api/login", {
     method: "POST",
