@@ -240,10 +240,10 @@ try {
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(health.json.serverTimezone, "Asia/Seoul");
   assert.equal(health.json.minAndroidVersion, "1.0.17");
-  assert.equal(health.json.latestAndroidVersion, "1.0.48");
-  assert.equal(health.json.latestAndroidVersionCode, 49);
+  assert.equal(health.json.latestAndroidVersion, "1.0.49");
+  assert.equal(health.json.latestAndroidVersionCode, 50);
   assert.equal(health.json.minAndroidVersionCode, 18);
-  assert.equal(health.json.latestAndroidVersionCode, 49);
+  assert.equal(health.json.latestAndroidVersionCode, 50);
   assert.equal(health.json.appUpdateRequired, false);
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
@@ -1318,8 +1318,8 @@ try {
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
   assert.equal(packageJson.scripts["android:release-report"], "node scripts/android-release-bundle.js --report-only");
   const androidGradle = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "build.gradle"), "utf8");
-  assert.match(androidGradle, /versionCode 49/);
-  assert.match(androidGradle, /versionName "1\.0\.48"/);
+  assert.match(androidGradle, /versionCode 50/);
+  assert.match(androidGradle, /versionName "1\.0\.49"/);
   assert.match(androidGradle, /com\.kakao\.sdk:v2-user:2\.23\.4/);
   const androidEventSender = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "EventSender.java"), "utf8");
   assert.match(androidEventSender, /optJSONArray\("rooms"\)/);
@@ -1335,6 +1335,9 @@ try {
   assert.match(androidEventSender, /\/api\/buyer\/command-packs\/apply/);
   assert.match(androidEventSender, /\/api\/buyer\/command-templates\/install/);
   assert.match(androidEventSender, /\/api\/buyer\/custom-commands\/save/);
+  assert.match(androidEventSender, /\/api\/buyer\/account\/profile/);
+  assert.match(androidEventSender, /\/api\/application-inquiries/);
+  assert.match(androidEventSender, /\/api\/buyer\/restore-requests/);
   assert.match(androidEventSender, /\/api\/login\/kakao/);
   assert.match(androidEventSender, /\/api\/auth\/config/);
   assert.match(androidEventSender, /\/api\/auth\/login\/start/);
@@ -1382,6 +1385,11 @@ try {
   assert.match(androidMainActivity, /showCommandStore/);
   assert.match(androidMainActivity, /EventSender\.autoConnect/);
   assert.match(androidMainActivity, /EventSender\.buyerConsole/);
+  assert.match(androidMainActivity, /showProfileEditDialog/);
+  assert.match(androidMainActivity, /showSupport/);
+  assert.match(androidMainActivity, /EventSender\.saveBuyerProfile/);
+  assert.match(androidMainActivity, /EventSender\.createApplicationInquiry/);
+  assert.match(androidMainActivity, /EventSender\.createRestoreRequest/);
   assert.match(androidMainActivity, /EventSender\.saveRoomFeatureSettings/);
   assert.match(androidMainActivity, /EventSender\.applyCommandPack/);
   assert.match(androidMainActivity, /EventSender\.installCommandTemplate/);

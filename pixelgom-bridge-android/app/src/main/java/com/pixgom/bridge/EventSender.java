@@ -245,8 +245,41 @@ final class EventSender {
         return postApi(context, "/api/buyer/account/link-kakao", payload);
     }
 
+    static ApiResult saveBuyerProfile(Context context, String buyerToken, String nickname) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            payload.put("nickname", nickname == null ? "" : nickname.trim());
+        } catch (Exception ignored) {
+            // Keep profile payload best-effort.
+        }
+        return postApi(context, "/api/buyer/account/profile", payload);
+    }
+
     static ApiResult buyerConsole(Context context, String buyerToken) {
         return postApi(context, "/api/buyer/console", tokenPayload(buyerToken));
+    }
+
+    static ApiResult createApplicationInquiry(Context context, String buyerToken, String applicationId, String type, String message) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            payload.put("applicationId", applicationId == null ? "" : applicationId);
+            payload.put("type", type == null ? "other" : type);
+            payload.put("message", message == null ? "" : message.trim());
+        } catch (Exception ignored) {
+            // Keep inquiry payload best-effort.
+        }
+        return postApi(context, "/api/application-inquiries", payload);
+    }
+
+    static ApiResult createRestoreRequest(Context context, String buyerToken, String archiveId, String reason) {
+        JSONObject payload = tokenPayload(buyerToken);
+        try {
+            payload.put("archiveId", archiveId == null ? "" : archiveId);
+            payload.put("reason", reason == null ? "" : reason.trim());
+        } catch (Exception ignored) {
+            // Keep restore payload best-effort.
+        }
+        return postApi(context, "/api/buyer/restore-requests", payload);
     }
 
     static ConnectResult autoConnect(Context context, String buyerToken, JSONArray applicationIds) {

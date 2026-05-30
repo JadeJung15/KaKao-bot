@@ -97,6 +97,7 @@ public class MainActivity extends Activity {
     private String otpEmail = "";
     private LinearLayout selectableRoomsContainer;
     private LinearLayout roomDetailContainer;
+    private LinearLayout supportContainer;
     private final List<CheckBox> roomSelectionChecks = new ArrayList<>();
     private JSONObject buyerConsoleJson;
     private String nativeConsoleMode = "";
@@ -675,6 +676,24 @@ public class MainActivity extends Activity {
         accountPanel.addView(sectionHeader(R.drawable.pixgom_support_bear, "구매자 계정", accountLabel()));
 
         if (BridgeConfig.isBuyerLoggedIn(this)) {
+            accountPanel.addView(settingCategoryRow(
+                    R.drawable.ic_settings,
+                    "닉네임",
+                    TextUtils.isEmpty(BridgeConfig.buyerNickname(this)) ? "계정 표시 이름을 등록합니다." : BridgeConfig.buyerNickname(this),
+                    "수정",
+                    v -> showProfileEditDialog()));
+
+            accountPanel.addView(settingCategoryRow(
+                    R.drawable.ic_log,
+                    "문의/복구",
+                    "입금, 설치 오류, 삭제 방 복구를 앱에서 접수합니다.",
+                    "열기",
+                    v -> showSupport()));
+
+            Button resetPasswordButton = secondaryButton("비밀번호 재설정 메일 보내기");
+            resetPasswordButton.setOnClickListener(v -> showPasswordResetDialog());
+            accountPanel.addView(resetPasswordButton);
+
             Button reloadButton = primaryButton("내 콘솔 새로고침");
             reloadButton.setOnClickListener(v -> loadBuyerConsole());
             accountPanel.addView(reloadButton);
@@ -694,6 +713,38 @@ public class MainActivity extends Activity {
             accountPanel.addView(buildLoginPanel());
         }
         return scrollView;
+    }
+
+    private void showSupport() {
+        if (!BridgeConfig.isBuyerLoggedIn(this)) {
+            showAccount();
+            Toast.makeText(this, "먼저 로그인해 주세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        clearMainRefs();
+        setContentView(buildSupportContent());
+        loadBuyerConsole();
+    }
+
+    private View buildSupportContent() {
+        ScrollView scrollView = baseScrollView();
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        applyScreenPadding(root, 18);
+        scrollView.addView(root);
+
+        root.addView(topBar("문의/복구", "앱에서 접수", true));
+        root.addView(compactSummaryPanel("웹 콘솔 없이 처리", "방별 문의와 삭제 방 복구 요청을 앱에서 바로 보냅니다."));
+
+        nativeConsoleStatusView = singleLineText("콘솔 데이터를 불러오는 중", 13, COLOR_MUTED, true);
+        nativeConsoleStatusView.setPadding(0, dp(6), 0, dp(4));
+        root.addView(nativeConsoleStatusView);
+
+        supportContainer = transparentStack();
+        supportContainer.addView(text("불러오는 중입니다.", 14, COLOR_MUTED, false));
+        nativeConsoleMode = "support";
+        root.addView(supportContainer);
+        return withBottomNav(scrollView, "settings");
     }
 
     private View buildFeatureDashboardContent() {
@@ -884,6 +935,7 @@ public class MainActivity extends Activity {
         hub.addView(settingCategoryRow(R.drawable.ic_checklist, "게임", "게임팩 상태와 도움말", BridgeConfig.gamesEnabled(this) ? "ON" : "OFF", v -> showFeatureDashboard()));
         hub.addView(settingCategoryRow(R.drawable.ic_sync, "명령어", "팩/템플릿 설치", "스토어", v -> showCommandStore()));
         hub.addView(settingCategoryRow(R.drawable.ic_log, "로그", "전송 기록 확인", "열기", v -> showLogs()));
+        hub.addView(settingCategoryRow(R.drawable.ic_log, "문의/복구", "입금, 설치 오류, 삭제 방 복구", "접수", v -> showSupport()));
         hub.addView(settingCategoryRow(R.drawable.ic_settings, "고급", "연결코드, 초기화, JS", "지원", v -> showAdvanced()));
         return withBottomNav(scrollView, "settings");
     }
@@ -1320,6 +1372,7 @@ public class MainActivity extends Activity {
         loginPasswordInput = null;
         selectableRoomsContainer = null;
         roomDetailContainer = null;
+        supportContainer = null;
         roomSelectionChecks.clear();
         nativeConsoleMode = "";
         selectedRoomApplicationId = "";
@@ -2268,6 +2321,16 @@ public class MainActivity extends Activity {
                 return "필수 약관 동의가 필요합니다.";
             case "email_already_registered":
                 return "이미 가입된 이메일입니다. 로그인해 주세요.";
+            case "nickname_invalid":
+                return "닉네임은 2~30자로 입력해 주세요.";
+            case "application_id_required":
+                return "문의할 방을 선택해 주세요.";
+            case "inquiry_message_required":
+                return "문의 내용을 입력해 주세요.";
+            case "archived_room_not_found":
+                return "복구할 보관 방을 찾지 못했습니다.";
+            case "restore_request_forbidden":
+                return "이 계정으로 복구 요청할 수 없는 방입니다.";
             case "social_provider_not_configured":
                 return "아직 사용할 수 없는 로그인 방식입니다.";
             case "supabase_login_unavailable":
@@ -2279,6 +2342,110 @@ public class MainActivity extends Activity {
             default:
                 return code.contains("_") ? fallback : code;
         }
+    }
+
+    private void showProfileEditDialog() {
+        final EditText nicknameInput = authInput("닉네임", BridgeConfig.buyerNickname(this));
+        new AlertDialog.Builder(this)
+                .setTitle("닉네임 수정")
+                .setMessage("앱과 구매자 콘솔에 표시되는 이름입니다.")
+                .setView(nicknameInput)
+                .setPositiveButton("저장", (dialog, which) -> saveBuyerProfile(nicknameInput.getText().toString().trim()))
+                .setNegativeButton("취소", null)
+                .show();
+    }
+
+    private void saveBuyerProfile(String nickname) {
+        if (TextUtils.isEmpty(nickname)) {
+            Toast.makeText(this, "닉네임을 입력해 주세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.saveBuyerProfile(this, BridgeConfig.buyerToken(this), nickname);
+            runOnUiThread(() -> {
+                if (result.ok()) {
+                    saveBuyerSession(result.json);
+                    Toast.makeText(this, "계정 정보를 저장했습니다.", Toast.LENGTH_SHORT).show();
+                    showAccount();
+                } else {
+                    Toast.makeText(this, "저장 실패: " + authErrorMessage(result, "다시 시도해 주세요."), Toast.LENGTH_LONG).show();
+                }
+            });
+        });
+    }
+
+    private void showApplicationInquiryDialog(String applicationId, String roomName) {
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(4), dp(4), dp(4), 0);
+        form.addView(text(roomName, 14, COLOR_TEXT, true));
+        final EditText messageInput = multiLineInput("", 4);
+        messageInput.setHint("입금 확인, 설치 오류, 연결 문제 등을 짧게 적어 주세요.");
+        form.addView(messageInput);
+        new AlertDialog.Builder(this)
+                .setTitle("문의 등록")
+                .setView(form)
+                .setPositiveButton("접수", (dialog, which) -> submitApplicationInquiry(applicationId, roomName, messageInput.getText().toString()))
+                .setNegativeButton("취소", null)
+                .show();
+    }
+
+    private void submitApplicationInquiry(String applicationId, String roomName, String message) {
+        if (TextUtils.isEmpty(applicationId) || TextUtils.isEmpty(message.trim())) {
+            Toast.makeText(this, "문의할 방과 내용을 확인해 주세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.createApplicationInquiry(this, BridgeConfig.buyerToken(this), applicationId, "other", message);
+            runOnUiThread(() -> {
+                if (result.ok()) {
+                    BridgeConfig.appendLog(this, "문의 접수: " + roomName);
+                    Toast.makeText(this, "문의가 접수되었습니다.", Toast.LENGTH_SHORT).show();
+                    loadBuyerConsole();
+                } else {
+                    Toast.makeText(this, "문의 실패: " + authErrorMessage(result, "다시 시도해 주세요."), Toast.LENGTH_LONG).show();
+                }
+            });
+        });
+    }
+
+    private void showRestoreRequestDialog(JSONObject archive) {
+        String roomName = archive == null ? "보관 방" : archive.optString("roomName", "보관 방");
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(4), dp(4), dp(4), 0);
+        form.addView(text(roomName, 14, COLOR_TEXT, true));
+        final EditText reasonInput = multiLineInput("앱에서 복구 요청", 3);
+        reasonInput.setHint("복구가 필요한 이유를 입력해 주세요.");
+        form.addView(reasonInput);
+        new AlertDialog.Builder(this)
+                .setTitle("방 복구 요청")
+                .setView(form)
+                .setPositiveButton("요청", (dialog, which) -> submitRestoreRequest(
+                        archive == null ? "" : archive.optString("id", ""),
+                        roomName,
+                        reasonInput.getText().toString()))
+                .setNegativeButton("취소", null)
+                .show();
+    }
+
+    private void submitRestoreRequest(String archiveId, String roomName, String reason) {
+        if (TextUtils.isEmpty(archiveId)) {
+            Toast.makeText(this, "복구할 방을 찾지 못했습니다.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        executor.execute(() -> {
+            EventSender.ApiResult result = EventSender.createRestoreRequest(this, BridgeConfig.buyerToken(this), archiveId, reason);
+            runOnUiThread(() -> {
+                if (result.ok()) {
+                    BridgeConfig.appendLog(this, "복구 요청: " + roomName);
+                    Toast.makeText(this, result.json.optBoolean("duplicate", false) ? "이미 접수된 복구 요청입니다." : "복구 요청이 접수되었습니다.", Toast.LENGTH_SHORT).show();
+                    loadBuyerConsole();
+                } else {
+                    Toast.makeText(this, "복구 요청 실패: " + authErrorMessage(result, "다시 시도해 주세요."), Toast.LENGTH_LONG).show();
+                }
+            });
+        });
     }
 
     private void handleLoginResult(EventSender.ApiResult result, String label) {
@@ -2322,6 +2489,7 @@ public class MainActivity extends Activity {
                 renderRoomChoices(result.json);
                 renderCommandStore(result.json);
                 renderRoomDetail(result.json);
+                renderSupportContent(result.json);
             });
         });
     }
@@ -2344,6 +2512,111 @@ public class MainActivity extends Activity {
         if (selectableRoomsContainer.getChildCount() == 0) {
             selectableRoomsContainer.addView(text("현재 필터에 맞는 방이 없습니다.", 14, COLOR_MUTED, false));
         }
+    }
+
+    private void renderSupportContent(JSONObject consoleJson) {
+        if (supportContainer == null || !"support".equals(nativeConsoleMode)) return;
+        supportContainer.removeAllViews();
+        if (consoleJson == null) {
+            supportContainer.addView(text("콘솔 데이터를 불러오는 중입니다.", 14, COLOR_MUTED, false));
+            return;
+        }
+
+        JSONArray rooms = consoleJson.optJSONArray("rooms");
+        supportContainer.addView(sectionTitle("방별 문의"));
+        if (rooms == null || rooms.length() == 0) {
+            supportContainer.addView(text("문의할 승인 방이 없습니다.", 14, COLOR_MUTED, false));
+        } else {
+            for (int index = 0; index < rooms.length(); index++) {
+                JSONObject room = rooms.optJSONObject(index);
+                if (room == null) continue;
+                String applicationId = room.optString("applicationId", "");
+                String roomName = room.optString("roomName", "방");
+                String body = room.optString("subscriptionStatusLabel", "상태 확인") + " · " + roomSetupLabel(room);
+                supportContainer.addView(settingCategoryRow(
+                        R.drawable.ic_log,
+                        roomName,
+                        body,
+                        "문의",
+                        v -> showApplicationInquiryDialog(applicationId, roomName)));
+            }
+        }
+
+        supportContainer.addView(sectionTitle("문의 처리 상태"));
+        JSONArray inquiries = consoleJson.optJSONArray("inquiries");
+        if (inquiries == null || inquiries.length() == 0) {
+            supportContainer.addView(text("접수된 문의가 없습니다.", 14, COLOR_MUTED, false));
+        } else {
+            int limit = Math.min(inquiries.length(), 5);
+            for (int index = 0; index < limit; index++) {
+                JSONObject inquiry = inquiries.optJSONObject(index);
+                if (inquiry != null) supportContainer.addView(supportStatusCard(
+                        inquiry.optString("typeLabel", "문의"),
+                        inquiry.optString("roomName", "방"),
+                        inquiry.optString("statusLabel", "접수"),
+                        inquiry.optString("message", "")));
+            }
+        }
+
+        supportContainer.addView(sectionTitle("삭제 방 복구"));
+        JSONArray archivedRooms = consoleJson.optJSONArray("archivedRooms");
+        if (archivedRooms == null || archivedRooms.length() == 0) {
+            supportContainer.addView(text("복구 요청 가능한 보관 방이 없습니다.", 14, COLOR_MUTED, false));
+        } else {
+            for (int index = 0; index < archivedRooms.length(); index++) {
+                JSONObject archive = archivedRooms.optJSONObject(index);
+                if (archive == null) continue;
+                JSONObject request = restoreRequestForArchive(consoleJson, archive.optString("id", ""));
+                boolean requested = request != null && !"resolved".equals(request.optString("status", ""));
+                String status = requested ? request.optString("statusLabel", "요청됨") : "복구";
+                supportContainer.addView(settingCategoryRow(
+                        R.drawable.ic_sync,
+                        archive.optString("roomName", "보관 방"),
+                        shortSupportText(archive.optString("reason", archive.optString("archivedAt", ""))),
+                        status,
+                        v -> {
+                            if (requested) {
+                                Toast.makeText(this, "이미 복구 요청이 접수되어 있습니다.", Toast.LENGTH_SHORT).show();
+                            } else {
+                                showRestoreRequestDialog(archive);
+                            }
+                        }));
+            }
+        }
+
+        Button refresh = secondaryButton("문의/복구 상태 새로고침");
+        refresh.setOnClickListener(v -> loadBuyerConsole());
+        supportContainer.addView(refresh);
+    }
+
+    private LinearLayout supportStatusCard(String title, String roomName, String status, String message) {
+        LinearLayout card = glassPanel();
+        card.setPadding(dp(10), dp(9), dp(10), dp(10));
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(singleLineText(title + " · " + roomName, 14, COLOR_TITLE, true), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        boolean open = !"처리 완료".equals(status) && !"완료".equals(status);
+        row.addView(statusBadge(status, open));
+        card.addView(row);
+        if (!TextUtils.isEmpty(message)) card.addView(singleLineText(shortSupportText(message), 12, COLOR_MUTED, false));
+        return card;
+    }
+
+    private JSONObject restoreRequestForArchive(JSONObject consoleJson, String archiveId) {
+        JSONArray requests = consoleJson == null ? null : consoleJson.optJSONArray("restoreRequests");
+        if (requests == null) return null;
+        for (int index = 0; index < requests.length(); index++) {
+            JSONObject request = requests.optJSONObject(index);
+            if (request != null && archiveId.equals(request.optString("archiveId", ""))) return request;
+        }
+        return null;
+    }
+
+    private String shortSupportText(String value) {
+        String text = safeText(value).replace("\n", " / ");
+        if (TextUtils.isEmpty(text)) return "상세 내용 없음";
+        return text.length() > 52 ? text.substring(0, 49) + "..." : text;
     }
 
     private LinearLayout selectableRoomCard(JSONObject room) {
