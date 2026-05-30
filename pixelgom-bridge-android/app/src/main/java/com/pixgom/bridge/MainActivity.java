@@ -356,20 +356,20 @@ public class MainActivity extends Activity {
         Button loginButton = primaryButton("로그인");
         loginButton.setOnClickListener(v -> loginWithEmail());
         panel.addView(loginButton);
-        Button kakaoButton = socialButton(kakaoReady() ? "카카오계정으로 로그인" : "카카오 로그인 준비 필요");
+        Button kakaoButton = socialButton(kakaoReady() ? "카카오 로그인" : "카카오 준비 중");
         kakaoButton.setEnabled(kakaoReady());
         kakaoButton.setOnClickListener(v -> loginWithKakao());
         panel.addView(kakaoButton);
-        Button googleButton = socialButton("Google 로그인 준비 필요");
+        Button googleButton = socialButton("Google 준비 중");
         googleButton.setEnabled(false);
         googleButton.setOnClickListener(v -> loginGoogleAppleOAuth("google"));
         panel.addView(googleButton);
-        Button appleButton = socialButton("Apple 로그인 준비 필요");
+        Button appleButton = socialButton("Apple 준비 중");
         appleButton.setEnabled(false);
         appleButton.setOnClickListener(v -> loginGoogleAppleOAuth("apple"));
         panel.addView(appleButton);
         loadAuthButtonState(kakaoButton, googleButton, appleButton);
-        accountStatusView = text("비밀번호 확인 후 2단계 인증을 진행합니다.", 12, COLOR_MUTED, false);
+        accountStatusView = text("로그인 후 인증번호를 확인합니다.", 12, COLOR_MUTED, false);
         accountStatusView.setGravity(Gravity.CENTER);
         accountStatusView.setPadding(0, dp(10), 0, 0);
         panel.addView(accountStatusView);
@@ -389,11 +389,11 @@ public class MainActivity extends Activity {
                 boolean appleEnabled = auth != null && auth.optBoolean("appleEnabled", false);
                 boolean kakaoEnabled = kakaoReady() && (auth == null || auth.optBoolean("kakaoEnabled", true));
                 kakaoButton.setEnabled(kakaoEnabled);
-                kakaoButton.setText(kakaoEnabled ? "카카오계정으로 로그인" : "카카오 로그인 준비 필요");
+                kakaoButton.setText(kakaoEnabled ? "카카오 로그인" : "카카오 준비 중");
                 googleButton.setEnabled(googleEnabled);
-                googleButton.setText(googleEnabled ? "Google로 로그인" : "Google 로그인 준비 필요");
+                googleButton.setText(googleEnabled ? "Google 로그인" : "Google 준비 중");
                 appleButton.setEnabled(appleEnabled);
-                appleButton.setText(appleEnabled ? "Apple로 로그인" : "Apple 로그인 준비 필요");
+                appleButton.setText(appleEnabled ? "Apple 로그인" : "Apple 준비 중");
                 if (accountStatusView != null && auth != null && !auth.optBoolean("otpEnabled", false)) {
                     accountStatusView.setText("2단계 인증 설정이 꺼져 있으면 바로 로그인됩니다.");
                 }
@@ -522,7 +522,7 @@ public class MainActivity extends Activity {
         loginButton.setOnClickListener(v -> loginWithEmail());
         loginPanel.addView(loginButton);
 
-        Button kakaoButton = secondaryButton(kakaoReady() ? "카카오로 로그인" : "카카오 로그인 준비 필요");
+        Button kakaoButton = secondaryButton(kakaoReady() ? "카카오 로그인" : "카카오 준비 중");
         kakaoButton.setEnabled(kakaoReady());
         kakaoButton.setOnClickListener(v -> loginWithKakao());
         loginPanel.addView(kakaoButton);
@@ -667,7 +667,7 @@ public class MainActivity extends Activity {
             reloadButton.setOnClickListener(v -> loadBuyerConsole());
             accountPanel.addView(reloadButton);
 
-            Button kakaoLinkButton = secondaryButton(kakaoReady() ? "카카오 계정 연결" : "카카오 연결 준비 필요");
+            Button kakaoLinkButton = secondaryButton(kakaoReady() ? "카카오 연결" : "카카오 준비 중");
             kakaoLinkButton.setEnabled(kakaoReady());
             kakaoLinkButton.setOnClickListener(v -> linkKakaoAccount());
             accountPanel.addView(kakaoLinkButton);
@@ -1769,7 +1769,7 @@ public class MainActivity extends Activity {
                     Toast.makeText(this, "회원가입이 완료되었습니다. 로그인해 주세요.", Toast.LENGTH_LONG).show();
                     showEmailLogin();
                 } else {
-                    String message = TextUtils.isEmpty(result.error) ? "회원가입 실패" : result.error;
+                    String message = authErrorMessage(result, "회원가입에 실패했습니다.");
                     if (accountStatusView != null) accountStatusView.setText(message);
                     Toast.makeText(this, message, Toast.LENGTH_LONG).show();
                 }
@@ -1797,7 +1797,7 @@ public class MainActivity extends Activity {
             EventSender.ApiResult result = EventSender.socialStart(this, provider);
             runOnUiThread(() -> {
                 if (!result.ok()) {
-                    String message = label + " 로그인 준비가 필요합니다.";
+                    String message = authErrorMessage(result, label + " 로그인 준비가 필요합니다.");
                     if (accountStatusView != null) accountStatusView.setText(message);
                     Toast.makeText(this, message, Toast.LENGTH_LONG).show();
                     return;
@@ -1875,18 +1875,58 @@ public class MainActivity extends Activity {
                     Toast.makeText(this, "카카오 계정을 연결했습니다.", Toast.LENGTH_SHORT).show();
                     showAccount();
                 } else {
-                    Toast.makeText(this, "카카오 연결 실패: " + result.error, Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "카카오 연결 실패: " + authErrorMessage(result, "다시 시도해 주세요."), Toast.LENGTH_LONG).show();
                 }
             });
         });
     }
 
+    private String authErrorMessage(EventSender.ApiResult result, String fallback) {
+        String code = "";
+        if (result != null && result.json != null) {
+            code = result.json.optString("error", "");
+            if (TextUtils.isEmpty(code)) code = result.json.optString("message", "");
+        }
+        if (TextUtils.isEmpty(code) && result != null) code = result.error;
+        if (TextUtils.isEmpty(code)) return fallback;
+        switch (code) {
+            case "invalid_login":
+                return "이메일 또는 비밀번호를 확인해 주세요.";
+            case "invalid_or_expired_challenge":
+                return "인증 시간이 지났습니다. 다시 로그인해 주세요.";
+            case "invalid_otp":
+            case "invalid_token":
+            case "otp_verification_failed":
+                return "인증번호를 다시 확인해 주세요.";
+            case "email_required":
+                return "이메일을 입력해 주세요.";
+            case "password_too_short":
+                return "비밀번호는 8자 이상 입력해 주세요.";
+            case "password_mismatch":
+                return "비밀번호 확인이 일치하지 않습니다.";
+            case "nickname_required":
+                return "닉네임을 입력해 주세요.";
+            case "terms_required":
+            case "privacy_required":
+                return "필수 약관 동의가 필요합니다.";
+            case "email_already_registered":
+                return "이미 가입된 이메일입니다. 로그인해 주세요.";
+            case "social_provider_not_configured":
+                return "아직 사용할 수 없는 로그인 방식입니다.";
+            case "supabase_login_unavailable":
+                return "로그인 서버 설정을 확인해 주세요.";
+            case "kakao_account_not_linked":
+                return "이메일 로그인 후 카카오 계정을 연결해 주세요.";
+            case "account_mismatch":
+                return "인증 계정이 다릅니다. 처음부터 다시 로그인해 주세요.";
+            default:
+                return code.contains("_") ? fallback : code;
+        }
+    }
+
     private void handleLoginResult(EventSender.ApiResult result, String label) {
         if (!result.ok()) {
-            String message = result.error == null ? "로그인 실패" : result.error;
-            if ("kakao_account_not_linked".equals(result.json.optString("error"))) {
-                message = "이메일 로그인 후 계정 화면에서 카카오 계정을 연결해 주세요.";
-            }
+            String message = authErrorMessage(result, "로그인에 실패했습니다.");
             if (accountStatusView != null) accountStatusView.setText(message);
             Toast.makeText(this, message, Toast.LENGTH_LONG).show();
             return;

@@ -1351,8 +1351,8 @@ try {
   assert.match(androidMainActivity, /EventSender\.loginVerify/);
   assert.match(androidMainActivity, /EventSender\.signup/);
   assert.match(androidMainActivity, /EventSender\.socialStart/);
-  assert.match(androidMainActivity, /Google 로그인 준비 필요/);
-  assert.match(androidMainActivity, /Apple 로그인 준비 필요/);
+  assert.match(androidMainActivity, /Google 준비 중/);
+  assert.match(androidMainActivity, /Apple 준비 중/);
   assert.match(androidMainActivity, /PIXELGOM/);
   assert.match(androidMainActivity, /로그인하고 방 자동 연결/);
   assert.match(androidMainActivity, /showRooms/);
@@ -1362,7 +1362,7 @@ try {
   assert.match(androidMainActivity, /EventSender\.saveRoomFeatureSettings/);
   assert.match(androidMainActivity, /EventSender\.applyCommandPack/);
   assert.match(androidMainActivity, /EventSender\.installCommandTemplate/);
-  assert.match(androidMainActivity, /카카오 로그인 준비 필요/);
+  assert.match(androidMainActivity, /카카오 준비 중/);
   assert.match(androidMainActivity, /연결코드 직접 등록/);
   assert.doesNotMatch(androidMainActivity, /오픈채팅 운영봇을 카카오 알림 기반으로 연결합니다\. 화면 감지는 사용하지 않습니다\./);
   assert.doesNotMatch(androidColors, /#FFF6E7|#7A4A2A|#3A2518/i);
