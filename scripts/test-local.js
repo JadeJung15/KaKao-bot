@@ -56,6 +56,7 @@ if (!baseUrl) {
 
   const supabaseTestEmail = `supabase-${process.pid}@pixgom.test`;
   const supabaseTestToken = `supabase-token-${process.pid}`;
+  const supabaseOtpCode = "123456";
   supabaseAuthServer = http.createServer((req, res) => {
     const url = new URL(req.url || "/", "http://127.0.0.1");
     const sendJson = (status, body) => {
@@ -75,6 +76,33 @@ if (!baseUrl) {
           });
         } else {
           sendJson(400, { error: "invalid_grant", error_description: "Invalid login credentials" });
+        }
+      });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/auth/v1/otp") {
+      let raw = "";
+      req.on("data", (chunk) => { raw += chunk; });
+      req.on("end", () => {
+        const body = JSON.parse(raw || "{}");
+        if (body.email === supabaseTestEmail) sendJson(200, {});
+        else sendJson(400, { error: "otp_not_available" });
+      });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/auth/v1/verify") {
+      let raw = "";
+      req.on("data", (chunk) => { raw += chunk; });
+      req.on("end", () => {
+        const body = JSON.parse(raw || "{}");
+        if (body.email === supabaseTestEmail && body.token === supabaseOtpCode && body.type === "email") {
+          sendJson(200, {
+            access_token: supabaseTestToken,
+            token_type: "bearer",
+            expires_in: 3600
+          });
+        } else {
+          sendJson(401, { error: "invalid_otp" });
         }
       });
       return;
@@ -202,10 +230,10 @@ try {
   assert.match(health.json.serverTime, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(health.json.serverTimezone, "Asia/Seoul");
   assert.equal(health.json.minAndroidVersion, "1.0.17");
-  assert.equal(health.json.latestAndroidVersion, "1.0.40");
-  assert.equal(health.json.latestAndroidVersionCode, 41);
+  assert.equal(health.json.latestAndroidVersion, "1.0.41");
+  assert.equal(health.json.latestAndroidVersionCode, 42);
   assert.equal(health.json.minAndroidVersionCode, 18);
-  assert.equal(health.json.latestAndroidVersionCode, 41);
+  assert.equal(health.json.latestAndroidVersionCode, 42);
   assert.equal(health.json.appUpdateRequired, false);
   assert.equal(health.json.gamesEnabled, true);
   assert.equal(Object.hasOwn(health.json, "benchmark"), false);
@@ -428,6 +456,9 @@ try {
   assert.match(health.json.features.join(","), /read-only-command-save-skip/);
   assert.match(health.json.features.join(","), /android-1030-play-latest/);
   assert.match(health.json.features.join(","), /android-1031-release-prep/);
+  assert.match(health.json.features.join(","), /android-dark-bridge-ui/);
+  assert.match(health.json.features.join(","), /android-email-otp-login/);
+  assert.match(health.json.features.join(","), /android-social-login-routing/);
   assert.match(health.json.features.join(","), /app-diagnostic-log-clarity/);
   assert.match(health.json.features.join(","), /admin-live-log-status-badges/);
   assert.match(health.json.features.join(","), /buyer-app-connection-check-card/);
@@ -622,8 +653,14 @@ try {
   assert.equal(authConfig.response.status, 200);
   assert.equal(authConfig.json.auth.mode, "supabase");
   assert.equal(authConfig.json.auth.supabaseEnabled, true);
+  assert.equal(authConfig.json.auth.otpEnabled, true);
+  assert.equal(authConfig.json.auth.googleEnabled, false);
+  assert.equal(authConfig.json.auth.appleEnabled, false);
   assert.equal(authConfig.json.routes.ownerAdmin, "/admin");
   assert.equal(authConfig.json.routes.buyerConsole, "/console");
+  const googleSocialStart = await request("/api/auth/social/start?provider=google");
+  assert.equal(googleSocialStart.response.status, 503);
+  assert.equal(googleSocialStart.json.error, "social_provider_not_configured");
 
   const home = await fetch(`${baseUrl}/`);
   assert.equal(home.status, 200);
@@ -1270,8 +1307,8 @@ try {
   assert.equal(packageJson.scripts["android:bundle"], "node scripts/android-release-bundle.js");
   assert.equal(packageJson.scripts["android:release-report"], "node scripts/android-release-bundle.js --report-only");
   const androidGradle = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "build.gradle"), "utf8");
-  assert.match(androidGradle, /versionCode 41/);
-  assert.match(androidGradle, /versionName "1\.0\.40"/);
+  assert.match(androidGradle, /versionCode 42/);
+  assert.match(androidGradle, /versionName "1\.0\.41"/);
   assert.match(androidGradle, /com\.kakao\.sdk:v2-user:2\.23\.4/);
   const androidEventSender = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "EventSender.java"), "utf8");
   assert.match(androidEventSender, /optJSONArray\("rooms"\)/);
@@ -1287,6 +1324,11 @@ try {
   assert.match(androidEventSender, /\/api\/buyer\/command-packs\/apply/);
   assert.match(androidEventSender, /\/api\/buyer\/command-templates\/install/);
   assert.match(androidEventSender, /\/api\/login\/kakao/);
+  assert.match(androidEventSender, /\/api\/auth\/config/);
+  assert.match(androidEventSender, /\/api\/auth\/login\/start/);
+  assert.match(androidEventSender, /\/api\/auth\/login\/verify/);
+  assert.match(androidEventSender, /\/api\/auth\/social\/start/);
+  assert.match(androidEventSender, /\/api\/signup/);
   assert.match(androidEventSender, /eventId/);
   assert.match(androidEventSender, /bridgeReceivedAt/);
   assert.match(androidEventSender, /bridgeSentAt/);
@@ -1294,10 +1336,24 @@ try {
   assert.match(androidEventSender, /timing/);
   const androidMainActivity = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "java", "com", "pixgom", "bridge", "MainActivity.java"), "utf8");
   const androidColors = await readFile(path.join(repoRoot, "pixelgom-bridge-android", "app", "src", "main", "res", "values", "colors.xml"), "utf8");
-  assert.match(androidMainActivity, /compactSummaryPanel\("운영 상태"/);
-  assert.match(androidMainActivity, /statusTileGrid/);
+  assert.match(androidMainActivity, /operatorHomePanel/);
+  assert.match(androidMainActivity, /settingCategoryRow/);
+  assert.match(androidMainActivity, /compactStatusChip/);
+  assert.match(androidMainActivity, /singleLineText/);
   assert.match(androidMainActivity, /compactActionGrid/);
   assert.match(androidMainActivity, /statusTile/);
+  assert.match(androidMainActivity, /buildAuthWelcomeContent/);
+  assert.match(androidMainActivity, /buildEmailLoginContent/);
+  assert.match(androidMainActivity, /buildSignupContent/);
+  assert.match(androidMainActivity, /buildOtpContent/);
+  assert.match(androidMainActivity, /withBottomNav/);
+  assert.match(androidMainActivity, /EventSender\.loginStart/);
+  assert.match(androidMainActivity, /EventSender\.loginVerify/);
+  assert.match(androidMainActivity, /EventSender\.signup/);
+  assert.match(androidMainActivity, /EventSender\.socialStart/);
+  assert.match(androidMainActivity, /Google 로그인 준비 필요/);
+  assert.match(androidMainActivity, /Apple 로그인 준비 필요/);
+  assert.match(androidMainActivity, /PIXELGOM/);
   assert.match(androidMainActivity, /로그인하고 방 자동 연결/);
   assert.match(androidMainActivity, /showRooms/);
   assert.match(androidMainActivity, /showCommandStore/);
@@ -1974,6 +2030,44 @@ try {
   assert.equal(supabasePasswordLogin.json.account.nickname, "슈파로그인");
   assert.match(supabasePasswordLogin.json.guideToken, /\./);
 
+  const supabaseOtpStart = await request("/api/auth/login/start", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `supabase-${process.pid}@pixgom.test`,
+      password: "password123"
+    })
+  });
+  assert.equal(supabaseOtpStart.response.status, 200);
+  assert.equal(supabaseOtpStart.json.twoFactorRequired, true);
+  assert.equal(supabaseOtpStart.json.email, `supabase-${process.pid}@pixgom.test`);
+  assert.match(supabaseOtpStart.json.challengeToken, /\./);
+
+  const supabaseOtpInvalid = await request("/api/auth/login/verify", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `supabase-${process.pid}@pixgom.test`,
+      challengeToken: supabaseOtpStart.json.challengeToken,
+      otpCode: "000000"
+    })
+  });
+  assert.equal(supabaseOtpInvalid.response.status, 401);
+  assert.equal(supabaseOtpInvalid.json.error, "invalid_otp");
+
+  const supabaseOtpVerify = await request("/api/auth/login/verify", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `supabase-${process.pid}@pixgom.test`,
+      challengeToken: supabaseOtpStart.json.challengeToken,
+      otpCode: "123456"
+    })
+  });
+  assert.equal(supabaseOtpVerify.response.status, 200);
+  assert.equal(supabaseOtpVerify.json.account.email, `supabase-${process.pid}@pixgom.test`);
+  assert.match(supabaseOtpVerify.json.guideToken, /\./);
+
   const supabasePasswordLoginInvalid = await request("/api/login", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -1984,6 +2078,17 @@ try {
   });
   assert.equal(supabasePasswordLoginInvalid.response.status, 401);
   assert.equal(supabasePasswordLoginInvalid.json.error, "invalid_login");
+
+  const supabaseOtpStartInvalid = await request("/api/auth/login/start", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: `supabase-${process.pid}@pixgom.test`,
+      password: "wrongpass123"
+    })
+  });
+  assert.equal(supabaseOtpStartInvalid.response.status, 401);
+  assert.equal(supabaseOtpStartInvalid.json.error, "invalid_login");
 
   const profileUpdate = await request("/api/buyer/account/profile", {
     method: "POST",

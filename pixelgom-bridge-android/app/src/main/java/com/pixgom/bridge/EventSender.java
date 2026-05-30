@@ -168,6 +168,53 @@ final class EventSender {
         return postApi(context, "/api/login", payload);
     }
 
+    static ApiResult authConfig(Context context) {
+        return getApi(context, "/api/auth/config");
+    }
+
+    static ApiResult signup(Context context, String email, String password, String passwordConfirm, String nickname) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("email", email == null ? "" : email.trim());
+            payload.put("password", password == null ? "" : password);
+            payload.put("passwordConfirm", passwordConfirm == null ? "" : passwordConfirm);
+            payload.put("nickname", nickname == null ? "" : nickname.trim());
+            payload.put("terms", true);
+            payload.put("privacy", true);
+            payload.put("marketing", false);
+        } catch (Exception ignored) {
+            // Keep signup payload best-effort.
+        }
+        return postApi(context, "/api/signup", payload);
+    }
+
+    static ApiResult loginStart(Context context, String email, String password) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("email", email == null ? "" : email.trim());
+            payload.put("password", password == null ? "" : password);
+        } catch (Exception ignored) {
+            // Keep login start payload best-effort.
+        }
+        return postApi(context, "/api/auth/login/start", payload);
+    }
+
+    static ApiResult loginVerify(Context context, String email, String challengeToken, String otpCode) {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("email", email == null ? "" : email.trim());
+            payload.put("challengeToken", challengeToken == null ? "" : challengeToken);
+            payload.put("otpCode", otpCode == null ? "" : otpCode.trim());
+        } catch (Exception ignored) {
+            // Keep OTP payload best-effort.
+        }
+        return postApi(context, "/api/auth/login/verify", payload);
+    }
+
+    static ApiResult socialStart(Context context, String provider) {
+        return getApi(context, "/api/auth/social/start?provider=" + urlEncode(provider == null ? "" : provider));
+    }
+
     static ApiResult loginKakao(Context context, String kakaoAccessToken) {
         JSONObject payload = new JSONObject();
         try {
@@ -290,6 +337,10 @@ final class EventSender {
             // Keep token payload best-effort.
         }
         return payload;
+    }
+
+    private static String urlEncode(String value) {
+        return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
     }
 
     private static ApiResult postApi(Context context, String path, JSONObject payload) {

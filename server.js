@@ -279,6 +279,9 @@ export const FEATURES = [
   "android-1031-release-prep",
   "android-account-auto-connect",
   "android-native-buyer-console",
+  "android-dark-bridge-ui",
+  "android-email-otp-login",
+  "android-social-login-routing",
   "app-diagnostic-log-clarity",
   "admin-live-log-status-badges",
   "buyer-app-connection-check-card",
@@ -336,12 +339,15 @@ const INCIDENT_MESSAGES = Object.freeze({
   }
 });
 const MIN_ANDROID_VERSION = normalizeText(process.env.MIN_ANDROID_VERSION || "1.0.17");
-const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.40");
+const LATEST_ANDROID_VERSION = normalizeText(process.env.LATEST_ANDROID_VERSION || "1.0.41");
 const MIN_ANDROID_VERSION_CODE = Math.max(1, Number(process.env.MIN_ANDROID_VERSION_CODE || 18));
-const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 41));
+const LATEST_ANDROID_VERSION_CODE = Math.max(MIN_ANDROID_VERSION_CODE, Number(process.env.LATEST_ANDROID_VERSION_CODE || 42));
 const SUPABASE_URL = normalizeText(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
 const SUPABASE_ANON_KEY = normalizeText(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
 const SUPABASE_KAKAO_ENABLED = normalizeText(process.env.SUPABASE_KAKAO_ENABLED || "false") === "true";
+const SUPABASE_GOOGLE_ENABLED = normalizeText(process.env.SUPABASE_GOOGLE_ENABLED || "false") === "true";
+const SUPABASE_APPLE_ENABLED = normalizeText(process.env.SUPABASE_APPLE_ENABLED || "false") === "true";
+const SUPABASE_OTP_ENABLED = normalizeText(process.env.SUPABASE_OTP_ENABLED || "true") !== "false";
 const KAKAO_REST_API_KEY = normalizeText(process.env.KAKAO_REST_API_KEY || process.env.KAKAO_CLIENT_ID || "");
 const KAKAO_CLIENT_SECRET = normalizeText(process.env.KAKAO_CLIENT_SECRET || "");
 const KAKAO_OIDC_ENABLED = normalizeText(process.env.KAKAO_OIDC_ENABLED || "true") !== "false";
@@ -3073,6 +3079,10 @@ function supabaseEnabled() {
   return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 }
 
+function supabaseOtpEnabled() {
+  return Boolean(supabaseEnabled() && SUPABASE_OTP_ENABLED);
+}
+
 function authConfigPayload() {
   const kakaoOidcEnabled = kakaoOidcConfigured();
   return {
@@ -3084,9 +3094,14 @@ function authConfigPayload() {
       supabaseUrl: SUPABASE_URL,
       supabaseAnonKey: SUPABASE_ANON_KEY,
       kakaoEnabled: supabaseEnabled() && SUPABASE_KAKAO_ENABLED,
+      googleEnabled: supabaseEnabled() && SUPABASE_GOOGLE_ENABLED,
+      appleEnabled: supabaseEnabled() && SUPABASE_APPLE_ENABLED,
+      otpEnabled: supabaseOtpEnabled(),
       kakaoMode: kakaoOidcEnabled ? "oidc" : "supabase-oauth",
       kakaoOidcEnabled,
       kakaoOidcStartUrl: kakaoOidcEnabled ? "/api/auth/kakao/start" : "",
+      googleStartUrl: supabaseEnabled() && SUPABASE_GOOGLE_ENABLED ? "/api/auth/social/start?provider=google" : "",
+      appleStartUrl: supabaseEnabled() && SUPABASE_APPLE_ENABLED ? "/api/auth/social/start?provider=apple" : "",
       loginRedirectUrl: `${PUBLIC_SITE_URL}/login`,
       consoleRedirectUrl: `${PUBLIC_SITE_URL}/console`
     },
@@ -3112,6 +3127,23 @@ function kakaoOidcConfigured() {
 
 function kakaoOidcRedirectUri() {
   return `${PUBLIC_SITE_URL}${KAKAO_OIDC_CALLBACK_PATH}`;
+}
+
+function supabaseSocialProviderEnabled(provider = "") {
+  const normalized = normalizeText(provider);
+  if (normalized === "google") return supabaseEnabled() && SUPABASE_GOOGLE_ENABLED;
+  if (normalized === "apple") return supabaseEnabled() && SUPABASE_APPLE_ENABLED;
+  return false;
+}
+
+function supabaseSocialStartUrl(provider = "", redirectTo = "") {
+  const normalized = normalizeText(provider);
+  if (!supabaseSocialProviderEnabled(normalized)) return "";
+  const params = new URLSearchParams({
+    provider: normalized,
+    redirect_to: redirectTo || `${PUBLIC_SITE_URL}/login`
+  });
+  return `${SUPABASE_URL}/auth/v1/authorize?${params.toString()}`;
 }
 
 function authStateSecret() {
@@ -3363,6 +3395,63 @@ async function supabaseUserFromPassword(email, password) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload.access_token) {
     return { ok: false, status: 401, error: "invalid_login" };
+  }
+  return supabaseUserFromAccessToken(payload.access_token);
+}
+
+async function sendSupabaseEmailOtp(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!validEmail(normalizedEmail)) return { ok: false, status: 400, error: "email_required" };
+  if (!supabaseOtpEnabled()) return { ok: false, status: 503, error: "supabase_otp_unavailable" };
+  let response;
+  try {
+    response = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        email: normalizedEmail,
+        create_user: true,
+        should_create_user: true
+      })
+    });
+  } catch {
+    return { ok: false, status: 502, error: "supabase_otp_unavailable" };
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return { ok: false, status: response.status || 502, error: payload.error || payload.msg || "supabase_otp_unavailable" };
+  }
+  return { ok: true, status: 200 };
+}
+
+async function supabaseUserFromEmailOtp(email, token) {
+  const normalizedEmail = normalizeEmail(email);
+  const otp = normalizeText(token);
+  if (!validEmail(normalizedEmail) || !otp) return { ok: false, status: 401, error: "invalid_otp" };
+  if (!supabaseOtpEnabled()) return { ok: false, status: 503, error: "supabase_otp_unavailable" };
+  let response;
+  try {
+    response = await fetch(`${SUPABASE_URL}/auth/v1/verify`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        email: normalizedEmail,
+        token: otp,
+        type: "email"
+      })
+    });
+  } catch {
+    return { ok: false, status: 502, error: "supabase_otp_unavailable" };
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.access_token) {
+    return { ok: false, status: response.status || 401, error: payload.error || payload.msg || "invalid_otp" };
   }
   return supabaseUserFromAccessToken(payload.access_token);
 }
@@ -3765,6 +3854,22 @@ function buyerTokenForAccount(account = {}) {
     email: account.email,
     exp: Date.now() + BUYER_TOKEN_TTL_MS
   });
+}
+
+function loginOtpChallengeForAccount(account = {}) {
+  return signTokenPayload({
+    kind: "buyer-login-otp",
+    sub: account.id,
+    email: account.email,
+    exp: Date.now() + 10 * 60 * 1000
+  });
+}
+
+function verifyLoginOtpChallenge(token, email = "") {
+  const payload = verifyTokenPayload(token);
+  if (!payload || payload.kind !== "buyer-login-otp") return null;
+  if (normalizeEmail(payload.email) !== normalizeEmail(email)) return null;
+  return payload;
 }
 
 function ownerTokenForAccount(account = {}) {
@@ -14161,6 +14266,45 @@ async function loginAccountFromRequest(state, body = {}) {
   return localLogin;
 }
 
+async function loginStartFromRequest(state, body = {}) {
+  const email = normalizeEmail(body.email);
+  const localLogin = loginAccount(state, body);
+  let account = localLogin.ok ? state.accounts?.[localLogin.account?.id] : null;
+  if (!account) {
+    const supabaseLogin = await supabaseUserFromPassword(body.email, body.password);
+    if (supabaseLogin.ok) {
+      account = ensureExternalAccount(state, supabaseLogin.user, body);
+    } else if (supabaseLogin.error === "supabase_login_unavailable") {
+      return supabaseLogin;
+    }
+  }
+  if (!account) return { ok: false, status: 401, error: "invalid_login" };
+  if (!supabaseOtpEnabled()) {
+    return loginPayloadForAccount(state, account);
+  }
+  const otp = await sendSupabaseEmailOtp(email);
+  if (!otp.ok) return otp;
+  return {
+    ok: true,
+    twoFactorRequired: true,
+    challengeToken: loginOtpChallengeForAccount(account),
+    email,
+    expiresInSeconds: 600,
+    message: "otp_sent"
+  };
+}
+
+async function loginVerifyFromRequest(state, body = {}) {
+  const email = normalizeEmail(body.email);
+  const challenge = verifyLoginOtpChallenge(body.challengeToken || body.challenge || "", email);
+  if (!challenge) return { ok: false, status: 401, error: "invalid_or_expired_challenge" };
+  const otp = await supabaseUserFromEmailOtp(email, body.otpCode || body.code || body.token);
+  if (!otp.ok) return otp;
+  const account = ensureExternalAccount(state, otp.user, { email });
+  if (challenge.sub && account.id !== challenge.sub) return { ok: false, status: 401, error: "account_mismatch" };
+  return loginPayloadForAccount(state, account);
+}
+
 function buyerConsolePayload(state, account = {}) {
   const applicationIds = account.applicationIds || [];
   const applications = applicationIds
@@ -16105,6 +16249,13 @@ async function handlePublicAccountApi(req, url) {
     return { status: 200, body: authConfigPayload() };
   }
 
+  if (req.method === "GET" && url.pathname === "/api/auth/social/start") {
+    const provider = normalizeText(url.searchParams.get("provider"));
+    const startUrl = supabaseSocialStartUrl(provider, normalizeText(url.searchParams.get("redirectTo") || url.searchParams.get("redirect_to")));
+    if (!startUrl) return { status: 503, body: { ok: false, error: "social_provider_not_configured", provider } };
+    return { status: 200, body: { ok: true, provider, url: startUrl } };
+  }
+
   if (req.method === "GET" && url.pathname === "/api/command-templates") {
     return { status: 200, body: commandTemplateCatalogPayload() };
   }
@@ -16141,6 +16292,24 @@ async function handlePublicAccountApi(req, url) {
     const body = await readBody(req);
     const state = await loadState();
     const result = await loginAccountFromRequest(state, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/auth/login/start") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await loginStartFromRequest(state, body);
+    if (!result.ok) return { status: result.status || 401, body: result };
+    await saveState(state);
+    return { status: 200, body: result };
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/auth/login/verify") {
+    const body = await readBody(req);
+    const state = await loadState();
+    const result = await loginVerifyFromRequest(state, body);
     if (!result.ok) return { status: result.status || 401, body: result };
     await saveState(state);
     return { status: 200, body: result };
@@ -17763,6 +17932,7 @@ export async function requestHandler(req, res) {
     const isChatEventPath = pathname === "/chat-event" || pathname === "/api/chat-event";
     const adminApi = pathname.startsWith("/api/admin/");
     const publicAccountApi = pathname === "/api/auth/config"
+      || pathname === "/api/auth/social/start"
       || pathname === "/api/command-templates"
       || pathname === "/api/command-packs"
       || pathname === "/api/game-pack-help"
@@ -17770,6 +17940,8 @@ export async function requestHandler(req, res) {
       || pathname === "/api/signup"
       || pathname === "/api/apply"
       || pathname === "/api/login"
+      || pathname === "/api/auth/login/start"
+      || pathname === "/api/auth/login/verify"
       || pathname === "/api/login/kakao"
       || pathname === "/api/buyer/guide"
       || pathname === "/api/buyer/console"

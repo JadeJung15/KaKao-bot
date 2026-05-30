@@ -1,6 +1,6 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="@color/pixelgom_surface" />
+    <solid android:color="@color/pixelgom_soft" />
     <stroke android:width="1dp" android:color="@color/pixelgom_line" />
-    <corners android:radius="20dp" />
-    <padding android:left="10dp" android:right="10dp" android:top="10dp" android:bottom="10dp" />
+    <corners android:radius="12dp" />
+    <padding android:left="8dp" android:right="8dp" android:top="8dp" android:bottom="8dp" />
 </shape>
