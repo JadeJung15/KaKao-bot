@@ -649,7 +649,10 @@ public class MainActivity extends Activity {
 
         LinearLayout storePanel = panel();
         storePanel.setPadding(dp(16), dp(16), dp(16), dp(16));
-        storePanel.addView(sectionHeader(R.drawable.pixgom_checklist_calendar, "추천 팩", "첫 번째 연결 방에 적용합니다."));
+        storePanel.addView(sectionHeader(
+                R.drawable.pixgom_checklist_calendar,
+                "추천 팩",
+                TextUtils.isEmpty(commandStoreTargetApplicationId) ? "연결된 방에 적용합니다." : "선택한 방에 적용합니다."));
         root.addView(storePanel);
         selectableRoomsContainer = storePanel;
         nativeConsoleMode = "store";
@@ -1514,6 +1517,7 @@ public class MainActivity extends Activity {
         LinearLayout bar = simpleTitleBar("방 관리", false, false);
         bar.addView(iconButton(R.drawable.ic_search, "검색", v -> showRoomSearchDialog()));
         bar.addView(iconButton(R.drawable.ic_filter, "필터", v -> showRoomFilterDialog()));
+        bar.addView(iconButton(R.drawable.ic_plus, "방 추가", v -> showAdvanced()));
         return bar;
     }
 
@@ -2496,7 +2500,7 @@ public class MainActivity extends Activity {
         status.addView(labelValue("대기 큐", BridgeConfig.pendingEventCount(this) + "건"));
         status.addView(labelValue("실패 로그", failureCountLabel() + "건"));
         status.addView(labelValue("설치된 팩", commandPackCountLabel(room)));
-        status.addView(labelValue("연결 코드", maskLicense(room.optString("licenseKey", ""))));
+        status.addView(labelValue("연결 코드", maskLicense(roomConnectCode(room))));
 
         Button stopButton = iconTextButton(R.drawable.ic_power, BridgeConfig.isEnabled(this) ? "이 방 브릿지 정지" : "이 방 브릿지 시작", false);
         stopButton.setOnClickListener(v -> toggleBridgeEnabled());
@@ -2504,6 +2508,9 @@ public class MainActivity extends Activity {
         Button checkButton = iconTextButton(R.drawable.ic_sync, "연결 다시 확인", false);
         checkButton.setOnClickListener(v -> syncFromHome());
         parent.addView(checkButton);
+        Button codeButton = iconTextButton(R.drawable.ic_copy, "연결코드 복사", false);
+        codeButton.setOnClickListener(v -> copyRoomConnectCode(room));
+        parent.addView(codeButton);
     }
 
     private void renderRoomSettingsTab(LinearLayout parent, JSONObject room) {
@@ -3626,6 +3633,23 @@ public class MainActivity extends Activity {
         if (TextUtils.isEmpty(value)) return "-";
         if (value.length() <= 10) return value.charAt(0) + "***";
         return value.substring(0, 7) + "..." + value.substring(value.length() - 4);
+    }
+
+    private String roomConnectCode(JSONObject room) {
+        if (room == null) return "";
+        String value = room.optString("bridgeConnectCode", "");
+        if (TextUtils.isEmpty(value)) value = room.optString("connectCode", "");
+        if (TextUtils.isEmpty(value)) value = room.optString("licenseKey", "");
+        return value;
+    }
+
+    private void copyRoomConnectCode(JSONObject room) {
+        String code = roomConnectCode(room);
+        if (TextUtils.isEmpty(code)) {
+            Toast.makeText(this, "복사할 연결코드가 없습니다.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        copyText("연결코드", code);
     }
 
     private boolean roomMatchesFilter(JSONObject room) {
