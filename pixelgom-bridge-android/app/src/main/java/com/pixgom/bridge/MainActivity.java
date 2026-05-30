@@ -6,6 +6,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -282,14 +283,8 @@ public class MainActivity extends Activity {
         applyScreenPadding(root, 18);
         scrollView.addView(root);
 
-        LinearLayout brandRow = new LinearLayout(this);
-        brandRow.setGravity(Gravity.CENTER);
-        brandRow.setPadding(0, dp(32), 0, dp(4));
-        brandRow.setContentDescription("PIXELGOM");
-        TextView brandPixel = text("PIXEL", 30, COLOR_TITLE, true);
-        TextView brandGom = text("GOM", 30, COLOR_GOOD, true);
-        brandRow.addView(brandPixel);
-        brandRow.addView(brandGom);
+        LinearLayout brandRow = brandWordmark(30);
+        brandRow.setPadding(0, dp(34), 0, dp(4));
         root.addView(brandRow);
 
         TextView sub = text("카카오톡 오픈채팅방 브릿지 플랫폼", 14, COLOR_MUTED, false);
@@ -307,12 +302,9 @@ public class MainActivity extends Activity {
         headline.setLineSpacing(dp(4), 1f);
         root.addView(headline);
 
-        LinearLayout features = glassPanel();
-        features.setPadding(dp(12), dp(10), dp(12), dp(10));
-        root.addView(features);
-        features.addView(featureLine(R.drawable.ic_log, "카카오톡 알림을 실시간으로 감지", "중요 메시지를 놓치지 않고 빠른 확인"));
-        features.addView(featureLine(R.drawable.ic_sync, "서버와 연결하여 자동으로 응답", "명령어 처리부터 게임 기능까지 지원"));
-        features.addView(featureLine(R.drawable.ic_users, "여러 방을 한 번에 관리", "모든 운영 상태를 앱에서 확인하고 제어"));
+        root.addView(featureLine(R.drawable.ic_log, "카카오톡 알림을 실시간으로 감지", "중요 메시지를 놓치지 않고 빠른 확인", COLOR_GOOD));
+        root.addView(featureLine(R.drawable.ic_sync, "서버와 연결하여 자동으로 응답", "명령어 처리부터 게임 기능까지 완벽 지원", COLOR_BLUE));
+        root.addView(featureLine(R.drawable.ic_users, "여러 방을 한 번에 관리", "모든 운영 상태를 한눈에 확인하고 제어", Color.rgb(139, 92, 246)));
 
         Button loginButton = primaryButton("로그인하기");
         loginButton.setOnClickListener(v -> showEmailLogin());
@@ -334,21 +326,21 @@ public class MainActivity extends Activity {
         scrollView.addView(root);
         root.addView(simpleTitleBar("로그인", true, false));
 
-        ImageView bear = assetImage(R.drawable.pixgom_bridge_captain, 82);
-        LinearLayout.LayoutParams bearParams = new LinearLayout.LayoutParams(dp(82), dp(82));
+        ImageView bear = assetImage(R.drawable.pixgom_bridge_captain, 76);
+        LinearLayout.LayoutParams bearParams = new LinearLayout.LayoutParams(dp(76), dp(76));
         bearParams.gravity = Gravity.CENTER_HORIZONTAL;
-        bearParams.setMargins(0, dp(12), 0, dp(10));
+        bearParams.setMargins(0, dp(8), 0, dp(8));
         root.addView(bear, bearParams);
         TextView title = text("픽셀곰 계정으로 로그인", 22, COLOR_TITLE, true);
         title.setGravity(Gravity.CENTER);
         root.addView(title);
-        TextView body = text("계정으로 로그인하여 방을 관리해보세요.", 14, COLOR_MUTED, false);
+        TextView body = text("계정으로 로그인하여 방을 관리해보세요.", 13, COLOR_MUTED, false);
         body.setGravity(Gravity.CENTER);
-        body.setPadding(0, dp(6), 0, dp(14));
+        body.setPadding(0, dp(4), 0, dp(10));
         root.addView(body);
 
         LinearLayout panel = transparentStack();
-        panel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        panel.setPadding(0, dp(10), 0, 0);
         root.addView(panel);
         loginEmailInput = authInput("이메일 또는 아이디", BridgeConfig.buyerEmail(this));
         loginEmailInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
@@ -361,15 +353,15 @@ public class MainActivity extends Activity {
         loginButton.setOnClickListener(v -> loginWithEmail());
         panel.addView(loginButton);
         panel.addView(orDivider());
-        Button kakaoButton = socialButton(kakaoReady() ? "카카오 로그인" : "카카오 준비 중");
+        Button kakaoButton = socialButton(kakaoReady() ? "카카오계정으로 로그인" : "카카오 준비 중");
         kakaoButton.setEnabled(kakaoReady());
         kakaoButton.setOnClickListener(v -> loginWithKakao());
         panel.addView(kakaoButton);
-        Button googleButton = socialButton("Google 준비 중");
+        Button googleButton = socialButton("Google로 로그인");
         googleButton.setEnabled(false);
         googleButton.setOnClickListener(v -> loginGoogleAppleOAuth("google"));
         panel.addView(googleButton);
-        Button appleButton = socialButton("Apple 준비 중");
+        Button appleButton = socialButton("Apple로 로그인");
         appleButton.setEnabled(false);
         appleButton.setOnClickListener(v -> loginGoogleAppleOAuth("apple"));
         panel.addView(appleButton);
@@ -394,11 +386,11 @@ public class MainActivity extends Activity {
                 boolean appleEnabled = auth != null && auth.optBoolean("appleEnabled", false);
                 boolean kakaoEnabled = kakaoReady() && (auth == null || auth.optBoolean("kakaoEnabled", true));
                 kakaoButton.setEnabled(kakaoEnabled);
-                kakaoButton.setText(kakaoEnabled ? "카카오 로그인" : "카카오 준비 중");
+                kakaoButton.setText(kakaoEnabled ? "카카오계정으로 로그인" : "카카오 준비 중");
                 googleButton.setEnabled(googleEnabled);
-                googleButton.setText(googleEnabled ? "Google 로그인" : "Google 준비 중");
+                googleButton.setText(googleEnabled ? "Google로 로그인" : "Google로 로그인");
                 appleButton.setEnabled(appleEnabled);
-                appleButton.setText(appleEnabled ? "Apple 로그인" : "Apple 준비 중");
+                appleButton.setText(appleEnabled ? "Apple로 로그인" : "Apple로 로그인");
                 if (accountStatusView != null && auth != null && !auth.optBoolean("otpEnabled", false)) {
                     accountStatusView.setText("2단계 인증 설정이 꺼져 있으면 바로 로그인됩니다.");
                 }
@@ -532,7 +524,7 @@ public class MainActivity extends Activity {
         loginButton.setOnClickListener(v -> loginWithEmail());
         loginPanel.addView(loginButton);
 
-        Button kakaoButton = secondaryButton(kakaoReady() ? "카카오 로그인" : "카카오 준비 중");
+        Button kakaoButton = secondaryButton(kakaoReady() ? "카카오계정으로 로그인" : "카카오 준비 중");
         kakaoButton.setEnabled(kakaoReady());
         kakaoButton.setOnClickListener(v -> loginWithKakao());
         loginPanel.addView(kakaoButton);
@@ -579,13 +571,7 @@ public class MainActivity extends Activity {
         selectableRoomsContainer.setPadding(0, 0, 0, 0);
         root.addView(selectableRoomsContainer);
 
-        Button connectButton = iconTextButton(R.drawable.ic_plus, "선택한 방 이 폰에 연결", true);
-        connectButton.setOnClickListener(v -> autoConnectSelectedRooms());
-        root.addView(connectButton);
-
-        Button syncButton = iconTextButton(R.drawable.ic_sync, "계정 기준으로 다시 동기화", false);
-        syncButton.setOnClickListener(v -> accountRoomSyncSelectedRooms());
-        root.addView(syncButton);
+        root.addView(roomFloatingActionRow());
         return withBottomNav(scrollView, "rooms");
     }
 
@@ -1525,33 +1511,46 @@ public class MainActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, 0, 0, dp(10));
+        params.setMargins(0, 0, 0, dp(8));
         header.setLayoutParams(params);
 
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.mipmap.ic_launcher);
-        header.addView(logo, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        header.addView(logo, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.setPadding(dp(10), 0, 0, 0);
-        copy.addView(singleLineText("픽셀곰", 21, COLOR_TITLE, true));
-        copy.addView(singleLineText("브릿지", 13, COLOR_MUTED, false));
+        copy.addView(singleLineText("픽셀곰", 20, COLOR_TITLE, true));
+        copy.addView(singleLineText("브릿지", 12, COLOR_MUTED, false));
         header.addView(copy, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         header.addView(iconButton(R.drawable.ic_settings, "설정", v -> showSettings()));
         return header;
+    }
+
+    private LinearLayout brandWordmark(int sizeSp) {
+        LinearLayout brandRow = new LinearLayout(this);
+        brandRow.setGravity(Gravity.CENTER);
+        brandRow.setContentDescription("PIXELGOM");
+        TextView brandPixel = text("PIXEL", sizeSp, COLOR_TITLE, true);
+        TextView brandGom = text("GOM", sizeSp, COLOR_GOOD, true);
+        brandPixel.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        brandGom.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        brandRow.addView(brandPixel);
+        brandRow.addView(brandGom);
+        return brandRow;
     }
 
     private LinearLayout homeBridgeHero(BridgeConfig.RoomProfile profile) {
         LinearLayout card = glassPanel();
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding(dp(16), dp(14), dp(12), dp(14));
+        card.setPadding(dp(16), dp(13), dp(12), dp(13));
         card.setBackground(roundedBackground(BridgeConfig.isEnabled(this) ? COLOR_GREEN_PANEL : COLOR_RED_PANEL, BridgeConfig.isEnabled(this) ? COLOR_GOOD : COLOR_BAD, 12));
 
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
-        TextView title = singleLineText(BridgeConfig.isEnabled(this) ? "● 브릿지 실행 중" : "● 브릿지 정지", 21, BridgeConfig.isEnabled(this) ? COLOR_GOOD : COLOR_BAD, true);
+        TextView title = singleLineText(BridgeConfig.isEnabled(this) ? "● 브릿지 실행 중" : "● 브릿지 정지", 20, BridgeConfig.isEnabled(this) ? COLOR_GOOD : COLOR_BAD, true);
         copy.addView(title);
         copy.addView(singleLineText(BridgeConfig.roomProfileCount(this) + "개 방에 연결되어 있습니다.", 13, COLOR_TEXT, false));
         if (!TextUtils.isEmpty(profile.name)) copy.addView(singleLineText("대표방 " + profile.name, 12, COLOR_MUTED, false));
@@ -1559,7 +1558,7 @@ public class MainActivity extends Activity {
 
         ImageButton power = iconButton(R.drawable.ic_power, BridgeConfig.isEnabled(this) ? "브릿지 정지" : "브릿지 시작", v -> toggleBridgeEnabled());
         power.setBackground(roundedBackground(Color.rgb(16, 185, 129), Color.rgb(16, 185, 129), 999));
-        LinearLayout.LayoutParams powerParams = new LinearLayout.LayoutParams(dp(64), dp(64));
+        LinearLayout.LayoutParams powerParams = new LinearLayout.LayoutParams(dp(58), dp(58));
         powerParams.setMargins(dp(12), 0, 0, 0);
         card.addView(power, powerParams);
         return card;
@@ -1587,9 +1586,9 @@ public class MainActivity extends Activity {
     private LinearLayout metricTile(String label, String value, boolean ok) {
         LinearLayout tile = glassPanel();
         tile.setPadding(dp(8), dp(7), dp(8), dp(7));
-        tile.setMinimumHeight(dp(66));
+        tile.setMinimumHeight(dp(58));
         tile.addView(singleLineText(label, 12, COLOR_MUTED, false));
-        TextView valueView = singleLineText(value, 17, ok ? COLOR_TITLE : COLOR_BAD, true);
+        TextView valueView = singleLineText(value, 16, ok ? COLOR_TITLE : COLOR_BAD, true);
         valueView.setPadding(0, dp(2), 0, 0);
         tile.addView(valueView);
         return tile;
@@ -1616,13 +1615,16 @@ public class MainActivity extends Activity {
         LinearLayout row = glassPanel();
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(10), dp(8), dp(10), dp(8));
+        row.setPadding(dp(9), dp(7), dp(9), dp(7));
+        row.setMinimumHeight(dp(44));
         row.addView(iconSquare(R.drawable.ic_users, roomColorForIndex(index), dp(28)));
         TextView title = singleLineText(safeText(name), 13, COLOR_TEXT, true);
         title.setPadding(dp(10), 0, dp(8), 0);
         row.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         row.addView(statusPill(on ? "ON" : "OFF", on));
-        row.addView(singleLineText("최근 응답 " + shortTimingStatus(), 11, COLOR_MUTED, false));
+        TextView recent = singleLineText("최근 응답 " + shortTimingStatus(), 11, COLOR_MUTED, false);
+        recent.setGravity(Gravity.END);
+        row.addView(recent, new LinearLayout.LayoutParams(dp(92), LinearLayout.LayoutParams.WRAP_CONTENT));
         row.addView(chevronText());
         row.setOnClickListener(v -> showRooms());
         return row;
@@ -1659,8 +1661,30 @@ public class MainActivity extends Activity {
         LinearLayout bar = simpleTitleBar("방 관리", false, false);
         bar.addView(iconButton(R.drawable.ic_search, "검색", v -> showRoomSearchDialog()));
         bar.addView(iconButton(R.drawable.ic_filter, "필터", v -> showRoomFilterDialog()));
-        bar.addView(iconButton(R.drawable.ic_plus, "방 추가", v -> showApplyService()));
         return bar;
+    }
+
+    private LinearLayout roomFloatingActionRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        rowParams.setMargins(0, dp(10), 0, dp(8));
+        row.setLayoutParams(rowParams);
+
+        TextView sync = singleLineText("계정 동기화", 12, COLOR_MUTED, true);
+        sync.setGravity(Gravity.CENTER);
+        sync.setPadding(dp(12), 0, dp(12), 0);
+        sync.setBackground(roundedBackground(COLOR_CARD_SOFT, Color.rgb(46, 68, 87), 999));
+        sync.setOnClickListener(v -> accountRoomSyncSelectedRooms());
+        row.addView(sync, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)));
+
+        ImageButton add = iconButton(R.drawable.ic_plus, "방 추가", v -> showApplyService());
+        add.setBackground(roundedBackground(COLOR_BLUE, COLOR_BLUE, 999));
+        LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(dp(56), dp(56));
+        addParams.setMargins(dp(12), 0, 0, 0);
+        row.addView(add, addParams);
+        return row;
     }
 
     private LinearLayout roomDetailTitleBar() {
@@ -1827,11 +1851,20 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout featureLine(int iconRes, String title, String body) {
+        return featureLine(iconRes, title, body, COLOR_BLUE);
+    }
+
+    private LinearLayout featureLine(int iconRes, String title, String body, int accentColor) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(8), 0, dp(8));
-        row.addView(iconSquare(iconRes, COLOR_BLUE, dp(42)));
+        row.setPadding(dp(12), dp(10), dp(12), dp(10));
+        row.setBackgroundResource(getResources().getIdentifier("status_tile_background", "drawable", getPackageName()));
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        rowParams.setMargins(0, dp(10), 0, 0);
+        row.setLayoutParams(rowParams);
+        row.setMinimumHeight(dp(64));
+        row.addView(iconSquare(iconRes, accentColor, dp(42)));
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.setPadding(dp(12), 0, 0, 0);
@@ -2073,6 +2106,7 @@ public class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(10), dp(8), dp(10), dp(8));
         row.setBackgroundResource(getResources().getIdentifier("status_tile_background", "drawable", getPackageName()));
+        row.setMinimumHeight(dp(72));
         row.setClickable(true);
         row.setOnClickListener(listener);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -2831,7 +2865,8 @@ public class MainActivity extends Activity {
         boolean ok = !"expired".equals(room.optString("subscriptionStatus", "")) && !"off".equalsIgnoreCase(room.optString("bridgeStatus", ""));
         boolean issue = roomSetupLabel(room).contains("필요") || "expired".equals(room.optString("subscriptionStatus", ""));
         LinearLayout card = glassPanel();
-        card.setPadding(dp(12), dp(12), dp(10), dp(12));
+        card.setPadding(dp(12), dp(10), dp(10), dp(10));
+        card.setMinimumHeight(dp(78));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(10), 0, 0);
         card.setLayoutParams(params);
@@ -2851,7 +2886,7 @@ public class MainActivity extends Activity {
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.setPadding(dp(12), 0, dp(8), 0);
-        copy.addView(singleLineText(room.optString("roomName", "방"), 16, COLOR_TITLE, true));
+        copy.addView(singleLineText(room.optString("roomName", "방"), 15, COLOR_TITLE, true));
         copy.addView(singleLineText((ok ? "브릿지 ON" : "브릿지 OFF") + " · 최근 응답 " + roomLastResponseLabel(room), 12, ok ? COLOR_GOOD : COLOR_BAD, true));
         copy.addView(singleLineText(packs + " · " + setup, 12, COLOR_MUTED, false));
         row.addView(copy, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
@@ -4489,7 +4524,23 @@ public class MainActivity extends Activity {
         editText.setSingleLine(true);
         editText.setMinHeight(dp(54));
         editText.setPadding(dp(14), 0, dp(14), 0);
+        int leftIcon = authIconForHint(hint);
+        int rightIcon = hint != null && hint.contains("비밀번호") ? R.drawable.ic_eye : 0;
+        editText.setCompoundDrawablesWithIntrinsicBounds(leftIcon, 0, rightIcon, 0);
+        editText.setCompoundDrawablePadding(dp(10));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            editText.setCompoundDrawableTintList(ColorStateList.valueOf(COLOR_MUTED));
+        }
         return editText;
+    }
+
+    private int authIconForHint(String hint) {
+        if (hint == null) return R.drawable.ic_user;
+        if (hint.contains("이메일")) return R.drawable.ic_mail;
+        if (hint.contains("비밀번호")) return R.drawable.ic_lock;
+        if (hint.contains("닉네임") || hint.contains("아이디")) return R.drawable.ic_user;
+        if (hint.contains("인증")) return R.drawable.ic_shield;
+        return R.drawable.ic_user;
     }
 
     private EditText multiLineInput(String value, int minLines) {
@@ -4634,6 +4685,7 @@ public class MainActivity extends Activity {
         textView.setTextSize(sp);
         textView.setTextColor(color);
         textView.setLineSpacing(dp(2), 1.0f);
+        textView.setIncludeFontPadding(true);
         if (bold) textView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         return textView;
     }
@@ -4667,8 +4719,24 @@ public class MainActivity extends Activity {
     }
 
     private Button socialButton(String label) {
-        Button button = secondaryButton(label);
-        button.setTextColor(COLOR_TITLE);
+        Button button = baseButton(label);
+        if (label.contains("카카오")) {
+            button.setTextColor(Color.rgb(24, 24, 24));
+            button.setBackground(roundedBackground(COLOR_GOLD, COLOR_GOLD, 10));
+            button.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_kakao, 0, 0, 0);
+        } else if (label.contains("Google")) {
+            button.setTextColor(Color.rgb(24, 24, 24));
+            button.setBackground(roundedBackground(Color.WHITE, Color.WHITE, 10));
+            button.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_google, 0, 0, 0);
+        } else if (label.contains("Apple")) {
+            button.setTextColor(Color.rgb(24, 24, 24));
+            button.setBackground(roundedBackground(Color.WHITE, Color.WHITE, 10));
+            button.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_apple, 0, 0, 0);
+        } else {
+            button.setTextColor(COLOR_TITLE);
+            button.setBackgroundResource(getResources().getIdentifier("button_secondary", "drawable", getPackageName()));
+        }
+        button.setCompoundDrawablePadding(dp(8));
         return button;
     }
 
