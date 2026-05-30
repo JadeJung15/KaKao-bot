@@ -13,6 +13,7 @@
     "smoke:prod": "node scripts/smoke-check.js https://pixgom.com",
     "android:bundle": "node scripts/android-release-bundle.js",
     "android:release-report": "node scripts/android-release-bundle.js --report-only",
+    "android:device-qa": "node scripts/android-device-qa.js",
     "test:local": "node scripts/test-local.js",
     "reset": "node scripts/reset-db.js"
   },
