@@ -106,6 +106,9 @@ public class MainActivity extends Activity {
     private String selectedRoomApplicationId = "";
     private String selectedRoomTab = "status";
     private String roomFilterMode = "all";
+    private String roomSearchQuery = "";
+    private String roomSettingsCategory = "overview";
+    private String commandSearchQuery = "";
     private String logFilterMode = "all";
     private Button gameRoomToggleButton;
     private boolean gameRoomListExpanded = false;
@@ -549,6 +552,12 @@ public class MainActivity extends Activity {
 
         root.addView(roomsTitleBar());
         root.addView(roomFilterRow());
+        if (!TextUtils.isEmpty(roomSearchQuery)) {
+            root.addView(activeSearchSummary("검색: " + roomSearchQuery, v -> {
+                roomSearchQuery = "";
+                showRooms();
+            }));
+        }
 
         nativeConsoleStatusView = singleLineText("내 방을 불러오는 중", 13, COLOR_MUTED, true);
         nativeConsoleStatusView.setPadding(0, dp(6), 0, dp(4));
@@ -578,6 +587,7 @@ public class MainActivity extends Activity {
         clearMainRefs();
         selectedRoomApplicationId = applicationId == null ? "" : applicationId;
         selectedRoomTab = TextUtils.isEmpty(tab) ? "status" : tab;
+        if (!"settings".equals(selectedRoomTab)) roomSettingsCategory = "overview";
         setContentView(buildRoomDetailContent());
         loadBuyerConsole();
     }
@@ -1496,11 +1506,8 @@ public class MainActivity extends Activity {
 
     private LinearLayout roomsTitleBar() {
         LinearLayout bar = simpleTitleBar("방 관리", false, false);
-        bar.addView(iconButton(R.drawable.ic_search, "검색", v -> Toast.makeText(this, "방 검색은 다음 버전에서 입력형으로 확장됩니다.", Toast.LENGTH_SHORT).show()));
-        bar.addView(iconButton(R.drawable.ic_filter, "필터", v -> {
-            roomFilterMode = "issue";
-            if (buyerConsoleJson != null) renderRoomChoices(buyerConsoleJson);
-        }));
+        bar.addView(iconButton(R.drawable.ic_search, "검색", v -> showRoomSearchDialog()));
+        bar.addView(iconButton(R.drawable.ic_filter, "필터", v -> showRoomFilterDialog()));
         return bar;
     }
 
@@ -1512,7 +1519,7 @@ public class MainActivity extends Activity {
         params.setMargins(0, 0, 0, dp(8));
         bar.setLayoutParams(params);
         bar.addView(iconButton(R.drawable.ic_back, "방 관리로", v -> showRooms()));
-        TextView titleView = singleLineText("방 상세", 20, COLOR_TITLE, true);
+        TextView titleView = singleLineText(selectedRoomNameLabel(), 20, COLOR_TITLE, true);
         titleView.setPadding(dp(8), 0, 0, 0);
         bar.addView(titleView, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
         bar.addView(iconButton(R.drawable.ic_settings, "방 설정", v -> showRoomDetail(selectedRoomApplicationId, "settings")));
@@ -1534,7 +1541,7 @@ public class MainActivity extends Activity {
         row.addView(filterChip("성공", "success", false));
         row.addView(filterChip("실패", "fail", false));
         row.addView(filterChip("무시", "ignore", false));
-        row.addView(iconButton(R.drawable.ic_filter, "로그 필터", v -> {}));
+        row.addView(iconButton(R.drawable.ic_filter, "로그 필터", v -> showLogFilterDialog()));
         return row;
     }
 
@@ -1575,6 +1582,63 @@ public class MainActivity extends Activity {
         return button;
     }
 
+    private void showRoomSearchDialog() {
+        final EditText input = input("방 이름, roomId, 역할 검색", roomSearchQuery);
+        input.setSingleLine(true);
+        new AlertDialog.Builder(this)
+                .setTitle("방 검색")
+                .setView(input)
+                .setPositiveButton("검색", (dialog, which) -> {
+                    roomSearchQuery = input.getText().toString().trim();
+                    showRooms();
+                })
+                .setNegativeButton("초기화", (dialog, which) -> {
+                    roomSearchQuery = "";
+                    showRooms();
+                })
+                .show();
+    }
+
+    private void showRoomFilterDialog() {
+        final String[] labels = {"전체", "실행 중", "정지", "문제 있음"};
+        final String[] modes = {"all", "on", "off", "issue"};
+        int checked = 0;
+        for (int index = 0; index < modes.length; index++) {
+            if (modes[index].equals(roomFilterMode)) checked = index;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("방 필터")
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                    roomFilterMode = modes[which];
+                    dialog.dismiss();
+                    showRooms();
+                })
+                .setNegativeButton("닫기", null)
+                .show();
+    }
+
+    private void showLogFilterDialog() {
+        final String[] labels = {"전체", "성공", "실패", "무시"};
+        final String[] modes = {"all", "success", "fail", "ignore"};
+        int checked = 0;
+        for (int index = 0; index < modes.length; index++) {
+            if (modes[index].equals(logFilterMode)) checked = index;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("로그 필터")
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                    logFilterMode = modes[which];
+                    dialog.dismiss();
+                    if ("room_detail".equals(nativeConsoleMode) && !TextUtils.isEmpty(selectedRoomApplicationId)) {
+                        showRoomDetail(selectedRoomApplicationId, "logs");
+                    } else {
+                        showLogs();
+                    }
+                })
+                .setNegativeButton("닫기", null)
+                .show();
+    }
+
     private TextView roomTabText(String applicationId, String tab, String label) {
         boolean active = tab.equals(selectedRoomTab);
         TextView view = singleLineText(label, 13, active ? COLOR_BLUE : COLOR_MUTED, true);
@@ -1585,6 +1649,13 @@ public class MainActivity extends Activity {
         view.setPadding(0, 0, 0, 0);
         view.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
         return view;
+    }
+
+    private String selectedRoomNameLabel() {
+        JSONObject room = consoleRoomByApplicationId(buyerConsoleJson, selectedRoomApplicationId);
+        if (room != null) return room.optString("roomName", "방 상세");
+        if (!TextUtils.isEmpty(selectedRoomApplicationId)) return "방 상세";
+        return "방 이름";
     }
 
     private LinearLayout roomStatusHero(JSONObject room, boolean ok) {
@@ -2415,10 +2486,14 @@ public class MainActivity extends Activity {
     private void renderRoomSettingsTab(LinearLayout parent, JSONObject room) {
         String applicationId = room.optString("applicationId", "");
         JSONObject features = room.optJSONObject("features");
+        if (!"overview".equals(roomSettingsCategory)) {
+            renderRoomSettingCategoryDetail(parent, room, applicationId, features);
+            return;
+        }
         parent.addView(sectionTitle("설정 카테고리"));
-        parent.addView(settingCategoryRow(R.drawable.ic_settings, "기본 설정", "방 이름, 운영 모드, 응답 속도", "열기", v -> {}));
-        parent.addView(settingCategoryRow(R.drawable.ic_log, "응답 설정", "자동 응답, 접두어, 무시 키워드", "열기", v -> {}));
-        parent.addView(settingCategoryRow(R.drawable.ic_shield, "운영 제한", "도배 방지, 쿨타임, 야간 모드", "열기", v -> {}));
+        parent.addView(settingCategoryRow(R.drawable.ic_settings, "기본 설정", "방 이름, 운영 모드, 응답 속도", "열기", v -> openRoomSettingCategory(applicationId, "basic")));
+        parent.addView(settingCategoryRow(R.drawable.ic_log, "응답 설정", "자동 응답, 접두어, 무시 키워드", "열기", v -> openRoomSettingCategory(applicationId, "response")));
+        parent.addView(settingCategoryRow(R.drawable.ic_shield, "운영 제한", "도배 방지, 쿨타임, 야간 모드", "열기", v -> openRoomSettingCategory(applicationId, "limits")));
         parent.addView(settingCategoryRow(R.drawable.ic_link, "고급 설정", "연결 코드, 서버 재연결, 초기화", "열기", v -> showAdvanced()));
 
         parent.addView(sectionTitle("개별 기능"));
@@ -2461,9 +2536,90 @@ public class MainActivity extends Activity {
         parent.addView(text("관리자 전용 설정과 결제 상태는 앱에서 변경하지 않습니다.", 12, COLOR_MUTED, false));
     }
 
+    private void openRoomSettingCategory(String applicationId, String category) {
+        roomSettingsCategory = TextUtils.isEmpty(category) ? "overview" : category;
+        showRoomDetail(applicationId, "settings");
+    }
+
+    private void renderRoomSettingCategoryDetail(LinearLayout parent, JSONObject room, String applicationId, JSONObject features) {
+        String title = roomSettingCategoryTitle(roomSettingsCategory);
+        parent.addView(sectionHeaderLine(title, "목록", v -> openRoomSettingCategory(applicationId, "overview")));
+
+        if ("basic".equals(roomSettingsCategory)) {
+            LinearLayout basic = glassPanel();
+            basic.setPadding(dp(14), dp(12), dp(14), dp(12));
+            parent.addView(basic);
+            basic.addView(labelValue("방 이름", room.optString("roomName", "방")));
+            basic.addView(labelValue("방 역할", roomRoleLabel(room)));
+            basic.addView(labelValue("구독 상태", room.optString("subscriptionStatusLabel", "확인")));
+            basic.addView(labelValue("roomId", room.optString("roomId", "-")));
+            basic.addView(labelValue("최근 응답", roomLastResponseLabel(room)));
+            basic.addView(labelValue("응답 속도", shortTimingStatus()));
+            parent.addView(iconTextButton(R.drawable.ic_power, BridgeConfig.isEnabled(this) ? "브릿지 정지" : "브릿지 시작", false));
+            parent.getChildAt(parent.getChildCount() - 1).setOnClickListener(v -> toggleBridgeEnabled());
+            parent.addView(iconTextButton(R.drawable.ic_sync, "연결 다시 확인", true));
+            parent.getChildAt(parent.getChildCount() - 1).setOnClickListener(v -> syncFromHome());
+            return;
+        }
+
+        prepareRoomFeatureSwitches(features);
+        if ("response".equals(roomSettingsCategory)) {
+            parent.addView(localJsFeatureSwitch);
+            parent.addView(customCommandsFeatureSwitch);
+            parent.addView(profilesFeatureSwitch);
+            parent.addView(pointsFeatureSwitch);
+            parent.addView(text("접두어와 무시 키워드는 현재 서버/웹 콘솔 기준을 따릅니다.", 12, COLOR_MUTED, false));
+            Button saveButton = primaryButton("응답 설정 저장");
+            saveButton.setOnClickListener(v -> saveRoomSettings(applicationId, false));
+            parent.addView(saveButton);
+            return;
+        }
+
+        if ("limits".equals(roomSettingsCategory)) {
+            parent.addView(gamesFeatureSwitch);
+            parent.addView(shopFeatureSwitch);
+            parent.addView(rankingsFeatureSwitch);
+            parent.addView(historyFeatureSwitch);
+            boolean isGameRoom = "game_room".equals(room.optString("roomPurpose", ""));
+            if (!isGameRoom) {
+                parent.addView(sectionTitle("방 분리 제한"));
+                JSONObject mode = roomModeSplit(room);
+                blockGamesInGeneralRoomSwitch = settingSwitch("일반방에서 게임 명령 차단", mode.optBoolean("blockGamesInGeneralRoom", true));
+                blockOpsInGameRoomSwitch = settingSwitch("게임방에서 운영 명령 차단", mode.optBoolean("blockOpsInGameRoom", true));
+                sharePointsAndInventorySwitch = settingSwitch("포인트/가방 데이터 공유", mode.optBoolean("sharePointsAndInventory", true));
+                parent.addView(blockGamesInGeneralRoomSwitch);
+                parent.addView(blockOpsInGameRoomSwitch);
+                parent.addView(sharePointsAndInventorySwitch);
+            }
+            parent.addView(text("도배 방지, 쿨타임, 야간 모드의 세부 수치는 서버 기본값을 사용합니다.", 12, COLOR_MUTED, false));
+            Button saveButton = primaryButton("운영 제한 저장");
+            saveButton.setOnClickListener(v -> saveRoomSettings(applicationId, !isGameRoom));
+            parent.addView(saveButton);
+        }
+    }
+
+    private void prepareRoomFeatureSwitches(JSONObject features) {
+        attendanceFeatureSwitch = settingSwitch("출석", roomFeatureChecked(features, "attendance", true));
+        pointsFeatureSwitch = settingSwitch("포인트", roomFeatureChecked(features, "points", true));
+        rankingsFeatureSwitch = settingSwitch("랭킹", roomFeatureChecked(features, "rankings", true));
+        historyFeatureSwitch = settingSwitch("히스토리", roomFeatureChecked(features, "history", true));
+        profilesFeatureSwitch = settingSwitch("프로필", roomFeatureChecked(features, "profiles", true));
+        localJsFeatureSwitch = settingSwitch("JS 자동응답", roomFeatureChecked(features, "localJs", true));
+        gamesFeatureSwitch = settingSwitch("게임", roomFeatureChecked(features, "games", false));
+        shopFeatureSwitch = settingSwitch("상점/가방", roomFeatureChecked(features, "shop", true));
+        customCommandsFeatureSwitch = settingSwitch("커스텀 명령어", roomFeatureChecked(features, "customCommands", true));
+    }
+
+    private String roomSettingCategoryTitle(String category) {
+        if ("basic".equals(category)) return "기본 설정";
+        if ("response".equals(category)) return "응답 설정";
+        if ("limits".equals(category)) return "운영 제한";
+        return "설정 카테고리";
+    }
+
     private void renderRoomCommandsTab(LinearLayout parent, JSONObject room, JSONObject consoleJson) {
         String applicationId = room.optString("applicationId", "");
-        parent.addView(searchBox("명령어 검색"));
+        parent.addView(commandSearchRow(applicationId));
         parent.addView(sectionTitle("장착된 명령어팩"));
         JSONObject state = room.optJSONObject("commandPacks");
         JSONArray installed = joinedPackDetails(state);
@@ -2474,10 +2630,13 @@ public class MainActivity extends Activity {
             JSONObject pack = installed.optJSONObject(index);
             if (pack == null) continue;
             String packId = pack.optString("id", "");
-            parent.addView(storeAction(
-                    pack.optString("title", packId),
-                    pack.optString("description", pack.optString("tier", "")),
-                    "제거",
+            if (!matchesCommandQuery(pack.optString("title", packId), pack.optString("description", ""), packId)) continue;
+            String title = pack.optString("title", packId);
+            String description = pack.optString("description", pack.optString("tier", ""));
+            parent.addView(installedPackAction(
+                    title,
+                    description,
+                    v -> showCommandPackDetail(title, packId, description, pack),
                     v -> changeCommandPack(applicationId, packId, "remove")
             ));
         }
@@ -2489,6 +2648,7 @@ public class MainActivity extends Activity {
             JSONObject pack = packs.optJSONObject(index);
             if (pack == null) continue;
             String packId = pack.optString("id", "");
+            if (!matchesCommandQuery(pack.optString("title", "명령어팩"), pack.optString("description", ""), packId)) continue;
             parent.addView(storeAction(
                     pack.optString("title", "명령어팩"),
                     pack.optString("description", ""),
@@ -2505,6 +2665,7 @@ public class MainActivity extends Activity {
             JSONObject command = commands.optJSONObject(index);
             if (command == null) continue;
             String trigger = command.optString("trigger", "");
+            if (!matchesCommandQuery(trigger, command.optString("response", ""), command.optString("description", ""))) continue;
             parent.addView(storeAction(
                     trigger,
                     command.optString("response", ""),
@@ -2517,6 +2678,75 @@ public class MainActivity extends Activity {
         Button storeButton = iconTextButton(R.drawable.ic_sync, "스토어에서 찾기", true);
         storeButton.setOnClickListener(v -> showCommandStore());
         parent.addView(compactActionGrid(addPackButton, storeButton));
+    }
+
+    private LinearLayout commandSearchRow(String applicationId) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(2), 0, dp(8));
+        row.setLayoutParams(params);
+
+        EditText search = searchBox("명령어 검색");
+        search.setText(commandSearchQuery);
+        row.addView(search, new LinearLayout.LayoutParams(0, dp(42), 1));
+
+        ImageButton searchButton = iconButton(R.drawable.ic_search, "명령어 검색", v -> {
+            commandSearchQuery = search.getText().toString().trim();
+            showRoomDetail(applicationId, "commands");
+        });
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(dp(42), dp(42));
+        buttonParams.setMargins(dp(8), dp(10), 0, 0);
+        row.addView(searchButton, buttonParams);
+        return row;
+    }
+
+    private boolean matchesCommandQuery(String... values) {
+        if (TextUtils.isEmpty(commandSearchQuery)) return true;
+        String query = commandSearchQuery.toLowerCase();
+        for (String value : values) {
+            if (value != null && value.toLowerCase().contains(query)) return true;
+        }
+        return false;
+    }
+
+    private LinearLayout installedPackAction(String title, String body, View.OnClickListener detailListener, View.OnClickListener removeListener) {
+        LinearLayout card = glassPanel();
+        card.setPadding(dp(10), dp(9), dp(10), dp(10));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.addView(singleLineText(title, 15, COLOR_TITLE, true));
+        if (!TextUtils.isEmpty(body)) copy.addView(singleLineText(body.length() > 70 ? body.substring(0, 70) + "..." : body, 12, COLOR_MUTED, false));
+        card.addView(copy);
+
+        Button detail = secondaryButton("상세 보기");
+        detail.setOnClickListener(detailListener);
+        Button remove = secondaryButton("해제");
+        remove.setOnClickListener(removeListener);
+        card.addView(compactActionGrid(detail, remove));
+        return card;
+    }
+
+    private void showCommandPackDetail(String title, String packId, String description, JSONObject pack) {
+        StringBuilder message = new StringBuilder();
+        if (!TextUtils.isEmpty(description)) message.append(description).append("\n\n");
+        message.append("팩 ID: ").append(packId);
+        JSONArray commands = pack == null ? null : pack.optJSONArray("commands");
+        if (commands != null && commands.length() > 0) {
+            message.append("\n\n포함 명령어");
+            int limit = Math.min(commands.length(), 8);
+            for (int index = 0; index < limit; index++) {
+                JSONObject command = commands.optJSONObject(index);
+                if (command != null) message.append("\n- ").append(command.optString("trigger", command.optString("name", "")));
+            }
+            if (commands.length() > limit) message.append("\n- 외 ").append(commands.length() - limit).append("개");
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message.toString())
+                .setPositiveButton("확인", null)
+                .show();
     }
 
     private void renderRoomLogsTab(LinearLayout parent, JSONObject room) {
@@ -3368,6 +3598,15 @@ public class MainActivity extends Activity {
         if (room == null) return false;
         boolean issue = roomSetupLabel(room).contains("필요") || "expired".equals(room.optString("subscriptionStatus", ""));
         boolean on = !"off".equalsIgnoreCase(room.optString("bridgeStatus", "")) && !issue;
+        if (!TextUtils.isEmpty(roomSearchQuery)) {
+            String query = roomSearchQuery.toLowerCase();
+            String haystack = (room.optString("roomName", "")
+                    + " " + room.optString("roomId", "")
+                    + " " + room.optString("applicationId", "")
+                    + " " + roomRoleLabel(room)
+                    + " " + room.optString("subscriptionStatusLabel", "")).toLowerCase();
+            if (!haystack.contains(query)) return false;
+        }
         if ("on".equals(roomFilterMode)) return on;
         if ("off".equals(roomFilterMode)) return !on && !issue;
         if ("issue".equals(roomFilterMode)) return issue;
@@ -3536,6 +3775,20 @@ public class MainActivity extends Activity {
         TextView body = text(message, 12, COLOR_MUTED, false);
         body.setPadding(dp(10), 0, 0, 0);
         row.addView(body, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        return row;
+    }
+
+    private LinearLayout activeSearchSummary(String label, View.OnClickListener clearListener) {
+        LinearLayout row = glassPanel();
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(10), dp(8), dp(10), dp(8));
+        TextView text = singleLineText(label, 13, COLOR_TEXT, true);
+        row.addView(text, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        TextView clear = singleLineText("초기화", 12, COLOR_GOOD, true);
+        clear.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        clear.setOnClickListener(clearListener);
+        row.addView(clear);
         return row;
     }
 
